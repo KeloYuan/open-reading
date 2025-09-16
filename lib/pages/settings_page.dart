@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
-import '../utils/color_extensions.dart';
 import '../utils/glass_config.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -68,7 +67,9 @@ class _SettingsPageState extends State<SettingsPage> {
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outline.withValues(alpha: 0.2),
                   width: 0.5,
                 ),
               ),
@@ -83,10 +84,16 @@ class _SettingsPageState extends State<SettingsPage> {
             end: Alignment.bottomCenter,
             stops: const [0.0, 0.3, 0.7, 1.0],
             colors: [
-              Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.12),
-              Theme.of(context).colorScheme.surface.withOpacityValues(0.98),
-              Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.08),
-              Theme.of(context).colorScheme.tertiaryContainer.withOpacityValues(0.15),
+              Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withValues(alpha: 0.12),
+              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
+              Theme.of(
+                context,
+              ).colorScheme.secondaryContainer.withValues(alpha: 0.08),
+              Theme.of(
+                context,
+              ).colorScheme.tertiaryContainer.withValues(alpha: 0.15),
             ],
           ),
         ),
@@ -110,10 +117,14 @@ class _SettingsPageState extends State<SettingsPage> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.3),
                         width: 1,
                       ),
                     ),
@@ -138,7 +149,9 @@ class _SettingsPageState extends State<SettingsPage> {
                           '打开任意书籍，点击屏幕中央，在底部控制栏中点击"设置"按钮，即可调整字体大小、行间距、字符间距、页面边距等阅读设置。',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.7),
                             fontSize: 14,
                             height: 1.5,
                           ),
@@ -164,7 +177,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     title: '自动保存',
                     subtitle: '自动保存阅读进度',
                     value: _enableAutoSave,
-                    onChanged: (value) => setState(() => _enableAutoSave = value),
+                    onChanged: (value) =>
+                        setState(() => _enableAutoSave = value),
                     icon: Icons.save_outlined,
                   ),
                 ],
@@ -190,10 +204,12 @@ class _SettingsPageState extends State<SettingsPage> {
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -206,7 +222,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacityValues(0.1),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -276,7 +294,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.secondary.withOpacityValues(0.1),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.secondary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Icon(
@@ -299,7 +319,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       Text(
                         subtitle,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
                     ],
@@ -311,7 +333,12 @@ class _SettingsPageState extends State<SettingsPage> {
                     onChanged(newValue);
                     _saveSettings();
                   },
-                  activeColor: Theme.of(context).colorScheme.primary,
+                  activeTrackColor: Theme.of(context).colorScheme.primary,
+                  thumbColor: WidgetStateProperty.resolveWith(
+                    (states) => states.contains(WidgetState.selected)
+                        ? Theme.of(context).colorScheme.onPrimary
+                        : Theme.of(context).colorScheme.outline,
+                  ),
                 ),
               ],
             ),
@@ -321,7 +348,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-
   Widget _buildAboutCard() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
@@ -330,10 +356,12 @@ class _SettingsPageState extends State<SettingsPage> {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -344,7 +372,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.tertiary.withOpacityValues(0.1),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.tertiary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -368,8 +398,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.3),
-                      Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.3),
+                      Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                      Theme.of(
+                        context,
+                      ).colorScheme.secondaryContainer.withValues(alpha: 0.3),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(12),
@@ -379,7 +413,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacityValues(0.1),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -399,7 +435,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     Text(
                       'v1.0.0',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -407,7 +445,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       '一款简洁高效的电子书阅读应用，支持多种格式和个性化设置，助您畅享阅读时光。',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.8),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.8),
                       ),
                     ),
                   ],

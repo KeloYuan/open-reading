@@ -12,8 +12,112 @@ import '../models/bookmark.dart';
 import '../services/book_dao.dart';
 import '../services/bookmark_dao.dart';
 import '../services/reading_stats_dao.dart';
+import '../utils/text_painter_pagination.dart';
 import '../widgets/custom_slider_components.dart';
 import '../utils/responsive_helper.dart';
+
+// 阅读主题数据结构
+class ReadingTheme {
+  final String name;
+  final String displayName;
+  final Color backgroundColor;
+  final Color textColor;
+  final Color controlBarColor;
+  final Color controlBarTextColor;
+  final Color iconColor;
+  final Color sliderActiveColor;
+  final Color sliderInactiveColor;
+
+  const ReadingTheme({
+    required this.name,
+    required this.displayName,
+    required this.backgroundColor,
+    required this.textColor,
+    required this.controlBarColor,
+    required this.controlBarTextColor,
+    required this.iconColor,
+    required this.sliderActiveColor,
+    required this.sliderInactiveColor,
+  });
+}
+
+// 预设阅读主题
+class ReadingThemes {
+  static const ReadingTheme dayTheme = ReadingTheme(
+    name: 'day',
+    displayName: '白天',
+    backgroundColor: Color(0xFFFFFBF0),
+    textColor: Color(0xFF2C2C2C),
+    controlBarColor: Color(0xFFF5F5F5),
+    controlBarTextColor: Color(0xFF333333),
+    iconColor: Color(0xFF666666),
+    sliderActiveColor: Color(0xFF4CAF50),
+    sliderInactiveColor: Color(0xFFE0E0E0),
+  );
+
+  static const ReadingTheme nightTheme = ReadingTheme(
+    name: 'night',
+    displayName: '夜间',
+    backgroundColor: Color(0xFF121212),
+    textColor: Color(0xFFE8E8E8),
+    controlBarColor: Color(0xFF1E1E1E),
+    controlBarTextColor: Color(0xFFE0E0E0),
+    iconColor: Color(0xFFB0B0B0),
+    sliderActiveColor: Color(0xFF81C784),
+    sliderInactiveColor: Color(0xFF424242),
+  );
+
+  static const ReadingTheme eyeProtectionTheme = ReadingTheme(
+    name: 'eye_protection',
+    displayName: '护眼',
+    backgroundColor: Color(0xFFE8F5E8),
+    textColor: Color(0xFF2E4A2E),
+    controlBarColor: Color(0xFFDCE9DC),
+    controlBarTextColor: Color(0xFF1B3A1B),
+    iconColor: Color(0xFF4A6E4A),
+    sliderActiveColor: Color(0xFF66BB6A),
+    sliderInactiveColor: Color(0xFFC8E6C9),
+  );
+
+  static const ReadingTheme parchmentTheme = ReadingTheme(
+    name: 'parchment',
+    displayName: '羊皮纸',
+    backgroundColor: Color(0xFFF4F1E8),
+    textColor: Color(0xFF8B4513),
+    controlBarColor: Color(0xFFE8E2D6),
+    controlBarTextColor: Color(0xFF654321),
+    iconColor: Color(0xFFA0522D),
+    sliderActiveColor: Color(0xFFD2B48C),
+    sliderInactiveColor: Color(0xFFF5DEB3),
+  );
+
+  static const ReadingTheme sepiaTheme = ReadingTheme(
+    name: 'sepia',
+    displayName: '棕褐色',
+    backgroundColor: Color(0xFFFDF6E3),
+    textColor: Color(0xFF5D4E37),
+    controlBarColor: Color(0xFFEEE5D0),
+    controlBarTextColor: Color(0xFF4A3E28),
+    iconColor: Color(0xFF8B7355),
+    sliderActiveColor: Color(0xFFCD853F),
+    sliderInactiveColor: Color(0xFFF5DEB3),
+  );
+
+  static const List<ReadingTheme> allThemes = [
+    dayTheme,
+    nightTheme,
+    eyeProtectionTheme,
+    parchmentTheme,
+    sepiaTheme,
+  ];
+
+  static ReadingTheme getThemeByName(String name) {
+    return allThemes.firstWhere(
+      (theme) => theme.name == name,
+      orElse: () => dayTheme,
+    );
+  }
+}
 
 class ReadingPageEnhanced extends StatefulWidget {
   final Book book;
@@ -40,7 +144,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   bool _showControls = false; // 默认隐藏工具栏
   Timer? _hideControlsTimer;
   DateTime? _sessionStartTime;
-  
+
   // --- Bookmark State ---
   List<Bookmark> _bookmarks = [];
   bool _isCurrentPageBookmarked = false;
@@ -50,9 +154,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   double _lineSpacing = 1.8;
   double _letterSpacing = 0.2;
   double _pageMargin = 16.0;
-  double _horizontalPadding = 16.0;  // 新增：左右留白距离
-  Color _backgroundColor = Colors.white;
-  Color _fontColor = Colors.black87;
+  double _horizontalPadding = 16.0; // 新增：左右留白距离
+  ReadingTheme _currentTheme = ReadingThemes.dayTheme; // 当前阅读主题
   bool _autoScroll = false;
   bool _keepScreenOn = false;
   String _fontFamily = 'System';
@@ -67,7 +170,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     _currentPageIndex = widget.book.currentPage;
     _pageController = PageController(initialPage: _currentPageIndex);
     _sessionStartTime = DateTime.now();
-    
 
     // 进入沉浸式模式
     _setImmersiveMode();
@@ -108,11 +210,13 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     } catch (e) {
       debugPrint('书籍初始化失败: $e');
       if (mounted) {
-        setState(() => _pages = ['$_kErrorPrefix 书籍加载失败: $e\n\n请检查文件是否存在或格式是否正确']);
+        setState(
+          () => _pages = ['$_kErrorPrefix 书籍加载失败: $e\n\n请检查文件是否存在或格式是否正确'],
+        );
       }
     }
   }
-  
+
   void _showControlsInitially() {
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted && !_showControls) {
@@ -134,7 +238,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         debugPrint('开始解析 EPUB: ${widget.book.filePath}');
         _bookContent = await _parseEpubDirectly(widget.book.filePath);
         debugPrint('EPUB 解析完成，长度: ${_bookContent.length}');
-        
+
         // 验证内容是否足够丰富
         if (_bookContent.length < 1000) {
           debugPrint('⚠️ 警告: EPUB 内容过少 (${_bookContent.length} 字符)，可能解析不完整');
@@ -170,7 +274,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       if (_bookContent.length < 10) {
         throw Exception('文件内容过短，可能不是有效的书籍文件');
       }
-      
+
       // 打印内容统计信息
       final lines = _bookContent.split('\n').length;
       final words = _bookContent.split(RegExp(r'\s+')).length;
@@ -192,19 +296,19 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       debugPrint('📂 开始读取 EPUB 文件...');
       final bytes = await file.readAsBytes();
       debugPrint('📂 EPUB 文件大小: ${bytes.length} 字节');
-      
+
       if (bytes.isEmpty) {
         throw Exception('EPUB 文件为空: $filePath');
       }
 
       debugPrint('📂 开始解析 EPUB 结构...');
       final epubBook = await EpubReader.readBook(bytes);
-      
+
       // 检查基本信息
       debugPrint('📚 书籍标题: ${epubBook.Title}');
       debugPrint('📚 作者: ${epubBook.Author}');
       debugPrint('📚 章节数量: ${epubBook.Chapters?.length ?? 0}');
-      
+
       if (epubBook.Chapters == null || epubBook.Chapters!.isEmpty) {
         throw Exception('EPUB 文件无有效章节: $filePath');
       }
@@ -212,7 +316,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       final buffer = StringBuffer();
       final chapters = epubBook.Chapters!;
       int processedChapters = 0;
-      
+
       // 全面章节处理函数
       void processChapter(dynamic chapter, int depth) {
         try {
@@ -225,18 +329,22 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               }
               buffer.writeln(cleanText.trim());
               processedChapters++;
-              debugPrint('📝 处理章节 $processedChapters, 深度: $depth, 内容长度: ${cleanText.length}');
+              debugPrint(
+                '📝 处理章节 $processedChapters, 深度: $depth, 内容长度: ${cleanText.length}',
+              );
             }
           }
-          
+
           // 递归处理子章节
           if (chapter.SubChapters != null && chapter.SubChapters!.isNotEmpty) {
-            debugPrint('📁 章节 "${chapter.Title ?? 'Unknown'}" 包含 ${chapter.SubChapters!.length} 个子章节');
+            debugPrint(
+              '📁 章节 "${chapter.Title ?? 'Unknown'}" 包含 ${chapter.SubChapters!.length} 个子章节',
+            );
             for (final subChapter in chapter.SubChapters!) {
               processChapter(subChapter, depth + 1);
             }
           }
-          
+
           // 检查是否有其他可能的内容源
           if (chapter.Anchor != null && chapter.Anchor!.isNotEmpty) {
             debugPrint('🔗 章节附加信息: ${chapter.Anchor}');
@@ -245,7 +353,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           debugPrint('⚠️ 处理章节错误: $e');
         }
       }
-      
+
       // 处理所有主章节
       for (int i = 0; i < chapters.length; i++) {
         final chapter = chapters[i];
@@ -253,18 +361,19 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         debugPrint('📄 开始处理第 ${i + 1}/${chapters.length} 章: "$title"');
         processChapter(chapter, 0);
       }
-      
 
       final finalContent = buffer.toString().trim();
       debugPrint('✅ EPUB 解析完成!');
       debugPrint('📈 总章节数: $processedChapters');
       debugPrint('📈 最终内容长度: ${finalContent.length} 字符');
-      debugPrint('📈 内容预览: ${finalContent.length > 200 ? '${finalContent.substring(0, 200)}...' : finalContent}');
-      
+      debugPrint(
+        '📈 内容预览: ${finalContent.length > 200 ? '${finalContent.substring(0, 200)}...' : finalContent}',
+      );
+
       if (finalContent.isEmpty) {
         throw Exception('EPUB 解析后内容为空: $filePath');
       }
-      
+
       return finalContent;
     } catch (e) {
       debugPrint('❌ EPUB 解析失败: $e');
@@ -276,7 +385,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     // 增强HTML清理逻辑
     String text = htmlString
         // 先处理段落和换行
-        .replaceAll(RegExp(r'<\s*\/?\s*(p|div|br|h[1-6])\s*[^>]*>', caseSensitive: false), '\n')
+        .replaceAll(
+          RegExp(r'<\s*\/?\s*(p|div|br|h[1-6])\s*[^>]*>', caseSensitive: false),
+          '\n',
+        )
         // 移除其他HTML标签
         .replaceAll(RegExp(r'<[^>]*>'), '')
         // 处理HTML实体
@@ -294,7 +406,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         .replaceAll(RegExp(r'\s+'), ' ')
         .replaceAll(RegExp(r'\n\s*\n'), '\n\n') // 保留段落间距
         .trim();
-    
+
     return text;
   }
 
@@ -330,119 +442,61 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
   // 精确分页算法 - 基于真实可用区域计算字符数
   void _standardizedPagination(String content) {
-    debugPrint('📱 开始精确分页算法...');
-    
+    debugPrint('📱 开始基于TextPainter的精确分页算法...');
+
     try {
       if (content.isEmpty) {
         _pages = ['内容为空'];
         return;
       }
-      
+
       // 获取屏幕尺寸和系统边距
       final screenSize = MediaQuery.of(context).size;
       final systemPadding = MediaQuery.of(context).padding;
-      
-      // 计算精确的可用区域 - 考虑所有可能的遮挡
-      final statusBarHeight = systemPadding.top;
-      final navigationBarHeight = systemPadding.bottom;
-      debugPrint('📐 屏幕信息: ${screenSize.width.toInt()}x${screenSize.height.toInt()}');
-      debugPrint('📐 系统边距: 状态栏${statusBarHeight.toInt()}px, 导航栏${navigationBarHeight.toInt()}px');
-      
-      // 根据字体设置和新布局精确计算每页字符数
-      final charsPerPage = _calculateOptimalCharsPerPage(screenSize.width, screenSize.height);
-      
-      debugPrint('📊 计算结果: 每页$charsPerPage字符 (字号${_fontSize.toInt()}px, 行距${_lineSpacing.toStringAsFixed(1)}, 字间距${_letterSpacing.toStringAsFixed(1)})');
-      
-      // 执行智能分页
-      _smartPagination(content, charsPerPage);
-      
-      // 验证分页结果，确保文字能完全显示
-      _validatePagination(screenSize.width, screenSize.height);
-      
+
+      debugPrint(
+        '📐 屏幕信息: ${screenSize.width.toInt()}x${screenSize.height.toInt()}',
+      );
+      debugPrint(
+        '📐 系统边距: 状态栏${systemPadding.top.toInt()}px, 导航栏${systemPadding.bottom.toInt()}px',
+      );
+
+      // 使用TextPainter进行精确分页
+      _pages = TextPainterPagination.performTextPainterBasedPagination(
+        content: content,
+        screenSize: screenSize,
+        systemPadding: systemPadding,
+        fontSize: _fontSize,
+        lineSpacing: _lineSpacing,
+        letterSpacing: _letterSpacing,
+        fontFamily: _fontFamily,
+        horizontalPadding: _horizontalPadding,
+      );
+
       debugPrint('✅ 精确分页完成: 总共 ${_pages.length} 页');
-      
     } catch (e) {
       debugPrint('❌ 分页出错: $e');
       // 备用分页方法
       _fallbackPagination(content);
     }
   }
-  
-  /// 基于TextPainter精确计算每页字符数
-  int _calculateOptimalCharsPerPage(double screenWidth, double screenHeight) {
-    // 使用与 _buildPageWidget 相同的精确计算逻辑
-    final statusBarHeight = MediaQuery.of(context).padding.top;
-    final systemBottomPadding = MediaQuery.of(context).padding.bottom;
-    
-    // 固定留白 + 控制栏空间预留 - 优化以增加文本密度
-    final topPadding = 30.0;        // 减少顶部留白
-    final baseBottomPadding = 25.0; // 减少底部留白
-    final controlsSpace = 80.0;     // 减少控制栏空间预留
-    final totalBottomPadding = baseBottomPadding + controlsSpace;
-    
-    // 计算实际可用的文本显示区域
-    final availableWidth = screenWidth - (_horizontalPadding * 2);
-    final availableHeight = screenHeight - topPadding - totalBottomPadding - statusBarHeight - systemBottomPadding;
-    
-    // 确保有最小可用区域
-    final safeWidth = availableWidth.clamp(200.0, double.infinity);
-    final safeHeight = availableHeight.clamp(200.0, double.infinity);
-    
-    // 使用TextPainter精确测量文本
-    final textStyle = TextStyle(
-      fontSize: _fontSize,
-      height: _lineSpacing,
-      letterSpacing: _letterSpacing,
-      fontFamily: _fontFamily == 'System' ? null : _fontFamily,
-    );
-    
-    // 测量单个字符的宽度（使用常见中文字符）
-    final singleCharPainter = TextPainter(
-      text: TextSpan(text: '中', style: textStyle),
-      textDirection: TextDirection.ltr,
-    );
-    singleCharPainter.layout();
-    final charWidth = singleCharPainter.size.width;
-    final lineHeight = singleCharPainter.size.height;
-    
-    // 计算每行可以显示的字符数（优化安全边距以增加字符密度）
-    final charsPerLine = ((safeWidth - 10) / charWidth).floor(); // 减少安全边距到10px
-    
-    // 计算可以显示的最大行数（减少余量以显示更多文本）
-    final maxLines = ((safeHeight - lineHeight * 0.5) / lineHeight).floor(); // 只减去半行高度余量
-    
-    // 计算每页总字符数
-    int totalChars = maxLines * charsPerLine;
-    
-    // 确保在合理范围内
-    totalChars = totalChars.clamp(100, 3000);
-    
-    debugPrint('📝 精确分页详情: 行高${lineHeight.toInt()}px, 最大行数$maxLines行, 每行$charsPerLine字');
-    debugPrint('📝 字符宽度: ${charWidth.toInt()}px, 可用区域: ${safeWidth.toInt()}x${safeHeight.toInt()}px');
-    debugPrint('📝 总计: $totalChars字符/页');
-    
-    // 释放TextPainter资源
-    singleCharPainter.dispose();
-    
-    return totalChars;
-  }
-  
+
   // 备用分页方法 - 确保边界连续性
   void _fallbackPagination(String content) {
     debugPrint('🆘 使用备用分页方法...');
     _pages.clear();
-    
+
     if (content.isEmpty) {
       _pages.add('内容为空');
       return;
     }
-    
+
     const int charsPerPage = 1200; // 增加每页字符数以提高文本密度
     int currentPos = 0;
-    
+
     while (currentPos < content.length) {
       int endPos = currentPos + charsPerPage;
-      
+
       // 如果超出内容长度，直接到末尾
       if (endPos >= content.length) {
         final lastPageContent = content.substring(currentPos);
@@ -451,246 +505,41 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         }
         break;
       }
-      
+
       // 尝试在合适位置分割，避免断字
       int actualEndPos = endPos;
       for (int offset = 0; offset < 50; offset++) {
         int checkPos = endPos - offset;
         if (checkPos <= currentPos) break;
-        
+
         String char = content[checkPos];
-        if (char == '。' || char == '！' || char == '？' || char == '\n' || char == ' ') {
+        if (char == '。' ||
+            char == '！' ||
+            char == '？' ||
+            char == '\n' ||
+            char == ' ') {
           actualEndPos = char == '\n' ? checkPos : checkPos + 1;
           break;
         }
       }
-      
+
       String pageContent = content.substring(currentPos, actualEndPos);
       // 只移除开头结尾的换行，保持内容完整性
-      pageContent = pageContent.replaceAll(RegExp(r'^\n+'), '').replaceAll(RegExp(r'\n+$'), '');
-      
+      pageContent = pageContent
+          .replaceAll(RegExp(r'^\n+'), '')
+          .replaceAll(RegExp(r'\n+$'), '');
+
       if (pageContent.isNotEmpty) {
         _pages.add(pageContent);
-        debugPrint('🆘 备用分页第${_pages.length}页: 位置$currentPos-$actualEndPos, 长度${pageContent.length}字符');
+        debugPrint(
+          '🆘 备用分页第${_pages.length}页: 位置$currentPos-$actualEndPos, 长度${pageContent.length}字符',
+        );
       }
-      
+
       currentPos = actualEndPos;
     }
-    
-    debugPrint('🆘 备用分页完成: 总共 ${_pages.length} 页');
-  }
-  
-  // 改进的智能分页 - 确保页面边界严格连续，无重叠无遗漏
-  void _smartPagination(String content, int targetCharsPerPage) {
-    try {
-      _pages.clear();
-      
-      if (content.isEmpty) {
-        _pages.add('内容为空');
-        return;
-      }
-      
-      int currentPos = 0;
-      int pageCount = 0;
-      const maxPages = 50000; // 防止无限循环
-      
-      debugPrint('📖 开始智能分页: 内容长度${content.length}字符, 目标每页$targetCharsPerPage字符');
-      
-      while (currentPos < content.length && pageCount < maxPages) {
-        int targetEndPos = currentPos + targetCharsPerPage;
-        
-        // 如果超出内容长度，直接取到末尾
-        if (targetEndPos >= content.length) {
-          final lastPageContent = content.substring(currentPos);
-          if (lastPageContent.isNotEmpty) {
-            _pages.add(lastPageContent);
-            debugPrint('📄 最后一页: 位置$currentPos-${content.length}, 长度${lastPageContent.length}字符');
-          }
-          break;
-        }
-        
-        // 寻找最佳分割点
-        int actualEndPos = targetEndPos;
-        final minEndPos = currentPos + (targetCharsPerPage * 0.6).round(); // 确保页面内容不会太短
-        
-        bool foundGoodSplit = false;
-        
-        // 在合理范围内寻找分割点，优先级：段落 > 句子 > 标点
-        for (int offset = 0; offset <= 150 && !foundGoodSplit; offset++) {
-          int checkPos = targetEndPos - offset;
-          if (checkPos <= minEndPos) break;
-          
-          if (checkPos >= content.length) continue;
-          String char = content[checkPos];
-          
-          // 段落分割最优（双换行或段落结束）
-          if (char == '\n') {
-            // 检查是否是段落结束（连续换行或换行后是段落开始）
-            if (checkPos + 1 < content.length) {
-              String nextChar = content[checkPos + 1];
-              if (nextChar == '\n' || nextChar == ' ' || RegExp(r'[第\d一二三四五六七八九十]').hasMatch(nextChar)) {
-                actualEndPos = checkPos;
-                foundGoodSplit = true;
-                debugPrint('📋 段落分割点: 位置$checkPos');
-              }
-            }
-          }
-          // 句号分割次优
-          else if (char == '。') {
-            actualEndPos = checkPos + 1; // 句号保留在当前页
-            foundGoodSplit = true;
-            debugPrint('📋 句号分割点: 位置$checkPos');
-          }
-          // 其他标点分割
-          else if ('！？；'.contains(char)) {
-            actualEndPos = checkPos + 1; // 标点保留在当前页
-            foundGoodSplit = true;
-            debugPrint('📋 标点分割点: 位置$checkPos ($char)');
-          }
-        }
-        
-        // 如果没找到合适分割点，检查是否可以在空格处分割
-        if (!foundGoodSplit) {
-          for (int offset = 0; offset <= 50; offset++) {
-            int checkPos = targetEndPos - offset;
-            if (checkPos <= minEndPos) break;
-            if (checkPos >= content.length) continue;
-            
-            if (content[checkPos] == ' ') {
-              actualEndPos = checkPos;
-              foundGoodSplit = true;
-              debugPrint('📋 空格分割点: 位置$checkPos');
-              break;
-            }
-          }
-        }
-        
-        // 确保分割位置在有效范围内
-        actualEndPos = actualEndPos.clamp(minEndPos, content.length);
-        
-        // 提取当前页内容 - 不使用trim()以保持原始字符完整性
-        String pageContent = content.substring(currentPos, actualEndPos);
-        
-        // 只移除页面开头和结尾的多余换行，保留其他空格
-        pageContent = pageContent.replaceAll(RegExp(r'^\n+'), '').replaceAll(RegExp(r'\n+$'), '');
-        
-        if (pageContent.isNotEmpty) {
-          _pages.add(pageContent);
-          debugPrint('📄 第${_pages.length}页: 位置$currentPos-$actualEndPos, 长度${pageContent.length}字符');
-          
-          // Debug: 显示页面边界字符
-          if (pageContent.isNotEmpty) {
-            final firstChar = pageContent[0];
-            final lastChar = pageContent[pageContent.length - 1];
-            debugPrint('   📝 边界字符: 首"$firstChar" 尾"$lastChar"');
-          }
-        }
-        
-        // 更新位置 - 关键：确保下一页从正确位置开始
-        currentPos = actualEndPos;
-        
-        // 跳过页面间的多余换行，但不跳过有意义的内容
-        while (currentPos < content.length && content[currentPos] == '\n') {
-          currentPos++;
-        }
-        
-        pageCount++;
-        
-        // 防止死循环
-        if (actualEndPos <= currentPos && pageCount > 1) {
-          debugPrint('⚠️ 检测到位置未推进，强制推进避免死循环');
-          currentPos++;
-        }
-      }
-      
-      // 验证分页结果
-      if (_pages.isEmpty) {
-        debugPrint('⚠️ 智能分页失败，使用备用方法');
-        _fallbackPagination(content);
-      } else {
-        debugPrint('✅ 智能分页完成: ${_pages.length}页');
-        _verifyPaginationContinuity(content);
-      }
-      
-    } catch (e) {
-      debugPrint('❌ 智能分页出错: $e');
-      _fallbackPagination(content);
-    }
-  }
-  
-  /// 验证分页连续性 - 确保没有字符丢失或重复
-  void _verifyPaginationContinuity(String originalContent) {
-    if (_pages.length <= 1) return;
-    
-    try {
-      // 重新组合所有页面内容
-      String reconstructed = _pages.join('');
-      
-      // 比较长度
-      if (reconstructed.length != originalContent.length) {
-        debugPrint('⚠️ 分页连续性检查: 长度不匹配 原文${originalContent.length} vs 重组${reconstructed.length}');
-      }
-      
-      // 抽样检查前几页的边界
-      for (int i = 0; i < _pages.length - 1 && i < 3; i++) {
-        if (_pages[i].isEmpty || _pages[i + 1].isEmpty) continue;
-        
-        String currentPageLast = _pages[i][_pages[i].length - 1];
-        String nextPageFirst = _pages[i + 1][0];
-        
-        debugPrint('📋 页面${i + 1}-${i + 2}边界: "$currentPageLast" -> "$nextPageFirst"');
-      }
-      
-      debugPrint('✅ 分页连续性验证完成');
-      
-    } catch (e) {
-      debugPrint('❌ 分页连续性验证出错: $e');
-    }
-  }
 
-  /// 验证分页结果，确保文字能完全显示在可视区域内
-  void _validatePagination(double screenWidth, double screenHeight) {
-    if (_pages.isEmpty) return;
-    
-    final textStyle = TextStyle(
-      fontSize: _fontSize,
-      height: _lineSpacing,
-      letterSpacing: _letterSpacing,
-      fontFamily: _fontFamily == 'System' ? null : _fontFamily,
-    );
-    
-    // 计算可用区域（与_calculateOptimalCharsPerPage保持一致）
-    final statusBarHeight = MediaQuery.of(context).padding.top;
-    final systemBottomPadding = MediaQuery.of(context).padding.bottom;
-    final topPadding = 40.0;    
-    final baseBottomPadding = 40.0; // 与页面显示保持一致
-    final controlsSpace = 100.0;    // 与页面显示保持一致
-    final totalBottomPadding = baseBottomPadding + controlsSpace;
-    final availableWidth = screenWidth - (_horizontalPadding * 2) - 20; // 减去安全边距
-    final availableHeight = screenHeight - topPadding - totalBottomPadding - statusBarHeight - systemBottomPadding;
-    
-    int oversizedPages = 0;
-    for (int i = 0; i < _pages.length && i < 5; i++) { // 只检查前5页避免影响性能
-      final painter = TextPainter(
-        text: TextSpan(text: _pages[i], style: textStyle),
-        textDirection: TextDirection.ltr,
-        textAlign: TextAlign.justify,
-      );
-      painter.layout(maxWidth: availableWidth);
-      
-      if (painter.size.height > availableHeight) {
-        oversizedPages++;
-        debugPrint('⚠️ 第${i + 1}页内容超出可视区域: ${painter.size.height.toInt()}px > ${availableHeight.toInt()}px');
-      }
-      
-      painter.dispose();
-    }
-    
-    if (oversizedPages > 0) {
-      debugPrint('⚠️ 发现 $oversizedPages 页内容可能超出可视区域，建议调整字体设置');
-    } else {
-      debugPrint('✅ 分页验证通过，所有文字都能完全显示在可视区域内');
-    }
+    debugPrint('🆘 备用分页完成: 总共 ${_pages.length} 页');
   }
 
   // --- Settings Persistence ---
@@ -706,15 +555,24 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       _keepScreenOn = prefs.getBool('keepScreenOn') ?? false;
       _fontFamily = prefs.getString('fontFamily') ?? 'System';
 
-      final isDarkMode = prefs.getBool('isDarkMode') ?? (Theme.of(context).brightness == Brightness.dark);
-      if (isDarkMode) {
-        _backgroundColor = const Color(0xFF121212);
-        _fontColor = const Color(0xFFE8E8E8);
-      } else {
-        _backgroundColor = const Color(0xFFFFFBF0);
-        _fontColor = const Color(0xFF2C2C2C);
-      }
+      // 加载阅读主题设置，独立于全局主题
+      final readingThemeName = prefs.getString('readingTheme') ?? 'day';
+      _currentTheme = ReadingThemes.getThemeByName(readingThemeName);
     });
+  }
+
+  // 切换阅读主题
+  Future<void> _switchReadingTheme(ReadingTheme theme) async {
+    setState(() {
+      _currentTheme = theme;
+    });
+
+    // 保存主题设置
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('readingTheme', theme.name);
+
+    // 更新沉浸式状态栏颜色
+    _setImmersiveMode();
   }
 
   Timer? _repaginationTimer;
@@ -723,7 +581,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     if (!mounted) return;
     final prefs = await SharedPreferences.getInstance();
     saver(prefs);
-    
+
     // 使用防抖机制，避免频繁重新分页
     _repaginationTimer?.cancel();
     _repaginationTimer = Timer(const Duration(milliseconds: 300), () {
@@ -737,16 +595,16 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   // 智能重新分页 - 保持当前阅读位置
   void _intelligentRepagination() {
     if (!mounted || _bookContent.isEmpty) return;
-    
+
     // 记录当前阅读位置（字符位置）
     int currentCharPosition = 0;
     for (int i = 0; i < _currentPageIndex && i < _pages.length; i++) {
       currentCharPosition += _pages[i].length;
     }
-    
+
     // 重新分页
     _splitIntoPages();
-    
+
     // 根据字符位置找到新的页码
     int newPageIndex = 0;
     int charCount = 0;
@@ -758,10 +616,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       charCount += _pages[i].length;
       newPageIndex = i + 1;
     }
-    
+
     // 安全地更新页码
     _currentPageIndex = newPageIndex.clamp(0, _pages.length - 1);
-    
+
     // 更新页面控制器
     if (_pageController.hasClients) {
       _pageController.animateToPage(
@@ -770,15 +628,16 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         curve: Curves.easeOut,
       );
     }
-    
+
     setState(() {});
     debugPrint('✅ 智能重新分页完成，保持阅读位置在第${_currentPageIndex + 1}页');
   }
 
   // --- UI Controls ---
   void _setImmersiveMode() {
-    final isLightBackground = _backgroundColor.computeLuminance() > 0.5;
-    
+    final isLightBackground =
+        _currentTheme.backgroundColor.computeLuminance() > 0.5;
+
     if (!_showControls) {
       SystemChrome.setEnabledSystemUIMode(
         SystemUiMode.immersiveSticky,
@@ -789,19 +648,23 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         SystemUiMode.manual,
         overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
       );
-      
+
       // 设置系统UI样式与控制栏颜色保持一致
       final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-      final Color navigationBarColor = isDarkMode 
-          ? Color.lerp(_backgroundColor, Colors.grey[800]!, 0.3)!
-          : Color.lerp(_backgroundColor, Colors.grey[100]!, 0.4)!;
-      
+      final Color navigationBarColor = isDarkMode
+          ? Color.lerp(_currentTheme.backgroundColor, Colors.grey[800]!, 0.3)!
+          : Color.lerp(_currentTheme.backgroundColor, Colors.grey[100]!, 0.4)!;
+
       SystemChrome.setSystemUIOverlayStyle(
         SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
-          statusBarIconBrightness: isLightBackground ? Brightness.dark : Brightness.light,
+          statusBarIconBrightness: isLightBackground
+              ? Brightness.dark
+              : Brightness.light,
           systemNavigationBarColor: navigationBarColor,
-          systemNavigationBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
+          systemNavigationBarIconBrightness: isDarkMode
+              ? Brightness.light
+              : Brightness.dark,
         ),
       );
     }
@@ -814,7 +677,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       _showControlsWithAnimation();
     }
   }
-  
+
   void _showControlsWithAnimation() {
     if (!_showControls) {
       setState(() => _showControls = true);
@@ -837,15 +700,15 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
   void _onPageTurn() {
     if (!mounted) return;
-    
+
     // 检查当前页面书签状态
     _checkCurrentPageBookmark();
-    
+
     // 不立即隐藏控件，让用户有时间看到页面变化
     if (_showControls) {
       _startHideControlsTimer(); // 重新开始计时而不是立即隐藏
     }
-    
+
     try {
       _bookDao.updateBookProgress(widget.book.id!, _currentPageIndex);
     } catch (e) {
@@ -858,7 +721,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     final screenHeight = MediaQuery.of(context).size.height;
     final tapPosition = details.globalPosition;
 
-    if (_showControls && (tapPosition.dy < 150 || tapPosition.dy > screenHeight - 200)) {
+    if (_showControls &&
+        (tapPosition.dy < 150 || tapPosition.dy > screenHeight - 200)) {
       return;
     }
 
@@ -898,9 +762,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   Widget build(BuildContext context) {
     // 检测屏幕尺寸变化，智能响应式重新分页
     final currentScreenSize = MediaQuery.of(context).size;
-    if (_lastScreenSize != null && 
-        (_lastScreenSize!.width != currentScreenSize.width || 
-         _lastScreenSize!.height != currentScreenSize.height)) {
+    if (_lastScreenSize != null &&
+        (_lastScreenSize!.width != currentScreenSize.width ||
+            _lastScreenSize!.height != currentScreenSize.height)) {
       debugPrint('🔄 屏幕尺寸变化，触发智能重新分页');
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _bookContent.isNotEmpty) {
@@ -909,9 +773,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       });
     }
     _lastScreenSize = currentScreenSize;
-    
+
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface, // 使用主题背景色而不是_backgroundColor
+      backgroundColor: _currentTheme.backgroundColor, // 使用阅读主题的背景色，确保切换主题时立即生效
       body: Stack(
         children: [
           Positioned.fill(
@@ -927,8 +791,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             ),
           ),
           _buildControlsOverlay(),
-          // 调试信息显示
-          if (_pages.isNotEmpty && _pages.length > 1) _buildDebugInfo(),
+          // 调试信息显示 - 已禁用
+          // if (_pages.isNotEmpty && _pages.length > 1) _buildDebugInfo(),
         ],
       ),
     );
@@ -937,16 +801,19 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   Widget _buildMainContent() {
     if (_pages.isEmpty) {
       return Container(
-        color: Theme.of(context).colorScheme.surface, // 使用主题背景色
-        child: const Center(
+        color: _currentTheme.backgroundColor, // 使用阅读主题背景色
+        child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
+              CircularProgressIndicator(color: _currentTheme.textColor),
+              const SizedBox(height: 16),
               Text(
                 '正在初始化阅读器...',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 16,
+                  color: _currentTheme.textColor.withValues(alpha: 0.7),
+                ),
               ),
             ],
           ),
@@ -958,18 +825,26 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     if (first.startsWith(_kLoadingPrefix) || first.startsWith(_kErrorPrefix)) {
       final isError = first.startsWith(_kErrorPrefix);
       return Container(
-        color: _backgroundColor,
+        color: _currentTheme.backgroundColor,
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (!isError) const CircularProgressIndicator() else Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
+              if (!isError)
+                const CircularProgressIndicator()
+              else
+                Icon(Icons.error_outline, size: 48, color: Colors.red.shade300),
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Text(
                   first,
-                  style: TextStyle(fontSize: 16, color: isError ? Colors.red : Colors.grey),
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: isError
+                        ? Colors.red.shade300
+                        : _currentTheme.textColor.withValues(alpha: 0.7),
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -989,12 +864,12 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
     // 检查是否应该显示双页布局
     final shouldShowDoublePage = ResponsiveHelper.shouldShowDoublePage(context);
-    
+
     if (shouldShowDoublePage) {
       return _buildDoublePageView();
     } else {
       return Container(
-        color: _backgroundColor,
+        color: _currentTheme.backgroundColor,
         child: PageView.builder(
           controller: _pageController,
           itemCount: _pages.length,
@@ -1035,33 +910,33 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   // 双页布局视图 - 简化版，只有中间分隔线
   Widget _buildDoublePageView() {
     return Container(
-      color: Theme.of(context).colorScheme.surface, // 使用主题背景色
+      color: _currentTheme.backgroundColor, // 使用阅读主题背景色
       child: PageView.builder(
         controller: _pageController,
         itemCount: (_pages.length / 2).ceil(),
         itemBuilder: (context, index) {
           final leftPageIndex = index * 2;
           final rightPageIndex = leftPageIndex + 1;
-          
+
           return Row(
             children: [
               // 左页
               Expanded(
-                child: leftPageIndex < _pages.length 
-                  ? _buildPageWidget(leftPageIndex, isDoublePage: true)
-                  : Container(color: _backgroundColor),
+                child: leftPageIndex < _pages.length
+                    ? _buildPageWidget(leftPageIndex, isDoublePage: true)
+                    : Container(color: _currentTheme.backgroundColor),
               ),
               // 中间分隔线
               Container(
                 width: 1,
                 height: double.infinity,
-                color: _fontColor.withValues(alpha: 0.2),
+                color: _currentTheme.textColor.withValues(alpha: 0.2),
               ),
               // 右页
               Expanded(
-                child: rightPageIndex < _pages.length 
-                  ? _buildPageWidget(rightPageIndex, isDoublePage: true)
-                  : Container(color: _backgroundColor),
+                child: rightPageIndex < _pages.length
+                    ? _buildPageWidget(rightPageIndex, isDoublePage: true)
+                    : Container(color: _currentTheme.backgroundColor),
               ),
             ],
           );
@@ -1081,11 +956,11 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   Widget _buildPageWidget(int index, {bool isDoublePage = false}) {
     if (index < 0 || index >= _pages.length) {
       return Container(
-        color: Theme.of(context).colorScheme.surface, // 使用主题背景色
+        color: _currentTheme.backgroundColor, // 使用阅读主题背景色
         child: Center(
           child: Text(
             '页面索引错误: $index',
-            style: TextStyle(fontSize: 16, color: _fontColor),
+            style: TextStyle(fontSize: 16, color: _currentTheme.textColor),
           ),
         ),
       );
@@ -1094,59 +969,63 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     final pageContent = _pages[index];
     if (pageContent.isEmpty) {
       return Container(
-        color: Theme.of(context).colorScheme.surface, // 使用主题背景色
+        color: _currentTheme.backgroundColor, // 使用阅读主题背景色
         child: Center(
           child: Text(
             '页面内容为空',
-            style: TextStyle(fontSize: 16, color: _fontColor.withValues(alpha: 0.5)),
+            style: TextStyle(
+              fontSize: 16,
+              color: _currentTheme.textColor.withValues(alpha: 0.5),
+            ),
           ),
         ),
       );
     }
 
     // 根据是否为双页布局调整边距和间距
-    final horizontalPadding = isDoublePage 
-        ? _horizontalPadding * 0.5  // 双页时减少内边距
+    final horizontalPadding = isDoublePage
+        ? _horizontalPadding *
+              0.5 // 双页时减少内边距
         : _horizontalPadding;
-    
+
     // 简化留白计算，确保文字完整显示
     final statusBarHeight = MediaQuery.of(context).padding.top;
-    
+
     // 适度的固定留白，确保文字完整显示
     final topPadding = isDoublePage ? 30.0 : 40.0;
     // 优化底部留白，减少过多的空白区域
     final baseBottomPadding = isDoublePage ? 30.0 : 40.0; // 减少基础底部留白
     final toolbarSpace = 100.0; // 减少控制栏预留空间
     final bottomPadding = baseBottomPadding + toolbarSpace;
-    
+
     return RepaintBoundary(
       child: Container(
-        color: Theme.of(context).colorScheme.surface, // 使用主题背景色
+        color: _currentTheme.backgroundColor, // 使用阅读主题背景色
         width: double.infinity,
         height: double.infinity,
         child: SafeArea(
-        top: false,   // 顶部由我们自己控制
-        bottom: true, // 底部使用SafeArea确保不被导航栏遮挡
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: horizontalPadding,
-            right: horizontalPadding,
-            top: topPadding + statusBarHeight,
-            bottom: bottomPadding,
-          ),
-          child: Text(
-            pageContent,
-            style: TextStyle(
-              fontSize: _fontSize,
-              height: _lineSpacing,
-              letterSpacing: _letterSpacing,
-              color: Theme.of(context).colorScheme.onSurface, // 使用主题字体颜色
-              fontFamily: _fontFamily == 'System' ? null : _fontFamily,
+          top: false, // 顶部由我们自己控制
+          bottom: true, // 底部使用SafeArea确保不被导航栏遮挡
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: horizontalPadding,
+              right: horizontalPadding,
+              top: topPadding + statusBarHeight,
+              bottom: bottomPadding,
             ),
-            textAlign: TextAlign.justify,
+            child: Text(
+              pageContent,
+              style: TextStyle(
+                fontSize: _fontSize,
+                height: _lineSpacing,
+                letterSpacing: _letterSpacing,
+                color: _currentTheme.textColor, // 使用阅读主题的文字颜色
+                fontFamily: _fontFamily == 'System' ? null : _fontFamily,
+              ),
+              textAlign: TextAlign.justify,
+            ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -1167,14 +1046,15 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   Widget _buildTopBar() {
     final double statusBarHeight = MediaQuery.of(context).padding.top;
     final double topBarHeight = statusBarHeight + 60;
-    
+
     // 根据背景颜色动态调整工具栏颜色
-    final isLightBackground = _backgroundColor.computeLuminance() > 0.5;
+    final isLightBackground =
+        _currentTheme.backgroundColor.computeLuminance() > 0.5;
     final textColor = isLightBackground ? Colors.black87 : Colors.white;
-    final iconBgColor = isLightBackground 
+    final iconBgColor = isLightBackground
         ? Colors.grey.withValues(alpha: 0.2)
         : Colors.grey.withValues(alpha: 0.3);
-    
+
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
@@ -1187,114 +1067,122 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         curve: Curves.easeInOut,
         child: IgnorePointer(
           ignoring: !_showControls,
-            child: ClipRRect(
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(20),
-              ),
-              // 毛玻璃效果 - 阅读页面顶部控制栏
-              // 创建半透明控制栏，不遮挡阅读内容的视觉体验
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), // 较轻的模糊避免干扰阅读
-                child: Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.only(
-                    top: statusBarHeight + 8,
-                    left: 16,
-                    right: 16,
-                    bottom: 12,
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(20),
+              bottomRight: Radius.circular(20),
+            ),
+            // 毛玻璃效果 - 阅读页面顶部控制栏
+            // 创建半透明控制栏，不遮挡阅读内容的视觉体验
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), // 较轻的模糊避免干扰阅读
+              child: Container(
+                width: double.infinity,
+                padding: EdgeInsets.only(
+                  top: statusBarHeight + 8,
+                  left: 16,
+                  right: 16,
+                  bottom: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: Color.lerp(
+                    _currentTheme.backgroundColor,
+                    isLightBackground ? Colors.white : Colors.black,
+                    0.15,
+                  )!.withValues(alpha: 0.85),
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(20),
                   ),
-                  decoration: BoxDecoration(
-                    color: Color.lerp(_backgroundColor, 
-                        isLightBackground ? Colors.white : Colors.black, 0.15)!.withValues(alpha: 0.85),
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(20),
-                      bottomRight: Radius.circular(20),
+                  border: Border.all(
+                    color: isLightBackground
+                        ? Colors.black.withValues(alpha: 0.08)
+                        : Colors.white.withValues(alpha: 0.1),
+                    width: 0.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
                     ),
-                    border: Border.all(
-                      color: isLightBackground 
-                          ? Colors.black.withValues(alpha: 0.08)
-                          : Colors.white.withValues(alpha: 0.1),
-                      width: 0.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 2),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: iconBgColor,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
-                  ),
-              child: Row(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: iconBgColor,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: Icon(
-                        Icons.arrow_back_ios_rounded,
-                        color: textColor,
-                        size: 20,
-                      ),
-                      padding: const EdgeInsets.all(8),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          widget.book.title,
-                          style: TextStyle(
-                            color: textColor,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      child: IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: Icon(
+                          Icons.arrow_back_ios_rounded,
+                          color: textColor,
+                          size: 20,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.book.author,
-                          style: TextStyle(
-                            color: textColor.withValues(alpha: 0.7),
-                            fontSize: 12,
+                        padding: const EdgeInsets.all(8),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.book.title,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          const SizedBox(height: 2),
+                          Text(
+                            widget.book.author,
+                            style: TextStyle(
+                              color: textColor.withValues(alpha: 0.7),
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.blue.withValues(alpha: 0.4),
+                          width: 1,
                         ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.blue.withValues(alpha: 0.4), 
-                        width: 1
+                      ),
+                      child: Text(
+                        '${_currentPageIndex + 1}/${_pages.length}',
+                        style: TextStyle(
+                          color: isLightBackground
+                              ? Colors.blue[700]
+                              : Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                    child: Text(
-                      '${_currentPageIndex + 1}/${_pages.length}',
-                      style: TextStyle(
-                        color: isLightBackground ? Colors.blue[700] : Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                  ],
                 ),
               ),
             ),
+          ),
         ),
       ),
     );
@@ -1303,15 +1191,11 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   Widget _buildBottomToolbar() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final double bottomPadding = MediaQuery.of(context).padding.bottom;
-    
-    final Color toolbarBgColor = isDarkMode 
-        ? Color.lerp(_backgroundColor, Colors.grey[800]!, 0.3)!
-        : Color.lerp(_backgroundColor, Colors.grey[100]!, 0.4)!;
-    
-    final Color handleColor = isDarkMode
-        ? Colors.white.withValues(alpha: 0.4)
-        : Colors.black.withValues(alpha: 0.3);
-    
+
+    final Color toolbarBgColor = _currentTheme.controlBarColor;
+
+    final Color handleColor = _currentTheme.iconColor.withValues(alpha: 0.6);
+
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
@@ -1324,67 +1208,74 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         child: IgnorePointer(
           ignoring: !_showControls,
           child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.only(
-          top: 8, // 只保留顶部内边距，让背景延伸到底部
-        ),
-        child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              padding: EdgeInsets.only(
-                bottom: bottomPadding + 8, // 内容区域保持底部间距
+            width: double.infinity,
+            padding: EdgeInsets.only(
+              top: 8, // 只保留顶部内边距，让背景延伸到底部
+            ),
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
               ),
-              decoration: BoxDecoration(
-                color: toolbarBgColor.withValues(alpha: 0.95),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                border: Border.all(
-                  color: isDarkMode 
-                      ? Colors.white.withValues(alpha: 0.1)
-                      : Colors.black.withValues(alpha: 0.08),
-                  width: 0.5,
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 可拖拽的小横条指示器
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 8), // 减少垂直内边距
-                    child: Center(
-                      child: Container(
-                        width: 48,
-                        height: 4, // 减少高度
-                        decoration: BoxDecoration(
-                          color: handleColor,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  padding: EdgeInsets.only(
+                    bottom: bottomPadding + 8, // 内容区域保持底部间距
+                  ),
+                  decoration: BoxDecoration(
+                    color: toolbarBgColor.withValues(alpha: 0.95),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
+                    border: Border.all(
+                      color: isDarkMode
+                          ? Colors.white.withValues(alpha: 0.1)
+                          : Colors.black.withValues(alpha: 0.08),
+                      width: 0.5,
                     ),
                   ),
-                  _buildProgressSlider(),
-                  const SizedBox(height: 8), // 减少间距
-                  _buildToolbarButtons(),
-                ],
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 可拖拽的小横条指示器
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                        ), // 减少垂直内边距
+                        child: Center(
+                          child: Container(
+                            width: 48,
+                            height: 4, // 减少高度
+                            decoration: BoxDecoration(
+                              color: handleColor,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8), // 减少间距
+                      _buildToolbarButtons(),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
         ),
-        ),
-        ),
       ),
     );
   }
-  
 
   Widget _buildToolbarButtons() {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 8), // 减少顶部内边距，增加底部内边距确保按钮不贴边
+      padding: const EdgeInsets.fromLTRB(
+        20,
+        4,
+        20,
+        8,
+      ), // 减少顶部内边距，增加底部内边距确保按钮不贴边
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
@@ -1392,154 +1283,38 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             icon: Icons.format_list_bulleted_rounded,
             label: '目录',
             onTap: _showTableOfContents,
-            isDarkMode: isDarkMode,
+            iconColor: _currentTheme.controlBarTextColor,
+            pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
           ),
           _ModernToolbarButton(
             icon: Icons.tune_rounded,
             label: '设置',
             onTap: _showSettingsPanel,
-            isDarkMode: isDarkMode,
+            iconColor: _currentTheme.controlBarTextColor,
+            pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
           ),
           _ModernToolbarButton(
             icon: Icons.palette_rounded,
             label: '主题',
             onTap: _showThemePanel,
-            isDarkMode: isDarkMode,
+            iconColor: _currentTheme.controlBarTextColor,
+            pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
           ),
           _ModernToolbarButton(
-            icon: _isCurrentPageBookmarked 
+            icon: _isCurrentPageBookmarked
                 ? Icons.bookmark_rounded
                 : Icons.bookmark_add_rounded,
             label: '书签',
             onTap: _showBookmarks,
-            isDarkMode: isDarkMode,
+            iconColor: _currentTheme.controlBarTextColor,
+            pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
           ),
           _ModernToolbarButton(
             icon: Icons.more_horiz_rounded,
             label: '更多',
             onTap: _showMoreOptions,
-            isDarkMode: isDarkMode,
-          ),
-        ],
-      ),
-    );
-  }
-
-
-  Widget _buildProgressSlider() {
-    final progress = _pages.isNotEmpty ? (_currentPageIndex + 1) / _pages.length : 0.0;
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
-    // 使用主题相关但有对比度的颜色
-    final Color sliderBgColor = isDarkMode 
-        ? Color.lerp(_backgroundColor, Colors.grey[850]!, 0.4)!
-        : Color.lerp(_backgroundColor, Colors.white, 0.6)!;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12), // 减少垂直内边距
-      decoration: BoxDecoration(
-        color: sliderBgColor.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDarkMode 
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.black.withValues(alpha: 0.08),
-          width: 0.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isDarkMode 
-                ? Colors.black.withValues(alpha: 0.3)
-                : Colors.black.withValues(alpha: 0.1),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                _pages.isNotEmpty ? '第 ${_currentPageIndex + 1} 页' : '第 0 页',
-                style: TextStyle(
-                  color: isDarkMode ? Colors.white : Colors.black87,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isDarkMode ? Colors.blue[600] : Colors.blue[500],
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${(progress * 100).toStringAsFixed(1)}%',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 6,
-              thumbShape: RoundSliderThumbShape(
-                enabledThumbRadius: 12,
-              ),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
-              activeTrackColor: isDarkMode ? Colors.blue[400] : Colors.blue[500],
-              inactiveTrackColor: isDarkMode 
-                  ? Colors.grey[700]
-                  : Colors.grey[300],
-              thumbColor: isDarkMode ? Colors.blue[400] : Colors.blue[600],
-              overlayColor: (isDarkMode ? Colors.blue[400] : Colors.blue[500])!.withValues(alpha: 0.2),
-            ),
-            child: Slider(
-              value: _pages.isNotEmpty ? _currentPageIndex.toDouble().clamp(0, (_pages.length - 1).toDouble()) : 0.0,
-              min: 0,
-              max: (_pages.isNotEmpty ? _pages.length - 1 : 0).toDouble(),
-              divisions: _pages.length > 1 ? _pages.length - 1 : null, // 修复：当页数<=1时设为null，避免divisions=0的错误
-              label: _pages.isNotEmpty ? '第 ${_currentPageIndex + 1} 页' : '第 0 页',
-              onChanged: _pages.isNotEmpty ? (value) => setState(() => _currentPageIndex = value.toInt()) : null,
-              onChangeEnd: _pages.isNotEmpty
-                  ? (value) {
-                      _pageController.animateToPage(
-                        value.toInt(),
-                        duration: const Duration(milliseconds: 350),
-                        curve: Curves.easeInOut,
-                      );
-                    }
-                  : null,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '总进度',
-                style: TextStyle(
-                  color: (isDarkMode ? Colors.white : Colors.black87).withValues(alpha: 0.7),
-                  fontSize: 12,
-                ),
-              ),
-              Text(
-                _pages.isNotEmpty ? '共 ${_pages.length} 页' : '共 0 页',
-                style: TextStyle(
-                  color: isDarkMode ? Colors.white : Colors.black87,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+            iconColor: _currentTheme.controlBarTextColor,
+            pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
           ),
         ],
       ),
@@ -1562,21 +1337,25 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-            final panelBgColor = isDarkMode 
+            final panelBgColor = isDarkMode
                 ? Colors.grey[900]!.withValues(alpha: 0.98)
                 : Colors.grey[50]!.withValues(alpha: 0.98);
-            
+
             return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               height: MediaQuery.of(context).size.height * 0.6,
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
                   child: Container(
                     decoration: BoxDecoration(
                       color: panelBgColor,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28),
+                      ),
                     ),
                     child: Column(
                       children: [
@@ -1589,8 +1368,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               width: 40,
                               height: 4,
                               decoration: BoxDecoration(
-                                color: isDarkMode 
-                                    ? Colors.grey[600] 
+                                color: isDarkMode
+                                    ? Colors.grey[600]
                                     : Colors.grey[400],
                                 borderRadius: BorderRadius.circular(2),
                               ),
@@ -1609,18 +1388,20 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(
-                                  Icons.palette_rounded, 
-                                  color: Colors.purple[600], 
-                                  size: 24
+                                  Icons.palette_rounded,
+                                  color: Colors.purple[600],
+                                  size: 24,
                                 ),
                               ),
                               const SizedBox(width: 16),
                               Text(
                                 '阅读主题',
                                 style: TextStyle(
-                                  color: isDarkMode ? Colors.white : Colors.grey[800], 
-                                  fontSize: 22, 
-                                  fontWeight: FontWeight.w700
+                                  color: isDarkMode
+                                      ? Colors.white
+                                      : Colors.grey[800],
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ],
@@ -1630,7 +1411,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                         Expanded(
                           child: SingleChildScrollView(
                             padding: const EdgeInsets.all(20),
-                            child: _buildEnhancedColorThemeSelector(setModalState, isDarkMode),
+                            child: _buildEnhancedColorThemeSelector(
+                              setModalState,
+                              isDarkMode,
+                            ),
                           ),
                         ),
                         // 底部按钮
@@ -1648,13 +1432,21 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.purple[600],
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                                 elevation: 0,
                               ),
-                              child: const Text('完成', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                              child: const Text(
+                                '完成',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -1686,28 +1478,34 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-            final panelBgColor = isDarkMode 
+            final panelBgColor = isDarkMode
                 ? Colors.grey[900]!.withValues(alpha: 0.98)
                 : Colors.grey[50]!.withValues(alpha: 0.98);
-            final panelBorderColor = isDarkMode 
+            final panelBorderColor = isDarkMode
                 ? Colors.grey[700]!.withValues(alpha: 0.6)
                 : Colors.grey[300]!.withValues(alpha: 0.8);
-            
+
             return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               height: MediaQuery.of(context).size.height * 0.6,
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
                   child: Container(
                     decoration: BoxDecoration(
                       color: panelBgColor,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(28),
+                      ),
                       border: Border.all(color: panelBorderColor, width: 1),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: isDarkMode ? 0.4 : 0.1),
+                          color: Colors.black.withValues(
+                            alpha: isDarkMode ? 0.4 : 0.1,
+                          ),
                           blurRadius: 20,
                           offset: const Offset(0, -5),
                         ),
@@ -1724,8 +1522,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               width: 40,
                               height: 4,
                               decoration: BoxDecoration(
-                                color: isDarkMode 
-                                    ? Colors.grey[600] 
+                                color: isDarkMode
+                                    ? Colors.grey[600]
                                     : Colors.grey[400],
                                 borderRadius: BorderRadius.circular(2),
                               ),
@@ -1738,10 +1536,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                           decoration: BoxDecoration(
                             border: Border(
                               top: BorderSide(
-                                color: isDarkMode 
+                                color: isDarkMode
                                     ? Colors.grey[700]!.withValues(alpha: 0.5)
-                                    : Colors.grey[300]!.withValues(alpha: 0.8), 
-                                width: 1
+                                    : Colors.grey[300]!.withValues(alpha: 0.8),
+                                width: 1,
                               ),
                             ),
                           ),
@@ -1750,42 +1548,50 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: isDarkMode 
+                                  color: isDarkMode
                                       ? Colors.blue[600]!.withValues(alpha: 0.2)
-                                      : Colors.blue[100]!.withValues(alpha: 0.8),
+                                      : Colors.blue[100]!.withValues(
+                                          alpha: 0.8,
+                                        ),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(
-                                  Icons.tune_rounded, 
-                                  color: isDarkMode ? Colors.blue[300] : Colors.blue[600], 
-                                  size: 24
+                                  Icons.tune_rounded,
+                                  color: isDarkMode
+                                      ? Colors.blue[300]
+                                      : Colors.blue[600],
+                                  size: 24,
                                 ),
                               ),
                               const SizedBox(width: 16),
                               Text(
                                 '阅读设置',
                                 style: TextStyle(
-                                  color: isDarkMode ? Colors.white : Colors.grey[800], 
-                                  fontSize: 22, 
-                                  fontWeight: FontWeight.w700, 
-                                  letterSpacing: 0.5
+                                  color: isDarkMode
+                                      ? Colors.white
+                                      : Colors.grey[800],
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
                                 ),
                               ),
                               const Spacer(),
                               Container(
                                 decoration: BoxDecoration(
-                                  color: isDarkMode 
+                                  color: isDarkMode
                                       ? Colors.grey[700]!.withValues(alpha: 0.5)
-                                      : Colors.grey[200]!.withValues(alpha: 0.8),
+                                      : Colors.grey[200]!.withValues(
+                                          alpha: 0.8,
+                                        ),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: IconButton(
                                   icon: Icon(
-                                    Icons.refresh_rounded, 
-                                    color: isDarkMode 
-                                        ? Colors.grey[300] 
-                                        : Colors.grey[600], 
-                                    size: 20
+                                    Icons.refresh_rounded,
+                                    color: isDarkMode
+                                        ? Colors.grey[300]
+                                        : Colors.grey[600],
+                                    size: 20,
                                   ),
                                   onPressed: () {
                                     _resetSettings();
@@ -1822,7 +1628,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                       onChanged: (v) {
                                         setModalState(() => _fontSize = v);
                                         setState(() {});
-                                        _saveSetting((p) => p.setDouble('fontSize', v));
+                                        _saveSetting(
+                                          (p) => p.setDouble('fontSize', v),
+                                        );
                                       },
                                     ),
                                     _buildEnhancedSettingSlider(
@@ -1837,7 +1645,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                       onChanged: (v) {
                                         setModalState(() => _lineSpacing = v);
                                         setState(() {});
-                                        _saveSetting((p) => p.setDouble('lineSpacing', v));
+                                        _saveSetting(
+                                          (p) => p.setDouble('lineSpacing', v),
+                                        );
                                       },
                                     ),
                                     _buildEnhancedSettingSlider(
@@ -1852,10 +1662,16 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                       onChanged: (v) {
                                         setModalState(() => _letterSpacing = v);
                                         setState(() {});
-                                        _saveSetting((p) => p.setDouble('letterSpacing', v));
+                                        _saveSetting(
+                                          (p) =>
+                                              p.setDouble('letterSpacing', v),
+                                        );
                                       },
                                     ),
-                                    _buildFontFamilySelector(isDarkMode, setModalState),
+                                    _buildFontFamilySelector(
+                                      isDarkMode,
+                                      setModalState,
+                                    ),
                                   ],
                                 ),
                                 const SizedBox(height: 24),
@@ -1876,7 +1692,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                       onChanged: (v) {
                                         setModalState(() => _pageMargin = v);
                                         setState(() {});
-                                        _saveSetting((p) => p.setDouble('pageMargin', v));
+                                        _saveSetting(
+                                          (p) => p.setDouble('pageMargin', v),
+                                        );
                                       },
                                     ),
                                     _buildEnhancedSettingSlider(
@@ -1889,9 +1707,16 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                       icon: Icons.horizontal_distribute,
                                       isDarkMode: isDarkMode,
                                       onChanged: (v) {
-                                        setModalState(() => _horizontalPadding = v);
+                                        setModalState(
+                                          () => _horizontalPadding = v,
+                                        );
                                         setState(() {});
-                                        _saveSetting((p) => p.setDouble('horizontalPadding', v));
+                                        _saveSetting(
+                                          (p) => p.setDouble(
+                                            'horizontalPadding',
+                                            v,
+                                          ),
+                                        );
                                       },
                                     ),
                                   ],
@@ -1910,7 +1735,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                       onChanged: (v) {
                                         setModalState(() => _keepScreenOn = v);
                                         setState(() {});
-                                        _saveSetting((p) => p.setBool('keepScreenOn', v));
+                                        _saveSetting(
+                                          (p) => p.setBool('keepScreenOn', v),
+                                        );
                                       },
                                     ),
                                     _buildSwitchSetting(
@@ -1921,7 +1748,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                       onChanged: (v) {
                                         setModalState(() => _autoScroll = v);
                                         setState(() {});
-                                        _saveSetting((p) => p.setBool('autoScroll', v));
+                                        _saveSetting(
+                                          (p) => p.setBool('autoScroll', v),
+                                        );
                                       },
                                     ),
                                   ],
@@ -1941,10 +1770,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                           decoration: BoxDecoration(
                             border: Border(
                               top: BorderSide(
-                                color: isDarkMode 
+                                color: isDarkMode
                                     ? Colors.grey[700]!.withValues(alpha: 0.5)
-                                    : Colors.grey[300]!.withValues(alpha: 0.8), 
-                                width: 1
+                                    : Colors.grey[300]!.withValues(alpha: 0.8),
+                                width: 1,
                               ),
                             ),
                           ),
@@ -1954,11 +1783,13 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                 child: ElevatedButton(
                                   onPressed: () => Navigator.pop(context),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: isDarkMode 
+                                    backgroundColor: isDarkMode
                                         ? Colors.blue[600]
                                         : Colors.blue[500],
                                     foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),
                                     ),
@@ -2010,17 +1841,17 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     bool isDarkMode = true,
   }) {
     final textColor = isDarkMode ? Colors.white : Colors.grey[800]!;
-    final sectionBgColor = isDarkMode 
+    final sectionBgColor = isDarkMode
         ? Colors.grey[850]!.withValues(alpha: 0.6)
         : Colors.grey[50]!.withValues(alpha: 0.9);
-    final sectionBorderColor = isDarkMode 
+    final sectionBorderColor = isDarkMode
         ? Colors.grey[700]!.withValues(alpha: 0.5)
         : Colors.grey[300]!.withValues(alpha: 0.8);
-    final iconBgColor = isDarkMode 
+    final iconBgColor = isDarkMode
         ? Colors.blue[600]!.withValues(alpha: 0.3)
         : Colors.blue[100]!.withValues(alpha: 0.8);
     final iconColor = isDarkMode ? Colors.blue[300] : Colors.blue[600];
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -2080,23 +1911,23 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }) {
     final textColor = isDarkMode ? Colors.white : Colors.grey[800]!;
     final activeColor = isDarkMode ? Colors.blue[400]! : Colors.blue[500]!;
-    final inactiveColor = isDarkMode 
+    final inactiveColor = isDarkMode
         ? Colors.grey[600]!.withValues(alpha: 0.5)
         : Colors.grey[300]!.withValues(alpha: 0.8);
-    final badgeColor = isDarkMode 
+    final badgeColor = isDarkMode
         ? Colors.blue[600]!.withValues(alpha: 0.3)
         : Colors.blue[100]!.withValues(alpha: 0.8);
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDarkMode 
+        color: isDarkMode
             ? Colors.grey[800]!.withValues(alpha: 0.4)
             : Colors.white.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDarkMode 
+          color: isDarkMode
               ? Colors.grey[700]!.withValues(alpha: 0.5)
               : Colors.grey[300]!.withValues(alpha: 0.6),
           width: 1,
@@ -2137,7 +1968,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: activeColor.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
@@ -2186,17 +2020,17 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
   Widget _buildFontFamilySelector(bool isDarkMode, StateSetter setModalState) {
     final textColor = isDarkMode ? Colors.white : Colors.grey[800]!;
-    final cardColor = isDarkMode 
+    final cardColor = isDarkMode
         ? Colors.grey[800]!.withValues(alpha: 0.6)
         : Colors.grey[100]!.withValues(alpha: 0.8);
-    
+
     final fontFamilies = [
       {'name': '系统默认', 'value': 'System'},
       {'name': '宋体', 'value': 'Serif'},
       {'name': '黑体', 'value': 'Sans-serif'},
       {'name': '等宽字体', 'value': 'Monospace'},
     ];
-    
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 12),
       padding: const EdgeInsets.all(20),
@@ -2204,7 +2038,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDarkMode 
+          color: isDarkMode
               ? Colors.grey[600]!.withValues(alpha: 0.3)
               : Colors.grey[300]!.withValues(alpha: 0.5),
           width: 1,
@@ -2218,7 +2052,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: isDarkMode 
+                  color: isDarkMode
                       ? Colors.orange[600]!.withValues(alpha: 0.3)
                       : Colors.orange[100]!.withValues(alpha: 0.8),
                   borderRadius: BorderRadius.circular(8),
@@ -2250,35 +2084,42 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                 onTap: () {
                   setModalState(() => _fontFamily = font['value']!);
                   setState(() {});
-                  _saveSetting((p) => p.setString('fontFamily', font['value']!));
+                  _saveSetting(
+                    (p) => p.setString('fontFamily', font['value']!),
+                  );
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? (isDarkMode ? Colors.blue[600] : Colors.blue[500])
-                        : (isDarkMode 
-                            ? Colors.grey[700]!.withValues(alpha: 0.5)
-                            : Colors.white.withValues(alpha: 0.8)),
+                        : (isDarkMode
+                              ? Colors.grey[700]!.withValues(alpha: 0.5)
+                              : Colors.white.withValues(alpha: 0.8)),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isSelected
                           ? (isDarkMode ? Colors.blue[400]! : Colors.blue[300]!)
-                          : (isDarkMode 
-                              ? Colors.grey[600]!.withValues(alpha: 0.3)
-                              : Colors.grey[300]!.withValues(alpha: 0.5)),
+                          : (isDarkMode
+                                ? Colors.grey[600]!.withValues(alpha: 0.3)
+                                : Colors.grey[300]!.withValues(alpha: 0.5)),
                       width: 1.5,
                     ),
                   ),
                   child: Text(
                     font['name']!,
                     style: TextStyle(
-                      color: isSelected
-                          ? Colors.white
-                          : textColor,
+                      color: isSelected ? Colors.white : textColor,
                       fontSize: 14,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                      fontFamily: font['value'] == 'System' ? null : font['value'],
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                      fontFamily: font['value'] == 'System'
+                          ? null
+                          : font['value'],
                     ),
                   ),
                 ),
@@ -2299,17 +2140,17 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }) {
     final textColor = isDarkMode ? Colors.white : Colors.grey[800]!;
     final activeColor = isDarkMode ? Colors.blue[400]! : Colors.blue[500]!;
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
-        color: isDarkMode 
+        color: isDarkMode
             ? Colors.grey[800]!.withValues(alpha: 0.4)
             : Colors.white.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDarkMode 
+          color: isDarkMode
               ? Colors.grey[700]!.withValues(alpha: 0.5)
               : Colors.grey[300]!.withValues(alpha: 0.6),
           width: 1,
@@ -2331,11 +2172,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                 color: activeColor.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(
-                icon,
-                color: activeColor,
-                size: 18,
-              ),
+              child: Icon(icon, color: activeColor, size: 18),
             ),
             const SizedBox(width: 12),
           ],
@@ -2352,12 +2189,12 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: activeColor,
-            inactiveTrackColor: isDarkMode 
+            inactiveTrackColor: isDarkMode
                 ? Colors.grey[600]!.withValues(alpha: 0.5)
                 : Colors.grey[300]!.withValues(alpha: 0.8),
-            inactiveThumbColor: isDarkMode 
+            inactiveThumbColor: isDarkMode
                 ? Colors.grey[400]
                 : Colors.grey[600],
           ),
@@ -2366,17 +2203,15 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     );
   }
 
-  Widget _buildEnhancedColorThemeSelector(StateSetter setModalState, bool isDarkMode) {
-    final themes = [
-      {'name': '护眼绿', 'bg': const Color(0xFFCCE8CC), 'text': const Color(0xFF2D5016), 'icon': Icons.eco},
-      {'name': '羊皮纸', 'bg': const Color(0xFFFBF5E6), 'text': const Color(0xFF5C4A37), 'icon': Icons.article},
-      {'name': '夜间黑', 'bg': const Color(0xFF1E1E1E), 'text': const Color(0xFFE0E0E0), 'icon': Icons.dark_mode},
-      {'name': '纯净白', 'bg': Colors.white, 'text': Colors.black87, 'icon': Icons.light_mode},
-    ];
-
+  Widget _buildEnhancedColorThemeSelector(
+    StateSetter setModalState,
+    bool isDarkMode,
+  ) {
     final textColor = isDarkMode ? Colors.white : Colors.grey[800]!;
-    final selectedBorderColor = isDarkMode ? Colors.blue[400]! : Colors.blue[500]!;
-    
+    final selectedBorderColor = isDarkMode
+        ? Colors.blue[400]!
+        : Colors.blue[500]!;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2389,7 +2224,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             ),
             const SizedBox(width: 8),
             Text(
-              '主题色彩',
+              '阅读主题',
               style: TextStyle(
                 color: textColor,
                 fontSize: 15,
@@ -2404,38 +2239,31 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
-            childAspectRatio: 2.2,
+            childAspectRatio: 2.6, // 进一步增加高度比例
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
           ),
-          itemCount: themes.length,
+          itemCount: ReadingThemes.allThemes.length,
           itemBuilder: (context, index) {
-            final theme = themes[index];
-            final isSelected = _backgroundColor == theme['bg'] as Color && _fontColor == theme['text'] as Color;
-            
+            final theme = ReadingThemes.allThemes[index];
+            final isSelected = _currentTheme.name == theme.name;
+
             return GestureDetector(
               onTap: () {
-                setModalState(() {
-                  _backgroundColor = theme['bg'] as Color;
-                  _fontColor = theme['text'] as Color;
-                });
-                setState(() {});
-                _saveSetting((p) {
-                  p.setInt('backgroundColor', (_backgroundColor).toARGB32());
-                  p.setInt('fontColor', (_fontColor).toARGB32());
-                });
+                _switchReadingTheme(theme);
+                setModalState(() {});
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(
-                  color: theme['bg'] as Color,
+                  color: theme.backgroundColor,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: isSelected 
+                    color: isSelected
                         ? selectedBorderColor
-                        : (isDarkMode 
-                            ? Colors.grey[600]!.withValues(alpha: 0.5)
-                            : Colors.grey[300]!.withValues(alpha: 0.8)),
+                        : (isDarkMode
+                              ? Colors.grey[600]!.withValues(alpha: 0.5)
+                              : Colors.grey[300]!.withValues(alpha: 0.8)),
                     width: isSelected ? 3 : 1,
                   ),
                   boxShadow: isSelected
@@ -2444,65 +2272,73 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                             color: selectedBorderColor.withValues(alpha: 0.3),
                             blurRadius: 12,
                             spreadRadius: 2,
-                          )
+                          ),
                         ]
                       : [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 4,
                             offset: const Offset(0, 2),
-                          )
+                          ),
                         ],
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: (theme['text'] as Color).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
+                  padding: const EdgeInsets.all(10), // 减少padding从12到10
+                  child: IntrinsicHeight(
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6), // 减少padding从8到6
+                          decoration: BoxDecoration(
+                            color: theme.textColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6), // 相应减少圆角
+                          ),
+                          child: Icon(
+                            _getThemeIcon(theme.name),
+                            color: theme.textColor,
+                            size: 14, // 减少图标大小从16到14
+                          ),
                         ),
-                        child: Icon(
-                          theme['icon'] as IconData,
-                          color: theme['text'] as Color,
-                          size: 16,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Aa',
-                              style: TextStyle(
-                                color: theme['text'] as Color,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
+                        const SizedBox(width: 6), // 减少间距从8到6
+                        Expanded(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Aa',
+                                  style: TextStyle(
+                                    color: theme.textColor,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Text(
+                                  theme.displayName,
+                                  style: TextStyle(
+                                    color: theme.textColor.withValues(
+                                      alpha: 0.7,
+                                    ),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              theme['name'] as String,
-                              style: TextStyle(
-                                color: (theme['text'] as Color).withValues(alpha: 0.7),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
-                      if (isSelected)
-                        Icon(
-                          Icons.check_circle,
-                          color: selectedBorderColor,
-                          size: 20,
-                        ),
-                    ],
+                        if (isSelected)
+                          Icon(
+                            Icons.check_circle,
+                            color: selectedBorderColor,
+                            size: 20,
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -2511,6 +2347,24 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         ),
       ],
     );
+  }
+
+  // 获取主题对应的图标
+  IconData _getThemeIcon(String themeName) {
+    switch (themeName) {
+      case 'day':
+        return Icons.light_mode;
+      case 'night':
+        return Icons.dark_mode;
+      case 'eye_protection':
+        return Icons.eco;
+      case 'parchment':
+        return Icons.article;
+      case 'sepia':
+        return Icons.auto_stories;
+      default:
+        return Icons.palette;
+    }
   }
 
   // --- Bookmark Management ---
@@ -2606,7 +2460,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     try {
       await _bookmarkDao.deleteBookmark(bookmarkId);
       await _loadBookmarks();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -2667,20 +2521,20 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }
 
   Timer? _autoScrollTimer;
-  
+
   void _toggleAutoScroll() {
     setState(() {
       _autoScroll = !_autoScroll;
     });
     _saveSetting((p) => p.setBool('autoScroll', _autoScroll));
-    
+
     if (_autoScroll) {
       _startAutoScroll();
     } else {
       _stopAutoScroll();
     }
   }
-  
+
   void _startAutoScroll() {
     _stopAutoScroll(); // 确保之前的定时器被清除
     _autoScrollTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
@@ -2695,7 +2549,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       }
     });
   }
-  
+
   void _stopAutoScroll() {
     _autoScrollTimer?.cancel();
     _autoScrollTimer = null;
@@ -2711,13 +2565,22 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           child: Container(
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.85),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
             ),
             child: Column(
               children: [
                 Container(
                   padding: const EdgeInsets.all(24),
-                  child: const Text('目录', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                  child: const Text(
+                    '目录',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
                 Expanded(
                   child: ListView.builder(
@@ -2730,7 +2593,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                           width: 32,
                           height: 32,
                           decoration: BoxDecoration(
-                            color: isCurrentPage ? Colors.white.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.1),
+                            color: isCurrentPage
+                                ? Colors.white.withValues(alpha: 0.2)
+                                : Colors.white.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Center(
@@ -2739,7 +2604,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
-                                fontWeight: isCurrentPage ? FontWeight.w700 : FontWeight.w500,
+                                fontWeight: isCurrentPage
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
                               ),
                             ),
                           ),
@@ -2749,12 +2616,17 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 15,
-                            fontWeight: isCurrentPage ? FontWeight.w600 : FontWeight.w500,
+                            fontWeight: isCurrentPage
+                                ? FontWeight.w600
+                                : FontWeight.w500,
                           ),
                         ),
                         subtitle: Text(
                           _getPagePreview(index),
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 12,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -2784,7 +2656,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           child: Container(
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.85),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
             ),
             child: Column(
               children: [
@@ -2812,14 +2686,17 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                           }
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
                           decoration: BoxDecoration(
-                            color: _isCurrentPageBookmarked 
+                            color: _isCurrentPageBookmarked
                                 ? Colors.orange.withValues(alpha: 0.2)
                                 : Colors.blue.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: _isCurrentPageBookmarked 
+                              color: _isCurrentPageBookmarked
                                   ? Colors.orange
                                   : Colors.blue,
                               width: 1,
@@ -2829,21 +2706,19 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                _isCurrentPageBookmarked 
+                                _isCurrentPageBookmarked
                                     ? Icons.bookmark_remove
                                     : Icons.bookmark_add,
-                                color: _isCurrentPageBookmarked 
+                                color: _isCurrentPageBookmarked
                                     ? Colors.orange
                                     : Colors.blue,
                                 size: 16,
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                _isCurrentPageBookmarked 
-                                    ? '删除书签'
-                                    : '添加书签',
+                                _isCurrentPageBookmarked ? '删除书签' : '添加书签',
                                 style: TextStyle(
-                                  color: _isCurrentPageBookmarked 
+                                  color: _isCurrentPageBookmarked
                                       ? Colors.orange
                                       : Colors.blue,
                                   fontSize: 12,
@@ -2899,14 +2774,19 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                 color: Colors.transparent,
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(12),
-                                  onTap: () => _goToBookmark(bookmark.pageNumber),
+                                  onTap: () =>
+                                      _goToBookmark(bookmark.pageNumber),
                                   child: Container(
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.05),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.05,
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
-                                        color: Colors.white.withValues(alpha: 0.1),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.1,
+                                        ),
                                         width: 1,
                                       ),
                                     ),
@@ -2915,8 +2795,12 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                         Container(
                                           padding: const EdgeInsets.all(8),
                                           decoration: BoxDecoration(
-                                            color: Colors.blue.withValues(alpha: 0.2),
-                                            borderRadius: BorderRadius.circular(8),
+                                            color: Colors.blue.withValues(
+                                              alpha: 0.2,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                           ),
                                           child: const Icon(
                                             Icons.bookmark,
@@ -2927,7 +2811,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                         const SizedBox(width: 16),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 '第 ${bookmark.pageNumber} 页',
@@ -2950,12 +2835,16 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                         ),
                                         // 删除按钮
                                         GestureDetector(
-                                          onTap: () => _deleteBookmark(bookmark.id!),
+                                          onTap: () =>
+                                              _deleteBookmark(bookmark.id!),
                                           child: Container(
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
-                                              color: Colors.red.withValues(alpha: 0.1),
-                                              borderRadius: BorderRadius.circular(6),
+                                              color: Colors.red.withValues(
+                                                alpha: 0.1,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
                                             ),
                                             child: const Icon(
                                               Icons.delete_outline,
@@ -2995,7 +2884,14 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('更多选项', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+              const Text(
+                '更多选项',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const SizedBox(height: 20),
               ListTile(
                 leading: const Icon(Icons.search, color: Colors.white),
@@ -3024,7 +2920,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   String _getPagePreview(int pageIndex) {
     if (pageIndex >= _pages.length) return '';
     final content = _pages[pageIndex];
-    final preview = content.length > 50 ? '${content.substring(0, 50)}...' : content;
+    final preview = content.length > 50
+        ? '${content.substring(0, 50)}...'
+        : content;
     return preview.replaceAll('\n', ' ');
   }
 
@@ -3050,8 +2948,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     _autoScroll = false;
     _keepScreenOn = false;
     _fontFamily = 'System';
-    _backgroundColor = const Color(0xFFFFFBF0);
-    _fontColor = const Color(0xFF2C2C2C);
+    _currentTheme = ReadingThemes.dayTheme;
     _saveSetting((p) async {
       await p.remove('fontSize');
       await p.remove('lineSpacing');
@@ -3063,6 +2960,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       await p.remove('fontFamily');
       await p.remove('backgroundColor');
       await p.remove('fontColor');
+      await p.remove('readingTheme');
     });
   }
 
@@ -3086,7 +2984,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     }
     super.dispose();
   }
-  
+
   void _showSearchDialog() {
     showDialog(
       context: context,
@@ -3094,19 +2992,32 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       builder: (context) {
         String searchQuery = '';
         return AlertDialog(
-          backgroundColor: Colors.black.withValues(alpha: 0.9),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('搜索内容', style: TextStyle(color: Colors.white)),
+          backgroundColor: _currentTheme.controlBarColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text(
+            '搜索内容',
+            style: TextStyle(color: _currentTheme.controlBarTextColor),
+          ),
           content: TextField(
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
+            style: TextStyle(color: _currentTheme.controlBarTextColor),
+            decoration: InputDecoration(
               hintText: '输入要搜索的内容...',
-              hintStyle: TextStyle(color: Colors.grey),
+              hintStyle: TextStyle(
+                color: _currentTheme.controlBarTextColor.withValues(alpha: 0.6),
+              ),
               enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Colors.grey),
+                borderSide: BorderSide(
+                  color: _currentTheme.controlBarTextColor.withValues(
+                    alpha: 0.6,
+                  ),
+                ),
               ),
               focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Colors.white),
+                borderSide: BorderSide(
+                  color: _currentTheme.controlBarTextColor,
+                ),
               ),
             ),
             onChanged: (value) => searchQuery = value,
@@ -3115,7 +3026,14 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('取消', style: TextStyle(color: Colors.grey)),
+              child: Text(
+                '取消',
+                style: TextStyle(
+                  color: _currentTheme.controlBarTextColor.withValues(
+                    alpha: 0.7,
+                  ),
+                ),
+              ),
             ),
             TextButton(
               onPressed: () {
@@ -3124,24 +3042,27 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                   _searchInBook(searchQuery);
                 }
               },
-              child: const Text('搜索', style: TextStyle(color: Colors.white)),
+              child: Text(
+                '搜索',
+                style: TextStyle(color: _currentTheme.controlBarTextColor),
+              ),
             ),
           ],
         );
       },
     );
   }
-  
+
   void _searchInBook(String query) {
     List<int> searchResults = [];
-    
+
     // 查找所有匹配的页面
     for (int i = 0; i < _pages.length; i++) {
       if (_pages[i].toLowerCase().contains(query.toLowerCase())) {
         searchResults.add(i);
       }
     }
-    
+
     if (searchResults.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -3165,7 +3086,11 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     _showSearchResultsPanel(query, searchResults, 0);
   }
 
-  void _showSearchResultsPanel(String query, List<int> results, int currentIndex) {
+  void _showSearchResultsPanel(
+    String query,
+    List<int> results,
+    int currentIndex,
+  ) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -3173,7 +3098,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       builder: (context) => Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.9),
+          color: _currentTheme.controlBarColor.withValues(alpha: 0.95),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -3184,16 +3109,18 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               children: [
                 Text(
                   '搜索结果：$query',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: _currentTheme.controlBarTextColor,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 Text(
                   '${currentIndex + 1}/${results.length}',
-                  style: const TextStyle(
-                    color: Colors.white70,
+                  style: TextStyle(
+                    color: _currentTheme.controlBarTextColor.withValues(
+                      alpha: 0.7,
+                    ),
                     fontSize: 14,
                   ),
                 ),
@@ -3218,8 +3145,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.withValues(alpha: 0.3),
-                    foregroundColor: Colors.white,
+                    backgroundColor: _currentTheme.controlBarTextColor
+                        .withValues(alpha: 0.2),
+                    foregroundColor: _currentTheme.controlBarTextColor,
                   ),
                   icon: const Icon(Icons.keyboard_arrow_up),
                   label: const Text('上一个'),
@@ -3239,8 +3167,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.withValues(alpha: 0.3),
-                    foregroundColor: Colors.white,
+                    backgroundColor: _currentTheme.sliderActiveColor.withValues(
+                      alpha: 0.3,
+                    ),
+                    foregroundColor: _currentTheme.controlBarTextColor,
                   ),
                   icon: const Icon(Icons.keyboard_arrow_down),
                   label: const Text('下一个'),
@@ -3250,8 +3180,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             const SizedBox(height: 16),
             Text(
               '第 ${results[currentIndex] + 1} 页',
-              style: const TextStyle(
-                color: Colors.white70,
+              style: TextStyle(
+                color: _currentTheme.controlBarTextColor.withValues(alpha: 0.7),
                 fontSize: 14,
               ),
             ),
@@ -3260,7 +3190,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       ),
     );
   }
-  
+
   void _shareCurrentPage() {
     showModalBottomSheet(
       context: context,
@@ -3288,7 +3218,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             ),
           ),
           const SizedBox(height: 24),
-          
+
           // 分享当前页面
           ListTile(
             leading: Container(
@@ -3300,7 +3230,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               child: const Icon(Icons.content_copy, color: Colors.blue),
             ),
             title: const Text('复制当前页面', style: TextStyle(color: Colors.white)),
-            subtitle: const Text('复制当前页面内容到剪贴板', style: TextStyle(color: Colors.white70)),
+            subtitle: const Text(
+              '复制当前页面内容到剪贴板',
+              style: TextStyle(color: Colors.white70),
+            ),
             onTap: () {
               Navigator.pop(context);
               _copyCurrentPage();
@@ -3318,7 +3251,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               child: const Icon(Icons.timeline, color: Colors.green),
             ),
             title: const Text('分享阅读进度', style: TextStyle(color: Colors.white)),
-            subtitle: const Text('分享书籍信息和阅读进度', style: TextStyle(color: Colors.white70)),
+            subtitle: const Text(
+              '分享书籍信息和阅读进度',
+              style: TextStyle(color: Colors.white70),
+            ),
             onTap: () {
               Navigator.pop(context);
               _copyReadingProgress();
@@ -3336,7 +3272,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               child: const Icon(Icons.format_quote, color: Colors.purple),
             ),
             title: const Text('创建书摘卡片', style: TextStyle(color: Colors.white)),
-            subtitle: const Text('生成精美的书摘分享卡片', style: TextStyle(color: Colors.white70)),
+            subtitle: const Text(
+              '生成精美的书摘分享卡片',
+              style: TextStyle(color: Colors.white70),
+            ),
             onTap: () {
               Navigator.pop(context);
               _createBookQuoteCard();
@@ -3354,7 +3293,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               child: const Icon(Icons.book, color: Colors.orange),
             ),
             title: const Text('分享书籍信息', style: TextStyle(color: Colors.white)),
-            subtitle: const Text('分享书名、作者等基本信息', style: TextStyle(color: Colors.white70)),
+            subtitle: const Text(
+              '分享书名、作者等基本信息',
+              style: TextStyle(color: Colors.white70),
+            ),
             onTap: () {
               Navigator.pop(context);
               _copyBookInfo();
@@ -3371,10 +3313,11 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     if (_pages.isNotEmpty && _currentPageIndex < _pages.length) {
       final currentPageContent = _pages[_currentPageIndex];
       final bookInfo = '《${widget.book.title}》- ${widget.book.author}';
-      final shareText = '$bookInfo\n\n第${_currentPageIndex + 1}页:\n\n$currentPageContent';
-      
+      final shareText =
+          '$bookInfo\n\n第${_currentPageIndex + 1}页:\n\n$currentPageContent';
+
       Clipboard.setData(ClipboardData(text: shareText));
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('当前页面内容已复制到剪贴板'),
@@ -3386,8 +3329,11 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }
 
   void _copyReadingProgress() {
-    final progress = _pages.isNotEmpty ? ((_currentPageIndex + 1) / _pages.length * 100) : 0;
-    final progressText = '''📚 阅读进度分享
+    final progress = _pages.isNotEmpty
+        ? ((_currentPageIndex + 1) / _pages.length * 100)
+        : 0;
+    final progressText =
+        '''📚 阅读进度分享
 
 《${widget.book.title}》
 作者：${widget.book.author}
@@ -3398,7 +3344,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 #读书记录 #阅读进度''';
 
     Clipboard.setData(ClipboardData(text: progressText));
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('阅读进度已复制到剪贴板'),
@@ -3411,13 +3357,14 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   void _createBookQuoteCard() {
     if (_pages.isNotEmpty && _currentPageIndex < _pages.length) {
       String pageContent = _pages[_currentPageIndex];
-      
+
       // 取前200字符作为摘录
-      String excerpt = pageContent.length > 200 
-          ? '${pageContent.substring(0, 200)}...' 
+      String excerpt = pageContent.length > 200
+          ? '${pageContent.substring(0, 200)}...'
           : pageContent;
 
-      final quoteCard = '''✨ 书摘分享
+      final quoteCard =
+          '''✨ 书摘分享
 
 "$excerpt"
 
@@ -3430,7 +3377,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 #读书笔记 #书摘 #阅读感悟''';
 
       Clipboard.setData(ClipboardData(text: quoteCard));
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('书摘卡片已复制到剪贴板'),
@@ -3442,7 +3389,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }
 
   void _copyBookInfo() {
-    final bookInfoText = '''📚 书籍推荐
+    final bookInfoText =
+        '''📚 书籍推荐
 
 《${widget.book.title}》
 作者：${widget.book.author}
@@ -3453,7 +3401,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 #读书推荐 #好书分享''';
 
     Clipboard.setData(ClipboardData(text: bookInfoText));
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('书籍信息已复制到剪贴板'),
@@ -3464,13 +3412,14 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }
 
   /// 构建调试信息显示
+  /*
   Widget _buildDebugInfo() {
     if (_pages.isEmpty) return const SizedBox.shrink();
-    
+
     final currentPage = _pages[_currentPageIndex];
     final isLastPage = _currentPageIndex >= _pages.length - 1;
     final isFirstPage = _currentPageIndex <= 0;
-    
+
     // 获取当前页面的边界字符
     String currentPageInfo = '';
     if (currentPage.isNotEmpty) {
@@ -3478,7 +3427,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       final lastChar = currentPage[currentPage.length - 1];
       currentPageInfo = '首"$firstChar" 尾"$lastChar"';
     }
-    
+
     // 获取下一页第一个字符（如果存在）
     String nextPageInfo = '';
     if (!isLastPage && _currentPageIndex + 1 < _pages.length) {
@@ -3488,7 +3437,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         nextPageInfo = '下页首"$nextFirstChar"';
       }
     }
-    
+
     // 获取上一页最后一个字符（如果存在）
     String prevPageInfo = '';
     if (!isFirstPage && _currentPageIndex - 1 >= 0) {
@@ -3498,17 +3447,17 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         prevPageInfo = '上页尾"$prevLastChar"';
       }
     }
-    
+
     return Positioned(
       right: 10,
       bottom: 120, // 在控制栏上方
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: _backgroundColor.withValues(alpha: 0.9),
+          color: _currentTheme.backgroundColor.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: _fontColor.withValues(alpha: 0.3),
+            color: _currentTheme.textColor.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
@@ -3519,7 +3468,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             Text(
               '第${_currentPageIndex + 1}/${_pages.length}页',
               style: TextStyle(
-                color: _fontColor.withValues(alpha: 0.7),
+                color: _currentTheme.textColor.withValues(alpha: 0.7),
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
@@ -3528,7 +3477,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             Text(
               '长度:${currentPage.length}字符',
               style: TextStyle(
-                color: _fontColor.withValues(alpha: 0.6),
+                color: _currentTheme.textColor.withValues(alpha: 0.6),
                 fontSize: 9,
               ),
             ),
@@ -3537,7 +3486,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               Text(
                 currentPageInfo,
                 style: TextStyle(
-                  color: _fontColor.withValues(alpha: 0.6),
+                  color: _currentTheme.textColor.withValues(alpha: 0.6),
                   fontSize: 9,
                 ),
               ),
@@ -3567,6 +3516,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       ),
     );
   }
+  */
 }
 
 // 现代化工具栏按钮
@@ -3574,20 +3524,22 @@ class _ModernToolbarButton extends StatefulWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final bool isDarkMode;
+  final Color iconColor;
+  final Color pressedColor;
 
   const _ModernToolbarButton({
     required this.icon,
     required this.label,
     required this.onTap,
-    this.isDarkMode = false,
+    required this.iconColor,
+    required this.pressedColor,
   });
 
   @override
   State<_ModernToolbarButton> createState() => _ModernToolbarButtonState();
 }
 
-class _ModernToolbarButtonState extends State<_ModernToolbarButton> 
+class _ModernToolbarButtonState extends State<_ModernToolbarButton>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
@@ -3603,23 +3555,12 @@ class _ModernToolbarButtonState extends State<_ModernToolbarButton>
     _scaleAnimation = Tween<double>(
       begin: 1.0,
       end: 0.95,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOut,
-    ));
-    
-    final baseColor = Colors.transparent;
-    final pressedColor = widget.isDarkMode
-        ? Colors.white.withValues(alpha: 0.15)
-        : Colors.black.withValues(alpha: 0.08);
-    
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+
     _colorAnimation = ColorTween(
-      begin: baseColor,
-      end: pressedColor,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeInOut,
-    ));
+      begin: Colors.transparent,
+      end: widget.pressedColor,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -3630,8 +3571,6 @@ class _ModernToolbarButtonState extends State<_ModernToolbarButton>
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = widget.isDarkMode ? Colors.white : Colors.black87;
-    
     return GestureDetector(
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) => _controller.reverse(),
@@ -3657,14 +3596,14 @@ class _ModernToolbarButtonState extends State<_ModernToolbarButton>
                 children: [
                   Icon(
                     widget.icon,
-                    color: iconColor,
+                    color: widget.iconColor,
                     size: 20, // 减少图标大小
                   ),
                   const SizedBox(height: 4), // 减少间距
                   Text(
                     widget.label,
                     style: TextStyle(
-                      color: iconColor,
+                      color: widget.iconColor,
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
                     ),

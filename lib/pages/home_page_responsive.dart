@@ -69,36 +69,44 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
   void _setupPageImmersiveMode() {
     // 强制启用边到边模式
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    
+
     // 应用基本的沉浸式样式，不依赖context
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark, // 默认深色图标
-      statusBarBrightness: Brightness.light,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarIconBrightness: Brightness.dark,
-      systemNavigationBarDividerColor: Colors.transparent,
-      systemStatusBarContrastEnforced: false,
-      systemNavigationBarContrastEnforced: false,
-    ));
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark, // 默认深色图标
+        statusBarBrightness: Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemStatusBarContrastEnforced: false,
+        systemNavigationBarContrastEnforced: false,
+      ),
+    );
   }
 
   // 基于主题的沉浸式设置 (在didChangeDependencies中调用)
   void _setupThemeBasedImmersiveMode() {
     // 获取当前主题状态
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     // 应用基于主题的沉浸式样式
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
-      statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
-      systemNavigationBarDividerColor: Colors.transparent,
-      systemStatusBarContrastEnforced: false,
-      systemNavigationBarContrastEnforced: false,
-    ));
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: isDarkMode
+            ? Brightness.light
+            : Brightness.dark,
+        statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: isDarkMode
+            ? Brightness.light
+            : Brightness.dark,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemStatusBarContrastEnforced: false,
+        systemNavigationBarContrastEnforced: false,
+      ),
+    );
   }
 
   @override
@@ -110,7 +118,7 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
   @override
   Widget build(BuildContext context) {
     final navigationType = ResponsiveHelper.getNavigationType(context);
-    
+
     switch (navigationType) {
       case NavigationType.rail:
         return _buildNavigationRail();
@@ -130,11 +138,17 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
             end: Alignment.bottomRight,
             stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
             colors: [
-              Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.12),
-              Theme.of(context).colorScheme.surface.withOpacityValues(0.98),
-              Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.08),
-              Theme.of(context).colorScheme.tertiaryContainer.withOpacityValues(0.10),
-              Theme.of(context).colorScheme.surface.withOpacityValues(0.95),
+              Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withValues(alpha: 0.12),
+              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
+              Theme.of(
+                context,
+              ).colorScheme.secondaryContainer.withValues(alpha: 0.08),
+              Theme.of(
+                context,
+              ).colorScheme.tertiaryContainer.withValues(alpha: 0.10),
+              Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
             ],
           ),
         ),
@@ -146,15 +160,19 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                 child: Container(
                   width: ResponsiveHelper.getValue(
                     context,
-                    mobile: 80,     // 不会用到，但保持一致性
-                    tablet: 200,    // 平板使用中等宽度
-                    desktop: 250,   // 桌面使用最大宽度
+                    mobile: 80, // 不会用到，但保持一致性
+                    tablet: 200, // 平板使用中等宽度
+                    desktop: 250, // 桌面使用最大宽度
                   ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surface.withValues(alpha: 0.8),
                     border: Border(
                       right: BorderSide(
-                        color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outline.withValues(alpha: 0.2),
                         width: 1,
                       ),
                     ),
@@ -169,17 +187,17 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                     extended: ResponsiveHelper.getValue(
                       context,
                       mobile: false,
-                      tablet: true,    // 平板显示扩展导航，方便使用
-                      desktop: true,   // 桌面也显示扩展导航
+                      tablet: true, // 平板显示扩展导航，方便使用
+                      desktop: true, // 桌面也显示扩展导航
                     ),
                     labelType: ResponsiveHelper.getValue(
                       context,
                       mobile: NavigationRailLabelType.all,
-                      tablet: NavigationRailLabelType.none,  // 平板使用扩展模式，不需要额外标签
+                      tablet: NavigationRailLabelType.none, // 平板使用扩展模式，不需要额外标签
                       desktop: NavigationRailLabelType.none, // 桌面同样
                     ),
-                    leading: ResponsiveHelper.isWideScreen(context) 
-                        ? _buildNavigationHeader() 
+                    leading: ResponsiveHelper.isWideScreen(context)
+                        ? _buildNavigationHeader()
                         : null,
                     minWidth: 60,
                     minExtendedWidth: ResponsiveHelper.getValue(
@@ -189,62 +207,74 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                       desktop: 250,
                     ),
                     backgroundColor: Colors.transparent,
-                    indicatorColor: Theme.of(context).colorScheme.primary.withOpacityValues(0.2),
+                    indicatorColor: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.2),
                     selectedIconTheme: IconThemeData(
                       color: Theme.of(context).colorScheme.primary,
                     ),
                     unselectedIconTheme: IconThemeData(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                     selectedLabelTextStyle: TextStyle(
                       color: Theme.of(context).colorScheme.primary,
                       fontWeight: FontWeight.w600,
                     ),
                     unselectedLabelTextStyle: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.6),
                       fontWeight: FontWeight.w500,
                     ),
-                    destinations: _navigationItems.map((item) => 
-                      NavigationRailDestination(
-                        icon: Icon(item.icon),
-                        selectedIcon: Icon(item.selectedIcon),
-                        label: Text(item.label),
-                      ),
-                    ).toList(),
+                    destinations: _navigationItems
+                        .map(
+                          (item) => NavigationRailDestination(
+                            icon: Icon(item.icon),
+                            selectedIcon: Icon(item.selectedIcon),
+                            label: Text(item.label),
+                          ),
+                        )
+                        .toList(),
                   ),
                 ),
               ),
             ),
-            Expanded(
-              child: _navigationItems[_selectedIndex].page,
-            ),
+            Expanded(child: _navigationItems[_selectedIndex].page),
           ],
         ),
       ),
-      floatingActionButton: _selectedIndex < 2 ? Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Theme.of(context).colorScheme.primary.withOpacityValues(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: FloatingActionButton.extended(
-              onPressed: () => _navigateToImport(),
-              backgroundColor: Theme.of(context).colorScheme.primary.withOpacityValues(0.9),
-              icon: const Icon(Icons.add),
-              label: const Text('导入书籍'),
-            ),
-          ),
-        ),
-      ) : null,
+      floatingActionButton: _selectedIndex < 2
+          ? Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: FloatingActionButton.extended(
+                    onPressed: () => _navigateToImport(),
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.9),
+                    icon: const Icon(Icons.add),
+                    label: const Text('导入书籍'),
+                  ),
+                ),
+              ),
+            )
+          : null,
     );
   }
 
@@ -267,7 +297,9 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
             onPageChanged: (index) {
               setState(() => _selectedIndex = index);
             },
-            children: _navigationItems.map((item) => _buildPageWrapper(item.page)).toList(),
+            children: _navigationItems
+                .map((item) => _buildPageWrapper(item.page))
+                .toList(),
           ),
           // 悬浮药丸导航栏
           Positioned(
@@ -275,41 +307,50 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
             right: 0,
             bottom: 0,
             child: Container(
-              height: 120 + MediaQuery.of(context).padding.bottom, // 动态高度适配底部安全区域
+              height:
+                  120 + MediaQuery.of(context).padding.bottom, // 动态高度适配底部安全区域
               color: Colors.transparent, // 完全透明，让内容透过
               child: Center(
                 child: Container(
-                  margin: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 25), // 动态适配底部安全区域
+                  margin: EdgeInsets.only(
+                    bottom: MediaQuery.of(context).padding.bottom + 25,
+                  ), // 动态适配底部安全区域
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(35),
+                    borderRadius: BorderRadius.circular(45), // 增大圆角半径，更Q弹
                     child: BackdropFilter(
                       filter: ImageFilter.blur(
-                        sigmaX: GlassEffectConfig.navigationBarBlur, 
+                        sigmaX: GlassEffectConfig.navigationBarBlur,
                         sigmaY: GlassEffectConfig.navigationBarBlur,
                       ),
                       child: Container(
                         height: 75, // 从70增加到75
-                        padding: const EdgeInsets.symmetric(horizontal: 36), // 从32增加到36
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 36,
+                        ), // 从32增加到36
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface.withOpacityValues(
-                            GlassEffectConfig.navigationBarOpacity
-                          ),
-                          borderRadius: BorderRadius.circular(37.5), // 匹配新的高度
+                          color: Theme.of(context).colorScheme.surface
+                              .withOpacityValues(
+                                GlassEffectConfig.navigationBarOpacity,
+                              ),
+                          borderRadius: BorderRadius.circular(45), // 更大的圆角半径
                           border: Border.all(
-                            color: Theme.of(context).colorScheme.outline.withOpacityValues(0.15),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.outline.withValues(alpha: 0.15),
                             width: 0.5,
                           ),
                           boxShadow: [
+                            // 增强阴影效果，让悬浮感更强
                             BoxShadow(
-                              color: Colors.black.withOpacityValues(0.08),
-                              blurRadius: 24,
-                              offset: const Offset(0, 6),
+                              color: Colors.black.withValues(alpha: 0.12),
+                              blurRadius: 30,
+                              offset: const Offset(0, 8),
                               spreadRadius: 0,
                             ),
                             BoxShadow(
-                              color: Colors.black.withOpacityValues(0.04),
-                              blurRadius: 48,
-                              offset: const Offset(0, 12),
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 60,
+                              offset: const Offset(0, 16),
                               spreadRadius: 0,
                             ),
                           ],
@@ -317,61 +358,27 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: _navigationItems.asMap().entries.map((entry) {
+                          children: _navigationItems.asMap().entries.map((
+                            entry,
+                          ) {
                             final index = entry.key;
                             final item = entry.value;
                             final isSelected = _selectedIndex == index;
-                            
-                            return GestureDetector(
+
+                            return _BounceNavigationItem(
+                              index: index,
+                              item: item,
+                              isSelected: isSelected,
                               onTap: () {
                                 setState(() => _selectedIndex = index);
                                 _pageController.animateToPage(
                                   index,
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeInOut,
+                                  duration: const Duration(
+                                    milliseconds: 500,
+                                  ), // 增加到500ms，更缓慢
+                                  curve: Curves.easeInOutCubic, // 使用更优雅的缓动曲线
                                 );
                               },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8), // 从18,6增加到20,8
-                                margin: const EdgeInsets.symmetric(horizontal: 5), // 从4增加到5
-                                decoration: BoxDecoration(
-                                  color: isSelected 
-                                    ? Theme.of(context).colorScheme.primary.withOpacityValues(0.15)
-                                    : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(24), // 从22增加到24
-                                ),
-                                child: IntrinsicHeight(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        isSelected ? item.selectedIcon : item.icon,
-                                        color: isSelected 
-                                          ? Theme.of(context).colorScheme.primary
-                                          : Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
-                                        size: 24, // 从22增加到24
-                                      ),
-                                      const SizedBox(height: 4), // 从3增加到4
-                                      Flexible(
-                                        child: Text(
-                                          item.label,
-                                          style: TextStyle(
-                                            fontSize: 12, // 从11增加到12
-                                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                                            color: isSelected 
-                                              ? Theme.of(context).colorScheme.primary
-                                              : Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
                             );
                           }).toList(),
                         ),
@@ -425,7 +432,9 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Theme.of(context).colorScheme.primary.withOpacityValues(0.3),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.3),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -437,16 +446,21 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
               size: 28,
             ),
           ),
-          if (ResponsiveHelper.getValue(context, mobile: false, tablet: true, desktop: true)) ...[
+          if (ResponsiveHelper.getValue(
+            context,
+            mobile: false,
+            tablet: true,
+            desktop: true,
+          )) ...[
             const SizedBox(height: 12),
             Text(
               '小元读书',
               style: TextStyle(
                 fontSize: ResponsiveHelper.getValue(
-                  context, 
-                  mobile: 16.0, 
-                  tablet: 18.0, 
-                  desktop: 20.0
+                  context,
+                  mobile: 16.0,
+                  tablet: 18.0,
+                  desktop: 20.0,
                 ),
                 fontWeight: FontWeight.w700,
                 color: Theme.of(context).colorScheme.onSurface,
@@ -458,7 +472,9 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
               '优雅阅读',
               style: TextStyle(
                 fontSize: 12,
-                color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
                 letterSpacing: 0.3,
               ),
             ),
@@ -482,6 +498,159 @@ class NavigationItem {
     required this.label,
     required this.page,
   });
+}
+
+// Q弹导航项目组件
+class _BounceNavigationItem extends StatefulWidget {
+  final int index;
+  final NavigationItem item;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _BounceNavigationItem({
+    required this.index,
+    required this.item,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  State<_BounceNavigationItem> createState() => _BounceNavigationItemState();
+}
+
+class _BounceNavigationItemState extends State<_BounceNavigationItem>
+    with TickerProviderStateMixin {
+  late AnimationController _bounceController;
+  late AnimationController _pressController;
+  late Animation<double> _bounceAnimation;
+  late Animation<double> _pressAnimation;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _bounceController = AnimationController(
+      duration: const Duration(milliseconds: 400), // 减少持续时间
+      vsync: this,
+    );
+
+    _pressController = AnimationController(
+      duration: const Duration(milliseconds: 200), // 稍微增加按压时间
+      vsync: this,
+    );
+
+    _bounceAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      // 减少弹跳幅度
+      CurvedAnimation(
+        parent: _bounceController,
+        curve: Curves.easeOutCubic,
+      ), // 使用更平滑的曲线
+    );
+
+    _pressAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      // 减少按压幅度
+      CurvedAnimation(parent: _pressController, curve: Curves.easeInOut),
+    );
+
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.02).animate(
+      // 减少缩放幅度
+      CurvedAnimation(
+        parent: _bounceController,
+        curve: Curves.easeOutCubic,
+      ), // 使用更平滑的曲线
+    );
+  }
+
+  @override
+  void dispose() {
+    _bounceController.dispose();
+    _pressController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _pressController.forward(),
+      onTapUp: (_) => _pressController.reverse(),
+      onTapCancel: () => _pressController.reverse(),
+      onTap: () {
+        widget.onTap();
+        // 触发Q弹效果
+        _bounceController.forward().then((_) {
+          _bounceController.reverse();
+        });
+      },
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_bounceController, _pressController]),
+        builder: (context, child) {
+          return Transform.scale(
+            scale: _pressAnimation.value * _scaleAnimation.value,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              margin: const EdgeInsets.symmetric(horizontal: 5),
+              decoration: BoxDecoration(
+                color: widget.isSelected
+                    ? Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.15)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(28), // 更大的圆角
+              ),
+              child: IntrinsicHeight(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Transform.scale(
+                      scale: widget.isSelected ? _bounceAnimation.value : 1.0,
+                      child: Icon(
+                        widget.isSelected
+                            ? widget.item.selectedIcon
+                            : widget.item.icon,
+                        color: widget.isSelected
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Flexible(
+                      child: AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOutCubic,
+                        style: TextStyle(
+                          fontSize: widget.isSelected ? 12.5 : 12,
+                          fontWeight: widget.isSelected
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          color: widget.isSelected
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                        child: Text(
+                          widget.item.label,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
 // 首页内容包装器 - 移除AppBar和Scaffold，调整padding
@@ -514,7 +683,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
       final weekly = await _statsDao.getWeeklyChartData();
       final achievements = await _statsDao.getAchievementStats();
       final bookCount = await _bookDao.getBooksCount();
-      
+
       setState(() {
         _summaryStats = summary;
         _weeklyData = weekly;
@@ -544,11 +713,19 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
           end: Alignment.bottomRight,
           stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
           colors: [
-            Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.15),
-            Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.08),
-            Theme.of(context).colorScheme.tertiaryContainer.withOpacityValues(0.12),
-            Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.06),
-            Theme.of(context).colorScheme.surface.withOpacityValues(0.95),
+            Theme.of(
+              context,
+            ).colorScheme.primaryContainer.withValues(alpha: 0.15),
+            Theme.of(
+              context,
+            ).colorScheme.secondaryContainer.withValues(alpha: 0.08),
+            Theme.of(
+              context,
+            ).colorScheme.tertiaryContainer.withValues(alpha: 0.12),
+            Theme.of(
+              context,
+            ).colorScheme.primaryContainer.withValues(alpha: 0.06),
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
           ],
         ),
       ),
@@ -563,7 +740,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                 width: 6,
                 height: 6,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacityValues(0.06),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -574,18 +753,31 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
               ? const Center(child: CircularProgressIndicator())
               : RefreshIndicator(
                   onRefresh: _loadAllStats,
-                  edgeOffset: MediaQuery.of(context).padding.top + 40, // 下拉刷新UI往下移，避开状态栏和AppBar
+                  strokeWidth: 2.5, // 减细刷新指示器线条
+                  displacement: 60, // 增加下拉距离
+                  color: Theme.of(context).colorScheme.primary, // 主题色
+                  backgroundColor: Theme.of(
+                    context,
+                  ).colorScheme.surface.withValues(alpha: 0.9), // 半透明背景
+                  edgeOffset:
+                      MediaQuery.of(context).padding.top +
+                      40, // 下拉刷新UI往下移，避开状态栏和AppBar
                   child: ListView(
-                    padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 60, 16, MediaQuery.of(context).padding.bottom + 90), // 沉浸式padding：顶部=状态栏+AppBar，底部=导航栏+额外间距
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      MediaQuery.of(context).padding.top + 60,
+                      16,
+                      MediaQuery.of(context).padding.bottom + 90,
+                    ), // 沉浸式padding：顶部=状态栏+AppBar，底部=导航栏+额外间距
                     children: [
-                        _buildWelcomeCard(),
-                        const SizedBox(height: 20),
-                        _buildSummaryCards(),
-                        const SizedBox(height: 24),
-                        _buildWeeklyChartCard(),
-                        const SizedBox(height: 24),
-                        _buildRecentActivity(),
-                      ],
+                      _buildWelcomeCard(),
+                      const SizedBox(height: 20),
+                      _buildSummaryCards(),
+                      const SizedBox(height: 24),
+                      _buildWeeklyChartCard(),
+                      const SizedBox(height: 24),
+                      _buildRecentActivity(),
+                    ],
                   ),
                 ),
           // 毛玻璃AppBar - 使用与书库页面相同的实现方式
@@ -600,20 +792,29 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   sigmaY: GlassEffectConfig.appBarBlur,
                 ),
                 child: Container(
-                  height: MediaQuery.of(context).padding.top + 60, // 状态栏高度 + AppBar高度
+                  height:
+                      MediaQuery.of(context).padding.top +
+                      60, // 状态栏高度 + AppBar高度
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface.withOpacityValues(
-                      GlassEffectConfig.appBarOpacity
+                    color: Theme.of(context).colorScheme.surface.withValues(
+                      alpha: GlassEffectConfig.appBarOpacity,
                     ),
                     border: Border(
                       bottom: BorderSide(
-                        color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outline.withValues(alpha: 0.2),
                         width: 0.5,
                       ),
                     ),
                   ),
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 16, 16, 16), // 沉浸式：状态栏高度 + 16px间距
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      MediaQuery.of(context).padding.top + 16,
+                      16,
+                      16,
+                    ), // 沉浸式：状态栏高度 + 16px间距
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
@@ -639,7 +840,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
   Widget _buildWelcomeCard() {
     final totalMinutes = (_summaryStats['total'] ?? 0) ~/ 60;
     final todayMinutes = (_summaryStats['today'] ?? 0) ~/ 60;
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       child: ClipRRect(
@@ -649,10 +850,14 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+              color: Theme.of(
+                context,
+              ).colorScheme.surface.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withValues(alpha: 0.2),
                 width: 1,
               ),
             ),
@@ -664,7 +869,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacityValues(0.1),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -680,18 +887,19 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                         children: [
                           Text(
                             '今日阅读时光',
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            todayMinutes > 0 
-                              ? '已阅读 $todayMinutes 分钟，继续保持！'
-                              : '开始今天的阅读之旅吧',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.7),
-                            ),
+                            todayMinutes > 0
+                                ? '已阅读 $todayMinutes 分钟，继续保持！'
+                                : '开始今天的阅读之旅吧',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.7),
+                                ),
                           ),
                         ],
                       ),
@@ -705,8 +913,11 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.4),
-                          Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.3),
+                          Theme.of(
+                            context,
+                          ).colorScheme.primaryContainer.withValues(alpha: 0.4),
+                          Theme.of(context).colorScheme.secondaryContainer
+                              .withValues(alpha: 0.3),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(12),
@@ -716,7 +927,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                         Container(
                           padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary.withOpacityValues(0.2),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Icon(
@@ -728,9 +941,8 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                         const SizedBox(width: 8),
                         Text(
                           '累计阅读 ${(totalMinutes / 60).toStringAsFixed(1)} 小时',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(fontWeight: FontWeight.w500),
                         ),
                       ],
                     ),
@@ -753,37 +965,73 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 400;
         return isNarrow
-          ? _buildNarrowLayout(todayMinutes, weekMinutes, totalMinutes)
-          : _buildWideLayout(todayMinutes, weekMinutes, totalMinutes);
+            ? _buildNarrowLayout(todayMinutes, weekMinutes, totalMinutes)
+            : _buildWideLayout(todayMinutes, weekMinutes, totalMinutes);
       },
     );
   }
 
-  Widget _buildNarrowLayout(int todayMinutes, int weekMinutes, int totalMinutes) {
+  Widget _buildNarrowLayout(
+    int todayMinutes,
+    int weekMinutes,
+    int totalMinutes,
+  ) {
     return Column(
       children: [
         Row(
           children: [
-            Expanded(child: GestureDetector(
-              onTap: () => _navigateToDetailedStats(),
-              child: _StatCard(title: '今日阅读', value: '$todayMinutes', unit: '分钟', icon: Icons.today, color: Colors.blue)
-            )),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => _navigateToDetailedStats(),
+                child: _StatCard(
+                  title: '今日阅读',
+                  value: '$todayMinutes',
+                  unit: '分钟',
+                  icon: Icons.today,
+                  color: Colors.blue,
+                ),
+              ),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: GestureDetector(
-              onTap: () => _navigateToDetailedStats(),
-              child: _StatCard(title: '本周阅读', value: '$weekMinutes', unit: '分钟', icon: Icons.calendar_view_week, color: Colors.orange)
-            )),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => _navigateToDetailedStats(),
+                child: _StatCard(
+                  title: '本周阅读',
+                  value: '$weekMinutes',
+                  unit: '分钟',
+                  icon: Icons.calendar_view_week,
+                  color: Colors.orange,
+                ),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(child: GestureDetector(
-              onTap: () => _navigateToDetailedStats(),
-              child: _StatCard(title: '累计阅读', value: '$totalMinutes', unit: '分钟', icon: Icons.history, color: Colors.green)
-            )),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => _navigateToDetailedStats(),
+                child: _StatCard(
+                  title: '累计阅读',
+                  value: '$totalMinutes',
+                  unit: '分钟',
+                  icon: Icons.history,
+                  color: Colors.green,
+                ),
+              ),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: _StatCard(title: '书架藏书', value: '$_bookCount', unit: '本', icon: Icons.book, color: Colors.purple)),
+            Expanded(
+              child: _StatCard(
+                title: '书架藏书',
+                value: '$_bookCount',
+                unit: '本',
+                icon: Icons.book,
+                color: Colors.purple,
+              ),
+            ),
           ],
         ),
       ],
@@ -801,17 +1049,41 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
       children: [
         GestureDetector(
           onTap: () => _navigateToDetailedStats(),
-          child: _StatCard(title: '今日阅读', value: '$todayMinutes', unit: '分钟', icon: Icons.today, color: Colors.blue),
+          child: _StatCard(
+            title: '今日阅读',
+            value: '$todayMinutes',
+            unit: '分钟',
+            icon: Icons.today,
+            color: Colors.blue,
+          ),
         ),
         GestureDetector(
           onTap: () => _navigateToDetailedStats(),
-          child: _StatCard(title: '本周阅读', value: '$weekMinutes', unit: '分钟', icon: Icons.calendar_view_week, color: Colors.orange),
+          child: _StatCard(
+            title: '本周阅读',
+            value: '$weekMinutes',
+            unit: '分钟',
+            icon: Icons.calendar_view_week,
+            color: Colors.orange,
+          ),
         ),
         GestureDetector(
           onTap: () => _navigateToDetailedStats(),
-          child: _StatCard(title: '累计阅读', value: '$totalMinutes', unit: '分钟', icon: Icons.history, color: Colors.green),
+          child: _StatCard(
+            title: '累计阅读',
+            value: '$totalMinutes',
+            unit: '分钟',
+            icon: Icons.history,
+            color: Colors.green,
+          ),
         ),
-        _StatCard(title: '书架藏书', value: '$_bookCount', unit: '本', icon: Icons.book, color: Colors.purple),
+        _StatCard(
+          title: '书架藏书',
+          value: '$_bookCount',
+          unit: '本',
+          icon: Icons.book,
+          color: Colors.purple,
+        ),
       ],
     );
   }
@@ -820,9 +1092,14 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
     if (_weeklyData.isEmpty) {
       return Container();
     }
-    
-    final maxY = (_weeklyData.map((d) => d['duration'] as int).reduce((a, b) => a > b ? a : b) / 60) + 10;
-    
+
+    final maxY =
+        (_weeklyData
+                .map((d) => d['duration'] as int)
+                .reduce((a, b) => a > b ? a : b) /
+            60) +
+        10;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
@@ -830,10 +1107,12 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -845,7 +1124,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.secondary.withOpacityValues(0.1),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.secondary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -873,12 +1154,15 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                     barTouchData: BarTouchData(
                       enabled: true,
                       touchTooltipData: BarTouchTooltipData(
-                        getTooltipColor: (group) => Theme.of(context).colorScheme.inverseSurface,
+                        getTooltipColor: (group) =>
+                            Theme.of(context).colorScheme.inverseSurface,
                         getTooltipItem: (group, groupIndex, rod, rodIndex) {
                           return BarTooltipItem(
                             '${rod.toY.toInt()} 分钟',
                             TextStyle(
-                              color: Theme.of(context).colorScheme.onInverseSurface,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onInverseSurface,
                               fontWeight: FontWeight.bold,
                             ),
                           );
@@ -905,8 +1189,12 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                           },
                         ),
                       ),
-                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
                     ),
                     gridData: FlGridData(
                       show: true,
@@ -914,7 +1202,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                       horizontalInterval: 10,
                       getDrawingHorizontalLine: (value) {
                         return FlLine(
-                          color: Theme.of(context).colorScheme.outline.withOpacityValues(0.1),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outline.withValues(alpha: 0.1),
                           strokeWidth: 1,
                         );
                       },
@@ -930,7 +1220,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                               begin: Alignment.bottomCenter,
                               end: Alignment.topCenter,
                               colors: [
-                                Theme.of(context).colorScheme.primary.withOpacityValues(0.8),
+                                Theme.of(
+                                  context,
+                                ).colorScheme.primary.withValues(alpha: 0.8),
                                 Theme.of(context).colorScheme.primary,
                               ],
                             ),
@@ -961,10 +1253,12 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -976,7 +1270,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.tertiary.withOpacityValues(0.1),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.tertiary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -1035,7 +1331,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacityValues(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -1043,7 +1339,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacityValues(0.2),
+              color: color.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: color, size: 20),
@@ -1055,14 +1351,16 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
               children: [
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 Text(
                   description,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -1084,14 +1382,29 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
     const style = TextStyle(fontSize: 10);
     String text;
     switch (value.toInt()) {
-      case 1: text = '一'; break;
-      case 2: text = '二'; break;
-      case 3: text = '三'; break;
-      case 4: text = '四'; break;
-      case 5: text = '五'; break;
-      case 6: text = '六'; break;
-      case 7: text = '日'; break;
-      default: text = '';
+      case 1:
+        text = '一';
+        break;
+      case 2:
+        text = '二';
+        break;
+      case 3:
+        text = '三';
+        break;
+      case 4:
+        text = '四';
+        break;
+      case 5:
+        text = '五';
+        break;
+      case 6:
+        text = '六';
+        break;
+      case 7:
+        text = '日';
+        break;
+      default:
+        text = '';
     }
     return SideTitleWidget(
       meta: meta,
@@ -1159,7 +1472,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
     await prefs.setBool('keepScreenOn', _keepScreenOn);
     await prefs.setString('fontFamily', _fontFamily);
     await prefs.setInt('autoSaveInterval', _autoSaveInterval);
-  }  @override
+  }
+
+  @override
   Widget build(BuildContext context) {
     final themeNotifier = Provider.of<ThemeNotifier>(context);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -1171,10 +1486,16 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
           end: Alignment.bottomCenter,
           stops: const [0.0, 0.3, 0.7, 1.0],
           colors: [
-            Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.12),
-            Theme.of(context).colorScheme.surface.withOpacityValues(0.98),
-            Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.08),
-            Theme.of(context).colorScheme.tertiaryContainer.withOpacityValues(0.15),
+            Theme.of(
+              context,
+            ).colorScheme.primaryContainer.withValues(alpha: 0.12),
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
+            Theme.of(
+              context,
+            ).colorScheme.secondaryContainer.withValues(alpha: 0.08),
+            Theme.of(
+              context,
+            ).colorScheme.tertiaryContainer.withValues(alpha: 0.15),
           ],
         ),
       ),
@@ -1189,7 +1510,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                 width: 5,
                 height: 5,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacityValues(0.07),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.07),
                   borderRadius: BorderRadius.circular(2.5),
                 ),
               ),
@@ -1197,88 +1520,95 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
           }),
           // 主内容
           ListView(
-            padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 60, 16, MediaQuery.of(context).padding.bottom + 90), // 沉浸式padding
+            padding: EdgeInsets.fromLTRB(
+              16,
+              MediaQuery.of(context).padding.top + 60,
+              16,
+              MediaQuery.of(context).padding.bottom + 90,
+            ), // 沉浸式padding
             children: [
-                _buildSectionCard(
-                  title: '外观设置',
-                  icon: Icons.palette_outlined,
-                  children: [
-                    _buildThemeToggle(themeNotifier, isDarkMode),
-                    _buildAnimationToggle(),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                _buildSectionCard(
-                  title: '阅读设置',
-                  icon: Icons.auto_stories_outlined,
-                  children: [
-                    _buildSliderSetting(
-                      title: '字体大小',
-                      subtitle: '${_fontSize.round()} pt',
-                      value: _fontSize,
-                      min: 12.0,
-                      max: 32.0,
-                      divisions: 20,
-                      onChanged: (value) => setState(() => _fontSize = value),
-                      icon: Icons.format_size,
-                    ),
-                    _buildSliderSetting(
-                      title: '行间距',
-                      subtitle: _lineSpacing.toStringAsFixed(1),
-                      value: _lineSpacing,
-                      min: 1.0,
-                      max: 3.0,
-                      divisions: 20,
-                      onChanged: (value) => setState(() => _lineSpacing = value),
-                      icon: Icons.format_line_spacing,
-                    ),
-                    _buildSliderSetting(
-                      title: '字符间距',
-                      subtitle: _letterSpacing.toStringAsFixed(1),
-                      value: _letterSpacing,
-                      min: 0.0,
-                      max: 2.0,
-                      divisions: 20,
-                      onChanged: (value) => setState(() => _letterSpacing = value),
-                      icon: Icons.text_fields,
-                    ),
-                    _buildSliderSetting(
-                      title: '页面边距',
-                      subtitle: '${_pageMargin.round()} px',
-                      value: _pageMargin,
-                      min: 8.0,
-                      max: 32.0,
-                      divisions: 24,
-                      onChanged: (value) => setState(() => _pageMargin = value),
-                      icon: Icons.format_indent_increase,
-                    ),
-                    _buildFontFamilySelector(),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                _buildSectionCard(
-                  title: '系统设置',
-                  icon: Icons.settings_outlined,
-                  children: [
-                    _buildSwitchSetting(
-                      title: '保持屏幕常亮',
-                      subtitle: '阅读时防止屏幕自动关闭',
-                      value: _keepScreenOn,
-                      onChanged: (value) => setState(() => _keepScreenOn = value),
-                      icon: Icons.stay_current_portrait,
-                    ),
-                    _buildSwitchSetting(
-                      title: '自动保存',
-                      subtitle: '自动保存阅读进度',
-                      value: _enableAutoSave,
-                      onChanged: (value) => setState(() => _enableAutoSave = value),
-                      icon: Icons.save_outlined,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                _buildAboutCard(),
-              ],
+              _buildSectionCard(
+                title: '外观设置',
+                icon: Icons.palette_outlined,
+                children: [
+                  _buildThemeToggle(themeNotifier, isDarkMode),
+                  _buildAnimationToggle(),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildSectionCard(
+                title: '阅读设置',
+                icon: Icons.auto_stories_outlined,
+                children: [
+                  _buildSliderSetting(
+                    title: '字体大小',
+                    subtitle: '${_fontSize.round()} pt',
+                    value: _fontSize,
+                    min: 12.0,
+                    max: 32.0,
+                    divisions: 20,
+                    onChanged: (value) => setState(() => _fontSize = value),
+                    icon: Icons.format_size,
+                  ),
+                  _buildSliderSetting(
+                    title: '行间距',
+                    subtitle: _lineSpacing.toStringAsFixed(1),
+                    value: _lineSpacing,
+                    min: 1.0,
+                    max: 3.0,
+                    divisions: 20,
+                    onChanged: (value) => setState(() => _lineSpacing = value),
+                    icon: Icons.format_line_spacing,
+                  ),
+                  _buildSliderSetting(
+                    title: '字符间距',
+                    subtitle: _letterSpacing.toStringAsFixed(1),
+                    value: _letterSpacing,
+                    min: 0.0,
+                    max: 2.0,
+                    divisions: 20,
+                    onChanged: (value) =>
+                        setState(() => _letterSpacing = value),
+                    icon: Icons.text_fields,
+                  ),
+                  _buildSliderSetting(
+                    title: '页面边距',
+                    subtitle: '${_pageMargin.round()} px',
+                    value: _pageMargin,
+                    min: 8.0,
+                    max: 32.0,
+                    divisions: 24,
+                    onChanged: (value) => setState(() => _pageMargin = value),
+                    icon: Icons.format_indent_increase,
+                  ),
+                  _buildFontFamilySelector(),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildSectionCard(
+                title: '系统设置',
+                icon: Icons.settings_outlined,
+                children: [
+                  _buildSwitchSetting(
+                    title: '保持屏幕常亮',
+                    subtitle: '阅读时防止屏幕自动关闭',
+                    value: _keepScreenOn,
+                    onChanged: (value) => setState(() => _keepScreenOn = value),
+                    icon: Icons.stay_current_portrait,
+                  ),
+                  _buildSwitchSetting(
+                    title: '自动保存',
+                    subtitle: '自动保存阅读进度',
+                    value: _enableAutoSave,
+                    onChanged: (value) =>
+                        setState(() => _enableAutoSave = value),
+                    icon: Icons.save_outlined,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildAboutCard(),
+            ],
           ),
           // 毛玻璃AppBar - 使用与书库页面相同的实现方式
           Positioned(
@@ -1292,20 +1622,29 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                   sigmaY: GlassEffectConfig.appBarBlur,
                 ),
                 child: Container(
-                  height: MediaQuery.of(context).padding.top + 60, // 状态栏高度 + AppBar高度
+                  height:
+                      MediaQuery.of(context).padding.top +
+                      60, // 状态栏高度 + AppBar高度
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface.withOpacityValues(
-                      GlassEffectConfig.appBarOpacity
+                    color: Theme.of(context).colorScheme.surface.withValues(
+                      alpha: GlassEffectConfig.appBarOpacity,
                     ),
                     border: Border(
                       bottom: BorderSide(
-                        color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outline.withValues(alpha: 0.2),
                         width: 0.5,
                       ),
                     ),
                   ),
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 16, 16, 16), // 沉浸式：状态栏高度 + 16px间距
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      MediaQuery.of(context).padding.top + 16,
+                      16,
+                      16,
+                    ), // 沉浸式：状态栏高度 + 16px间距
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
@@ -1339,10 +1678,12 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -1355,7 +1696,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacityValues(0.1),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -1425,7 +1768,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.secondary.withOpacityValues(0.1),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.secondary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Icon(
@@ -1448,7 +1793,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                       Text(
                         subtitle,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                       ),
                     ],
@@ -1460,7 +1807,12 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                     onChanged(newValue);
                     _saveSettings();
                   },
-                  activeColor: Theme.of(context).colorScheme.primary,
+                  activeTrackColor: Theme.of(context).colorScheme.primary,
+                  thumbColor: WidgetStateProperty.resolveWith(
+                    (states) => states.contains(WidgetState.selected)
+                        ? Theme.of(context).colorScheme.onPrimary
+                        : Theme.of(context).colorScheme.outline,
+                  ),
                 ),
               ],
             ),
@@ -1490,7 +1842,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.tertiary.withOpacityValues(0.1),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.tertiary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Icon(
@@ -1529,9 +1883,13 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
               overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
               activeTrackColor: Theme.of(context).colorScheme.primary,
-              inactiveTrackColor: Theme.of(context).colorScheme.outline.withOpacityValues(0.3),
+              inactiveTrackColor: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.3),
               thumbColor: Theme.of(context).colorScheme.primary,
-              overlayColor: Theme.of(context).colorScheme.primary.withOpacityValues(0.2),
+              overlayColor: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.2),
             ),
             child: Slider(
               value: value,
@@ -1558,7 +1916,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.secondary.withOpacityValues(0.1),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.secondary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Icon(
@@ -1601,16 +1961,23 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                   _saveSettings();
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.outline.withOpacityValues(0.1),
+                        : Theme.of(
+                            context,
+                          ).colorScheme.outline.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isSelected
                           ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).colorScheme.outline.withOpacityValues(0.3),
+                          : Theme.of(
+                              context,
+                            ).colorScheme.outline.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Text(
@@ -1619,7 +1986,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                       color: isSelected
                           ? Theme.of(context).colorScheme.onPrimary
                           : Theme.of(context).colorScheme.onSurface,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
                       fontSize: 12,
                     ),
                   ),
@@ -1640,10 +2009,12 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -1654,7 +2025,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.tertiary.withOpacityValues(0.1),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.tertiary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -1678,8 +2051,12 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.3),
-                      Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.3),
+                      Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                      Theme.of(
+                        context,
+                      ).colorScheme.secondaryContainer.withValues(alpha: 0.3),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(12),
@@ -1689,7 +2066,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacityValues(0.1),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -1709,7 +2088,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                     Text(
                       'v1.0.0',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -1717,7 +2098,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                       '优雅的Flutter电子书阅读器',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.8),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.8),
                       ),
                     ),
                   ],
@@ -1739,7 +2122,13 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color color;
 
-  const _StatCard({required this.title, required this.value, required this.unit, required this.icon, required this.color});
+  const _StatCard({
+    required this.title,
+    required this.value,
+    required this.unit,
+    required this.icon,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1750,10 +2139,12 @@ class _StatCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(12.0),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -1765,7 +2156,7 @@ class _StatCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: color.withOpacityValues(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, size: 20, color: color),
@@ -1780,7 +2171,9 @@ class _StatCard extends StatelessWidget {
                     Text(
                       title,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.8),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.8),
                         fontSize: 12,
                       ),
                       maxLines: 1,
@@ -1797,18 +2190,21 @@ class _StatCard extends StatelessWidget {
                         children: [
                           Text(
                             value,
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 18,
-                            ),
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 18,
+                                ),
                           ),
                           const SizedBox(width: 3),
                           Text(
                             unit,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
-                              fontSize: 10,
-                            ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withValues(alpha: 0.6),
+                                  fontSize: 10,
+                                ),
                           ),
                         ],
                       ),

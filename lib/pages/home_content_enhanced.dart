@@ -36,7 +36,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
       final weekly = await _statsDao.getWeeklyChartData();
       final achievements = await _statsDao.getAchievementStats();
       final bookCount = await _bookDao.getBooksCount();
-      
+
       setState(() {
         _summaryStats = summary;
         _weeklyData = weekly;
@@ -55,9 +55,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
   void _navigateToDetailedStats(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const DetailedStatsPage(),
-      ),
+      MaterialPageRoute(builder: (context) => const DetailedStatsPage()),
     );
   }
 
@@ -82,7 +80,9 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outline.withOpacityValues(0.2),
                   width: 0.5,
                 ),
               ),
@@ -97,10 +97,18 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
             end: Alignment.bottomRight,
             stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
             colors: [
-              Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.15),
-              Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.08),
-              Theme.of(context).colorScheme.tertiaryContainer.withOpacityValues(0.12),
-              Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.06),
+              Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withOpacityValues(0.15),
+              Theme.of(
+                context,
+              ).colorScheme.secondaryContainer.withOpacityValues(0.08),
+              Theme.of(
+                context,
+              ).colorScheme.tertiaryContainer.withOpacityValues(0.12),
+              Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withOpacityValues(0.06),
               Theme.of(context).colorScheme.surface.withOpacityValues(0.95),
             ],
           ),
@@ -111,7 +119,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                 onRefresh: _loadAllStats,
                 child: SafeArea(
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
                     children: [
                       _buildWelcomeCard(),
                       const SizedBox(height: 20),
@@ -120,7 +128,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                       _buildWeeklyChartCard(),
                       const SizedBox(height: 24),
                       _buildRecentActivity(),
-                      const SizedBox(height: 100), // 底部留白
+                      const SizedBox(height: 40), // 底部留白
                     ],
                   ),
                 ),
@@ -132,105 +140,114 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
   Widget _buildWelcomeCard() {
     final totalMinutes = (_summaryStats['total'] ?? 0) ~/ 60;
     final todayMinutes = (_summaryStats['today'] ?? 0) ~/ 60;
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
-                width: 1,
-              ),
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
+              width: 1,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacityValues(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        Icons.auto_stories,
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '今日阅读时光',
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            todayMinutes > 0 
-                              ? '已阅读 $todayMinutes 分钟，继续保持！'
-                              : '开始今天的阅读之旅吧',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.7),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                if (totalMinutes > 0) ...[
-                  const SizedBox(height: 16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.4),
-                          Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.3),
-                        ],
-                      ),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacityValues(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Row(
+                    child: Icon(
+                      Icons.auto_stories,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary.withOpacityValues(0.2),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Icon(
-                            Icons.emoji_events,
-                            color: Theme.of(context).colorScheme.primary,
-                            size: 16,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
                         Text(
-                          '累计阅读 ${(totalMinutes / 60).toStringAsFixed(1)} 小时',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
+                          '今日阅读时光',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          todayMinutes > 0
+                              ? '已阅读 $todayMinutes 分钟，继续保持！'
+                              : '开始今天的阅读之旅吧',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacityValues(0.7),
+                              ),
                         ),
                       ],
                     ),
                   ),
                 ],
+              ),
+              if (totalMinutes > 0) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer.withOpacityValues(0.4),
+                        Theme.of(
+                          context,
+                        ).colorScheme.secondaryContainer.withOpacityValues(0.3),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withOpacityValues(0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(
+                          Icons.emoji_events,
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '累计阅读 ${(totalMinutes / 60).toStringAsFixed(1)} 小时',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
-            ),
+            ],
           ),
         ),
       ),
@@ -246,56 +263,68 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 400;
         return isNarrow
-          ? _buildNarrowLayout(todayMinutes, weekMinutes, totalMinutes)
-          : _buildWideLayout(todayMinutes, weekMinutes, totalMinutes);
+            ? _buildNarrowLayout(todayMinutes, weekMinutes, totalMinutes)
+            : _buildWideLayout(todayMinutes, weekMinutes, totalMinutes);
       },
     );
   }
 
-  Widget _buildNarrowLayout(int todayMinutes, int weekMinutes, int totalMinutes) {
+  Widget _buildNarrowLayout(
+    int todayMinutes,
+    int weekMinutes,
+    int totalMinutes,
+  ) {
     return Column(
       children: [
         Row(
           children: [
-            Expanded(child: _StatCard(
-              title: '今日阅读', 
-              value: '$todayMinutes', 
-              unit: '分钟', 
-              icon: Icons.today, 
-              color: Colors.blue,
-              onTap: () => _navigateToDetailedStats(context), // 跳转到详细统计
-            )),
+            Expanded(
+              child: _StatCard(
+                title: '今日阅读',
+                value: '$todayMinutes',
+                unit: '分钟',
+                icon: Icons.today,
+                color: Colors.blue,
+                onTap: () => _navigateToDetailedStats(context), // 跳转到详细统计
+              ),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: _StatCard(
-              title: '本周阅读', 
-              value: '$weekMinutes', 
-              unit: '分钟', 
-              icon: Icons.calendar_view_week, 
-              color: Colors.orange,
-              onTap: () => _navigateToDetailedStats(context),
-            )),
+            Expanded(
+              child: _StatCard(
+                title: '本周阅读',
+                value: '$weekMinutes',
+                unit: '分钟',
+                icon: Icons.calendar_view_week,
+                color: Colors.orange,
+                onTap: () => _navigateToDetailedStats(context),
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: _StatCard(
-              title: '累计阅读', 
-              value: '$totalMinutes', 
-              unit: '分钟', 
-              icon: Icons.history, 
-              color: Colors.green,
-              onTap: () => _navigateToDetailedStats(context),
-            )),
+            Expanded(
+              child: _StatCard(
+                title: '累计阅读',
+                value: '$totalMinutes',
+                unit: '分钟',
+                icon: Icons.history,
+                color: Colors.green,
+                onTap: () => _navigateToDetailedStats(context),
+              ),
+            ),
             const SizedBox(width: 12),
-            Expanded(child: _StatCard(
-              title: '书架藏书', 
-              value: '$_bookCount', 
-              unit: '本', 
-              icon: Icons.book, 
-              color: Colors.purple,
-              onTap: () => _navigateToDetailedStats(context),
-            )),
+            Expanded(
+              child: _StatCard(
+                title: '书架藏书',
+                value: '$_bookCount',
+                unit: '本',
+                icon: Icons.book,
+                color: Colors.purple,
+                onTap: () => _navigateToDetailedStats(context),
+              ),
+            ),
           ],
         ),
       ],
@@ -312,34 +341,34 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
       childAspectRatio: 1.4,
       children: [
         _StatCard(
-          title: '今日阅读', 
-          value: '$todayMinutes', 
-          unit: '分钟', 
-          icon: Icons.today, 
+          title: '今日阅读',
+          value: '$todayMinutes',
+          unit: '分钟',
+          icon: Icons.today,
           color: Colors.blue,
           onTap: () => _navigateToDetailedStats(context),
         ),
         _StatCard(
-          title: '本周阅读', 
-          value: '$weekMinutes', 
-          unit: '分钟', 
-          icon: Icons.calendar_view_week, 
+          title: '本周阅读',
+          value: '$weekMinutes',
+          unit: '分钟',
+          icon: Icons.calendar_view_week,
           color: Colors.orange,
           onTap: () => _navigateToDetailedStats(context),
         ),
         _StatCard(
-          title: '累计阅读', 
-          value: '$totalMinutes', 
-          unit: '分钟', 
-          icon: Icons.history, 
+          title: '累计阅读',
+          value: '$totalMinutes',
+          unit: '分钟',
+          icon: Icons.history,
           color: Colors.green,
           onTap: () => _navigateToDetailedStats(context),
         ),
         _StatCard(
-          title: '书架藏书', 
-          value: '$_bookCount', 
-          unit: '本', 
-          icon: Icons.book, 
+          title: '书架藏书',
+          value: '$_bookCount',
+          unit: '本',
+          icon: Icons.book,
           color: Colors.purple,
           onTap: () => _navigateToDetailedStats(context),
         ),
@@ -351,9 +380,14 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
     if (_weeklyData.isEmpty) {
       return Container();
     }
-    
-    final maxY = (_weeklyData.map((d) => d['duration'] as int).reduce((a, b) => a > b ? a : b) / 60) + 10;
-    
+
+    final maxY =
+        (_weeklyData
+                .map((d) => d['duration'] as int)
+                .reduce((a, b) => a > b ? a : b) /
+            60) +
+        10;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
@@ -364,7 +398,9 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
             color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
           ),
@@ -376,7 +412,9 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.secondary.withOpacityValues(0.1),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.secondary.withOpacityValues(0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -404,12 +442,15 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                     barTouchData: BarTouchData(
                       enabled: true,
                       touchTooltipData: BarTouchTooltipData(
-                        getTooltipColor: (group) => Theme.of(context).colorScheme.inverseSurface,
+                        getTooltipColor: (group) =>
+                            Theme.of(context).colorScheme.inverseSurface,
                         getTooltipItem: (group, groupIndex, rod, rodIndex) {
                           return BarTooltipItem(
                             '${rod.toY.toInt()} 分钟',
                             TextStyle(
-                              color: Theme.of(context).colorScheme.onInverseSurface,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onInverseSurface,
                               fontWeight: FontWeight.bold,
                             ),
                           );
@@ -436,8 +477,12 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                           },
                         ),
                       ),
-                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
                     ),
                     gridData: FlGridData(
                       show: true,
@@ -445,7 +490,9 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                       horizontalInterval: 10,
                       getDrawingHorizontalLine: (value) {
                         return FlLine(
-                          color: Theme.of(context).colorScheme.outline.withOpacityValues(0.1),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outline.withOpacityValues(0.1),
                           strokeWidth: 1,
                         );
                       },
@@ -461,7 +508,9 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                               begin: Alignment.bottomCenter,
                               end: Alignment.topCenter,
                               colors: [
-                                Theme.of(context).colorScheme.primary.withOpacityValues(0.8),
+                                Theme.of(
+                                  context,
+                                ).colorScheme.primary.withOpacityValues(0.8),
                                 Theme.of(context).colorScheme.primary,
                               ],
                             ),
@@ -495,7 +544,9 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
             color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
           ),
@@ -507,7 +558,9 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.tertiary.withOpacityValues(0.1),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.tertiary.withOpacityValues(0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -586,14 +639,16 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
               children: [
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 Text(
                   description,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacityValues(0.6),
                   ),
                 ),
               ],
@@ -615,14 +670,29 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
     const style = TextStyle(fontSize: 10);
     String text;
     switch (value.toInt()) {
-      case 1: text = '一'; break;
-      case 2: text = '二'; break;
-      case 3: text = '三'; break;
-      case 4: text = '四'; break;
-      case 5: text = '五'; break;
-      case 6: text = '六'; break;
-      case 7: text = '日'; break;
-      default: text = '';
+      case 1:
+        text = '一';
+        break;
+      case 2:
+        text = '二';
+        break;
+      case 3:
+        text = '三';
+        break;
+      case 4:
+        text = '四';
+        break;
+      case 5:
+        text = '五';
+        break;
+      case 6:
+        text = '六';
+        break;
+      case 7:
+        text = '日';
+        break;
+      default:
+        text = '';
     }
     return SideTitleWidget(
       meta: meta,
@@ -641,10 +711,10 @@ class _StatCard extends StatelessWidget {
   final VoidCallback? onTap; // 新增点击回调
 
   const _StatCard({
-    required this.title, 
-    required this.value, 
-    required this.unit, 
-    required this.icon, 
+    required this.title,
+    required this.value,
+    required this.unit,
+    required this.icon,
     required this.color,
     this.onTap, // 可选的点击事件
   });
@@ -654,82 +724,93 @@ class _StatCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap, // 添加点击事件
       child: ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          padding: const EdgeInsets.all(12.0),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
-              width: 1,
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            padding: const EdgeInsets.all(16.0),
+            decoration: BoxDecoration(
+              color: Theme.of(
+                context,
+              ).colorScheme.surface.withOpacityValues(0.8),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withOpacityValues(0.2),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: color.withOpacityValues(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 22, color: color),
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacityValues(0.8),
+                          fontSize: 12,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 6),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text(
+                              value,
+                              style: Theme.of(context).textTheme.headlineSmall
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 18,
+                                  ),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              unit,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withOpacityValues(0.6),
+                                    fontSize: 10,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: color.withOpacityValues(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 20, color: color),
-              ),
-              const SizedBox(height: 8),
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.8),
-                        fontSize: 12,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            value,
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 18,
-                            ),
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            unit,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
-                              fontSize: 10,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
         ),
-      ),
       ), // GestureDetector
     );
   }

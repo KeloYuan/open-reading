@@ -8,7 +8,6 @@ import 'import_book_page.dart';
 import 'reading_page_enhanced.dart';
 import '../utils/responsive_helper.dart';
 import '../utils/color_extensions.dart';
-import '../utils/glass_config.dart';
 
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
@@ -44,11 +43,14 @@ class _LibraryPageState extends State<LibraryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
+      value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
+        statusBarIconBrightness: isDarkMode
+            ? Brightness.light
+            : Brightness.dark,
+        statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
         systemStatusBarContrastEnforced: false,
         systemNavigationBarContrastEnforced: false,
       ),
@@ -65,14 +67,23 @@ class _LibraryPageState extends State<LibraryPage> {
           ),
           backgroundColor: Colors.transparent,
           elevation: 0,
-          flexibleSpace: GlassEffectConfig.createProgressiveAppBar(
-            context: context,
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: Theme.of(context).colorScheme.outline.withOpacityValues(0.28),
-                    width: 0.5,
+          surfaceTintColor: Colors.transparent, // 添加这个属性移除Material 3的色调
+          scrolledUnderElevation: 0, // 滚动时也保持透明
+          flexibleSpace: ClipRRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surface.withValues(alpha: 0.8),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.outline.withValues(alpha: 0.2),
+                      width: 0.5,
+                    ),
                   ),
                 ),
               ),
@@ -86,10 +97,16 @@ class _LibraryPageState extends State<LibraryPage> {
               end: Alignment.bottomRight,
               stops: const [0.0, 0.3, 0.6, 1.0],
               colors: [
-                Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.12),
+                Theme.of(
+                  context,
+                ).colorScheme.secondaryContainer.withOpacityValues(0.12),
                 Theme.of(context).colorScheme.surface.withOpacityValues(0.98),
-                Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.08),
-                Theme.of(context).colorScheme.tertiaryContainer.withOpacityValues(0.10),
+                Theme.of(
+                  context,
+                ).colorScheme.primaryContainer.withOpacityValues(0.08),
+                Theme.of(
+                  context,
+                ).colorScheme.tertiaryContainer.withOpacityValues(0.10),
               ],
             ),
           ),
@@ -104,7 +121,9 @@ class _LibraryPageState extends State<LibraryPage> {
                     width: 6,
                     height: 6,
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withOpacityValues(0.06),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacityValues(0.06),
                       borderRadius: BorderRadius.circular(3),
                     ),
                   ),
@@ -114,11 +133,17 @@ class _LibraryPageState extends State<LibraryPage> {
               _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _books.isEmpty
-                      ? _buildEmptyLibrary()
-                      : RefreshIndicator(
-                          onRefresh: _loadBooks,
-                          child: _buildBooksGrid(),
-                        ),
+                  ? _buildEmptyLibrary()
+                  : RefreshIndicator(
+                      onRefresh: _loadBooks,
+                      strokeWidth: 2.5, // 减细刷新指示器线条
+                      displacement: 60, // 增加下拉距离
+                      color: Theme.of(context).colorScheme.primary, // 主题色
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.surface.withValues(alpha: 0.9), // 半透明背景
+                      child: _buildBooksGrid(),
+                    ),
               // 移除顶部自定义 Positioned 毛玻璃，改用 AppBar 的 flexibleSpace
             ],
           ),
@@ -130,7 +155,9 @@ class _LibraryPageState extends State<LibraryPage> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Theme.of(context).colorScheme.primary.withOpacityValues(0.3),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withOpacityValues(0.3),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
                 spreadRadius: 0,
@@ -145,14 +172,18 @@ class _LibraryPageState extends State<LibraryPage> {
                 onPressed: () async {
                   final result = await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const ImportBookPage()),
+                    MaterialPageRoute(
+                      builder: (context) => const ImportBookPage(),
+                    ),
                   );
                   // 导入完成后刷新书籍列表
                   if (result == true || mounted) {
                     _loadBooks();
                   }
                 },
-                backgroundColor: Theme.of(context).colorScheme.primary.withOpacityValues(0.9),
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.primary.withOpacityValues(0.9),
                 foregroundColor: Colors.white,
                 elevation: 0,
                 heroTag: "add_book_fab", // 添加唯一标识避免冲突
@@ -169,7 +200,12 @@ class _LibraryPageState extends State<LibraryPage> {
     final topInset = MediaQuery.of(context).padding.top;
     return Center(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(40, topInset + kToolbarHeight + 40, 40, 40),
+        padding: EdgeInsets.fromLTRB(
+          40,
+          topInset + kToolbarHeight + 40,
+          40,
+          40,
+        ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
           // 毛玻璃效果 - 空书架提示卡片
@@ -180,10 +216,14 @@ class _LibraryPageState extends State<LibraryPage> {
             child: Container(
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+                color: Theme.of(
+                  context,
+                ).colorScheme.surface.withOpacityValues(0.8),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
-                  color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outline.withOpacityValues(0.2),
                   width: 1,
                 ),
               ),
@@ -193,7 +233,9 @@ class _LibraryPageState extends State<LibraryPage> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withOpacityValues(0.1),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacityValues(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Icon(
@@ -214,7 +256,9 @@ class _LibraryPageState extends State<LibraryPage> {
                     '你的书架还是空的\n点击右上角的 "+" 按钮\n添加你的第一本书吧',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.7),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacityValues(0.7),
                       height: 1.5,
                     ),
                   ),
@@ -223,14 +267,19 @@ class _LibraryPageState extends State<LibraryPage> {
                     onPressed: () async {
                       await Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const ImportBookPage()),
+                        MaterialPageRoute(
+                          builder: (context) => const ImportBookPage(),
+                        ),
                       );
                       _loadBooks();
                     },
                     icon: const Icon(Icons.add),
                     label: const Text('导入书籍'),
                     style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -250,14 +299,14 @@ class _LibraryPageState extends State<LibraryPage> {
     final isDesktop = ResponsiveHelper.isDesktop(context);
     final isTablet = ResponsiveHelper.isTablet(context);
     final topInset = MediaQuery.of(context).padding.top;
-    
+
     // 毛玻璃效果增强 - 网格容器背景
     // 为整个书籍网格添加细微的毛玻璃背景层
-    
+
     int crossAxisCount;
     double childAspectRatio;
     double spacing;
-    
+
     if (isDesktop) {
       crossAxisCount = 4; // 桌面4列
       childAspectRatio = 0.65; // 调整比例，防止溢出
@@ -277,7 +326,7 @@ class _LibraryPageState extends State<LibraryPage> {
       }
       spacing = 12;
     }
-    
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -286,8 +335,12 @@ class _LibraryPageState extends State<LibraryPage> {
           stops: const [0.0, 0.3, 0.7, 1.0],
           colors: [
             Theme.of(context).colorScheme.surface.withOpacityValues(0.0),
-            Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.03),
-            Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.03),
+            Theme.of(
+              context,
+            ).colorScheme.primaryContainer.withOpacityValues(0.03),
+            Theme.of(
+              context,
+            ).colorScheme.secondaryContainer.withOpacityValues(0.03),
             Theme.of(context).colorScheme.surface.withOpacityValues(0.0),
           ],
         ),
@@ -316,7 +369,9 @@ class _LibraryPageState extends State<LibraryPage> {
                 if (context.mounted) {
                   await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => ReadingPageEnhanced(book: fullBook)),
+                    MaterialPageRoute(
+                      builder: (context) => ReadingPageEnhanced(book: fullBook),
+                    ),
                   );
                 }
               }
@@ -341,11 +396,17 @@ class _LibraryPageState extends State<LibraryPage> {
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25), // 较强模糊创造深度感
           child: Container(
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface.withOpacityValues(0.9),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              color: Theme.of(
+                context,
+              ).colorScheme.surface.withOpacityValues(0.9),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
               border: Border(
                 top: BorderSide(
-                  color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outline.withOpacityValues(0.2),
                   width: 1,
                 ),
               ),
@@ -368,16 +429,27 @@ class _LibraryPageState extends State<LibraryPage> {
                 ),
                 Container(
                   // 毛玻璃效果 - 列表项容器
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.errorContainer.withOpacityValues(0.1),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.errorContainer.withOpacityValues(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: ListTile(
-                    leading: Icon(Icons.delete_outline, 
-                        color: Theme.of(context).colorScheme.error),
-                    title: Text('删除书籍', 
-                        style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    leading: Icon(
+                      Icons.delete_outline,
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                    title: Text(
+                      '删除书籍',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
                     onTap: () {
                       Navigator.pop(context); // 先关闭底部弹窗
                       _confirmDeleteBook(book);
@@ -404,18 +476,28 @@ class _LibraryPageState extends State<LibraryPage> {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30), // 高强度模糊突出对话框
             child: AlertDialog(
-              backgroundColor: Theme.of(context).colorScheme.surface.withOpacityValues(0.95),
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.surface.withOpacityValues(0.95),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
                 side: BorderSide(
-                  color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outline.withOpacityValues(0.2),
                   width: 1,
                 ),
               ),
-              title: Text('确认删除', style: Theme.of(context).textTheme.headlineSmall),
+              title: Text(
+                '确认删除',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
               content: Text('确定要删除《${book.title}》吗？文件将从设备中永久移除。'),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('取消'),
+                ),
                 TextButton(
                   onPressed: () async {
                     // Store the Navigator and ScaffoldMessenger before the async gap.
@@ -428,7 +510,7 @@ class _LibraryPageState extends State<LibraryPage> {
                         await file.delete();
                       }
                       await _bookDao.deleteBook(book.id!);
-                      
+
                       navigator.pop();
                       _loadBooks();
                       scaffoldMessenger.showSnackBar(
@@ -438,7 +520,12 @@ class _LibraryPageState extends State<LibraryPage> {
                       // Handle error
                     }
                   },
-                  child: Text('删除', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  child: Text(
+                    '删除',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -462,8 +549,9 @@ class _BookCoverItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progress = book.currentPage / (book.totalPages > 0 ? book.totalPages : 1);
-    
+    final progress =
+        book.currentPage / (book.totalPages > 0 ? book.totalPages : 1);
+
     return InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -493,21 +581,30 @@ class _BookCoverItem extends StatelessWidget {
                     // 为每本书的封面创建磨砂玻璃效果
                     // 结合渐变色和透明度创造层次感
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20), // 封面模糊效果
+                      filter: ImageFilter.blur(
+                        sigmaX: 20,
+                        sigmaY: 20,
+                      ), // 封面模糊效果
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface.withOpacityValues(0.9),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.surface.withOpacityValues(0.9),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.outline.withOpacityValues(0.2),
                             width: 1,
                           ),
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.3),
-                              Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.3),
+                              Theme.of(context).colorScheme.primaryContainer
+                                  .withOpacityValues(0.3),
+                              Theme.of(context).colorScheme.secondaryContainer
+                                  .withOpacityValues(0.3),
                             ],
                           ),
                         ),
@@ -521,29 +618,46 @@ class _BookCoverItem extends StatelessWidget {
                                   Expanded(
                                     child: Center(
                                       child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           // 毛玻璃效果 - 书籍图标容器
                                           // 为书籍图标添加细腻的毛玻璃背景效果
                                           ClipRRect(
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
                                             child: BackdropFilter(
-                                              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8), // 微妙模糊
+                                              filter: ImageFilter.blur(
+                                                sigmaX: 8,
+                                                sigmaY: 8,
+                                              ), // 微妙模糊
                                               child: Container(
-                                                padding: const EdgeInsets.all(12),
+                                                padding: const EdgeInsets.all(
+                                                  12,
+                                                ),
                                                 decoration: BoxDecoration(
-                                                  color: Theme.of(context).colorScheme.primary.withOpacityValues(0.15),
-                                                  borderRadius: BorderRadius.circular(12),
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .primary
+                                                      .withOpacityValues(0.15),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
                                                   border: Border.all(
-                                                    color: Theme.of(context).colorScheme.primary.withOpacityValues(0.2),
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .primary
+                                                        .withOpacityValues(0.2),
                                                     width: 0.5,
                                                   ),
                                                 ),
                                                 child: Icon(
                                                   Icons.menu_book,
                                                   size: 24,
-                                                  color: Theme.of(context).colorScheme.primary,
+                                                  color: Theme.of(
+                                                    context,
+                                                  ).colorScheme.primary,
                                                 ),
                                               ),
                                             ),
@@ -555,11 +669,14 @@ class _BookCoverItem extends StatelessWidget {
                                               textAlign: TextAlign.center,
                                               maxLines: 2,
                                               overflow: TextOverflow.ellipsis,
-                                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                                fontWeight: FontWeight.w600,
-                                                height: 1.2,
-                                                fontSize: 13,
-                                              ),
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleSmall
+                                                  ?.copyWith(
+                                                    fontWeight: FontWeight.w600,
+                                                    height: 1.2,
+                                                    fontSize: 13,
+                                                  ),
                                             ),
                                           ),
                                         ],
@@ -571,7 +688,10 @@ class _BookCoverItem extends StatelessWidget {
                                     Container(
                                       height: 3,
                                       decoration: BoxDecoration(
-                                        color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .outline
+                                            .withOpacityValues(0.2),
                                         borderRadius: BorderRadius.circular(2),
                                       ),
                                       child: FractionallySizedBox(
@@ -579,8 +699,12 @@ class _BookCoverItem extends StatelessWidget {
                                         widthFactor: progress.clamp(0.0, 1.0),
                                         child: Container(
                                           decoration: BoxDecoration(
-                                            color: Theme.of(context).colorScheme.primary,
-                                            borderRadius: BorderRadius.circular(2),
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                            borderRadius: BorderRadius.circular(
+                                              2,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -588,11 +712,16 @@ class _BookCoverItem extends StatelessWidget {
                                     const SizedBox(height: 2),
                                     Text(
                                       '${(progress * 100).toInt()}%',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        color: Theme.of(context).colorScheme.primary,
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 10,
-                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.primary,
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 10,
+                                          ),
                                     ),
                                   ],
                                 ],
@@ -603,15 +732,22 @@ class _BookCoverItem extends StatelessWidget {
                                 top: 8,
                                 right: 8,
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.primary,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
                                     '在读',
                                     style: TextStyle(
-                                      color: Theme.of(context).colorScheme.onPrimary,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onPrimary,
                                       fontSize: 8,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -638,11 +774,12 @@ class _BookCoverItem extends StatelessWidget {
                           book.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            height: 1.2,
-                            fontSize: 12,
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                height: 1.2,
+                                fontSize: 12,
+                              ),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -651,17 +788,22 @@ class _BookCoverItem extends StatelessWidget {
                           book.author,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.7),
-                            fontSize: 10,
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacityValues(0.7),
+                                fontSize: 10,
+                              ),
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         '共 ${book.totalPages} 页',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.5),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacityValues(0.5),
                           fontSize: 9,
                         ),
                       ),
