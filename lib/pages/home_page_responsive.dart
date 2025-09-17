@@ -52,7 +52,11 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
+    // 优化PageController，设置合适的视窗比例
+    _pageController = PageController(
+      viewportFraction: 1.0, // 保持全屏显示
+      keepPage: true, // 保持页面状态
+    );
     _setupPageImmersiveMode();
   }
 
@@ -291,15 +295,23 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
       ),
       body: Stack(
         children: [
-          // 主内容 - 使用PageView添加滑动动画
-          PageView(
+          // 主内容 - 使用PageView添加滑动动画，优化性能
+          PageView.builder(
             controller: _pageController,
             onPageChanged: (index) {
               setState(() => _selectedIndex = index);
             },
-            children: _navigationItems
-                .map((item) => _buildPageWrapper(item.page))
-                .toList(),
+            itemCount: _navigationItems.length,
+            itemBuilder: (context, index) {
+              // 使用RepaintBoundary隔离重绘
+              return RepaintBoundary(
+                child: _buildPageWrapper(_navigationItems[index].page),
+              );
+            },
+            // 添加缓存页面数量，减少重建
+            allowImplicitScrolling: true,
+            // 优化滚动物理效果
+            physics: const ClampingScrollPhysics(),
           ),
           // 悬浮药丸导航栏
           Positioned(
@@ -374,9 +386,9 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                                 _pageController.animateToPage(
                                   index,
                                   duration: const Duration(
-                                    milliseconds: 500,
-                                  ), // 增加到500ms，更缓慢
-                                  curve: Curves.easeInOutCubic, // 使用更优雅的缓动曲线
+                                    milliseconds: 250,
+                                  ), // 减少到250ms，提升响应速度
+                                  curve: Curves.easeOutQuart, // 使用更快的缓动曲线
                                 );
                               },
                             );
@@ -395,13 +407,20 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
   }
 
   Widget _buildPageWrapper(Widget page) {
+    // 使用RepaintBoundary和缓存优化
+    Widget wrappedPage;
+
     // 对于手机端，为首页和设置页添加毛玻璃AppBar
     if (page is HomeContentEnhanced) {
-      return const _HomeContentWrapper();
+      wrappedPage = const _HomeContentWrapper();
     } else if (page is SettingsPage) {
-      return const _SettingsPageWrapper();
+      wrappedPage = const _SettingsPageWrapper();
+    } else {
+      wrappedPage = page;
     }
-    return page;
+
+    // 添加AutomaticKeepAliveClientMixin包装以保持页面状态
+    return _KeepAlivePage(child: wrappedPage);
   }
 
   void _navigateToImport() {
@@ -519,77 +538,47 @@ class _BounceNavigationItem extends StatefulWidget {
 }
 
 class _BounceNavigationItemState extends State<_BounceNavigationItem>
-    with TickerProviderStateMixin {
-  late AnimationController _bounceController;
-  late AnimationController _pressController;
-  late Animation<double> _bounceAnimation;
-  late Animation<double> _pressAnimation;
+    with SingleTickerProviderStateMixin {
+  // 只使用一个ticker
+  late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
 
-    _bounceController = AnimationController(
-      duration: const Duration(milliseconds: 400), // 减少持续时间
+    // 只使用一个动画控制器，简化动画
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 150), // 减少持续时间
       vsync: this,
     );
 
-    _pressController = AnimationController(
-      duration: const Duration(milliseconds: 200), // 稍微增加按压时间
-      vsync: this,
-    );
-
-    _bounceAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
-      // 减少弹跳幅度
-      CurvedAnimation(
-        parent: _bounceController,
-        curve: Curves.easeOutCubic,
-      ), // 使用更平滑的曲线
-    );
-
-    _pressAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      // 减少按压幅度
-      CurvedAnimation(parent: _pressController, curve: Curves.easeInOut),
-    );
-
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.02).animate(
-      // 减少缩放幅度
-      CurvedAnimation(
-        parent: _bounceController,
-        curve: Curves.easeOutCubic,
-      ), // 使用更平滑的曲线
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
   }
 
   @override
   void dispose() {
-    _bounceController.dispose();
-    _pressController.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: (_) => _pressController.forward(),
-      onTapUp: (_) => _pressController.reverse(),
-      onTapCancel: () => _pressController.reverse(),
-      onTap: () {
-        widget.onTap();
-        // 触发Q弹效果
-        _bounceController.forward().then((_) {
-          _bounceController.reverse();
-        });
-      },
+      onTapDown: (_) => _animationController.forward(),
+      onTapUp: (_) => _animationController.reverse(),
+      onTapCancel: () => _animationController.reverse(),
+      onTap: widget.onTap,
       child: AnimatedBuilder(
-        animation: Listenable.merge([_bounceController, _pressController]),
+        animation: _animationController,
         builder: (context, child) {
           return Transform.scale(
-            scale: _pressAnimation.value * _scaleAnimation.value,
+            scale: _scaleAnimation.value,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOutCubic,
+              duration: const Duration(milliseconds: 200), // 减少动画时间
+              curve: Curves.easeOut, // 简化曲线
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               margin: const EdgeInsets.symmetric(horizontal: 5),
               decoration: BoxDecoration(
@@ -598,52 +587,45 @@ class _BounceNavigationItemState extends State<_BounceNavigationItem>
                         context,
                       ).colorScheme.primary.withValues(alpha: 0.15)
                     : Colors.transparent,
-                borderRadius: BorderRadius.circular(28), // 更大的圆角
+                borderRadius: BorderRadius.circular(28),
               ),
-              child: IntrinsicHeight(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Transform.scale(
-                      scale: widget.isSelected ? _bounceAnimation.value : 1.0,
-                      child: Icon(
-                        widget.isSelected
-                            ? widget.item.selectedIcon
-                            : widget.item.icon,
-                        color: widget.isSelected
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        size: 24,
-                      ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    widget.isSelected
+                        ? widget.item.selectedIcon
+                        : widget.item.icon,
+                    color: widget.isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                    size: 24,
+                  ),
+                  const SizedBox(height: 4),
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                    style: TextStyle(
+                      fontSize: widget.isSelected ? 12.5 : 12,
+                      fontWeight: widget.isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                      color: widget.isSelected
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
-                    const SizedBox(height: 4),
-                    Flexible(
-                      child: AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOutCubic,
-                        style: TextStyle(
-                          fontSize: widget.isSelected ? 12.5 : 12,
-                          fontWeight: widget.isSelected
-                              ? FontWeight.w600
-                              : FontWeight.w500,
-                          color: widget.isSelected
-                              ? Theme.of(context).colorScheme.primary
-                              : Theme.of(
-                                  context,
-                                ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
-                        child: Text(
-                          widget.item.label,
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ),
+                    child: Text(
+                      widget.item.label,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           );
@@ -711,21 +693,21 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+          stops: const [0.0, 0.3, 0.6, 0.8, 1.0],
           colors: [
             Theme.of(
               context,
-            ).colorScheme.primaryContainer.withValues(alpha: 0.15),
+            ).colorScheme.primaryContainer.withValues(alpha: 0.3),
             Theme.of(
               context,
-            ).colorScheme.secondaryContainer.withValues(alpha: 0.08),
+            ).colorScheme.secondaryContainer.withValues(alpha: 0.2),
             Theme.of(
               context,
-            ).colorScheme.tertiaryContainer.withValues(alpha: 0.12),
+            ).colorScheme.tertiaryContainer.withValues(alpha: 0.25),
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
             Theme.of(
               context,
-            ).colorScheme.primaryContainer.withValues(alpha: 0.06),
-            Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+            ).colorScheme.primaryContainer.withValues(alpha: 0.1),
           ],
         ),
       ),
@@ -2217,5 +2199,27 @@ class _StatCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// 保持页面状态的包装器，避免页面重建
+class _KeepAlivePage extends StatefulWidget {
+  final Widget child;
+
+  const _KeepAlivePage({required this.child});
+
+  @override
+  State<_KeepAlivePage> createState() => _KeepAlivePageState();
+}
+
+class _KeepAlivePageState extends State<_KeepAlivePage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // 必须调用以保持状态
+    return widget.child;
   }
 }

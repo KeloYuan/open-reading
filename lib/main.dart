@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'pages/home_page_responsive.dart';
+import 'utils/app_themes.dart';
 
 void main() {
   // 确保可以在 runApp 前安全调用 SystemChrome
@@ -108,9 +109,13 @@ void _updateSystemUIOverlay(bool isDarkMode) {
 class ThemeNotifier extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   bool _isInitialized = false;
+  AppTheme _currentAppTheme = AppThemes.blueTheme; // 默认蓝色主题
+  Color? _customAccentColor; // 存储自定义强调色
 
   ThemeMode get themeMode => _themeMode;
   bool get isInitialized => _isInitialized;
+  AppTheme get currentAppTheme => _currentAppTheme;
+  Color? get customAccentColor => _customAccentColor;
 
   ThemeNotifier() {
     _loadTheme();
@@ -119,12 +124,24 @@ class ThemeNotifier extends ChangeNotifier {
   void _loadTheme() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     final isDarkMode = prefs.getBool('isDarkMode');
+    final appThemeName = prefs.getString('appTheme') ?? 'blue';
+    final customColorValue = prefs.getInt('customAccentColor');
 
     if (isDarkMode == null) {
       // 首次启动，使用系统主题
       _themeMode = ThemeMode.system;
     } else {
       _themeMode = isDarkMode ? ThemeMode.dark : ThemeMode.light;
+    }
+
+    // 加载应用主题
+    if (appThemeName == 'custom' && customColorValue != null) {
+      // 加载自定义主题
+      _customAccentColor = Color(customColorValue);
+      _currentAppTheme = AppThemes.createCustomTheme(_customAccentColor!);
+    } else {
+      _customAccentColor = null;
+      _currentAppTheme = AppThemes.getThemeByName(appThemeName);
     }
 
     _isInitialized = true;
@@ -149,6 +166,38 @@ class ThemeNotifier extends ChangeNotifier {
     // 异步保存设置
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isDarkMode', isDarkMode);
+  }
+
+  // 切换应用主题
+  void setAppTheme(AppTheme theme) async {
+    if (_currentAppTheme.name == theme.name) return; // 避免重复设置
+
+    _currentAppTheme = theme;
+    _customAccentColor = null; // 清除自定义强调色
+
+    // 立即通知监听器更新UI
+    notifyListeners();
+
+    // 异步保存设置
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('appTheme', theme.name);
+    await prefs.remove('customAccentColor'); // 移除自定义颜色设置
+  }
+
+  // 设置自定义强调色
+  void setCustomAccentColor(Color color) async {
+    _customAccentColor = color;
+    final customTheme = AppThemes.createCustomTheme(color);
+
+    _currentAppTheme = customTheme;
+
+    // 立即通知监听器更新UI
+    notifyListeners();
+
+    // 异步保存设置
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('appTheme', 'custom');
+    await prefs.setInt('customAccentColor', color.value);
   }
 
   void setThemeMode(ThemeMode mode) {
@@ -202,8 +251,8 @@ class XxReadApp extends StatelessWidget {
         return MaterialApp(
           title: '小元读书',
           debugShowCheckedModeBanner: false,
-          theme: _buildLightTheme(),
-          darkTheme: _buildDarkTheme(),
+          theme: _buildLightTheme(themeNotifier.currentAppTheme),
+          darkTheme: _buildDarkTheme(themeNotifier.currentAppTheme),
           themeMode: themeNotifier.themeMode,
           home: const HomePageResponsive(),
           builder: (context, child) {
@@ -232,14 +281,11 @@ class XxReadApp extends StatelessWidget {
     return notifier.themeMode;
   }
 
-  ThemeData _buildLightTheme() {
+  ThemeData _buildLightTheme(AppTheme appTheme) {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF6366F1),
-        brightness: Brightness.light,
-      ),
+      colorScheme: appTheme.lightColorScheme,
       appBarTheme: const AppBarTheme(
         elevation: 0,
         backgroundColor: Colors.transparent,
@@ -251,16 +297,11 @@ class XxReadApp extends StatelessWidget {
     );
   }
 
-  ThemeData _buildDarkTheme() {
+  ThemeData _buildDarkTheme(AppTheme appTheme) {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF8B5CF6),
-        brightness: Brightness.dark,
-        surface: const Color(0xFF1E1E1E),
-      ),
-      scaffoldBackgroundColor: const Color(0xFF121212),
+      colorScheme: appTheme.darkColorScheme,
       appBarTheme: const AppBarTheme(
         elevation: 0,
         backgroundColor: Colors.transparent,
