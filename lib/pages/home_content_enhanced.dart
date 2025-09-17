@@ -96,21 +96,19 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+            stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
             colors: [
+              // 使用主题的主色调创建更丰富的渐变
+              Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.12),
+              Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.06),
               Theme.of(
                 context,
-              ).colorScheme.primaryContainer.withOpacityValues(0.15),
+              ).colorScheme.primaryContainer.withValues(alpha: 0.15),
               Theme.of(
                 context,
-              ).colorScheme.secondaryContainer.withOpacityValues(0.08),
-              Theme.of(
-                context,
-              ).colorScheme.tertiaryContainer.withOpacityValues(0.12),
-              Theme.of(
-                context,
-              ).colorScheme.primaryContainer.withOpacityValues(0.06),
-              Theme.of(context).colorScheme.surface.withOpacityValues(0.95),
+              ).colorScheme.secondaryContainer.withValues(alpha: 0.10),
+              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
             ],
           ),
         ),
@@ -122,43 +120,57 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                   child: ListView(
                     padding: EdgeInsets.fromLTRB(
                       ResponsiveHelper.getHorizontalPadding(context),
-                      ResponsiveHelper.getValue(context,
+                      ResponsiveHelper.getValue(
+                        context,
                         mobile: 20.0,
                         tablet: 24.0,
-                        desktop: 28.0
+                        desktop: 28.0,
                       ),
                       ResponsiveHelper.getHorizontalPadding(context),
-                      ResponsiveHelper.getValue(context,
+                      ResponsiveHelper.getValue(
+                        context,
                         mobile: 24.0 + MediaQuery.of(context).padding.bottom,
                         tablet: 32.0 + MediaQuery.of(context).padding.bottom,
-                        desktop: 40.0 + MediaQuery.of(context).padding.bottom
+                        desktop: 40.0 + MediaQuery.of(context).padding.bottom,
                       ),
                     ),
                     children: [
                       _buildWelcomeCard(),
-                      SizedBox(height: ResponsiveHelper.getValue(context,
-                        mobile: 20.0,
-                        tablet: 24.0,
-                        desktop: 28.0
-                      )),
+                      SizedBox(
+                        height: ResponsiveHelper.getValue(
+                          context,
+                          mobile: 20.0,
+                          tablet: 24.0,
+                          desktop: 28.0,
+                        ),
+                      ),
                       _buildSummaryCards(),
-                      SizedBox(height: ResponsiveHelper.getValue(context,
-                        mobile: 24.0,
-                        tablet: 28.0,
-                        desktop: 32.0
-                      )),
+                      SizedBox(
+                        height: ResponsiveHelper.getValue(
+                          context,
+                          mobile: 24.0,
+                          tablet: 28.0,
+                          desktop: 32.0,
+                        ),
+                      ),
                       _buildWeeklyChartCard(),
-                      SizedBox(height: ResponsiveHelper.getValue(context,
-                        mobile: 24.0,
-                        tablet: 28.0,
-                        desktop: 32.0
-                      )),
+                      SizedBox(
+                        height: ResponsiveHelper.getValue(
+                          context,
+                          mobile: 24.0,
+                          tablet: 28.0,
+                          desktop: 32.0,
+                        ),
+                      ),
                       _buildRecentActivity(),
-                      SizedBox(height: ResponsiveHelper.getValue(context,
-                        mobile: 40.0,
-                        tablet: 48.0,
-                        desktop: 56.0
-                      )), // 底部留白
+                      SizedBox(
+                        height: ResponsiveHelper.getValue(
+                          context,
+                          mobile: 40.0,
+                          tablet: 48.0,
+                          desktop: 56.0,
+                        ),
+                      ), // 底部留白
                     ],
                   ),
                 ),
@@ -822,20 +834,26 @@ class _StatCard extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
-            padding: EdgeInsets.all(ResponsiveHelper.getValue(context,
-              mobile: 16.0,
-              tablet: 18.0,
-              desktop: 20.0
-            )),
+            padding: EdgeInsets.all(
+              ResponsiveHelper.getValue(
+                context,
+                mobile: 16.0,
+                tablet: 18.0,
+                desktop: 20.0,
+              ),
+            ),
             decoration: BoxDecoration(
               color: Theme.of(
                 context,
               ).colorScheme.surface.withOpacityValues(0.8),
-              borderRadius: BorderRadius.circular(ResponsiveHelper.getValue(context,
-                mobile: 16.0,
-                tablet: 18.0,
-                desktop: 20.0
-              )),
+              borderRadius: BorderRadius.circular(
+                ResponsiveHelper.getValue(
+                  context,
+                  mobile: 16.0,
+                  tablet: 18.0,
+                  desktop: 20.0,
+                ),
+              ),
               border: Border.all(
                 color: Theme.of(
                   context,
@@ -849,30 +867,44 @@ class _StatCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  padding: EdgeInsets.all(ResponsiveHelper.getValue(context,
-                    mobile: 6.0,
-                    tablet: 7.0,
-                    desktop: 8.0
-                  )),
+                  padding: EdgeInsets.all(
+                    ResponsiveHelper.getValue(
+                      context,
+                      mobile: 6.0,
+                      tablet: 7.0,
+                      desktop: 8.0,
+                    ),
+                  ),
                   decoration: BoxDecoration(
                     color: color.withOpacityValues(0.1),
-                    borderRadius: BorderRadius.circular(ResponsiveHelper.getValue(context,
-                      mobile: 8.0,
-                      tablet: 9.0,
-                      desktop: 10.0
-                    )),
+                    borderRadius: BorderRadius.circular(
+                      ResponsiveHelper.getValue(
+                        context,
+                        mobile: 8.0,
+                        tablet: 9.0,
+                        desktop: 10.0,
+                      ),
+                    ),
                   ),
-                  child: Icon(icon, size: ResponsiveHelper.getValue(context,
-                    mobile: 22.0,
-                    tablet: 24.0,
-                    desktop: 26.0
-                  ), color: color),
+                  child: Icon(
+                    icon,
+                    size: ResponsiveHelper.getValue(
+                      context,
+                      mobile: 22.0,
+                      tablet: 24.0,
+                      desktop: 26.0,
+                    ),
+                    color: color,
+                  ),
                 ),
-                SizedBox(height: ResponsiveHelper.getValue(context,
-                  mobile: 12.0,
-                  tablet: 14.0,
-                  desktop: 16.0
-                )),
+                SizedBox(
+                  height: ResponsiveHelper.getValue(
+                    context,
+                    mobile: 12.0,
+                    tablet: 14.0,
+                    desktop: 16.0,
+                  ),
+                ),
                 Flexible(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -890,11 +922,14 @@ class _StatCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      SizedBox(height: ResponsiveHelper.getValue(context,
-                        mobile: 6.0,
-                        tablet: 7.0,
-                        desktop: 8.0
-                      )),
+                      SizedBox(
+                        height: ResponsiveHelper.getValue(
+                          context,
+                          mobile: 6.0,
+                          tablet: 7.0,
+                          desktop: 8.0,
+                        ),
+                      ),
                       FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
@@ -911,11 +946,14 @@ class _StatCard extends StatelessWidget {
                                     fontSize: 18,
                                   ),
                             ),
-                            SizedBox(width: ResponsiveHelper.getValue(context,
-                              mobile: 3.0,
-                              tablet: 4.0,
-                              desktop: 5.0
-                            )),
+                            SizedBox(
+                              width: ResponsiveHelper.getValue(
+                                context,
+                                mobile: 3.0,
+                                tablet: 4.0,
+                                desktop: 5.0,
+                              ),
+                            ),
                             Text(
                               unit,
                               style: Theme.of(context).textTheme.bodySmall

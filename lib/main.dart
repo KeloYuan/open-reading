@@ -111,11 +111,13 @@ class ThemeNotifier extends ChangeNotifier {
   bool _isInitialized = false;
   AppTheme _currentAppTheme = AppThemes.blueTheme; // 默认蓝色主题
   Color? _customAccentColor; // 存储自定义强调色
+  Color? _globalAccentColor; // 全局强调色（与应用主题分离）
 
   ThemeMode get themeMode => _themeMode;
   bool get isInitialized => _isInitialized;
   AppTheme get currentAppTheme => _currentAppTheme;
   Color? get customAccentColor => _customAccentColor;
+  Color? get globalAccentColor => _globalAccentColor;
 
   ThemeNotifier() {
     _loadTheme();
@@ -126,12 +128,19 @@ class ThemeNotifier extends ChangeNotifier {
     final isDarkMode = prefs.getBool('isDarkMode');
     final appThemeName = prefs.getString('appTheme') ?? 'blue';
     final customColorValue = prefs.getInt('customAccentColor');
+    final globalAccentColorValue = prefs.getInt('globalAccentColor');
 
     if (isDarkMode == null) {
       // 首次启动，使用系统主题
       _themeMode = ThemeMode.system;
     } else {
       _themeMode = isDarkMode ? ThemeMode.dark : ThemeMode.light;
+    }
+
+    // 加载全局强调色
+    if (globalAccentColorValue != null) {
+      _globalAccentColor = Color(globalAccentColorValue);
+      AppThemes.setGlobalAccentColor(_globalAccentColor);
     }
 
     // 加载应用主题
@@ -198,6 +207,23 @@ class ThemeNotifier extends ChangeNotifier {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('appTheme', 'custom');
     await prefs.setInt('customAccentColor', color.value);
+  }
+
+  // 设置全局强调色（与应用主题分离）
+  void setGlobalAccentColor(Color? color) async {
+    _globalAccentColor = color;
+    AppThemes.setGlobalAccentColor(color);
+
+    // 立即通知监听器更新UI
+    notifyListeners();
+
+    // 异步保存设置
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    if (color != null) {
+      await prefs.setInt('globalAccentColor', color.value);
+    } else {
+      await prefs.remove('globalAccentColor');
+    }
   }
 
   void setThemeMode(ThemeMode mode) {
@@ -282,10 +308,21 @@ class XxReadApp extends StatelessWidget {
   }
 
   ThemeData _buildLightTheme(AppTheme appTheme) {
+    ColorScheme colorScheme = appTheme.lightColorScheme;
+
+    // 如果有全局强调色，应用到color scheme
+    final globalAccent = AppThemes.getGlobalAccentColor();
+    if (globalAccent != null) {
+      colorScheme = AppThemes.getColorSchemeWithAccent(
+        colorScheme,
+        globalAccent,
+      );
+    }
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      colorScheme: appTheme.lightColorScheme,
+      colorScheme: colorScheme,
       appBarTheme: const AppBarTheme(
         elevation: 0,
         backgroundColor: Colors.transparent,
@@ -298,10 +335,21 @@ class XxReadApp extends StatelessWidget {
   }
 
   ThemeData _buildDarkTheme(AppTheme appTheme) {
+    ColorScheme colorScheme = appTheme.darkColorScheme;
+
+    // 如果有全局强调色，应用到color scheme
+    final globalAccent = AppThemes.getGlobalAccentColor();
+    if (globalAccent != null) {
+      colorScheme = AppThemes.getColorSchemeWithAccent(
+        colorScheme,
+        globalAccent,
+      );
+    }
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      colorScheme: appTheme.darkColorScheme,
+      colorScheme: colorScheme,
       appBarTheme: const AppBarTheme(
         elevation: 0,
         backgroundColor: Colors.transparent,

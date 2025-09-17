@@ -13,6 +13,7 @@ import 'detailed_stats_page.dart';
 import '../utils/responsive_helper.dart';
 import '../utils/glass_config.dart';
 import '../utils/color_extensions.dart';
+import '../utils/app_themes.dart';
 import '../services/book_dao.dart';
 import '../services/reading_stats_dao.dart';
 import '../main.dart';
@@ -140,19 +141,19 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+            stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
             colors: [
+              // 使用主题的主色调创建更丰富的渐变
+              Theme.of(context).colorScheme.primary.withValues(alpha: 0.06),
+              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.10),
+              Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.04),
               Theme.of(
                 context,
               ).colorScheme.primaryContainer.withValues(alpha: 0.12),
-              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
               Theme.of(
                 context,
               ).colorScheme.secondaryContainer.withValues(alpha: 0.08),
-              Theme.of(
-                context,
-              ).colorScheme.tertiaryContainer.withValues(alpha: 0.10),
-              Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
             ],
           ),
         ),
@@ -693,21 +694,19 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          stops: const [0.0, 0.3, 0.6, 0.8, 1.0],
+          stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
           colors: [
+            // 使用主题的主色调创建更丰富的渐变
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+            Theme.of(context).colorScheme.secondary.withValues(alpha: 0.12),
+            Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.06),
             Theme.of(
               context,
-            ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+            ).colorScheme.primaryContainer.withValues(alpha: 0.15),
             Theme.of(
               context,
-            ).colorScheme.secondaryContainer.withValues(alpha: 0.2),
-            Theme.of(
-              context,
-            ).colorScheme.tertiaryContainer.withValues(alpha: 0.25),
-            Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
-            Theme.of(
-              context,
-            ).colorScheme.primaryContainer.withValues(alpha: 0.1),
+            ).colorScheme.secondaryContainer.withValues(alpha: 0.10),
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
           ],
         ),
       ),
@@ -1514,6 +1513,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                 icon: Icons.palette_outlined,
                 children: [
                   _buildThemeToggle(themeNotifier, isDarkMode),
+                  _buildAppThemeSelector(themeNotifier),
+                  _buildCustomAccentColorSelector(themeNotifier),
+                  _buildGlobalAccentColorSelector(themeNotifier),
                   _buildAnimationToggle(),
                 ],
               ),
@@ -2091,6 +2093,488 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // 应用主题选择器
+  Widget _buildAppThemeSelector(ThemeNotifier themeNotifier) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showAppThemeModal(themeNotifier),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    AppThemes.getThemeIcon(themeNotifier.currentAppTheme.name),
+                    size: 16,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '应用主题',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        '当前: ${themeNotifier.currentAppTheme.displayName}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 自定义强调色选择器
+  Widget _buildCustomAccentColorSelector(ThemeNotifier themeNotifier) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showCustomAccentColorModal(themeNotifier),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    Icons.color_lens,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '自定义强调色',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        '为当前主题设置强调色',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 全局强调色选择器
+  Widget _buildGlobalAccentColorSelector(ThemeNotifier themeNotifier) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showGlobalAccentColorModal(themeNotifier),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    Icons.palette,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '全局强调色',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        '设置应用全局强调色',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 显示应用主题选择模态窗口
+  void _showAppThemeModal(ThemeNotifier themeNotifier) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.7,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      Text(
+                        '选择应用主题',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: GridView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      childAspectRatio: 1.2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                    ),
+                    itemCount: AppThemes.allThemes.length,
+                    itemBuilder: (context, index) {
+                      final theme = AppThemes.allThemes[index];
+                      final isSelected = themeNotifier.currentAppTheme.name == theme.name;
+                      
+                      return GestureDetector(
+                        onTap: () {
+                          themeNotifier.setAppTheme(theme);
+                          Navigator.pop(context);
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isSelected 
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                              width: isSelected ? 2 : 1,
+                            ),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                theme.lightColorScheme.primary.withValues(alpha: 0.1),
+                                theme.lightColorScheme.secondary.withValues(alpha: 0.1),
+                              ],
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                AppThemes.getThemeIcon(theme.name),
+                                size: 32,
+                                color: theme.lightColorScheme.primary,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                theme.displayName,
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    width: 12,
+                                    height: 12,
+                                    decoration: BoxDecoration(
+                                      color: theme.lightColorScheme.primary,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Container(
+                                    width: 12,
+                                    height: 12,
+                                    decoration: BoxDecoration(
+                                      color: theme.lightColorScheme.secondary,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // 显示自定义强调色选择模态窗口
+  void _showCustomAccentColorModal(ThemeNotifier themeNotifier) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.6,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      Text(
+                        '自定义强调色',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: GridView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 4,
+                      childAspectRatio: 1,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                    ),
+                    itemCount: AppThemes.accentColors.length,
+                    itemBuilder: (context, index) {
+                      final color = AppThemes.accentColors[index];
+                      final isSelected = themeNotifier.customAccentColor?.value == color.value;
+                      
+                      return GestureDetector(
+                        onTap: () {
+                          themeNotifier.setCustomAccentColor(color);
+                          Navigator.pop(context);
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected 
+                                ? Theme.of(context).colorScheme.onSurface
+                                : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                          child: isSelected
+                            ? const Icon(
+                                Icons.check,
+                                color: Colors.white,
+                                size: 24,
+                              )
+                            : null,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // 显示全局强调色选择模态窗口
+  void _showGlobalAccentColorModal(ThemeNotifier themeNotifier) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.6,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      Text(
+                        '全局强调色',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: GridView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 4,
+                      childAspectRatio: 1,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                    ),
+                    itemCount: AppThemes.accentColors.length,
+                    itemBuilder: (context, index) {
+                      final color = AppThemes.accentColors[index];
+                      final isSelected = themeNotifier.globalAccentColor?.value == color.value;
+                      
+                      return GestureDetector(
+                        onTap: () {
+                          themeNotifier.setGlobalAccentColor(color);
+                          Navigator.pop(context);
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected 
+                                ? Theme.of(context).colorScheme.onSurface
+                                : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                          child: isSelected
+                            ? const Icon(
+                                Icons.check,
+                                color: Colors.white,
+                                size: 24,
+                              )
+                            : null,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

@@ -429,4 +429,58 @@ class AppThemes {
     Color(0xFF3F51B5), // 靛蓝色
     Color(0xFFFF5722), // 深橙色
   ];
+
+  // 强调色名称对应
+  static final Map<Color, String> accentColorNames = {
+    const Color(0xFF1976D2): '海洋蓝',
+    const Color(0xFF6A4C93): '优雅紫',
+    const Color(0xFF2E7D32): '森林绿',
+    const Color(0xFFFF6F00): '活力橙',
+    const Color(0xFFD32F2F): '热情红',
+    const Color(0xFFE91E63): '樱花粉',
+    const Color(0xFF00BCD4): '清新青',
+    const Color(0xFF795548): '古典棕',
+    const Color(0xFF607D8B): '优雅灰',
+    const Color(0xFF9C27B0): '魅力紫',
+    const Color(0xFFFF9800): '琥珀金',
+    const Color(0xFF4CAF50): '生机绿',
+    const Color(0xFFFFEB3B): '阳光黄',
+    const Color(0xFF9E9E9E): '简约灰',
+    const Color(0xFF3F51B5): '深邃蓝',
+    const Color(0xFFFF5722): '火焰橙',
+  };
+
+  // 获取强调色名称
+  static String getAccentColorName(Color color) {
+    return accentColorNames[color] ?? '自定义';
+  }
+
+  // 全局强调色管理（与应用主题分离）
+  static Color? _globalAccentColor;
+
+  // 设置全局强调色
+  static void setGlobalAccentColor(Color? color) {
+    _globalAccentColor = color;
+  }
+
+  // 获取全局强调色
+  static Color? getGlobalAccentColor() {
+    return _globalAccentColor;
+  }
+
+  // 获取带全局强调色的ColorScheme
+  static ColorScheme getColorSchemeWithAccent(
+    ColorScheme baseScheme,
+    Color? accentColor,
+  ) {
+    if (accentColor == null) return baseScheme;
+
+    return ColorScheme.fromSeed(
+      seedColor: accentColor,
+      brightness: baseScheme.brightness,
+      // 保持原有的surface色调
+      surface: baseScheme.surface,
+      onSurface: baseScheme.onSurface,
+    );
+  }
 }
