@@ -697,6 +697,39 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     debugPrint('✅ 智能重新分页完成，保持阅读位置在第${_currentPageIndex + 1}页');
   }
 
+  // --- 统一主题配置 ---
+  /// 为二级页面提供统一的主题配置
+  BoxDecoration _getModalDecoration() {
+    return BoxDecoration(
+      color: _currentTheme.controlBarColor.withValues(alpha: 0.98),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      border: Border.all(
+        color: _currentTheme.iconColor.withValues(alpha: 0.3),
+        width: 1,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: _currentTheme.textColor.withValues(alpha: 0.1),
+          blurRadius: 20,
+          offset: const Offset(0, -5),
+        ),
+      ],
+    );
+  }
+
+  /// 获取二级页面的文本颜色
+  Color _getModalTextColor() => _currentTheme.controlBarTextColor;
+
+  /// 获取二级页面的图标颜色
+  Color _getModalIconColor() => _currentTheme.iconColor;
+
+  /// 获取二级页面的分割线颜色
+  Color _getModalDividerColor() =>
+      _currentTheme.iconColor.withValues(alpha: 0.3);
+
+  /// 获取二级页面的背景色
+  Color _getModalBackgroundColor() => _currentTheme.controlBarColor;
+
   // --- UI Controls ---
   void _setImmersiveMode() {
     final isLightBackground =
@@ -1420,11 +1453,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-            final panelBgColor = isDarkMode
-                ? Colors.grey[900]!.withValues(alpha: 0.98)
-                : Colors.grey[50]!.withValues(alpha: 0.98);
-
             return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               height: MediaQuery.of(context).size.height * 0.6,
@@ -1435,12 +1463,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
                   child: Container(
-                    decoration: BoxDecoration(
-                      color: panelBgColor,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28),
-                      ),
-                    ),
+                    decoration: _getModalDecoration(),
                     child: Column(
                       children: [
                         // 拖拽指示器
@@ -1452,9 +1475,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               width: 40,
                               height: 4,
                               decoration: BoxDecoration(
-                                color: isDarkMode
-                                    ? Colors.grey[600]
-                                    : Colors.grey[400],
+                                color: _getModalIconColor(),
                                 borderRadius: BorderRadius.circular(2),
                               ),
                             ),
@@ -1468,12 +1489,13 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: Colors.purple[100],
+                                  color: _currentTheme.sliderActiveColor
+                                      .withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(
                                   Icons.palette_rounded,
-                                  color: Colors.purple[600],
+                                  color: _currentTheme.sliderActiveColor,
                                   size: 24,
                                 ),
                               ),
@@ -1481,9 +1503,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               Text(
                                 '阅读主题',
                                 style: TextStyle(
-                                  color: isDarkMode
-                                      ? Colors.white
-                                      : Colors.grey[800],
+                                  color: _getModalTextColor(),
                                   fontSize: 22,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -1497,7 +1517,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                             padding: const EdgeInsets.all(20),
                             child: _buildEnhancedColorThemeSelector(
                               setModalState,
-                              isDarkMode,
                             ),
                           ),
                         ),
@@ -1561,14 +1580,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-            final panelBgColor = isDarkMode
-                ? Colors.grey[900]!.withValues(alpha: 0.98)
-                : Colors.grey[50]!.withValues(alpha: 0.98);
-            final panelBorderColor = isDarkMode
-                ? Colors.grey[700]!.withValues(alpha: 0.6)
-                : Colors.grey[300]!.withValues(alpha: 0.8);
-
             return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               height: MediaQuery.of(context).size.height * 0.6,
@@ -1579,22 +1590,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
                   child: Container(
-                    decoration: BoxDecoration(
-                      color: panelBgColor,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28),
-                      ),
-                      border: Border.all(color: panelBorderColor, width: 1),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(
-                            alpha: isDarkMode ? 0.4 : 0.1,
-                          ),
-                          blurRadius: 20,
-                          offset: const Offset(0, -5),
-                        ),
-                      ],
-                    ),
+                    decoration: _getModalDecoration(),
                     child: Column(
                       children: [
                         // 拖拽指示器
@@ -1606,9 +1602,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               width: 40,
                               height: 4,
                               decoration: BoxDecoration(
-                                color: isDarkMode
-                                    ? Colors.grey[600]
-                                    : Colors.grey[400],
+                                color: _getModalIconColor(),
                                 borderRadius: BorderRadius.circular(2),
                               ),
                             ),
@@ -1620,9 +1614,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                           decoration: BoxDecoration(
                             border: Border(
                               top: BorderSide(
-                                color: isDarkMode
-                                    ? Colors.grey[700]!.withValues(alpha: 0.5)
-                                    : Colors.grey[300]!.withValues(alpha: 0.8),
+                                color: _getModalDividerColor(),
                                 width: 1,
                               ),
                             ),
@@ -1632,18 +1624,13 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: isDarkMode
-                                      ? Colors.blue[600]!.withValues(alpha: 0.2)
-                                      : Colors.blue[100]!.withValues(
-                                          alpha: 0.8,
-                                        ),
+                                  color: _currentTheme.sliderActiveColor
+                                      .withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(
                                   Icons.tune_rounded,
-                                  color: isDarkMode
-                                      ? Colors.blue[300]
-                                      : Colors.blue[600],
+                                  color: _currentTheme.sliderActiveColor,
                                   size: 24,
                                 ),
                               ),
@@ -1651,9 +1638,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               Text(
                                 '阅读设置',
                                 style: TextStyle(
-                                  color: isDarkMode
-                                      ? Colors.white
-                                      : Colors.grey[800],
+                                  color: _getModalTextColor(),
                                   fontSize: 22,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 0.5,
@@ -1662,19 +1647,15 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               const Spacer(),
                               Container(
                                 decoration: BoxDecoration(
-                                  color: isDarkMode
-                                      ? Colors.grey[700]!.withValues(alpha: 0.5)
-                                      : Colors.grey[200]!.withValues(
-                                          alpha: 0.8,
-                                        ),
+                                  color: _getModalBackgroundColor().withValues(
+                                    alpha: 0.5,
+                                  ),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: IconButton(
                                   icon: Icon(
                                     Icons.refresh_rounded,
-                                    color: isDarkMode
-                                        ? Colors.grey[300]
-                                        : Colors.grey[600],
+                                    color: _getModalIconColor(),
                                     size: 20,
                                   ),
                                   onPressed: () {
@@ -1698,7 +1679,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                 _buildSettingSection(
                                   title: '文字设置',
                                   icon: Icons.text_fields_rounded,
-                                  isDarkMode: isDarkMode,
                                   children: [
                                     _buildEnhancedSettingSlider(
                                       label: '字号',
@@ -1708,7 +1688,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                       divisions: 18,
                                       unit: 'pt',
                                       icon: Icons.format_size,
-                                      isDarkMode: isDarkMode,
                                       onChanged: (v) {
                                         setModalState(() => _fontSize = v);
                                         setState(() {});
@@ -1725,7 +1704,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                       divisions: 20,
                                       unit: 'x',
                                       icon: Icons.format_line_spacing,
-                                      isDarkMode: isDarkMode,
                                       onChanged: (v) {
                                         setModalState(() => _lineSpacing = v);
                                         setState(() {});
@@ -1742,7 +1720,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                       divisions: 20,
                                       unit: 'pt',
                                       icon: Icons.text_fields,
-                                      isDarkMode: isDarkMode,
                                       onChanged: (v) {
                                         setModalState(() => _letterSpacing = v);
                                         setState(() {});
@@ -1752,17 +1729,13 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                         );
                                       },
                                     ),
-                                    _buildFontFamilySelector(
-                                      isDarkMode,
-                                      setModalState,
-                                    ),
+                                    _buildFontFamilySelector(setModalState),
                                   ],
                                 ),
                                 const SizedBox(height: 24),
                                 _buildSettingSection(
                                   title: '页面设置',
                                   icon: Icons.article_rounded,
-                                  isDarkMode: isDarkMode,
                                   children: [
                                     _buildEnhancedSettingSlider(
                                       label: '页面边距',
@@ -1772,7 +1745,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                       divisions: 12,
                                       unit: 'px',
                                       icon: Icons.crop_free,
-                                      isDarkMode: isDarkMode,
                                       onChanged: (v) {
                                         setModalState(() => _pageMargin = v);
                                         setState(() {});
@@ -1789,7 +1761,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                       divisions: 20,
                                       unit: 'px',
                                       icon: Icons.horizontal_distribute,
-                                      isDarkMode: isDarkMode,
                                       onChanged: (v) {
                                         setModalState(
                                           () => _horizontalPadding = v,
@@ -1809,13 +1780,11 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                 _buildSettingSection(
                                   title: '阅读体验',
                                   icon: Icons.auto_stories_rounded,
-                                  isDarkMode: isDarkMode,
                                   children: [
                                     _buildSwitchSetting(
                                       label: '保持屏幕常亮',
                                       value: _keepScreenOn,
                                       icon: Icons.screen_lock_portrait,
-                                      isDarkMode: isDarkMode,
                                       onChanged: (v) {
                                         setModalState(() => _keepScreenOn = v);
                                         setState(() {});
@@ -1828,7 +1797,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                       label: '自动滚动',
                                       value: _autoScroll,
                                       icon: Icons.auto_mode,
-                                      isDarkMode: isDarkMode,
                                       onChanged: (v) {
                                         setModalState(() => _autoScroll = v);
                                         setState(() {});
@@ -1854,9 +1822,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                           decoration: BoxDecoration(
                             border: Border(
                               top: BorderSide(
-                                color: isDarkMode
-                                    ? Colors.grey[700]!.withValues(alpha: 0.5)
-                                    : Colors.grey[300]!.withValues(alpha: 0.8),
+                                color: _getModalDividerColor(),
                                 width: 1,
                               ),
                             ),
@@ -1867,10 +1833,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                 child: ElevatedButton(
                                   onPressed: () => Navigator.pop(context),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: isDarkMode
-                                        ? Colors.blue[600]
-                                        : Colors.blue[500],
-                                    foregroundColor: Colors.white,
+                                    backgroundColor:
+                                        _currentTheme.sliderActiveColor,
+                                    foregroundColor:
+                                        _currentTheme.controlBarColor,
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 16,
                                     ),
@@ -1922,19 +1888,12 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     required String title,
     required IconData icon,
     required List<Widget> children,
-    bool isDarkMode = true,
   }) {
-    final textColor = isDarkMode ? Colors.white : Colors.grey[800]!;
-    final sectionBgColor = isDarkMode
-        ? Colors.grey[850]!.withValues(alpha: 0.6)
-        : Colors.grey[50]!.withValues(alpha: 0.9);
-    final sectionBorderColor = isDarkMode
-        ? Colors.grey[700]!.withValues(alpha: 0.5)
-        : Colors.grey[300]!.withValues(alpha: 0.8);
-    final iconBgColor = isDarkMode
-        ? Colors.blue[600]!.withValues(alpha: 0.3)
-        : Colors.blue[100]!.withValues(alpha: 0.8);
-    final iconColor = isDarkMode ? Colors.blue[300] : Colors.blue[600];
+    final textColor = _getModalTextColor();
+    final sectionBgColor = _getModalBackgroundColor().withValues(alpha: 0.6);
+    final sectionBorderColor = _getModalDividerColor();
+    final iconBgColor = _currentTheme.sliderActiveColor.withValues(alpha: 0.3);
+    final iconColor = _currentTheme.sliderActiveColor;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1944,7 +1903,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         border: Border.all(color: sectionBorderColor, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.06),
+            color: _currentTheme.textColor.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -1990,35 +1949,23 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     int? divisions,
     String unit = '',
     required IconData icon,
-    required bool isDarkMode,
     required ValueChanged<double> onChanged,
   }) {
-    final textColor = isDarkMode ? Colors.white : Colors.grey[800]!;
-    final activeColor = isDarkMode ? Colors.blue[400]! : Colors.blue[500]!;
-    final inactiveColor = isDarkMode
-        ? Colors.grey[600]!.withValues(alpha: 0.5)
-        : Colors.grey[300]!.withValues(alpha: 0.8);
-    final badgeColor = isDarkMode
-        ? Colors.blue[600]!.withValues(alpha: 0.3)
-        : Colors.blue[100]!.withValues(alpha: 0.8);
+    final textColor = _getModalTextColor();
+    final activeColor = _currentTheme.sliderActiveColor;
+    final inactiveColor = _currentTheme.sliderInactiveColor;
+    final badgeColor = _currentTheme.sliderActiveColor.withValues(alpha: 0.3);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDarkMode
-            ? Colors.grey[800]!.withValues(alpha: 0.4)
-            : Colors.white.withValues(alpha: 0.8),
+        color: _getModalBackgroundColor().withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDarkMode
-              ? Colors.grey[700]!.withValues(alpha: 0.5)
-              : Colors.grey[300]!.withValues(alpha: 0.6),
-          width: 1,
-        ),
+        border: Border.all(color: _getModalDividerColor(), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.04),
+            color: _currentTheme.textColor.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -2036,7 +1983,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                 ),
                 child: Icon(
                   icon,
-                  color: isDarkMode ? Colors.blue[300] : Colors.blue[600],
+                  color: _currentTheme.sliderActiveColor,
                   size: 18,
                 ),
               ),
@@ -2102,11 +2049,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     );
   }
 
-  Widget _buildFontFamilySelector(bool isDarkMode, StateSetter setModalState) {
-    final textColor = isDarkMode ? Colors.white : Colors.grey[800]!;
-    final cardColor = isDarkMode
-        ? Colors.grey[800]!.withValues(alpha: 0.6)
-        : Colors.grey[100]!.withValues(alpha: 0.8);
+  Widget _buildFontFamilySelector(StateSetter setModalState) {
+    final textColor = _getModalTextColor();
+    final cardColor = _getModalBackgroundColor().withValues(alpha: 0.6);
 
     final fontFamilies = [
       {'name': '系统默认', 'value': 'System'},
@@ -2121,12 +2066,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDarkMode
-              ? Colors.grey[600]!.withValues(alpha: 0.3)
-              : Colors.grey[300]!.withValues(alpha: 0.5),
-          width: 1,
-        ),
+        border: Border.all(color: _getModalDividerColor(), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2136,15 +2076,13 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: isDarkMode
-                      ? Colors.orange[600]!.withValues(alpha: 0.3)
-                      : Colors.orange[100]!.withValues(alpha: 0.8),
+                  color: _currentTheme.sliderActiveColor.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   Icons.font_download_rounded,
                   size: 16,
-                  color: isDarkMode ? Colors.orange[300] : Colors.orange[600],
+                  color: _currentTheme.sliderActiveColor,
                 ),
               ),
               const SizedBox(width: 12),
@@ -2179,24 +2117,22 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                   ),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? (isDarkMode ? Colors.blue[600] : Colors.blue[500])
-                        : (isDarkMode
-                              ? Colors.grey[700]!.withValues(alpha: 0.5)
-                              : Colors.white.withValues(alpha: 0.8)),
+                        ? _currentTheme.sliderActiveColor
+                        : _getModalBackgroundColor().withValues(alpha: 0.8),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isSelected
-                          ? (isDarkMode ? Colors.blue[400]! : Colors.blue[300]!)
-                          : (isDarkMode
-                                ? Colors.grey[600]!.withValues(alpha: 0.3)
-                                : Colors.grey[300]!.withValues(alpha: 0.5)),
+                          ? _currentTheme.sliderActiveColor
+                          : _getModalDividerColor(),
                       width: 1.5,
                     ),
                   ),
                   child: Text(
                     font['name']!,
                     style: TextStyle(
-                      color: isSelected ? Colors.white : textColor,
+                      color: isSelected
+                          ? _currentTheme.controlBarColor
+                          : textColor,
                       fontSize: 14,
                       fontWeight: isSelected
                           ? FontWeight.w600
@@ -2220,28 +2156,20 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     required bool value,
     required ValueChanged<bool> onChanged,
     IconData? icon,
-    bool isDarkMode = true,
   }) {
-    final textColor = isDarkMode ? Colors.white : Colors.grey[800]!;
-    final activeColor = isDarkMode ? Colors.blue[400]! : Colors.blue[500]!;
+    final textColor = _getModalTextColor();
+    final activeColor = _currentTheme.sliderActiveColor;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
-        color: isDarkMode
-            ? Colors.grey[800]!.withValues(alpha: 0.4)
-            : Colors.white.withValues(alpha: 0.8),
+        color: _getModalBackgroundColor().withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDarkMode
-              ? Colors.grey[700]!.withValues(alpha: 0.5)
-              : Colors.grey[300]!.withValues(alpha: 0.6),
-          width: 1,
-        ),
+        border: Border.all(color: _getModalDividerColor(), width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.04),
+            color: _currentTheme.textColor.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -2273,28 +2201,19 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: Colors.white,
+            activeThumbColor: _currentTheme.controlBarColor,
             activeTrackColor: activeColor,
-            inactiveTrackColor: isDarkMode
-                ? Colors.grey[600]!.withValues(alpha: 0.5)
-                : Colors.grey[300]!.withValues(alpha: 0.8),
-            inactiveThumbColor: isDarkMode
-                ? Colors.grey[400]
-                : Colors.grey[600],
+            inactiveTrackColor: _currentTheme.sliderInactiveColor,
+            inactiveThumbColor: _getModalIconColor(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildEnhancedColorThemeSelector(
-    StateSetter setModalState,
-    bool isDarkMode,
-  ) {
-    final textColor = isDarkMode ? Colors.white : Colors.grey[800]!;
-    final selectedBorderColor = isDarkMode
-        ? Colors.blue[400]!
-        : Colors.blue[500]!;
+  Widget _buildEnhancedColorThemeSelector(StateSetter setModalState) {
+    final textColor = _getModalTextColor();
+    final selectedBorderColor = _currentTheme.sliderActiveColor;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2303,7 +2222,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           children: [
             Icon(
               Icons.palette_rounded,
-              color: isDarkMode ? Colors.blue[300] : Colors.blue[600],
+              color: _currentTheme.sliderActiveColor,
               size: 18,
             ),
             const SizedBox(width: 8),
@@ -2345,9 +2264,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                   border: Border.all(
                     color: isSelected
                         ? selectedBorderColor
-                        : (isDarkMode
-                              ? Colors.grey[600]!.withValues(alpha: 0.5)
-                              : Colors.grey[300]!.withValues(alpha: 0.8)),
+                        : _getModalDividerColor(),
                     width: isSelected ? 3 : 1,
                   ),
                   boxShadow: isSelected
@@ -2647,20 +2564,15 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.85),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
-              ),
-            ),
+            decoration: _getModalDecoration(),
             child: Column(
               children: [
                 Container(
                   padding: const EdgeInsets.all(24),
-                  child: const Text(
+                  child: Text(
                     '目录',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: _getModalTextColor(),
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
@@ -2738,12 +2650,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.85),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
-              ),
-            ),
+            decoration: _getModalDecoration(),
             child: Column(
               children: [
                 // 标题栏
@@ -2752,10 +2659,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         '书签',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: _getModalTextColor(),
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
                         ),
@@ -2961,33 +2868,36 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.8),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
+          decoration: _getModalDecoration(),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 '更多选项',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: _getModalTextColor(),
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 20),
               ListTile(
-                leading: const Icon(Icons.search, color: Colors.white),
-                title: const Text('搜索', style: TextStyle(color: Colors.white)),
+                leading: Icon(Icons.search, color: _getModalIconColor()),
+                title: Text(
+                  '搜索',
+                  style: TextStyle(color: _getModalTextColor()),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   _showSearchDialog();
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.share, color: Colors.white),
-                title: const Text('分享', style: TextStyle(color: Colors.white)),
+                leading: Icon(Icons.share, color: _getModalIconColor()),
+                title: Text(
+                  '分享',
+                  style: TextStyle(color: _getModalTextColor()),
+                ),
                 onTap: () {
                   Navigator.pop(context);
                   _shareCurrentPage();

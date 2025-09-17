@@ -35,7 +35,9 @@
       "Bash(git checkout:*)",
       "Bash(rd:*)",
       "Bash(./gradlew --stop)",
-      "Bash(./gradlew:*)"
+      "Bash(./gradlew:*)",
+      "Bash(nc localhost 54393)",
+      "Bash(/dev/null)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

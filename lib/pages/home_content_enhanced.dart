@@ -5,6 +5,7 @@ import '../services/book_dao.dart';
 import '../services/reading_stats_dao.dart';
 import '../utils/color_extensions.dart';
 import '../utils/glass_config.dart';
+import '../utils/responsive_helper.dart';
 import 'detailed_stats_page.dart';
 
 class HomeContentEnhanced extends StatefulWidget {
@@ -119,16 +120,45 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                 onRefresh: _loadAllStats,
                 child: SafeArea(
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                    padding: EdgeInsets.fromLTRB(
+                      ResponsiveHelper.getHorizontalPadding(context),
+                      ResponsiveHelper.getValue(context,
+                        mobile: 20.0,
+                        tablet: 24.0,
+                        desktop: 28.0
+                      ),
+                      ResponsiveHelper.getHorizontalPadding(context),
+                      ResponsiveHelper.getValue(context,
+                        mobile: 24.0 + MediaQuery.of(context).padding.bottom,
+                        tablet: 32.0 + MediaQuery.of(context).padding.bottom,
+                        desktop: 40.0 + MediaQuery.of(context).padding.bottom
+                      ),
+                    ),
                     children: [
                       _buildWelcomeCard(),
-                      const SizedBox(height: 20),
+                      SizedBox(height: ResponsiveHelper.getValue(context,
+                        mobile: 20.0,
+                        tablet: 24.0,
+                        desktop: 28.0
+                      )),
                       _buildSummaryCards(),
-                      const SizedBox(height: 24),
+                      SizedBox(height: ResponsiveHelper.getValue(context,
+                        mobile: 24.0,
+                        tablet: 28.0,
+                        desktop: 32.0
+                      )),
                       _buildWeeklyChartCard(),
-                      const SizedBox(height: 24),
+                      SizedBox(height: ResponsiveHelper.getValue(context,
+                        mobile: 24.0,
+                        tablet: 28.0,
+                        desktop: 32.0
+                      )),
                       _buildRecentActivity(),
-                      const SizedBox(height: 40), // 底部留白
+                      SizedBox(height: ResponsiveHelper.getValue(context,
+                        mobile: 40.0,
+                        tablet: 48.0,
+                        desktop: 56.0
+                      )), // 底部留白
                     ],
                   ),
                 ),
@@ -261,7 +291,21 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 400;
+        // 针对iOS设备优化布局断点 - 考虑不同iPhone尺寸和像素密度
+        final screenWidth = MediaQuery.of(context).size.width;
+        final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+
+        // 动态调整断点 - 考虑高像素密度的iOS设备
+        double breakPoint = 380.0;
+        if (pixelRatio > 2.5) {
+          // iPhone Pro/Pro Max等高密度设备
+          breakPoint = 390.0;
+        } else if (pixelRatio > 2.0) {
+          // 标准Retina显示设备
+          breakPoint = 380.0;
+        }
+
+        final isNarrow = screenWidth < breakPoint;
         return isNarrow
             ? _buildNarrowLayout(todayMinutes, weekMinutes, totalMinutes)
             : _buildWideLayout(todayMinutes, weekMinutes, totalMinutes);
@@ -274,6 +318,31 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
     int weekMinutes,
     int totalMinutes,
   ) {
+    // 获取iOS设备优化的响应式间距
+    final screenWidth = MediaQuery.of(context).size.width;
+    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
+
+    // 动态调整间距 - 考虑iOS设备尺寸差异
+    double cardSpacing, rowSpacing;
+
+    if (screenWidth >= 428) {
+      // iPhone 14 Pro Max, 15 Pro Max, 16 Pro Max等大屏设备
+      cardSpacing = 16.0;
+      rowSpacing = 20.0;
+    } else if (screenWidth >= 414) {
+      // iPhone 14 Plus, 15 Plus等Plus设备
+      cardSpacing = 14.0;
+      rowSpacing = 18.0;
+    } else if (screenWidth >= 390) {
+      // iPhone 14 Pro, 15 Pro, 16 Pro等标准Pro设备
+      cardSpacing = 12.0;
+      rowSpacing = 16.0;
+    } else {
+      // iPhone SE, Mini等小屏设备
+      cardSpacing = 10.0;
+      rowSpacing = 14.0;
+    }
+
     return Column(
       children: [
         Row(
@@ -288,7 +357,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                 onTap: () => _navigateToDetailedStats(context), // 跳转到详细统计
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: cardSpacing),
             Expanded(
               child: _StatCard(
                 title: '本周阅读',
@@ -301,7 +370,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: rowSpacing),
         Row(
           children: [
             Expanded(
@@ -314,7 +383,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                 onTap: () => _navigateToDetailedStats(context),
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: cardSpacing),
             Expanded(
               child: _StatCard(
                 title: '书架藏书',
@@ -332,13 +401,38 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
   }
 
   Widget _buildWideLayout(int todayMinutes, int weekMinutes, int totalMinutes) {
+    // 获取iOS设备优化的GridView间距和纵横比
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    // 根据iOS设备屏幕尺寸优化间距和纵横比
+    double gridSpacing, aspectRatio;
+
+    if (screenWidth >= 428) {
+      // iPhone Pro Max等大屏设备
+      gridSpacing = 20.0;
+      aspectRatio = 1.5;
+    } else if (screenWidth >= 414) {
+      // iPhone Plus等设备
+      gridSpacing = 18.0;
+      aspectRatio = 1.4;
+    } else if (screenWidth >= 390) {
+      // iPhone Pro等设备
+      gridSpacing = 16.0;
+      aspectRatio = 1.3;
+    } else {
+      // iPhone SE, Mini等小屏设备
+      gridSpacing = 14.0;
+      aspectRatio = 1.2;
+    }
+
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: 1.4,
+      crossAxisSpacing: gridSpacing,
+      mainAxisSpacing: gridSpacing,
+      childAspectRatio: aspectRatio,
       children: [
         _StatCard(
           title: '今日阅读',
@@ -728,12 +822,20 @@ class _StatCard extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
-            padding: const EdgeInsets.all(16.0),
+            padding: EdgeInsets.all(ResponsiveHelper.getValue(context,
+              mobile: 16.0,
+              tablet: 18.0,
+              desktop: 20.0
+            )),
             decoration: BoxDecoration(
               color: Theme.of(
                 context,
               ).colorScheme.surface.withOpacityValues(0.8),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(ResponsiveHelper.getValue(context,
+                mobile: 16.0,
+                tablet: 18.0,
+                desktop: 20.0
+              )),
               border: Border.all(
                 color: Theme.of(
                   context,
@@ -747,14 +849,30 @@ class _StatCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(6),
+                  padding: EdgeInsets.all(ResponsiveHelper.getValue(context,
+                    mobile: 6.0,
+                    tablet: 7.0,
+                    desktop: 8.0
+                  )),
                   decoration: BoxDecoration(
                     color: color.withOpacityValues(0.1),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(ResponsiveHelper.getValue(context,
+                      mobile: 8.0,
+                      tablet: 9.0,
+                      desktop: 10.0
+                    )),
                   ),
-                  child: Icon(icon, size: 22, color: color),
+                  child: Icon(icon, size: ResponsiveHelper.getValue(context,
+                    mobile: 22.0,
+                    tablet: 24.0,
+                    desktop: 26.0
+                  ), color: color),
                 ),
-                const SizedBox(height: 12),
+                SizedBox(height: ResponsiveHelper.getValue(context,
+                  mobile: 12.0,
+                  tablet: 14.0,
+                  desktop: 16.0
+                )),
                 Flexible(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -772,7 +890,11 @@ class _StatCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 6),
+                      SizedBox(height: ResponsiveHelper.getValue(context,
+                        mobile: 6.0,
+                        tablet: 7.0,
+                        desktop: 8.0
+                      )),
                       FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
@@ -789,7 +911,11 @@ class _StatCard extends StatelessWidget {
                                     fontSize: 18,
                                   ),
                             ),
-                            const SizedBox(width: 3),
+                            SizedBox(width: ResponsiveHelper.getValue(context,
+                              mobile: 3.0,
+                              tablet: 4.0,
+                              desktop: 5.0
+                            )),
                             Text(
                               unit,
                               style: Theme.of(context).textTheme.bodySmall
