@@ -6,6 +6,8 @@ import 'package:epubx/epubx.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 
 import '../models/book.dart';
 import '../models/bookmark.dart';
@@ -226,17 +228,27 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }
 
   Future<void> _loadBookContent() async {
-    final file = File(widget.book.filePath);
+    var currentFilePath = widget.book.filePath;
+    var file = File(currentFilePath);
+
     if (!await file.exists()) {
-      throw Exception('文件不存在: ${widget.book.filePath}');
+      // 尝试重新定位文件
+      final newPath = await _tryRelocateFile(currentFilePath);
+      if (newPath != null) {
+        debugPrint('📂 文件已重新定位到: $newPath');
+        currentFilePath = newPath;
+        file = File(currentFilePath);
+      } else {
+        throw Exception('文件不存在且无法重新定位: $currentFilePath');
+      }
     }
 
     final fileExtension = widget.book.format.toLowerCase();
 
     try {
       if (fileExtension == 'epub') {
-        debugPrint('开始解析 EPUB: ${widget.book.filePath}');
-        _bookContent = await _parseEpubDirectly(widget.book.filePath);
+        debugPrint('开始解析 EPUB: $currentFilePath');
+        _bookContent = await _parseEpubDirectly(currentFilePath);
         debugPrint('EPUB 解析完成，长度: ${_bookContent.length}');
 
         // 验证内容是否足够丰富
@@ -290,6 +302,12 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     try {
       final file = File(filePath);
       if (!await file.exists()) {
+        // 尝试检查文件是否在新的Documents路径下
+        final newPath = await _tryRelocateFile(filePath);
+        if (newPath != null) {
+          debugPrint('📂 文件已重新定位到: $newPath');
+          return _parseEpubDirectly(newPath);
+        }
         throw Exception('EPUB 文件不存在: $filePath');
       }
 
@@ -378,6 +396,52 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     } catch (e) {
       debugPrint('❌ EPUB 解析失败: $e');
       throw Exception('EPUB 解析失败: $e');
+    }
+  }
+
+  // 尝试重新定位文件 - 处理iOS沙盒路径变更问题
+  Future<String?> _tryRelocateFile(String oldPath) async {
+    try {
+      // 从路径中提取文件名
+      final fileName = oldPath.split('/').last;
+      debugPrint('🔍 尝试重新定位文件: $fileName');
+
+      // 获取当前的Documents目录
+      final documentsDir = await getApplicationDocumentsDirectory();
+      final booksDir = Directory(path.join(documentsDir.path, 'books'));
+
+      if (!await booksDir.exists()) {
+        debugPrint('📂 books目录不存在，无法重新定位');
+        return null;
+      }
+
+      // 检查文件是否在当前的books目录中
+      final newPath = path.join(booksDir.path, fileName);
+      final newFile = File(newPath);
+
+      if (await newFile.exists()) {
+        debugPrint('✅ 文件已重新定位到: $newPath');
+        // 更新数据库中的文件路径
+        await _updateBookFilePath(oldPath, newPath);
+        return newPath;
+      }
+
+      debugPrint('❌ 无法在新路径中找到文件: $fileName');
+      return null;
+    } catch (e) {
+      debugPrint('❌ 重新定位文件时出错: $e');
+      return null;
+    }
+  }
+
+  // 更新数据库中的文件路径
+  Future<void> _updateBookFilePath(String oldPath, String newPath) async {
+    try {
+      final bookDao = BookDao();
+      await bookDao.updateBookFilePath(widget.book.id!, newPath);
+      debugPrint('✅ 已更新数据库中的文件路径');
+    } catch (e) {
+      debugPrint('❌ 更新文件路径失败: $e');
     }
   }
 
@@ -582,9 +646,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     final prefs = await SharedPreferences.getInstance();
     saver(prefs);
 
-    // 使用防抖机制，避免频繁重新分页
+    // 使用防抖机制，避免频繁重新分页 - 增加防抖时间提升性能
     _repaginationTimer?.cancel();
-    _repaginationTimer = Timer(const Duration(milliseconds: 300), () {
+    _repaginationTimer = Timer(const Duration(milliseconds: 800), () {
       if (mounted && _bookContent.isNotEmpty) {
         debugPrint('🔄 设置变化，智能重新分页...');
         _intelligentRepagination();
@@ -988,15 +1052,15 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               0.5 // 双页时减少内边距
         : _horizontalPadding;
 
-    // 简化留白计算，确保文字完整显示
+    // 智能显示区域计算 - 与分页算法保持一致
     final statusBarHeight = MediaQuery.of(context).padding.top;
+    final screenHeight = MediaQuery.of(context).size.height;
 
-    // 适度的固定留白，确保文字完整显示
-    final topPadding = isDoublePage ? 30.0 : 40.0;
-    // 优化底部留白，减少过多的空白区域
-    final baseBottomPadding = isDoublePage ? 30.0 : 40.0; // 减少基础底部留白
-    final toolbarSpace = 100.0; // 减少控制栏预留空间
-    final bottomPadding = baseBottomPadding + toolbarSpace;
+    // 智能留白计算：根据屏幕大小自适应
+    final reservedSpace = screenHeight * 0.2; // 总共预留20%空间
+
+    // 动态分配留白空间
+    final topPadding = (reservedSpace * 0.25).clamp(20.0, 40.0); // 25%给顶部
 
     return RepaintBoundary(
       child: Container(
@@ -1011,18 +1075,38 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               left: horizontalPadding,
               right: horizontalPadding,
               top: topPadding + statusBarHeight,
-              bottom: bottomPadding,
+              bottom: 8.0, // 最小化底部留白，最大化阅读区域
             ),
-            child: Text(
-              pageContent,
-              style: TextStyle(
-                fontSize: _fontSize,
-                height: _lineSpacing,
-                letterSpacing: _letterSpacing,
-                color: _currentTheme.textColor, // 使用阅读主题的文字颜色
-                fontFamily: _fontFamily == 'System' ? null : _fontFamily,
-              ),
-              textAlign: TextAlign.justify,
+            child: Column(
+              children: [
+                // 主要文本内容区域
+                Expanded(
+                  child: Text(
+                    pageContent,
+                    style: TextStyle(
+                      fontSize: _fontSize,
+                      height: _lineSpacing,
+                      letterSpacing: _letterSpacing,
+                      color: _currentTheme.textColor, // 使用阅读主题的文字颜色
+                      fontFamily: _fontFamily == 'System' ? null : _fontFamily,
+                    ),
+                    textAlign: TextAlign.justify,
+                  ),
+                ),
+                // 页码标签 - 紧凑设计
+                Container(
+                  height: 20.0,
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${index + 1} / ${_pages.length}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _currentTheme.textColor.withValues(alpha: 0.6),
+                      fontFamily: 'System',
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

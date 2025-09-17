@@ -1,9 +1,72 @@
 import 'package:flutter/material.dart';
+import 'pagination_cache.dart';
 
 /// TextPainter基础的精确分页工具类
 class TextPainterPagination {
-  /// 使用TextPainter进行精确的基于布局的分页
+  static final PaginationCache _cache = PaginationCache();
+
+  /// 使用TextPainter进行精确的基于布局的分页（带缓存优化）
   static List<String> performTextPainterBasedPagination({
+    required String content,
+    required Size screenSize,
+    required EdgeInsets systemPadding,
+    required double fontSize,
+    required double lineSpacing,
+    required double letterSpacing,
+    required String fontFamily,
+    required double horizontalPadding,
+  }) {
+    if (content.isEmpty) {
+      return ['内容为空'];
+    }
+
+    // 生成缓存键
+    final contentHash = _cache.generateContentHash(content);
+    final settingsFingerprint = _cache.generateSettingsFingerprint(
+      fontSize: fontSize,
+      lineSpacing: lineSpacing,
+      letterSpacing: letterSpacing,
+      fontFamily: fontFamily,
+      horizontalPadding: horizontalPadding,
+      screenSize: screenSize,
+    );
+
+    // 尝试从缓存获取结果
+    final cachedPages = _cache.getCachedPagination(
+      contentHash: contentHash,
+      settingsFingerprint: settingsFingerprint,
+    );
+
+    if (cachedPages != null) {
+      debugPrint('✅ 从缓存获取分页结果: ${cachedPages.length}页');
+      return cachedPages;
+    }
+
+    debugPrint('🔄 执行新分页计算...');
+    List<String> pages = _performPaginationCalculation(
+      content: content,
+      screenSize: screenSize,
+      systemPadding: systemPadding,
+      fontSize: fontSize,
+      lineSpacing: lineSpacing,
+      letterSpacing: letterSpacing,
+      fontFamily: fontFamily,
+      horizontalPadding: horizontalPadding,
+    );
+
+    // 缓存结果
+    _cache.cachePagination(
+      contentHash: contentHash,
+      settingsFingerprint: settingsFingerprint,
+      pages: pages,
+    );
+
+    debugPrint('💾 分页结果已缓存: ${pages.length}页');
+    return pages;
+  }
+
+  /// 执行实际的分页计算（优化后的算法）
+  static List<String> _performPaginationCalculation({
     required String content,
     required Size screenSize,
     required EdgeInsets systemPadding,
@@ -15,26 +78,15 @@ class TextPainterPagination {
   }) {
     List<String> pages = [];
 
-    if (content.isEmpty) {
-      return ['内容为空'];
-    }
-
-    // 计算可用区域 - 与实际显示保持完全一致
-    // 精确匹配_buildPageWidget中的计算逻辑
+    // 智能显示区域计算 - 确保90%的高效显示区域
     final statusBarHeight = systemPadding.top;
-    final topPadding = 40.0;
-    final baseBottomPadding = 40.0;
-    final toolbarSpace = 100.0; // 控制栏预留空间
-    final totalBottomPadding = baseBottomPadding + toolbarSpace;
 
-    // 精确的可用尺寸 - 最大化利用屏幕空间
+    // 智能留白计算：根据屏幕大小自适应，优化至90%显示区域
+    final screenHeight = screenSize.height;
+
+    // 90%高效显示区域 - 最大化利用屏幕空间
     final availableWidth = screenSize.width - (horizontalPadding * 2);
-    // 顶部留白 = topPadding + statusBarHeight
-    // 底部留白 = totalBottomPadding + systemPadding.bottom（SafeArea自动处理）
-    final availableHeight =
-        screenSize.height -
-        (topPadding + statusBarHeight) -
-        (totalBottomPadding + systemPadding.bottom);
+    final availableHeight = screenHeight * 0.9 - statusBarHeight - systemPadding.bottom;
 
     // 文本样式
     final textStyle = TextStyle(
@@ -55,16 +107,39 @@ class TextPainterPagination {
     int pageCount = 0;
     const maxPages = 50000; // 防止无限循环
 
-    // 预先计算单行字符数，优化分页性能
-    final singleLineText = '测试中文字符English123';
-    final singleLinePainter = TextPainter(
-      text: TextSpan(text: singleLineText, style: textStyle),
-      textDirection: TextDirection.ltr,
-    );
-    singleLinePainter.layout(maxWidth: availableWidth);
-    final avgCharWidth = singleLinePainter.size.width / singleLineText.length;
-    final charsPerLine = (availableWidth / avgCharWidth).floor();
-    singleLinePainter.dispose();
+    // 预先计算单行字符数，优化分页性能 - 使用缓存和TextPainter池
+    final metricsKey = 'metrics_${fontSize}_${fontFamily}_${availableWidth.toInt()}';
+    TextMetrics? cachedMetrics = _cache.getCachedMetrics(metricsKey);
+
+    late double avgCharWidth;
+    late int charsPerLine;
+
+    if (cachedMetrics != null) {
+      avgCharWidth = cachedMetrics.avgCharWidth;
+      charsPerLine = cachedMetrics.charsPerLine;
+      debugPrint('📊 使用缓存的文本度量数据');
+    } else {
+      // 计算新的文本度量数据
+      const singleLineText = '测试中文字符English123';
+      final singleLinePainter = _cache.getTextPainter();
+      singleLinePainter.text = TextSpan(text: singleLineText, style: textStyle);
+      singleLinePainter.layout(maxWidth: availableWidth);
+
+      avgCharWidth = singleLinePainter.size.width / singleLineText.length;
+      charsPerLine = (availableWidth / avgCharWidth).floor();
+
+      // 缓存度量数据
+      final metrics = TextMetrics(
+        avgCharWidth: avgCharWidth,
+        avgLineHeight: singleLinePainter.size.height,
+        charsPerLine: charsPerLine,
+      );
+      _cache.cacheMetrics(metricsKey, metrics);
+
+      // 归还TextPainter到池中
+      _cache.returnTextPainter(singleLinePainter);
+      debugPrint('💾 文本度量数据已缓存');
+    }
 
     debugPrint(
       '📊 字体分析: 平均字符宽度${avgCharWidth.toStringAsFixed(1)}px, 每行约$charsPerLine字符',
@@ -162,20 +237,21 @@ class TextPainterPagination {
   ) {
     if (startIndex >= content.length) return content.length;
 
-    // 更精确的初始估算
-    final testPainter = TextPainter(
-      text: TextSpan(text: '测试字符串中文内容\n第二行测试', style: textStyle),
-      textDirection: TextDirection.ltr,
-      textAlign: TextAlign.justify,
-    );
+    // 更精确的初始估算 - 使用TextPainter池
+    final testPainter = _cache.getTextPainter();
+    testPainter.text = TextSpan(text: '测试字符串中文内容\n第二行测试', style: textStyle);
+    testPainter.textAlign = TextAlign.justify;
     testPainter.layout(maxWidth: maxWidth);
+
     final avgLineHeight = testPainter.size.height / 2;
     final estimatedLines = (maxHeight / avgLineHeight).floor();
 
     // 更准确的字符宽度估算：中文字符约为字号的0.9倍，英文字符约为字号的0.6倍
     final estimatedCharsPerLine = (maxWidth / (fontSize * 0.85)).floor();
     final estimatedTotalChars = estimatedLines * estimatedCharsPerLine;
-    testPainter.dispose();
+
+    // 归还TextPainter到池中
+    _cache.returnTextPainter(testPainter);
 
     // 设置更保守的搜索范围，避免过度估算
     int left = startIndex;
@@ -193,17 +269,36 @@ class TextPainterPagination {
       // 在自然分割点进行调整
       int adjustedMid = _findNaturalBreak(content, mid, startIndex);
 
-      // 测量这段文本的实际高度
+      // 测量这段文本的实际高度 - 使用TextPainter池
       String testText = content.substring(startIndex, adjustedMid);
-      final painter = TextPainter(
-        text: TextSpan(text: testText, style: textStyle),
-        textDirection: TextDirection.ltr,
-        textAlign: TextAlign.justify,
-      );
-      painter.layout(maxWidth: maxWidth);
 
-      final actualHeight = painter.size.height;
-      painter.dispose();
+      // 检查布局缓存
+      final layoutKey = 'layout_${testText.length}_${maxWidth.toInt()}_${fontSize.toInt()}';
+      LayoutMeasurement? cachedLayout = _cache.getCachedLayout(layoutKey);
+
+      late double actualHeight;
+
+      if (cachedLayout != null && cachedLayout.characterCount == testText.length) {
+        actualHeight = cachedLayout.textHeight;
+      } else {
+        final painter = _cache.getTextPainter();
+        painter.text = TextSpan(text: testText, style: textStyle);
+        painter.textAlign = TextAlign.justify;
+        painter.layout(maxWidth: maxWidth);
+
+        actualHeight = painter.size.height;
+
+        // 缓存布局测量结果
+        final layout = LayoutMeasurement(
+          textWidth: painter.size.width,
+          textHeight: actualHeight,
+          characterCount: testText.length,
+        );
+        _cache.cacheLayout(layoutKey, layout);
+
+        // 归还TextPainter到池中
+        _cache.returnTextPainter(painter);
+      }
 
       // 精确判断：留出小量缓冲空间避免文字被截断
       final heightMargin = fontSize * 0.2; // 留出0.2倍字号的缓冲

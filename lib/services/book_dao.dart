@@ -20,7 +20,7 @@ class BookDao {
         'books',
         columns: [
           'id',
-          'title', 
+          'title',
           'author',
           'filePath',
           'format',
@@ -28,7 +28,7 @@ class BookDao {
           'totalPages',
           'importDate',
           'file_modified_time',
-          'content_hash'
+          'content_hash',
         ],
         orderBy: 'importDate DESC',
       );
@@ -124,7 +124,25 @@ class BookDao {
       throw Exception('删除书籍失败: $e');
     }
   }
-  
+
+  // 更新书籍文件路径 - 用于处理iOS沙盒路径变更
+  Future<void> updateBookFilePath(int bookId, String newFilePath) async {
+    try {
+      final db = await _dbService.database;
+      final result = await db.update(
+        'books',
+        {'filePath': newFilePath},
+        where: 'id = ?',
+        whereArgs: [bookId],
+      );
+      if (result == 0) {
+        throw Exception('书籍不存在');
+      }
+    } catch (e) {
+      throw Exception('更新书籍文件路径失败: $e');
+    }
+  }
+
   // We can add other DAOs (e.g., BookmarkDao) in separate files
   // for better organization.
 }
