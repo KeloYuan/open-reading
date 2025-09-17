@@ -717,18 +717,113 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     );
   }
 
-  /// 获取二级页面的文本颜色
-  Color _getModalTextColor() => _currentTheme.controlBarTextColor;
+  /// 获取二级页面的文本颜色 - 优化版
+  Color _getModalTextColor() {
+    switch (_currentTheme.name) {
+      case 'day':
+        return const Color(0xFF1A1A1A); // 深黑色文字
+      case 'night':
+        return const Color(0xFFE5E5E5); // 亮灰色文字
+      case 'eye_protection':
+        return const Color(0xFF1B3A1B); // 深绿色文字
+      case 'parchment':
+        return const Color(0xFF4A3E28); // 深棕色文字
+      case 'sepia':
+        return const Color(0xFF3D2F1F); // 深棕褐色文字
+      default:
+        return _currentTheme.controlBarTextColor;
+    }
+  }
 
-  /// 获取二级页面的图标颜色
-  Color _getModalIconColor() => _currentTheme.iconColor;
+  /// 获取二级页面的图标颜色 - 优化版
+  Color _getModalIconColor() {
+    switch (_currentTheme.name) {
+      case 'day':
+        return const Color(0xFF4A4A4A); // 中灰色图标
+      case 'night':
+        return const Color(0xFFB0B0B0); // 亮灰色图标
+      case 'eye_protection':
+        return const Color(0xFF2E5A2E); // 中绿色图标
+      case 'parchment':
+        return const Color(0xFF6B4E3D); // 中棕色图标
+      case 'sepia':
+        return const Color(0xFF5D4037); // 中棕褐色图标
+      default:
+        return _currentTheme.iconColor;
+    }
+  }
 
-  /// 获取二级页面的分割线颜色
-  Color _getModalDividerColor() =>
-      _currentTheme.iconColor.withValues(alpha: 0.3);
+  /// 获取二级页面的分割线颜色 - 优化版
+  Color _getModalDividerColor() {
+    switch (_currentTheme.name) {
+      case 'day':
+        return const Color(0xFFE0E0E0); // 浅灰色分割线
+      case 'night':
+        return const Color(0xFF3A3A3A); // 深灰色分割线
+      case 'eye_protection':
+        return const Color(0xFFC8E6C9); // 浅绿色分割线
+      case 'parchment':
+        return const Color(0xFFD7C4B0); // 浅棕色分割线
+      case 'sepia':
+        return const Color(0xFFE6D7C3); // 浅棕褐色分割线
+      default:
+        return _currentTheme.iconColor.withValues(alpha: 0.3);
+    }
+  }
 
-  /// 获取二级页面的背景色
-  Color _getModalBackgroundColor() => _currentTheme.controlBarColor;
+  /// 获取二级页面的背景色 - 优化版
+  Color _getModalBackgroundColor() {
+    switch (_currentTheme.name) {
+      case 'day':
+        return const Color(0xFFFAFAFA); // 浅灰白色背景
+      case 'night':
+        return const Color(0xFF2A2A2A); // 深灰色背景
+      case 'eye_protection':
+        return const Color(0xFFF1F8F1); // 浅绿色背景
+      case 'parchment':
+        return const Color(0xFFF7F3ED); // 浅米色背景
+      case 'sepia':
+        return const Color(0xFFFAF6F0); // 浅棕褐色背景
+      default:
+        return _currentTheme.controlBarColor;
+    }
+  }
+
+  /// 获取二级页面的次要文字颜色
+  Color _getModalSecondaryTextColor() {
+    switch (_currentTheme.name) {
+      case 'day':
+        return const Color(0xFF757575); // 中灰色次要文字
+      case 'night':
+        return const Color(0xFF9E9E9E); // 浅灰色次要文字
+      case 'eye_protection':
+        return const Color(0xFF4A6B4A); // 中绿色次要文字
+      case 'parchment':
+        return const Color(0xFF8B7355); // 中棕色次要文字
+      case 'sepia':
+        return const Color(0xFF7D6E5D); // 中棕褐色次要文字
+      default:
+        return _getModalTextColor().withValues(alpha: 0.7);
+    }
+  }
+
+  /// 获取二级页面的强调色
+  Color _getModalAccentColor() {
+    switch (_currentTheme.name) {
+      case 'day':
+        return const Color(0xFF2196F3); // 蓝色强调
+      case 'night':
+        return const Color(0xFF64B5F6); // 亮蓝色强调
+      case 'eye_protection':
+        return const Color(0xFF4CAF50); // 绿色强调
+      case 'parchment':
+        return const Color(0xFFD2B48C); // 棕色强调
+      case 'sepia':
+        return const Color(0xFFCD853F); // 棕褐色强调
+      default:
+        return _currentTheme.sliderActiveColor;
+    }
+  }
 
   // --- UI Controls ---
   void _setImmersiveMode() {
@@ -1262,7 +1357,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                           Text(
                             widget.book.author,
                             style: TextStyle(
-                              color: textColor.withValues(alpha: 0.7),
+                              color: _getModalSecondaryTextColor(),
                               fontSize: 12,
                             ),
                             maxLines: 1,
@@ -1489,13 +1584,14 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: _currentTheme.sliderActiveColor
-                                      .withValues(alpha: 0.2),
+                                  color: _getModalAccentColor().withValues(
+                                    alpha: 0.2,
+                                  ),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(
                                   Icons.palette_rounded,
-                                  color: _currentTheme.sliderActiveColor,
+                                  color: _getModalAccentColor(),
                                   size: 24,
                                 ),
                               ),
@@ -1533,8 +1629,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                             child: ElevatedButton(
                               onPressed: () => Navigator.pop(context),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.purple[600],
-                                foregroundColor: Colors.white,
+                                backgroundColor: _getModalAccentColor(),
+                                foregroundColor: _getModalBackgroundColor(),
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 16,
                                 ),
@@ -1624,13 +1720,14 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: _currentTheme.sliderActiveColor
-                                      .withValues(alpha: 0.2),
+                                  color: _getModalAccentColor().withValues(
+                                    alpha: 0.2,
+                                  ),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(
                                   Icons.tune_rounded,
-                                  color: _currentTheme.sliderActiveColor,
+                                  color: _getModalAccentColor(),
                                   size: 24,
                                 ),
                               ),
@@ -1952,9 +2049,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     required ValueChanged<double> onChanged,
   }) {
     final textColor = _getModalTextColor();
-    final activeColor = _currentTheme.sliderActiveColor;
-    final inactiveColor = _currentTheme.sliderInactiveColor;
-    final badgeColor = _currentTheme.sliderActiveColor.withValues(alpha: 0.3);
+    final activeColor = _getModalAccentColor();
+    final inactiveColor = _getModalDividerColor();
+    final badgeColor = _getModalAccentColor().withValues(alpha: 0.3);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -2117,12 +2214,12 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                   ),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? _currentTheme.sliderActiveColor
+                        ? _getModalAccentColor()
                         : _getModalBackgroundColor().withValues(alpha: 0.8),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isSelected
-                          ? _currentTheme.sliderActiveColor
+                          ? _getModalAccentColor()
                           : _getModalDividerColor(),
                       width: 1.5,
                     ),
@@ -2131,7 +2228,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                     font['name']!,
                     style: TextStyle(
                       color: isSelected
-                          ? _currentTheme.controlBarColor
+                          ? _getModalBackgroundColor()
                           : textColor,
                       fontSize: 14,
                       fontWeight: isSelected
@@ -2201,9 +2298,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: _currentTheme.controlBarColor,
+            activeThumbColor: _getModalBackgroundColor(),
             activeTrackColor: activeColor,
-            inactiveTrackColor: _currentTheme.sliderInactiveColor,
+            inactiveTrackColor: _getModalDividerColor(),
             inactiveThumbColor: _getModalIconColor(),
           ),
         ],
@@ -2213,7 +2310,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
   Widget _buildEnhancedColorThemeSelector(StateSetter setModalState) {
     final textColor = _getModalTextColor();
-    final selectedBorderColor = _currentTheme.sliderActiveColor;
+    final selectedBorderColor = _getModalAccentColor();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2222,7 +2319,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           children: [
             Icon(
               Icons.palette_rounded,
-              color: _currentTheme.sliderActiveColor,
+              color: _getModalAccentColor(),
               size: 18,
             ),
             const SizedBox(width: 8),
@@ -3139,9 +3236,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _currentTheme.controlBarTextColor
-                        .withValues(alpha: 0.2),
-                    foregroundColor: _currentTheme.controlBarTextColor,
+                    backgroundColor: _getModalAccentColor().withValues(
+                      alpha: 0.3,
+                    ),
+                    foregroundColor: _getModalTextColor(),
                   ),
                   icon: const Icon(Icons.keyboard_arrow_up),
                   label: const Text('上一个'),
@@ -3161,10 +3259,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _currentTheme.sliderActiveColor.withValues(
+                    backgroundColor: _getModalAccentColor().withValues(
                       alpha: 0.3,
                     ),
-                    foregroundColor: _currentTheme.controlBarTextColor,
+                    foregroundColor: _getModalTextColor(),
                   ),
                   icon: const Icon(Icons.keyboard_arrow_down),
                   label: const Text('下一个'),
@@ -3175,7 +3273,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             Text(
               '第 ${results[currentIndex] + 1} 页',
               style: TextStyle(
-                color: _currentTheme.controlBarTextColor.withValues(alpha: 0.7),
+                color: _getModalSecondaryTextColor(),
                 fontSize: 14,
               ),
             ),
@@ -3197,16 +3295,17 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.9),
+        color: _getModalBackgroundColor().withValues(alpha: 0.95),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(color: _getModalDividerColor(), width: 1),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
+          Text(
             '分享选项',
             style: TextStyle(
-              color: Colors.white,
+              color: _getModalTextColor(),
               fontSize: 18,
               fontWeight: FontWeight.w600,
             ),
@@ -3218,15 +3317,18 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.blue.withValues(alpha: 0.2),
+                color: _getModalAccentColor().withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.content_copy, color: Colors.blue),
+              child: Icon(Icons.content_copy, color: _getModalAccentColor()),
             ),
-            title: const Text('复制当前页面', style: TextStyle(color: Colors.white)),
-            subtitle: const Text(
+            title: Text(
+              '复制当前页面',
+              style: TextStyle(color: _getModalTextColor()),
+            ),
+            subtitle: Text(
               '复制当前页面内容到剪贴板',
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(color: _getModalSecondaryTextColor()),
             ),
             onTap: () {
               Navigator.pop(context);
@@ -3239,15 +3341,18 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.2),
+                color: _getModalAccentColor().withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.timeline, color: Colors.green),
+              child: Icon(Icons.timeline, color: _getModalAccentColor()),
             ),
-            title: const Text('分享阅读进度', style: TextStyle(color: Colors.white)),
-            subtitle: const Text(
+            title: Text(
+              '分享阅读进度',
+              style: TextStyle(color: _getModalTextColor()),
+            ),
+            subtitle: Text(
               '分享书籍信息和阅读进度',
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(color: _getModalSecondaryTextColor()),
             ),
             onTap: () {
               Navigator.pop(context);
@@ -3260,15 +3365,18 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.purple.withValues(alpha: 0.2),
+                color: _getModalAccentColor().withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.format_quote, color: Colors.purple),
+              child: Icon(Icons.format_quote, color: _getModalAccentColor()),
             ),
-            title: const Text('创建书摘卡片', style: TextStyle(color: Colors.white)),
-            subtitle: const Text(
+            title: Text(
+              '创建书摘卡片',
+              style: TextStyle(color: _getModalTextColor()),
+            ),
+            subtitle: Text(
               '生成精美的书摘分享卡片',
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(color: _getModalSecondaryTextColor()),
             ),
             onTap: () {
               Navigator.pop(context);
