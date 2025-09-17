@@ -2495,22 +2495,61 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         createDate: DateTime.now(),
       );
 
-      await _bookmarkDao.insertBookmark(bookmark);
-      await _loadBookmarks(); // 重新加载书签列表
-
+      // 立即更新UI状态
       if (mounted) {
+        setState(() {
+          _isCurrentPageBookmarked = true;
+        });
+      }
+
+      // 后台保存到数据库
+      final insertedId = await _bookmarkDao.insertBookmark(bookmark);
+
+      // 立即添加到本地列表，避免重新查询数据库
+      if (mounted && insertedId > 0) {
+        final bookmarkWithId = Bookmark(
+          id: insertedId,
+          bookId: bookmark.bookId,
+          pageNumber: bookmark.pageNumber,
+          note: bookmark.note,
+          createDate: bookmark.createDate,
+        );
+
+        setState(() {
+          _bookmarks.add(bookmarkWithId);
+          _bookmarks.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+        });
+
+        // 显示成功提示
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已添加书签：第${_currentPageIndex + 1}页'),
+            content: Row(
+              children: [
+                const Icon(Icons.bookmark_added, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text('已添加书签：第${_currentPageIndex + 1}页'),
+              ],
+            ),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 2),
+            action: SnackBarAction(
+              label: '撤销',
+              textColor: Colors.white,
+              onPressed: () => _removeBookmark(),
+            ),
           ),
         );
       }
     } catch (e) {
       debugPrint('添加书签失败: $e');
+
+      // 回滚UI状态
       if (mounted) {
+        setState(() {
+          _isCurrentPageBookmarked = false;
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('添加书签失败'),
@@ -2523,26 +2562,66 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }
 
   Future<void> _removeBookmark() async {
+    // 保存要删除的书签信息（用于撤销功能）
+    final bookmarkToRemove = _bookmarks.firstWhere(
+      (bookmark) => bookmark.pageNumber == _currentPageIndex + 1,
+      orElse: () => Bookmark(
+        bookId: widget.book.id!,
+        pageNumber: _currentPageIndex + 1,
+        note: '',
+        createDate: DateTime.now(),
+      ),
+    );
+
     try {
+      // 立即更新UI状态
+      if (mounted) {
+        setState(() {
+          _isCurrentPageBookmarked = false;
+          _bookmarks.removeWhere(
+            (bookmark) => bookmark.pageNumber == _currentPageIndex + 1,
+          );
+        });
+      }
+
+      // 后台从数据库删除
       await _bookmarkDao.deleteBookmarkOnPage(
         widget.book.id!,
         _currentPageIndex + 1,
       );
-      await _loadBookmarks(); // 重新加载书签列表
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('已删除书签：第${_currentPageIndex + 1}页'),
+            content: Row(
+              children: [
+                const Icon(Icons.bookmark_remove, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text('已删除书签：第${_currentPageIndex + 1}页'),
+              ],
+            ),
             backgroundColor: Colors.orange,
             behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: '撤销',
+              textColor: Colors.white,
+              onPressed: () => _restoreBookmark(bookmarkToRemove),
+            ),
           ),
         );
       }
     } catch (e) {
       debugPrint('删除书签失败: $e');
+
+      // 回滚UI状态
       if (mounted) {
+        setState(() {
+          _isCurrentPageBookmarked = true;
+          _bookmarks.add(bookmarkToRemove);
+          _bookmarks.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('删除书签失败'),
@@ -2554,22 +2633,134 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     }
   }
 
-  Future<void> _deleteBookmark(int bookmarkId) async {
+  Future<void> _restoreBookmark(Bookmark bookmark) async {
     try {
-      await _bookmarkDao.deleteBookmark(bookmarkId);
-      await _loadBookmarks();
+      // 立即更新UI状态
+      if (mounted) {
+        setState(() {
+          _bookmarks.add(bookmark);
+          _bookmarks.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+
+          // 如果恢复的是当前页的书签，更新状态
+          if (bookmark.pageNumber == _currentPageIndex + 1) {
+            _isCurrentPageBookmarked = true;
+          }
+        });
+      }
+
+      // 后台保存到数据库
+      await _bookmarkDao.insertBookmark(bookmark);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.bookmark_added, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text('已恢复书签：第${bookmark.pageNumber}页'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('恢复书签失败: $e');
+
+      // 回滚UI状态
+      if (mounted) {
+        setState(() {
+          _bookmarks.removeWhere((b) => b.pageNumber == bookmark.pageNumber);
+          if (bookmark.pageNumber == _currentPageIndex + 1) {
+            _isCurrentPageBookmarked = false;
+          }
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('书签已删除'),
+            content: Text('恢复书签失败'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteBookmarkWithAnimation(int bookmarkId) async {
+    // 找到要删除的书签
+    final bookmarkToDelete = _bookmarks.firstWhere(
+      (bookmark) => bookmark.id == bookmarkId,
+      orElse: () => Bookmark(
+        id: bookmarkId,
+        bookId: widget.book.id!,
+        pageNumber: 0,
+        note: '',
+        createDate: DateTime.now(),
+      ),
+    );
+
+    try {
+      // 立即更新UI状态
+      if (mounted) {
+        setState(() {
+          _bookmarks.removeWhere((bookmark) => bookmark.id == bookmarkId);
+
+          // 如果删除的是当前页的书签，更新状态
+          if (bookmarkToDelete.pageNumber == _currentPageIndex + 1) {
+            _isCurrentPageBookmarked = false;
+          }
+        });
+      }
+
+      // 后台从数据库删除
+      await _bookmarkDao.deleteBookmark(bookmarkId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.bookmark_remove, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text('已删除书签：第${bookmarkToDelete.pageNumber}页'),
+              ],
+            ),
             backgroundColor: Colors.orange,
             behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: '撤销',
+              textColor: Colors.white,
+              onPressed: () => _restoreBookmark(bookmarkToDelete),
+            ),
           ),
         );
       }
     } catch (e) {
       debugPrint('删除书签失败: $e');
+
+      // 回滚UI状态
+      if (mounted) {
+        setState(() {
+          _bookmarks.add(bookmarkToDelete);
+          _bookmarks.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
+          if (bookmarkToDelete.pageNumber == _currentPageIndex + 1) {
+            _isCurrentPageBookmarked = true;
+          }
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('删除书签失败'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -2681,52 +2872,69 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                     itemCount: _pages.length,
                     itemBuilder: (context, index) {
                       final isCurrentPage = index == _currentPageIndex;
-                      return ListTile(
-                        leading: Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: isCurrentPage
-                                ? Colors.white.withValues(alpha: 0.2)
-                                : Colors.white.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${index + 1}',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: isCurrentPage
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
+                      final modalTextColor = _getModalTextColor();
+                      final modalSecondaryTextColor = _getModalSecondaryTextColor();
+
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeInOut,
+                        child: ListTile(
+                          leading: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: isCurrentPage
+                                  ? _getModalAccentColor().withValues(alpha: 0.3)
+                                  : modalTextColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: isCurrentPage
+                                  ? Border.all(
+                                      color: _getModalAccentColor(),
+                                      width: 1.5,
+                                    )
+                                  : null,
+                            ),
+                            child: Center(
+                              child: Text(
+                                '${index + 1}',
+                                style: TextStyle(
+                                  color: isCurrentPage
+                                      ? _getModalAccentColor()
+                                      : modalTextColor,
+                                  fontSize: 12,
+                                  fontWeight: isCurrentPage
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        title: Text(
-                          '第 ${index + 1} 页',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: isCurrentPage
-                                ? FontWeight.w600
-                                : FontWeight.w500,
+                          title: Text(
+                            '第 ${index + 1} 页',
+                            style: TextStyle(
+                              color: isCurrentPage
+                                  ? _getModalAccentColor()
+                                  : modalTextColor,
+                              fontSize: 15,
+                              fontWeight: isCurrentPage
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                            ),
                           ),
-                        ),
-                        subtitle: Text(
-                          _getPagePreview(index),
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.7),
-                            fontSize: 12,
+                          subtitle: Text(
+                            _getPagePreview(index),
+                            style: TextStyle(
+                              color: modalSecondaryTextColor,
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _goToPage(index);
+                          },
                         ),
-                        onTap: () {
-                          Navigator.pop(context);
-                          _goToPage(index);
-                        },
                       );
                     },
                   ),
@@ -2823,28 +3031,28 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                 // 书签列表
                 Expanded(
                   child: _bookmarks.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
                                 Icons.bookmark_border,
-                                color: Colors.white38,
+                                color: _getModalSecondaryTextColor(),
                                 size: 48,
                               ),
-                              SizedBox(height: 16),
+                              const SizedBox(height: 16),
                               Text(
                                 '暂无书签',
                                 style: TextStyle(
-                                  color: Colors.white70,
+                                  color: _getModalTextColor(),
                                   fontSize: 16,
                                 ),
                               ),
-                              SizedBox(height: 8),
+                              const SizedBox(height: 8),
                               Text(
                                 '点击上方按钮添加当前页面为书签',
                                 style: TextStyle(
-                                  color: Colors.white38,
+                                  color: _getModalSecondaryTextColor(),
                                   fontSize: 12,
                                 ),
                               ),
@@ -2856,7 +3064,11 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                           itemCount: _bookmarks.length,
                           itemBuilder: (context, index) {
                             final bookmark = _bookmarks[index];
-                            return Container(
+                            final isCurrentBookmark = bookmark.pageNumber == _currentPageIndex + 1;
+
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeInOut,
                               margin: const EdgeInsets.only(bottom: 12),
                               child: Material(
                                 color: Colors.transparent,
@@ -2867,15 +3079,15 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                   child: Container(
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.05,
-                                      ),
+                                      color: isCurrentBookmark
+                                          ? _getModalAccentColor().withValues(alpha: 0.1)
+                                          : _getModalTextColor().withValues(alpha: 0.05),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.1,
-                                        ),
-                                        width: 1,
+                                        color: isCurrentBookmark
+                                            ? _getModalAccentColor().withValues(alpha: 0.3)
+                                            : _getModalDividerColor(),
+                                        width: isCurrentBookmark ? 1.5 : 1,
                                       ),
                                     ),
                                     child: Row(
@@ -2883,16 +3095,16 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                         Container(
                                           padding: const EdgeInsets.all(8),
                                           decoration: BoxDecoration(
-                                            color: Colors.blue.withValues(
+                                            color: _getModalAccentColor().withValues(
                                               alpha: 0.2,
                                             ),
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
                                           ),
-                                          child: const Icon(
+                                          child: Icon(
                                             Icons.bookmark,
-                                            color: Colors.blue,
+                                            color: _getModalAccentColor(),
                                             size: 20,
                                           ),
                                         ),
@@ -2904,17 +3116,21 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                             children: [
                                               Text(
                                                 '第 ${bookmark.pageNumber} 页',
-                                                style: const TextStyle(
-                                                  color: Colors.white,
+                                                style: TextStyle(
+                                                  color: isCurrentBookmark
+                                                      ? _getModalAccentColor()
+                                                      : _getModalTextColor(),
                                                   fontSize: 16,
-                                                  fontWeight: FontWeight.w500,
+                                                  fontWeight: isCurrentBookmark
+                                                      ? FontWeight.w600
+                                                      : FontWeight.w500,
                                                 ),
                                               ),
                                               const SizedBox(height: 4),
                                               Text(
                                                 '创建于 ${_formatDate(bookmark.createDate)}',
-                                                style: const TextStyle(
-                                                  color: Colors.white60,
+                                                style: TextStyle(
+                                                  color: _getModalSecondaryTextColor(),
                                                   fontSize: 12,
                                                 ),
                                               ),
@@ -2923,13 +3139,14 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                         ),
                                         // 删除按钮
                                         GestureDetector(
-                                          onTap: () =>
-                                              _deleteBookmark(bookmark.id!),
+                                          onTap: () {
+                                            _deleteBookmarkWithAnimation(bookmark.id!);
+                                          },
                                           child: Container(
                                             padding: const EdgeInsets.all(8),
                                             decoration: BoxDecoration(
                                               color: Colors.red.withValues(
-                                                alpha: 0.1,
+                                                alpha: 0.15,
                                               ),
                                               borderRadius:
                                                   BorderRadius.circular(6),
