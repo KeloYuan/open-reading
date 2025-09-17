@@ -7,61 +7,61 @@ import 'color_extensions.dart';
 
 class GlassEffectConfig {
   // ============ 模糊强度配置 (sigmaX/sigmaY) ============
-  
+
   // 顶部应用栏 (AppBar)
-  static const double appBarBlur = 15.0;           // 首页、书库、设置页顶栏 - 增加模糊强度
-  
+  static const double appBarBlur = 15.0; // 首页、书库、设置页顶栏 - 增加模糊强度
+
   // 导航栏
-  static const double navigationBarBlur = 15.0;    // 底部悬浮式导航栏 - 增加模糊强度
-  
+  static const double navigationBarBlur = 15.0; // 底部悬浮式导航栏 - 增加模糊强度
+
   // 阅读页面控制栏
-  static const double readingTopBarBlur = 15.0;    // 阅读页顶部控制栏
+  static const double readingTopBarBlur = 15.0; // 阅读页顶部控制栏
   static const double readingBottomBarBlur = 15.0; // 阅读页底部控制栏
-  
+
   // 卡片和容器
-  static const double cardBlur = 20.0;             // 一般卡片容器
-  static const double lightCardBlur = 8.0;         // 轻量级容器（图标背景等）
-  static const double dialogBlur = 30.0;          // 对话框和弹窗
-  static const double modalBlur = 25.0;           // 底部弹出菜单
-  
+  static const double cardBlur = 20.0; // 一般卡片容器
+  static const double lightCardBlur = 8.0; // 轻量级容器（图标背景等）
+  static const double dialogBlur = 30.0; // 对话框和弹窗
+  static const double modalBlur = 25.0; // 底部弹出菜单
+
   // ============ 透明度配置 (alpha值: 0.0-1.0) ============
-  
+
   // 顶部应用栏透明度
-  static const double appBarOpacity = 0.3;        // 可调范围: 0.3-0.9 (修改为不透明)
-  
+  static const double appBarOpacity = 0.3; // 可调范围: 0.3-0.9 (修改为不透明)
+
   // 导航栏透明度
   static const double navigationBarOpacity = 0.3; // 可调范围: 0.7-0.95
 
   // 阅读页面控制栏透明度
   static const double readingTopBarOpacity = 0.9; // 可调范围: 0.6-0.9
   static const double readingBottomBarOpacity = 0.9; // 可调范围: 0.8-0.95
-  
+
   // 卡片透明度
-  static const double cardOpacity = 0.8;          // 一般卡片
-  static const double lightCardOpacity = 0.15;    // 轻量级容器
-  static const double dialogOpacity = 0.95;       // 对话框
-  static const double modalOpacity = 0.9;         // 底部弹出菜单
-  
+  static const double cardOpacity = 0.8; // 一般卡片
+  static const double lightCardOpacity = 0.15; // 轻量级容器
+  static const double dialogOpacity = 0.95; // 对话框
+  static const double modalOpacity = 0.9; // 底部弹出菜单
+
   // ============ 快速配置预设 ============
-  
+
   // 预设1: 清晰模式 (透明度偏高，模糊偏低)
   static const GlassPreset clearMode = GlassPreset(
     name: '清晰模式',
-    blurReduction: 0.6,    // 模糊强度 × 0.6
-    opacityIncrease: 0.2,  // 透明度 + 0.2
+    blurReduction: 0.6, // 模糊强度 × 0.6
+    opacityIncrease: 0.2, // 透明度 + 0.2
   );
-  
+
   // 预设2: 毛玻璃模式 (标准设置)
   static const GlassPreset standardMode = GlassPreset(
     name: '标准模式',
-    blurReduction: 1.0,    // 标准模糊
-    opacityIncrease: 0.0,  // 标准透明度
+    blurReduction: 1.0, // 标准模糊
+    opacityIncrease: 0.0, // 标准透明度
   );
-  
+
   // 预设3: 朦胧模式 (透明度偏低，模糊偏高)
   static const GlassPreset dreamyMode = GlassPreset(
     name: '朦胧模式',
-    blurReduction: 1.4,    // 模糊强度 × 1.4
+    blurReduction: 1.4, // 模糊强度 × 1.4
     opacityIncrease: -0.15, // 透明度 - 0.15
   );
 
@@ -71,7 +71,7 @@ class GlassEffectConfig {
     required Widget child,
     GlassPreset? preset,
     bool enableBlur = true, // 新增
-    double? opacityScale,   // 新增：调整透明度强度
+    double? opacityScale, // 新增：调整透明度强度
   }) {
     return ClipRect(
       child: GlassEffectHelper._progressiveAppBarInternal(
@@ -104,9 +104,9 @@ class GlassEffectConfig {
 // 毛玻璃预设配置
 class GlassPreset {
   final String name;
-  final double blurReduction;   // 模糊强度倍数
+  final double blurReduction; // 模糊强度倍数
   final double opacityIncrease; // 透明度增减值
-  
+
   const GlassPreset({
     required this.name,
     required this.blurReduction,
@@ -121,25 +121,35 @@ class GlassEffectHelper {
     preset ??= GlassEffectConfig.standardMode;
     return {
       'blur': GlassEffectConfig.appBarBlur * preset.blurReduction,
-      'opacity': (GlassEffectConfig.appBarOpacity + preset.opacityIncrease).clamp(0.0, 1.0),
+      'opacity': (GlassEffectConfig.appBarOpacity + preset.opacityIncrease)
+          .clamp(0.0, 1.0),
     };
   }
-  
+
   // 获取导航栏配置
   static Map<String, double> getNavigationConfig({GlassPreset? preset}) {
     preset ??= GlassEffectConfig.standardMode;
     return {
       'blur': GlassEffectConfig.navigationBarBlur * preset.blurReduction,
-      'opacity': (GlassEffectConfig.navigationBarOpacity + preset.opacityIncrease).clamp(0.0, 1.0),
+      'opacity':
+          (GlassEffectConfig.navigationBarOpacity + preset.opacityIncrease)
+              .clamp(0.0, 1.0),
     };
   }
-  
+
   // 获取阅读页控制栏配置
-  static Map<String, double> getReadingControlConfig({GlassPreset? preset, bool isTopBar = true}) {
+  static Map<String, double> getReadingControlConfig({
+    GlassPreset? preset,
+    bool isTopBar = true,
+  }) {
     preset ??= GlassEffectConfig.standardMode;
-    final blur = isTopBar ? GlassEffectConfig.readingTopBarBlur : GlassEffectConfig.readingBottomBarBlur;
-    final opacity = isTopBar ? GlassEffectConfig.readingTopBarOpacity : GlassEffectConfig.readingBottomBarOpacity;
-    
+    final blur = isTopBar
+        ? GlassEffectConfig.readingTopBarBlur
+        : GlassEffectConfig.readingBottomBarBlur;
+    final opacity = isTopBar
+        ? GlassEffectConfig.readingTopBarOpacity
+        : GlassEffectConfig.readingBottomBarOpacity;
+
     return {
       'blur': blur * preset.blurReduction,
       'opacity': (opacity + preset.opacityIncrease).clamp(0.0, 1.0),
@@ -147,7 +157,7 @@ class GlassEffectHelper {
   }
 
   // ============ 渐进模糊效果配置 ============
-  
+
   // 创建渐进模糊的AppBar（内部实现，外部通过 ClipRect 包裹后调用）
   static Widget _progressiveAppBarInternal({
     required BuildContext context,
@@ -165,10 +175,14 @@ class GlassEffectHelper {
     if (!enableBlur) {
       return Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withOpacityValues(scaledOpacity),
+          color: Theme.of(
+            context,
+          ).colorScheme.surface.withOpacityValues(scaledOpacity),
           border: Border(
             bottom: BorderSide(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.16),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.16),
               width: 0.5,
             ),
           ),
@@ -177,19 +191,13 @@ class GlassEffectHelper {
       );
     }
 
+    // 使用单层底色 + 轻覆层模糊，避免双重渐变导致的发暗与割裂
     return ProgressiveBlurPresets.topToBottomBlur(
       child: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Theme.of(context).colorScheme.surface.withOpacityValues(scaledOpacity + 0.08),
-              Theme.of(context).colorScheme.surface.withOpacityValues(scaledOpacity),
-              Theme.of(context).colorScheme.surface.withOpacityValues((scaledOpacity - 0.1).clamp(0.0, 1.0)),
-            ],
-            stops: const [0.0, 0.6, 1.0],
-          ),
+          color: Theme.of(
+            context,
+          ).colorScheme.surface.withOpacityValues(scaledOpacity),
         ),
         child: child,
       ),
@@ -215,12 +223,16 @@ class GlassEffectHelper {
           color: Theme.of(context).colorScheme.surface.withOpacityValues(0.98),
           borderRadius: borderRadius,
           border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withOpacityValues(0.16),
+            color: Theme.of(
+              context,
+            ).colorScheme.outline.withOpacityValues(0.16),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Theme.of(context).colorScheme.shadow.withOpacityValues(0.12),
+              color: Theme.of(
+                context,
+              ).colorScheme.shadow.withOpacityValues(0.12),
               blurRadius: 18,
               offset: const Offset(0, 8),
             ),
@@ -229,11 +241,13 @@ class GlassEffectHelper {
         child: child,
       );
     }
-    
+
     return ProgressiveBlurPresets.radialBlur(
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withOpacityValues(GlassEffectConfig.cardOpacity),
+          color: Theme.of(context).colorScheme.surface.withOpacityValues(
+            GlassEffectConfig.cardOpacity,
+          ),
           borderRadius: borderRadius,
           border: Border.all(
             color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
@@ -256,7 +270,7 @@ class GlassEffectHelper {
     GlassPreset? preset,
   }) {
     preset ??= GlassEffectConfig.standardMode;
-    
+
     return ProgressiveBlurPresets.edgeBlur(
       child: child,
       context: context,
@@ -274,7 +288,7 @@ class GlassEffectHelper {
   }) {
     preset ??= GlassEffectConfig.standardMode;
     final config = getNavigationConfig(preset: preset);
-    
+
     return ProgressiveBlurPresets.bottomNavigationBlur(
       child: Container(
         decoration: BoxDecoration(
@@ -282,8 +296,12 @@ class GlassEffectHelper {
             begin: Alignment.bottomCenter,
             end: Alignment.topCenter,
             colors: [
-              Theme.of(context).colorScheme.surface.withOpacityValues(config['opacity']! + 0.1),
-              Theme.of(context).colorScheme.surface.withOpacityValues(config['opacity']!),
+              Theme.of(
+                context,
+              ).colorScheme.surface.withOpacityValues(config['opacity']! + 0.1),
+              Theme.of(
+                context,
+              ).colorScheme.surface.withOpacityValues(config['opacity']!),
               Colors.transparent,
             ],
             stops: const [0.0, 0.7, 1.0],

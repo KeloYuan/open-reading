@@ -19,10 +19,10 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     with TickerProviderStateMixin {
   final _statsDao = ReadingStatsDao();
   final _bookDao = BookDao();
-  
+
   late TabController _tabController;
   late PageController _pageController;
-  
+
   // 统计数据
   Map<String, int> _overallStats = {};
   List<Map<String, dynamic>> _dailyStats = [];
@@ -30,18 +30,109 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   // List<Map<String, dynamic>> _monthlyStats = [];
   List<Map<String, dynamic>> _bookStats = [];
   List<Book> _recentBooks = [];
-  
+
   // UI状态
   bool _isLoading = true;
   String _selectedTimeRange = '7天';
   int _selectedStatType = 0; // 0: 时长, 1: 页数, 2: 书籍数
-  
+
+  // 根据选择的时间范围获取窗口化的每日数据
+  List<Map<String, dynamic>> get _windowedDailyStats {
+    int days;
+    switch (_selectedTimeRange) {
+      case '7天':
+        days = 7;
+        break;
+      case '30天':
+        days = 30;
+        break;
+      case '90天':
+        days = 90;
+        break;
+      case '1年':
+        days = 365;
+        break;
+      default:
+        days = _dailyStats.length;
+    }
+    if (_dailyStats.isEmpty) return const [];
+    return _dailyStats.length <= days
+        ? _dailyStats
+        : _dailyStats.sublist(_dailyStats.length - days);
+  }
+
+  // 平均阅读速度：页/分钟（基于窗口化数据）
+  double get _averagePagesPerMinute {
+    final data = _windowedDailyStats;
+    if (data.isEmpty) return 0;
+    final totalPages = data.fold<int>(
+      0,
+      (sum, e) => sum + ((e['pagesRead'] as int?) ?? 0),
+    );
+    final totalMinutes = data.fold<int>(
+      0,
+      (sum, e) => sum + ((e['readingTime'] as int?) ?? 0),
+    );
+    if (totalMinutes == 0) return 0;
+    return totalPages / totalMinutes;
+  }
+
+  // 平均单次阅读时长（以有阅读的天为“次”近似）
+  String get _avgSessionDurationLabel {
+    final data = _windowedDailyStats;
+    if (data.isEmpty) return '0 分钟';
+    final daysWithReading = data
+        .where((e) => ((e['readingTime'] as int?) ?? 0) > 0)
+        .length;
+    if (daysWithReading == 0) return '0 分钟';
+    final totalMinutes = data.fold<int>(
+      0,
+      (sum, e) => sum + ((e['readingTime'] as int?) ?? 0),
+    );
+    final avg = (totalMinutes / daysWithReading).round();
+    return '$avg 分钟';
+  }
+
+  // 最高连读天数
+  String get _maxStreakLabel {
+    final streak = _overallStats['streak'] ?? 0;
+    if (streak > 0) return '$streak 天';
+    int best = 0, cur = 0;
+    for (final e in _windowedDailyStats) {
+      if (((e['readingTime'] as int?) ?? 0) > 0) {
+        cur++;
+        if (cur > best) best = cur;
+      } else {
+        cur = 0;
+      }
+    }
+    return '$best 天';
+  }
+
+  // 阅读专注度（相对60分钟目标的达成度）
+  String get _focusScoreLabel {
+    final data = _windowedDailyStats;
+    if (data.isEmpty) return '0%';
+    final totalMinutes = data.fold<int>(
+      0,
+      (sum, e) => sum + ((e['readingTime'] as int?) ?? 0),
+    );
+    final avg = data.isEmpty ? 0.0 : totalMinutes / data.length;
+    final score = (avg / 60.0).clamp(0.0, 1.0) * 100.0;
+    return '${score.round()}%';
+  }
+
+  String _inferBestReadingPeriod() {
+    // TODO: 当有小时粒度数据时，统计分布后给出时间段；当前返回占位
+    return '--';
+  }
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _pageController = PageController();
-    
+
     // 监听TabController变化，同步PageController
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) {
@@ -52,7 +143,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
         );
       }
     });
-    
+
     _loadAllStats();
   }
 
@@ -86,31 +177,40 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     final summaryStats = await _statsDao.getSummaryStats();
     final achievementStats = await _statsDao.getAchievementStats();
     final bookCount = await _bookDao.getBooksCount();
-    
+
     final totalMinutes = (summaryStats['total'] ?? 0) ~/ 60;
-    
+
     // 计算总页数 - 基于所有书籍的currentPage总和
     final books = await _bookDao.getAllBooks();
-    final totalPages = books.fold<int>(0, (sum, book) => sum + book.currentPage);
-    
-    setState(() => _overallStats = {
-      'totalReadingTime': totalMinutes,
-      'totalPages': totalPages, // 真实数据：所有书籍已读页数总和
-      'totalBooks': bookCount, // 真实数据：书架中的书籍总数
-      'streak': achievementStats['consecutiveDays'] ?? 0, // 真实数据：连续阅读天数
-    });
+    final totalPages = books.fold<int>(
+      0,
+      (sum, book) => sum + book.currentPage,
+    );
+
+    setState(
+      () => _overallStats = {
+        'totalReadingTime': totalMinutes,
+        'totalPages': totalPages, // 真实数据：所有书籍已读页数总和
+        'totalBooks': bookCount, // 真实数据：书架中的书籍总数
+        'streak': achievementStats['consecutiveDays'] ?? 0, // 真实数据：连续阅读天数
+      },
+    );
   }
 
   Future<void> _loadDailyStats() async {
     // 使用真实的每日统计数据
     final endDate = DateTime.now();
-    final startDate = endDate.subtract(const Duration(days: 30));
-    
-    final realDailyStats = await _statsDao.getDailyStatsRange(startDate, endDate);
-    
-    // 构建完整的30天数据，没有数据的日期填充为0
+    // 统一加载最近一年数据，便于切换窗口
+    final startDate = endDate.subtract(const Duration(days: 365));
+
+    final realDailyStats = await _statsDao.getDailyStatsRange(
+      startDate,
+      endDate,
+    );
+
+    // 构建完整的日期数据，没有数据的日期填充为0
     final dailyStatsMap = <String, Map<String, dynamic>>{};
-    
+
     // 先填充真实数据
     for (final stat in realDailyStats) {
       final dateStr = stat['date'] as String;
@@ -121,21 +221,19 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
         'booksRead': stat['books_read'] ?? 0,
       };
     }
-    
-    // 填充空白日期
+
+    // 填充空白日期（最近一年）
     final completeStats = <Map<String, dynamic>>[];
-    for (int i = 29; i >= 0; i--) {
+    for (int i = 364; i >= 0; i--) {
       final date = endDate.subtract(Duration(days: i));
       final dateStr = date.toIso8601String().split('T').first;
-      
-      completeStats.add(dailyStatsMap[dateStr] ?? {
-        'date': dateStr,
-        'readingTime': 0,
-        'pagesRead': 0,
-        'booksRead': 0,
-      });
+
+      completeStats.add(
+        dailyStatsMap[dateStr] ??
+            {'date': dateStr, 'readingTime': 0, 'pagesRead': 0, 'booksRead': 0},
+      );
     }
-    
+
     setState(() => _dailyStats = completeStats);
   }
 
@@ -162,15 +260,17 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   Future<void> _loadBookStats() async {
     final books = await _bookDao.getAllBooks();
     final bookStats = <Map<String, dynamic>>[];
-    
+
     for (final book in books) {
       // 基于真实阅读进度计算统计数据
-      final progress = book.totalPages > 0 ? book.currentPage / book.totalPages : 0.0;
-      
+      final progress = book.totalPages > 0
+          ? book.currentPage / book.totalPages
+          : 0.0;
+
       // 根据书籍阅读进度和估算阅读速度计算阅读时间
       // 假设平均阅读速度为每页2分钟，根据已读页数计算
       final estimatedReadingTime = book.currentPage * 2; // 每页2分钟
-      
+
       bookStats.add({
         'book': book,
         'readingTime': estimatedReadingTime, // 基于已读页数的估算时间
@@ -179,9 +279,11 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
         'totalPages': book.totalPages, // 真实总页数
       });
     }
-    
+
     // 按阅读时间排序
-    bookStats.sort((a, b) => (b['readingTime'] as int).compareTo(a['readingTime'] as int));
+    bookStats.sort(
+      (a, b) => (b['readingTime'] as int).compareTo(a['readingTime'] as int),
+    );
     setState(() => _bookStats = bookStats);
   }
 
@@ -221,10 +323,14 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary.withOpacityValues(0.15),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withOpacityValues(0.15),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Theme.of(context).colorScheme.primary.withOpacityValues(0.2),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacityValues(0.2),
                       width: 1,
                     ),
                   ),
@@ -238,12 +344,12 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                       Icons.date_range,
                       color: Theme.of(context).colorScheme.primary,
                     ),
-                    itemBuilder: (context) => [
-                      '7天', '30天', '90天', '1年', '全部'
-                    ].map((range) => PopupMenuItem(
-                      value: range,
-                      child: Text(range),
-                    )).toList(),
+                    itemBuilder: (context) => ['7天', '30天', '90天', '1年', '全部']
+                        .map(
+                          (range) =>
+                              PopupMenuItem(value: range, child: Text(range)),
+                        )
+                        .toList(),
                   ),
                 ),
               ),
@@ -257,7 +363,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               color: Colors.transparent,
               border: Border(
                 bottom: BorderSide(
-                  color: Theme.of(context).colorScheme.outline.withOpacityValues(0.18),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outline.withOpacityValues(0.18),
                   width: 0.6,
                 ),
               ),
@@ -271,7 +379,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 Tab(text: '成就'),
               ],
               labelColor: Theme.of(context).colorScheme.primary,
-              unselectedLabelColor: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+              unselectedLabelColor: Theme.of(
+                context,
+              ).colorScheme.onSurface.withOpacityValues(0.6),
               indicatorColor: Theme.of(context).colorScheme.primary,
               indicatorWeight: 3,
             ),
@@ -285,9 +395,15 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.1),
-              Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.1),
-              Theme.of(context).colorScheme.tertiaryContainer.withOpacityValues(0.05),
+              Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withOpacityValues(0.1),
+              Theme.of(
+                context,
+              ).colorScheme.secondaryContainer.withOpacityValues(0.1),
+              Theme.of(
+                context,
+              ).colorScheme.tertiaryContainer.withOpacityValues(0.05),
             ],
           ),
         ),
@@ -314,7 +430,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         16,
-        MediaQuery.of(context).padding.top , // 减少上方padding，与其他Tab保持一致
+        MediaQuery.of(context).padding.top, // 减少上方padding，与其他Tab保持一致
         16,
         20,
       ),
@@ -323,15 +439,15 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           // 核心统计卡片网格
           _buildStatsGrid(),
           const SizedBox(height: 20),
-          
+
           // 今日阅读进度
           _buildTodayProgress(),
           const SizedBox(height: 20),
-          
+
           // 最近阅读书籍
           _buildRecentBooks(),
           const SizedBox(height: 20),
-          
+
           // 阅读习惯分析
           _buildReadingHabits(),
         ],
@@ -401,11 +517,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
         child: Container(
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withOpacityValues(
-              GlassEffectConfig.cardOpacity
+              GlassEffectConfig.cardOpacity,
             ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
           ),
@@ -428,10 +546,12 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                   ),
                 ),
                 const SizedBox(height: 8), // 减少间距
-                Flexible( // 使用Flexible防止溢出
+                Flexible(
+                  // 使用Flexible防止溢出
                   child: Text(
                     stat['value'] as String,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith( // 减小字体大小
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      // 减小字体大小
                       fontWeight: FontWeight.bold,
                       color: stat['color'] as Color,
                     ),
@@ -439,21 +559,26 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Flexible( // 使用Flexible防止溢出
+                Flexible(
+                  // 使用Flexible防止溢出
                   child: Text(
                     stat['unit'] as String,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.7),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacityValues(0.7),
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const SizedBox(height: 2), // 减少间距
-                Flexible( // 使用Flexible防止溢出
+                Flexible(
+                  // 使用Flexible防止溢出
                   child: Text(
                     stat['title'] as String,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith( // 减小字体大小
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      // 减小字体大小
                       fontWeight: FontWeight.w500,
                     ),
                     textAlign: TextAlign.center,
@@ -472,12 +597,14 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   // 今日阅读进度
   Widget _buildTodayProgress() {
     // 查找今日数据（最后一个元素应该是今天）
-    final todayData = _dailyStats.isNotEmpty ? _dailyStats.last : {'readingTime': 0, 'pagesRead': 0};
+    final todayData = _dailyStats.isNotEmpty
+        ? _dailyStats.last
+        : {'readingTime': 0, 'pagesRead': 0};
     final todayTime = todayData['readingTime'] ?? 0;
     final todayPages = todayData['pagesRead'] ?? 0;
     final targetTime = 60; // 目标60分钟
     final targetPages = 20; // 目标20页
-    
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
@@ -489,19 +616,25 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withOpacityValues(
-              GlassEffectConfig.cardOpacity
+              GlassEffectConfig.cardOpacity,
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.1),
-                Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.1),
+                Theme.of(
+                  context,
+                ).colorScheme.primaryContainer.withOpacityValues(0.1),
+                Theme.of(
+                  context,
+                ).colorScheme.secondaryContainer.withOpacityValues(0.1),
               ],
             ),
           ),
@@ -513,7 +646,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withOpacityValues(0.15),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacityValues(0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -532,7 +667,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 ],
               ),
               const SizedBox(height: 20),
-              
+
               // 时间进度
               Row(
                 children: [
@@ -549,16 +684,17 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                             ),
                             Text(
                               '$todayTime / $targetTime 分钟',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w500,
-                              ),
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w500),
                             ),
                           ],
                         ),
                         const SizedBox(height: 8),
                         LinearProgressIndicator(
                           value: (todayTime / targetTime).clamp(0.0, 1.0),
-                          backgroundColor: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.outline.withOpacityValues(0.2),
                           valueColor: AlwaysStoppedAnimation(
                             Theme.of(context).colorScheme.primary,
                           ),
@@ -569,7 +705,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 ],
               ),
               const SizedBox(height: 16),
-              
+
               // 页数进度
               Row(
                 children: [
@@ -586,16 +722,17 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                             ),
                             Text(
                               '$todayPages / $targetPages 页',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w500,
-                              ),
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w500),
                             ),
                           ],
                         ),
                         const SizedBox(height: 8),
                         LinearProgressIndicator(
                           value: (todayPages / targetPages).clamp(0.0, 1.0),
-                          backgroundColor: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.outline.withOpacityValues(0.2),
                           valueColor: AlwaysStoppedAnimation(
                             Theme.of(context).colorScheme.secondary,
                           ),
@@ -625,11 +762,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withOpacityValues(
-              GlassEffectConfig.cardOpacity
+              GlassEffectConfig.cardOpacity,
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
           ),
@@ -641,7 +780,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.secondary.withOpacityValues(0.15),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.secondary.withOpacityValues(0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -660,14 +801,17 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 ],
               ),
               const SizedBox(height: 16),
-              
+
               ..._recentBooks.map((book) {
-                final progress = book.totalPages > 0 ? book.currentPage / book.totalPages : 0.0;
+                final progress = book.totalPages > 0
+                    ? book.currentPage / book.totalPages
+                    : 0.0;
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacityValues(0.3),
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest
+                        .withOpacityValues(0.3),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
@@ -676,7 +820,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary.withOpacityValues(0.1),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withOpacityValues(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
@@ -692,16 +838,17 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                           children: [
                             Text(
                               book.title,
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w500,
-                              ),
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w500),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 4),
                             LinearProgressIndicator(
                               value: progress,
-                              backgroundColor: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.outline.withOpacityValues(0.2),
                               valueColor: AlwaysStoppedAnimation(
                                 Theme.of(context).colorScheme.primary,
                               ),
@@ -741,11 +888,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withOpacityValues(
-              GlassEffectConfig.cardOpacity
+              GlassEffectConfig.cardOpacity,
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
           ),
@@ -757,7 +906,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.tertiary.withOpacityValues(0.15),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.tertiary.withOpacityValues(0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -776,11 +927,23 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 ],
               ),
               const SizedBox(height: 20),
-              
-              _buildHabitItem('最佳阅读时段', '19:00 - 21:00', Icons.access_time),
-              _buildHabitItem('平均单次阅读', '25 分钟', Icons.timer),
-              _buildHabitItem('最高连读天数', '12 天', Icons.local_fire_department),
-              _buildHabitItem('阅读专注度', '85%', Icons.center_focus_strong),
+
+              _buildHabitItem(
+                '最佳阅读时段',
+                _inferBestReadingPeriod(),
+                Icons.access_time,
+              ),
+              _buildHabitItem('平均单次阅读', _avgSessionDurationLabel, Icons.timer),
+              _buildHabitItem(
+                '最高连读天数',
+                _maxStreakLabel,
+                Icons.local_fire_department,
+              ),
+              _buildHabitItem(
+                '阅读专注度',
+                _focusScoreLabel,
+                Icons.center_focus_strong,
+              ),
             ],
           ),
         ),
@@ -800,10 +963,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              title,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            child: Text(title, style: Theme.of(context).textTheme.bodyMedium),
           ),
           Text(
             value,
@@ -822,7 +982,8 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         16,
-        MediaQuery.of(context).padding.top + 140, // 增加上方padding以避免被AppBar+TabBar遮挡
+        MediaQuery.of(context).padding.top +
+            140, // 增加上方padding以避免被AppBar+TabBar遮挡
         16,
         20,
       ),
@@ -831,27 +992,27 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           // 统计类型选择
           _buildStatTypeSelector(),
           const SizedBox(height: 20),
-          
+
           // 趋势图表
           _buildTrendChart(),
           const SizedBox(height: 20),
-          
+
           // 时间分布图
           _buildTimeDistributionChart(),
           const SizedBox(height: 20),
-          
+
           // 书籍类型分布
           _buildGenreDistributionChart(),
           const SizedBox(height: 20),
-          
+
           // 阅读目标进度
           _buildReadingGoalChart(),
           const SizedBox(height: 20),
-          
+
           // 阅读速度分析
           _buildReadingSpeedChart(),
           const SizedBox(height: 20),
-          
+
           // 阅读连续性热力图
           _buildReadingStreakHeatmap(),
         ],
@@ -890,7 +1051,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected 
+            color: isSelected
                 ? Theme.of(context).colorScheme.primary.withOpacityValues(0.2)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
@@ -899,7 +1060,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             title,
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: isSelected 
+              color: isSelected
                   ? Theme.of(context).colorScheme.primary
                   : Theme.of(context).colorScheme.onSurface,
               fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
@@ -924,11 +1085,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withOpacityValues(
-              GlassEffectConfig.cardOpacity
+              GlassEffectConfig.cardOpacity,
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
           ),
@@ -937,16 +1100,12 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             children: [
               Text(
                 '阅读趋势分析',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 20),
-              Expanded(
-                child: LineChart(
-                  _buildLineChartData(),
-                ),
-              ),
+              Expanded(child: LineChart(_buildLineChartData())),
             ],
           ),
         ),
@@ -987,7 +1146,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
       ),
       titlesData: FlTitlesData(
         show: true,
-        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(
+          sideTitles: SideTitles(showTitles: false),
+        ),
         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         bottomTitles: AxisTitles(
           sideTitles: SideTitles(
@@ -1020,7 +1181,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
       minX: 0,
       maxX: spots.length.toDouble() - 1,
       minY: 0,
-      maxY: spots.isNotEmpty ? spots.map((e) => e.y).reduce((a, b) => a > b ? a : b) * 1.2 : 10,
+      maxY: spots.isNotEmpty
+          ? spots.map((e) => e.y).reduce((a, b) => a > b ? a : b) * 1.2
+          : 10,
       lineBarsData: [
         LineChartBarData(
           spots: spots,
@@ -1064,11 +1227,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withOpacityValues(
-              GlassEffectConfig.cardOpacity
+              GlassEffectConfig.cardOpacity,
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
           ),
@@ -1077,16 +1242,12 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             children: [
               Text(
                 '阅读时间分布',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 20),
-              Expanded(
-                child: BarChart(
-                  _buildBarChartData(),
-                ),
-              ),
+              Expanded(child: BarChart(_buildBarChartData())),
             ],
           ),
         ),
@@ -1110,7 +1271,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
       barTouchData: BarTouchData(enabled: false),
       titlesData: FlTitlesData(
         show: true,
-        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(
+          sideTitles: SideTitles(showTitles: false),
+        ),
         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         bottomTitles: AxisTitles(
           sideTitles: SideTitles(
@@ -1168,11 +1331,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withOpacityValues(
-              GlassEffectConfig.cardOpacity
+              GlassEffectConfig.cardOpacity,
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
           ),
@@ -1181,16 +1346,12 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             children: [
               Text(
                 '阅读类型分布',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 20),
-              Expanded(
-                child: PieChart(
-                  _buildPieChartData(),
-                ),
-              ),
+              Expanded(child: PieChart(_buildPieChartData())),
             ],
           ),
         ),
@@ -1254,7 +1415,8 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         16,
-        MediaQuery.of(context).padding.top + 140, // 增加上方padding以避免被AppBar+TabBar遮挡
+        MediaQuery.of(context).padding.top +
+            140, // 增加上方padding以避免被AppBar+TabBar遮挡
         16,
         20,
       ),
@@ -1263,7 +1425,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           // 书籍统计摘要
           _buildBooksSummary(),
           const SizedBox(height: 20),
-          
+
           // 书籍排行榜
           _buildBooksRanking(),
         ],
@@ -1273,11 +1435,17 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
   // 书籍统计摘要
   Widget _buildBooksSummary() {
-    final completedBooks = _bookStats.where((book) => 
-        (book['progress'] as double) >= 1.0).length;
-    final inProgressBooks = _bookStats.where((book) => 
-        (book['progress'] as double) > 0.0 && (book['progress'] as double) < 1.0).length;
-    
+    final completedBooks = _bookStats
+        .where((book) => (book['progress'] as double) >= 1.0)
+        .length;
+    final inProgressBooks = _bookStats
+        .where(
+          (book) =>
+              (book['progress'] as double) > 0.0 &&
+              (book['progress'] as double) < 1.0,
+        )
+        .length;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
@@ -1289,19 +1457,36 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withOpacityValues(
-              GlassEffectConfig.cardOpacity
+              GlassEffectConfig.cardOpacity,
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
           ),
           child: Row(
             children: [
-              _buildSummaryItem('已完成', completedBooks, Icons.check_circle, Colors.green),
-              _buildSummaryItem('阅读中', inProgressBooks, Icons.schedule, Colors.orange),
-              _buildSummaryItem('总计', _bookStats.length, Icons.library_books, Colors.blue),
+              _buildSummaryItem(
+                '已完成',
+                completedBooks,
+                Icons.check_circle,
+                Colors.green,
+              ),
+              _buildSummaryItem(
+                '阅读中',
+                inProgressBooks,
+                Icons.schedule,
+                Colors.orange,
+              ),
+              _buildSummaryItem(
+                '总计',
+                _bookStats.length,
+                Icons.library_books,
+                Colors.blue,
+              ),
             ],
           ),
         ),
@@ -1309,7 +1494,12 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     );
   }
 
-  Widget _buildSummaryItem(String title, int value, IconData icon, Color color) {
+  Widget _buildSummaryItem(
+    String title,
+    int value,
+    IconData icon,
+    Color color,
+  ) {
     return Expanded(
       child: Column(
         children: [
@@ -1319,11 +1509,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               color: color.withOpacityValues(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 24,
-            ),
+            child: Icon(icon, color: color, size: 24),
           ),
           const SizedBox(height: 8),
           Text(
@@ -1333,10 +1519,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               color: color,
             ),
           ),
-          Text(
-            title,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          Text(title, style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
     );
@@ -1355,11 +1538,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withOpacityValues(
-              GlassEffectConfig.cardOpacity
+              GlassEffectConfig.cardOpacity,
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
           ),
@@ -1368,19 +1553,24 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             children: [
               Text(
                 '阅读时长排行',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 20),
-              
+
               ..._bookStats.take(10).map((bookStat) {
                 final book = bookStat['book'] as Book;
                 final readingTime = bookStat['readingTime'] as int;
                 final progress = bookStat['progress'] as double;
                 final index = _bookStats.indexOf(bookStat) + 1;
-                
-                return _buildBookRankingItem(book, readingTime, progress, index);
+
+                return _buildBookRankingItem(
+                  book,
+                  readingTime,
+                  progress,
+                  index,
+                );
               }),
             ],
           ),
@@ -1389,12 +1579,19 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     );
   }
 
-  Widget _buildBookRankingItem(Book book, int readingTime, double progress, int rank) {
+  Widget _buildBookRankingItem(
+    Book book,
+    int readingTime,
+    double progress,
+    int rank,
+  ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacityValues(0.3),
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withOpacityValues(0.3),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
@@ -1404,29 +1601,35 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: rank <= 3 
+              color: rank <= 3
                   ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.outline.withOpacityValues(0.3),
+                  : Theme.of(
+                      context,
+                    ).colorScheme.outline.withOpacityValues(0.3),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Center(
               child: Text(
                 '$rank',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: rank <= 3 ? Colors.white : Theme.of(context).colorScheme.onSurface,
+                  color: rank <= 3
+                      ? Colors.white
+                      : Theme.of(context).colorScheme.onSurface,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ),
           ),
           const SizedBox(width: 12),
-          
+
           // 书籍图标
           Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withOpacityValues(0.1),
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withOpacityValues(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -1436,7 +1639,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             ),
           ),
           const SizedBox(width: 12),
-          
+
           // 书籍信息
           Expanded(
             child: Column(
@@ -1444,9 +1647,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               children: [
                 Text(
                   book.title,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1454,7 +1657,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 Text(
                   book.author,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.7),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacityValues(0.7),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1462,7 +1667,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 const SizedBox(height: 4),
                 LinearProgressIndicator(
                   value: progress,
-                  backgroundColor: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                  backgroundColor: Theme.of(
+                    context,
+                  ).colorScheme.outline.withOpacityValues(0.2),
                   valueColor: AlwaysStoppedAnimation(
                     Theme.of(context).colorScheme.primary,
                   ),
@@ -1471,7 +1678,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             ),
           ),
           const SizedBox(width: 12),
-          
+
           // 阅读时间
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -1486,7 +1693,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               Text(
                 '${(progress * 100).toInt()}%',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.7),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacityValues(0.7),
                 ),
               ),
             ],
@@ -1501,7 +1710,8 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         16,
-        MediaQuery.of(context).padding.top + 140, // 增加上方padding以避免被AppBar+TabBar遮挡
+        MediaQuery.of(context).padding.top +
+            140, // 增加上方padding以避免被AppBar+TabBar遮挡
         16,
         20,
       ),
@@ -1510,7 +1720,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           // 成就总览
           _buildAchievementsOverview(),
           const SizedBox(height: 20),
-          
+
           // 成就列表
           _buildAchievementsList(),
         ],
@@ -1531,19 +1741,25 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withOpacityValues(
-              GlassEffectConfig.cardOpacity
+              GlassEffectConfig.cardOpacity,
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                Theme.of(context).colorScheme.primaryContainer.withOpacityValues(0.1),
-                Theme.of(context).colorScheme.secondaryContainer.withOpacityValues(0.1),
+                Theme.of(
+                  context,
+                ).colorScheme.primaryContainer.withOpacityValues(0.1),
+                Theme.of(
+                  context,
+                ).colorScheme.secondaryContainer.withOpacityValues(0.1),
               ],
             ),
           ),
@@ -1552,7 +1768,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withOpacityValues(0.1),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withOpacityValues(0.1),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Icon(
@@ -1576,13 +1794,17 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                     Text(
                       '已获得 12 个成就，还有 8 个等待解锁',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.7),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withOpacityValues(0.7),
                       ),
                     ),
                     const SizedBox(height: 8),
                     LinearProgressIndicator(
                       value: 12 / 20,
-                      backgroundColor: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.outline.withOpacityValues(0.2),
                       valueColor: AlwaysStoppedAnimation(
                         Theme.of(context).colorScheme.primary,
                       ),
@@ -1677,12 +1899,16 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface.withOpacityValues(0.7),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surface.withOpacityValues(0.7),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: achievement['achieved'] as bool
                         ? (achievement['color'] as Color).withOpacityValues(0.3)
-                        : Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                        : Theme.of(
+                            context,
+                          ).colorScheme.outline.withOpacityValues(0.2),
                     width: 1,
                   ),
                 ),
@@ -1692,9 +1918,10 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                       width: 60,
                       height: 60,
                       decoration: BoxDecoration(
-                        color: (achievement['color'] as Color).withOpacityValues(
-                          achievement['achieved'] as bool ? 0.2 : 0.1
-                        ),
+                        color: (achievement['color'] as Color)
+                            .withOpacityValues(
+                              achievement['achieved'] as bool ? 0.2 : 0.1,
+                            ),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Icon(
@@ -1712,12 +1939,18 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                             children: [
                               Text(
                                 achievement['title'] as String,
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: achievement['achieved'] as bool
-                                      ? Theme.of(context).colorScheme.onSurface
-                                      : Theme.of(context).colorScheme.onSurface.withOpacityValues(0.7),
-                                ),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: achievement['achieved'] as bool
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface
+                                          : Theme.of(context)
+                                                .colorScheme
+                                                .onSurface
+                                                .withOpacityValues(0.7),
+                                    ),
                               ),
                               if (achievement['achieved'] as bool) ...[
                                 const SizedBox(width: 8),
@@ -1732,15 +1965,19 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                           const SizedBox(height: 4),
                           Text(
                             achievement['description'] as String,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.7),
-                            ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurface
+                                      .withOpacityValues(0.7),
+                                ),
                           ),
                           if (!(achievement['achieved'] as bool)) ...[
                             const SizedBox(height: 8),
                             LinearProgressIndicator(
                               value: achievement['progress'] as double,
-                              backgroundColor: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                              backgroundColor: Theme.of(
+                                context,
+                              ).colorScheme.outline.withOpacityValues(0.2),
                               valueColor: AlwaysStoppedAnimation(
                                 achievement['color'] as Color,
                               ),
@@ -1748,9 +1985,10 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                             const SizedBox(height: 4),
                             Text(
                               '进度: ${((achievement['progress'] as double) * 100).toInt()}%',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: achievement['color'] as Color,
-                              ),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: achievement['color'] as Color,
+                                  ),
                             ),
                           ],
                         ],
@@ -1780,11 +2018,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withOpacityValues(
-              GlassEffectConfig.cardOpacity
+              GlassEffectConfig.cardOpacity,
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
           ),
@@ -1793,20 +2033,20 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             children: [
               Text(
                 '阅读目标进度',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 20),
-              
+
               // 月度目标
               _buildGoalProgress('本月阅读目标', '12本书', 8, 12, Colors.blue),
               const SizedBox(height: 16),
-              
+
               // 时间目标
               _buildGoalProgress('每周阅读时长', '10小时', 7.5, 10, Colors.orange),
               const SizedBox(height: 16),
-              
+
               // 页数目标
               _buildGoalProgress('每日阅读页数', '50页', 38, 50, Colors.green),
             ],
@@ -1816,7 +2056,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     );
   }
 
-  Widget _buildGoalProgress(String title, String target, double current, double max, Color color) {
+  Widget _buildGoalProgress(
+    String title,
+    String target,
+    double current,
+    double max,
+    Color color,
+  ) {
     final progress = (current / max).clamp(0.0, 1.0);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1826,9 +2072,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           children: [
             Text(
               title,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
             ),
             Text(
               '${current.toInt()} / $target',
@@ -1845,14 +2091,19 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             Container(
               height: 8,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withOpacityValues(0.2),
                 borderRadius: BorderRadius.circular(4),
               ),
             ),
             AnimatedContainer(
               duration: const Duration(milliseconds: 800),
               height: 8,
-              width: MediaQuery.of(context).size.width * progress * 0.8, // 考虑padding
+              width:
+                  MediaQuery.of(context).size.width *
+                  progress *
+                  0.8, // 考虑padding
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [color.withOpacityValues(0.6), color],
@@ -1880,11 +2131,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withOpacityValues(
-              GlassEffectConfig.cardOpacity
+              GlassEffectConfig.cardOpacity,
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
           ),
@@ -1901,13 +2154,18 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                   ),
                   const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withOpacityValues(0.1),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withOpacityValues(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '平均: 2.3页/分钟',
+                      '平均: ${_averagePagesPerMinute.toStringAsFixed(1)}页/分钟',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.primary,
                         fontWeight: FontWeight.w600,
@@ -1917,11 +2175,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 ],
               ),
               const SizedBox(height: 20),
-              Expanded(
-                child: LineChart(
-                  _buildReadingSpeedChartData(),
-                ),
-              ),
+              Expanded(child: LineChart(_buildReadingSpeedChartData())),
             ],
           ),
         ),
@@ -1932,7 +2186,10 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   LineChartData _buildReadingSpeedChartData() {
     // 模拟阅读速度数据（页/分钟）
     final speedData = List.generate(14, (index) {
-      return FlSpot(index.toDouble(), 1.8 + (index % 7) * 0.2 + (index / 14) * 0.5);
+      return FlSpot(
+        index.toDouble(),
+        1.8 + (index % 7) * 0.2 + (index / 14) * 0.5,
+      );
     });
 
     return LineChartData(
@@ -1949,7 +2206,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
       ),
       titlesData: FlTitlesData(
         show: true,
-        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(
+          sideTitles: SideTitles(showTitles: false),
+        ),
         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         bottomTitles: AxisTitles(
           sideTitles: SideTitles(
@@ -2035,11 +2294,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withOpacityValues(
-              GlassEffectConfig.cardOpacity
+              GlassEffectConfig.cardOpacity,
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withOpacityValues(0.2),
               width: 1,
             ),
           ),
@@ -2056,9 +2317,14 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                   ),
                   const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.tertiary.withOpacityValues(0.1),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.tertiary.withOpacityValues(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -2072,19 +2338,21 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 ],
               ),
               const SizedBox(height: 20),
-              
+
               // 热力图网格 (最近90天)
               _buildHeatmapGrid(),
-              
+
               const SizedBox(height: 16),
-              
+
               // 图例
               Row(
                 children: [
                   Text(
                     '少',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacityValues(0.6),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -2095,10 +2363,14 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                       width: 12,
                       height: 12,
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacityValues(opacity),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withOpacityValues(opacity),
                         borderRadius: BorderRadius.circular(2),
                         border: Border.all(
-                          color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outline.withOpacityValues(0.2),
                           width: 0.5,
                         ),
                       ),
@@ -2108,7 +2380,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                   Text(
                     '多',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacityValues(0.6),
                     ),
                   ),
                 ],
@@ -2124,7 +2398,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     // const int totalDays = 91; // 13周 x 7天 (备用)
     const int weeksToShow = 13;
     final List<String> weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-    
+
     return Column(
       children: [
         // 周标题
@@ -2138,7 +2412,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                     '第${weekIndex + 1}周',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       fontSize: 10,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacityValues(0.6),
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -2149,7 +2425,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           ],
         ),
         const SizedBox(height: 8),
-        
+
         // 热力图主体
         Column(
           children: List.generate(7, (dayOfWeek) {
@@ -2162,28 +2438,39 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                     weekDays[dayOfWeek],
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       fontSize: 10,
-                      color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.6),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacityValues(0.6),
                     ),
                     textAlign: TextAlign.center,
                   ),
                 ),
-                
+
                 // 热力图方格
                 ...List.generate(weeksToShow, (weekIndex) {
                   // 模拟阅读强度数据 (0-1)
-                  final intensity = _generateReadingIntensity(weekIndex, dayOfWeek);
-                  
+                  final intensity = _generateReadingIntensity(
+                    weekIndex,
+                    dayOfWeek,
+                  );
+
                   return Expanded(
                     child: Container(
                       margin: const EdgeInsets.all(1),
                       height: 12,
                       decoration: BoxDecoration(
-                        color: intensity > 0 
-                            ? Theme.of(context).colorScheme.primary.withOpacityValues(intensity)
-                            : Theme.of(context).colorScheme.outline.withOpacityValues(0.1),
+                        color: intensity > 0
+                            ? Theme.of(
+                                context,
+                              ).colorScheme.primary.withOpacityValues(intensity)
+                            : Theme.of(
+                                context,
+                              ).colorScheme.outline.withOpacityValues(0.1),
                         borderRadius: BorderRadius.circular(2),
                         border: Border.all(
-                          color: Theme.of(context).colorScheme.outline.withOpacityValues(0.1),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outline.withOpacityValues(0.1),
                           width: 0.5,
                         ),
                       ),
