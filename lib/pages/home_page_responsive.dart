@@ -1515,7 +1515,6 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                   _buildThemeToggle(themeNotifier, isDarkMode),
                   _buildAppThemeSelector(themeNotifier),
                   _buildCustomAccentColorSelector(themeNotifier),
-                  _buildGlobalAccentColorSelector(themeNotifier),
                   _buildAnimationToggle(),
                 ],
               ),
@@ -2223,69 +2222,6 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
     );
   }
 
-  // 全局强调色选择器
-  Widget _buildGlobalAccentColorSelector(ThemeNotifier themeNotifier) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 1),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _showGlobalAccentColorModal(themeNotifier),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    Icons.palette,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '全局强调色',
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      Text(
-                        '设置应用全局强调色',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.4),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   // 显示应用主题选择模态窗口
   void _showAppThemeModal(ThemeNotifier themeNotifier) {
     showModalBottomSheet(
@@ -2298,7 +2234,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
             height: MediaQuery.of(context).size.height * 0.7,
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
             ),
             child: Column(
               children: [
@@ -2308,9 +2246,8 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                     children: [
                       Text(
                         '选择应用主题',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const Spacer(),
                       IconButton(
@@ -2323,17 +2260,19 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                 Expanded(
                   child: GridView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 1.2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 1.2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
                     itemCount: AppThemes.allThemes.length,
                     itemBuilder: (context, index) {
                       final theme = AppThemes.allThemes[index];
-                      final isSelected = themeNotifier.currentAppTheme.name == theme.name;
-                      
+                      final isSelected =
+                          themeNotifier.currentAppTheme.name == theme.name;
+
                       return GestureDetector(
                         onTap: () {
                           themeNotifier.setAppTheme(theme);
@@ -2343,17 +2282,22 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: isSelected 
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).colorScheme.outline
+                                        .withValues(alpha: 0.3),
                               width: isSelected ? 2 : 1,
                             ),
                             gradient: LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                               colors: [
-                                theme.lightColorScheme.primary.withValues(alpha: 0.1),
-                                theme.lightColorScheme.secondary.withValues(alpha: 0.1),
+                                theme.lightColorScheme.primary.withValues(
+                                  alpha: 0.1,
+                                ),
+                                theme.lightColorScheme.secondary.withValues(
+                                  alpha: 0.1,
+                                ),
                               ],
                             ),
                           ),
@@ -2368,9 +2312,8 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                               const SizedBox(height: 8),
                               Text(
                                 theme.displayName,
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 4),
@@ -2423,7 +2366,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
             height: MediaQuery.of(context).size.height * 0.6,
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
             ),
             child: Column(
               children: [
@@ -2433,9 +2378,8 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                     children: [
                       Text(
                         '自定义强调色',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const Spacer(),
                       IconButton(
@@ -2448,17 +2392,19 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                 Expanded(
                   child: GridView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
-                      childAspectRatio: 1,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 4,
+                          childAspectRatio: 1,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
                     itemCount: AppThemes.accentColors.length,
                     itemBuilder: (context, index) {
                       final color = AppThemes.accentColors[index];
-                      final isSelected = themeNotifier.customAccentColor?.value == color.value;
-                      
+                      final isSelected =
+                          themeNotifier.customAccentColor?.value == color.value;
+
                       return GestureDetector(
                         onTap: () {
                           themeNotifier.setCustomAccentColor(color);
@@ -2469,103 +2415,19 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                             color: color,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: isSelected 
-                                ? Theme.of(context).colorScheme.onSurface
-                                : Colors.transparent,
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.onSurface
+                                  : Colors.transparent,
                               width: 2,
                             ),
                           ),
                           child: isSelected
-                            ? const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 24,
-                              )
-                            : null,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  // 显示全局强调色选择模态窗口
-  void _showGlobalAccentColorModal(ThemeNotifier themeNotifier) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return Container(
-            height: MediaQuery.of(context).size.height * 0.6,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Text(
-                        '全局强调色',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: GridView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
-                      childAspectRatio: 1,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                    ),
-                    itemCount: AppThemes.accentColors.length,
-                    itemBuilder: (context, index) {
-                      final color = AppThemes.accentColors[index];
-                      final isSelected = themeNotifier.globalAccentColor?.value == color.value;
-                      
-                      return GestureDetector(
-                        onTap: () {
-                          themeNotifier.setGlobalAccentColor(color);
-                          Navigator.pop(context);
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: color,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isSelected 
-                                ? Theme.of(context).colorScheme.onSurface
-                                : Colors.transparent,
-                              width: 2,
-                            ),
-                          ),
-                          child: isSelected
-                            ? const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 24,
-                              )
-                            : null,
+                              ? const Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                  size: 24,
+                                )
+                              : null,
                         ),
                       );
                     },
