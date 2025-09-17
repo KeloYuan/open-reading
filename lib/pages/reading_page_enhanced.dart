@@ -1180,15 +1180,21 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               0.5 // 双页时减少内边距
         : _horizontalPadding;
 
-    // 智能显示区域计算 - 与分页算法保持一致
+    // 智能显示区域计算 - 与分页算法保持严格一致
     final statusBarHeight = MediaQuery.of(context).padding.top;
     final screenHeight = MediaQuery.of(context).size.height;
+    final systemPadding = MediaQuery.of(context).padding;
 
-    // 智能留白计算：根据屏幕大小自适应
-    final reservedSpace = screenHeight * 0.2; // 总共预留20%空间
+    // 使用与分页算法完全相同的可用高度计算
+    final availableHeight =
+        screenHeight * 0.9 - statusBarHeight - systemPadding.bottom;
 
-    // 动态分配留白空间
-    final topPadding = (reservedSpace * 0.25).clamp(20.0, 40.0); // 25%给顶部
+    // 保守的padding设置，确保内容区域不超过分页时的可用高度
+    final topPadding = statusBarHeight + 20.0; // 状态栏 + 安全间距
+    final bottomPadding = 40.0; // 固定底部安全间距
+
+    // 确保内容区域高度不超过分页算法的availableHeight
+    final maxContentHeight = availableHeight - 40.0; // 额外减少40px作为安全边距
 
     return RepaintBoundary(
       child: Container(
@@ -1202,39 +1208,44 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             padding: EdgeInsets.only(
               left: horizontalPadding,
               right: horizontalPadding,
-              top: topPadding + statusBarHeight,
-              bottom: 8.0, // 最小化底部留白，最大化阅读区域
+              top: topPadding,
+              bottom: bottomPadding,
             ),
-            child: Column(
-              children: [
-                // 主要文本内容区域
-                Expanded(
-                  child: Text(
-                    pageContent,
-                    style: TextStyle(
-                      fontSize: _fontSize,
-                      height: _lineSpacing,
-                      letterSpacing: _letterSpacing,
-                      color: _currentTheme.textColor, // 使用阅读主题的文字颜色
-                      fontFamily: _fontFamily == 'System' ? null : _fontFamily,
-                    ),
-                    textAlign: TextAlign.justify,
-                  ),
-                ),
-                // 页码标签 - 紧凑设计
-                Container(
-                  height: 20.0,
-                  alignment: Alignment.center,
-                  child: Text(
-                    '${index + 1} / ${_pages.length}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: _currentTheme.textColor.withValues(alpha: 0.6),
-                      fontFamily: 'System',
+            child: SizedBox(
+              height: maxContentHeight, // 严格限制内容区域高度
+              child: Column(
+                children: [
+                  // 主要文本内容区域
+                  Expanded(
+                    child: Text(
+                      pageContent,
+                      style: TextStyle(
+                        fontSize: _fontSize,
+                        height: _lineSpacing,
+                        letterSpacing: _letterSpacing,
+                        color: _currentTheme.textColor, // 使用阅读主题的文字颜色
+                        fontFamily: _fontFamily == 'System'
+                            ? null
+                            : _fontFamily,
+                      ),
+                      textAlign: TextAlign.justify,
                     ),
                   ),
-                ),
-              ],
+                  // 页码标签 - 紧凑设计
+                  Container(
+                    height: 20.0,
+                    alignment: Alignment.center,
+                    child: Text(
+                      '${index + 1} / ${_pages.length}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: _currentTheme.textColor.withValues(alpha: 0.6),
+                        fontFamily: 'System',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -2595,7 +2606,11 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.bookmark_remove, color: Colors.white, size: 20),
+                const Icon(
+                  Icons.bookmark_remove,
+                  color: Colors.white,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Text('已删除书签：第${_currentPageIndex + 1}页'),
               ],
@@ -2724,7 +2739,11 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.bookmark_remove, color: Colors.white, size: 20),
+                const Icon(
+                  Icons.bookmark_remove,
+                  color: Colors.white,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Text('已删除书签：第${bookmarkToDelete.pageNumber}页'),
               ],
@@ -2873,7 +2892,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                     itemBuilder: (context, index) {
                       final isCurrentPage = index == _currentPageIndex;
                       final modalTextColor = _getModalTextColor();
-                      final modalSecondaryTextColor = _getModalSecondaryTextColor();
+                      final modalSecondaryTextColor =
+                          _getModalSecondaryTextColor();
 
                       return AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
@@ -2884,7 +2904,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                             height: 32,
                             decoration: BoxDecoration(
                               color: isCurrentPage
-                                  ? _getModalAccentColor().withValues(alpha: 0.3)
+                                  ? _getModalAccentColor().withValues(
+                                      alpha: 0.3,
+                                    )
                                   : modalTextColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                               border: isCurrentPage
@@ -3064,7 +3086,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                           itemCount: _bookmarks.length,
                           itemBuilder: (context, index) {
                             final bookmark = _bookmarks[index];
-                            final isCurrentBookmark = bookmark.pageNumber == _currentPageIndex + 1;
+                            final isCurrentBookmark =
+                                bookmark.pageNumber == _currentPageIndex + 1;
 
                             return AnimatedContainer(
                               duration: const Duration(milliseconds: 300),
@@ -3080,12 +3103,18 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
                                       color: isCurrentBookmark
-                                          ? _getModalAccentColor().withValues(alpha: 0.1)
-                                          : _getModalTextColor().withValues(alpha: 0.05),
+                                          ? _getModalAccentColor().withValues(
+                                              alpha: 0.1,
+                                            )
+                                          : _getModalTextColor().withValues(
+                                              alpha: 0.05,
+                                            ),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
                                         color: isCurrentBookmark
-                                            ? _getModalAccentColor().withValues(alpha: 0.3)
+                                            ? _getModalAccentColor().withValues(
+                                                alpha: 0.3,
+                                              )
                                             : _getModalDividerColor(),
                                         width: isCurrentBookmark ? 1.5 : 1,
                                       ),
@@ -3095,9 +3124,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                         Container(
                                           padding: const EdgeInsets.all(8),
                                           decoration: BoxDecoration(
-                                            color: _getModalAccentColor().withValues(
-                                              alpha: 0.2,
-                                            ),
+                                            color: _getModalAccentColor()
+                                                .withValues(alpha: 0.2),
                                             borderRadius: BorderRadius.circular(
                                               8,
                                             ),
@@ -3130,7 +3158,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                               Text(
                                                 '创建于 ${_formatDate(bookmark.createDate)}',
                                                 style: TextStyle(
-                                                  color: _getModalSecondaryTextColor(),
+                                                  color:
+                                                      _getModalSecondaryTextColor(),
                                                   fontSize: 12,
                                                 ),
                                               ),
@@ -3140,7 +3169,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                         // 删除按钮
                                         GestureDetector(
                                           onTap: () {
-                                            _deleteBookmarkWithAnimation(bookmark.id!);
+                                            _deleteBookmarkWithAnimation(
+                                              bookmark.id!,
+                                            );
                                           },
                                           child: Container(
                                             padding: const EdgeInsets.all(8),

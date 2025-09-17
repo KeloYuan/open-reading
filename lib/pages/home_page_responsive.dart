@@ -712,23 +712,6 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
       ),
       child: Stack(
         children: [
-          // 添加背景图案让毛玻璃效果更明显
-          ...List.generate(15, (index) {
-            return Positioned(
-              left: (index * 89.0) % MediaQuery.of(context).size.width,
-              top: (index * 143.0) % MediaQuery.of(context).size.height,
-              child: Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.primary.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-            );
-          }),
           // 主内容
           _isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -742,21 +725,23 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   ).colorScheme.surface.withValues(alpha: 0.9), // 半透明背景
                   edgeOffset:
                       MediaQuery.of(context).padding.top +
-                      40, // 下拉刷新UI往下移，避开状态栏和AppBar
+                      40, // 下拉刷新UI往下移，避开状态栏，调整到40px配合卡片位置
                   child: ListView(
                     padding: EdgeInsets.fromLTRB(
                       16,
-                      MediaQuery.of(context).padding.top + 60,
+                      MediaQuery.of(context).padding.top +
+                          60, // 增加顶部padding：状态栏+60px，让卡片下移
                       16,
-                      MediaQuery.of(context).padding.bottom + 90,
-                    ), // 沉浸式padding：顶部=状态栏+AppBar，底部=导航栏+额外间距
+                      MediaQuery.of(context).padding.bottom +
+                          20, // 减少底部padding：导航栏+20px
+                    ), // 优化padding：调整上下空白，确保内容完整显示
                     children: [
                       _buildWelcomeCard(),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 6),
                       _buildSummaryCards(),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 8),
                       _buildWeeklyChartCard(),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 8),
                       _buildRecentActivity(),
                     ],
                   ),
@@ -792,10 +777,10 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(
                       16,
-                      MediaQuery.of(context).padding.top + 16,
+                      MediaQuery.of(context).padding.top + 8, // 减少AppBar内间距
                       16,
-                      16,
-                    ), // 沉浸式：状态栏高度 + 16px间距
+                      8, // 减少底部间距
+                    ), // 沉浸式：状态栏高度 + 8px间距
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
@@ -823,13 +808,13 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
     final todayMinutes = (_summaryStats['today'] ?? 0) ~/ 60;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 4),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Theme.of(
                 context,
@@ -973,7 +958,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             Expanded(
               child: GestureDetector(
                 onTap: () => _navigateToDetailedStats(),
@@ -988,7 +973,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 6),
         Row(
           children: [
             Expanded(
@@ -1003,7 +988,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             Expanded(
               child: _StatCard(
                 title: '书架藏书',
@@ -1020,13 +1005,37 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
   }
 
   Widget _buildWideLayout(int todayMinutes, int weekMinutes, int totalMinutes) {
+    // 获取iOS设备优化的GridView间距和纵横比
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    // 根据iOS设备屏幕尺寸优化间距和纵横比
+    double gridSpacing, aspectRatio;
+
+    if (screenWidth >= 428) {
+      // iPhone Pro Max等大屏设备
+      gridSpacing = 12.0;
+      aspectRatio = 1.4;
+    } else if (screenWidth >= 414) {
+      // iPhone Plus等设备
+      gridSpacing = 12.0;
+      aspectRatio = 1.3;
+    } else if (screenWidth >= 390) {
+      // iPhone Pro等设备
+      gridSpacing = 10.0;
+      aspectRatio = 1.3;
+    } else {
+      // iPhone SE, Mini等小屏设备
+      gridSpacing = 10.0;
+      aspectRatio = 1.2;
+    }
+
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: 1.4,
+      crossAxisSpacing: gridSpacing,
+      mainAxisSpacing: gridSpacing,
+      childAspectRatio: aspectRatio,
       children: [
         GestureDetector(
           onTap: () => _navigateToDetailedStats(),
@@ -1482,23 +1491,6 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
       ),
       child: Stack(
         children: [
-          // 添加背景图案让毛玻璃效果更明显
-          ...List.generate(12, (index) {
-            return Positioned(
-              left: (index * 97.0) % MediaQuery.of(context).size.width,
-              top: (index * 157.0) % MediaQuery.of(context).size.height,
-              child: Container(
-                width: 5,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.primary.withValues(alpha: 0.07),
-                  borderRadius: BorderRadius.circular(2.5),
-                ),
-              ),
-            );
-          }),
           // 主内容
           ListView(
             padding: EdgeInsets.fromLTRB(
@@ -2465,7 +2457,7 @@ class _StatCard extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          padding: const EdgeInsets.all(12.0),
+          padding: const EdgeInsets.all(10.0),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(16),
@@ -2489,7 +2481,7 @@ class _StatCard extends StatelessWidget {
                 ),
                 child: Icon(icon, size: 20, color: color),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Flexible(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

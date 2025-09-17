@@ -112,23 +112,6 @@ class _LibraryPageState extends State<LibraryPage> {
           ),
           child: Stack(
             children: [
-              // 添加背景图案让毛玻璃效果更明显
-              ...List.generate(15, (index) {
-                return Positioned(
-                  left: (index * 89.0) % MediaQuery.of(context).size.width,
-                  top: (index * 143.0) % MediaQuery.of(context).size.height,
-                  child: Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withOpacityValues(0.06),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  ),
-                );
-              }),
               // 主内容
               _isLoading
                   ? const Center(child: CircularProgressIndicator())
