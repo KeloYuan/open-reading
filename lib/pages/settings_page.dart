@@ -857,8 +857,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       itemBuilder: (context, index) {
                         final color = AppThemes.accentColors[index];
                         final isSelected =
-                            themeNotifier.customAccentColor?.value ==
-                            color.value;
+                            themeNotifier.customAccentColor?.toARGB32() ==
+                            color.toARGB32();
 
                         return GestureDetector(
                           onTap: () {
@@ -973,7 +973,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       Text(
                         themeNotifier.globalAccentColor != null
-                            ? '${AppThemes.getAccentColorName(themeNotifier.globalAccentColor!)}'
+                            ? AppThemes.getAccentColorName(
+                                themeNotifier.globalAccentColor!,
+                              )
                             : '跟随系统',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(
@@ -1187,8 +1189,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       itemBuilder: (context, index) {
                         final color = AppThemes.accentColors[index];
                         final isSelected =
-                            themeNotifier.globalAccentColor?.value ==
-                            color.value;
+                            themeNotifier.globalAccentColor?.toARGB32() ==
+                            color.toARGB32();
                         final colorName = AppThemes.getAccentColorName(color);
 
                         return GestureDetector(

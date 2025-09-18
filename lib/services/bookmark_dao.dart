@@ -55,11 +55,7 @@ class BookmarkDao {
   // 删除书签
   Future<int> deleteBookmark(int id) async {
     final db = await _databaseService.database;
-    return await db.delete(
-      'bookmarks',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.delete('bookmarks', where: 'id = ?', whereArgs: [id]);
   }
 
   // 删除指定页面的书签
@@ -80,6 +76,17 @@ class BookmarkDao {
       {'note': note},
       where: 'id = ?',
       whereArgs: [id],
+    );
+  }
+
+  // 更新整个书签对象
+  Future<int> updateBookmark(Bookmark bookmark) async {
+    final db = await _databaseService.database;
+    return await db.update(
+      'bookmarks',
+      bookmark.toMap(),
+      where: 'id = ?',
+      whereArgs: [bookmark.id],
     );
   }
 

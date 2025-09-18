@@ -329,23 +329,23 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                     bottom: MediaQuery.of(context).padding.bottom + 25,
                   ), // 动态适配底部安全区域
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(45), // 增大圆角半径，更Q弹
+                    borderRadius: BorderRadius.circular(60), // 增大圆角半径，更Q弹
                     child: BackdropFilter(
                       filter: ImageFilter.blur(
                         sigmaX: GlassEffectConfig.navigationBarBlur,
                         sigmaY: GlassEffectConfig.navigationBarBlur,
                       ),
                       child: Container(
-                        height: 75, // 从70增加到75
+                        height: 68, // 从70增加到75
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 36,
-                        ), // 从32增加到36
+                          horizontal: 20, // 进一步减少到20px，让背景更紧凑
+                        ),
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.surface
                               .withOpacityValues(
                                 GlassEffectConfig.navigationBarOpacity,
                               ),
-                          borderRadius: BorderRadius.circular(45), // 更大的圆角半径
+                          borderRadius: BorderRadius.circular(60), // 更大的圆角半径
                           border: Border.all(
                             color: Theme.of(
                               context,
@@ -580,7 +580,7 @@ class _BounceNavigationItemState extends State<_BounceNavigationItem>
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200), // 减少动画时间
               curve: Curves.easeOut, // 简化曲线
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               margin: const EdgeInsets.symmetric(horizontal: 5),
               decoration: BoxDecoration(
                 color: widget.isSelected
@@ -2395,7 +2395,8 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                     itemBuilder: (context, index) {
                       final color = AppThemes.accentColors[index];
                       final isSelected =
-                          themeNotifier.customAccentColor?.value == color.value;
+                          themeNotifier.customAccentColor?.toARGB32() ==
+                          color.toARGB32();
 
                       return GestureDetector(
                         onTap: () {

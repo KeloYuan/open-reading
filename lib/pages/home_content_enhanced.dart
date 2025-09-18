@@ -332,7 +332,6 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
   ) {
     // 获取iOS设备优化的响应式间距
     final screenWidth = MediaQuery.of(context).size.width;
-    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
 
     // 动态调整间距 - 考虑iOS设备尺寸差异
     double cardSpacing, rowSpacing;
@@ -415,7 +414,6 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
   Widget _buildWideLayout(int todayMinutes, int weekMinutes, int totalMinutes) {
     // 获取iOS设备优化的GridView间距和纵横比
     final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
 
     // 根据iOS设备屏幕尺寸优化间距和纵横比
     double gridSpacing, aspectRatio;

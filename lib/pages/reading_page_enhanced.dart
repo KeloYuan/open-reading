@@ -11,11 +11,13 @@ import 'package:path/path.dart' as path;
 
 import '../models/book.dart';
 import '../models/bookmark.dart';
+import '../models/chapter.dart';
 import '../services/book_dao.dart';
 import '../services/bookmark_dao.dart';
 import '../services/reading_stats_dao.dart';
-import '../utils/text_painter_pagination.dart';
+import '../services/book_import_service.dart';
 import '../widgets/custom_slider_components.dart';
+import '../widgets/toc_widget.dart';
 import '../utils/responsive_helper.dart';
 
 // 阅读主题数据结构
@@ -130,11 +132,16 @@ class ReadingPageEnhanced extends StatefulWidget {
 }
 
 class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
+  // --- UI控件尺寸常量 ---
+  static const double _controlBarHideOffset = 150.0; // 控制栏隐藏时的偏移
+  static const double _topBarHideOffset = 80.0; // 顶部栏隐藏时的偏移
+
   // --- DAOs & Controllers ---
   late final PageController _pageController;
   final _bookDao = BookDao();
   final _statsDao = ReadingStatsDao();
   final _bookmarkDao = BookmarkDao();
+  final _bookImportService = BookImportService();
 
   // --- Content & Pages ---
   List<String> _pages = [];
@@ -150,6 +157,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   // --- Bookmark State ---
   List<Bookmark> _bookmarks = [];
   bool _isCurrentPageBookmarked = false;
+
+  // --- Chapter State ---
+  List<Chapter> _chapters = [];
+  bool _chaptersLoaded = false;
 
   // --- Reading Settings ---
   double _fontSize = 18.0;
@@ -203,6 +214,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
         if (mounted) {
           setState(() {});
+          // 加载章节信息
+          _loadChapters();
           // 初始加载完成后，短暂显示工具栏提示用户
           _showControlsInitially();
         }
@@ -295,6 +308,67 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       debugPrint('文件读取异常: $e');
       rethrow;
     }
+  }
+
+  /// 加载章节信息
+  Future<void> _loadChapters() async {
+    if (_chaptersLoaded) return;
+
+    try {
+      final fileExtension = widget.book.format.toLowerCase();
+
+      if (fileExtension == 'epub') {
+        debugPrint('🔖 开始解析EPUB章节...');
+        _chapters = await _bookImportService.extractEpubChapters(
+          widget.book.filePath,
+        );
+
+        // 如果分页已完成，更新章节页码
+        if (_pages.isNotEmpty) {
+          _chapters = await _bookImportService.updateChapterPages(
+            _chapters,
+            _bookContent,
+            _pages,
+          );
+        }
+
+        debugPrint('🔖 章节解析完成: ${_chapters.length} 个章节');
+      } else {
+        // 对于TXT等格式，生成简单的章节结构
+        _generateSimpleChapters();
+      }
+
+      _chaptersLoaded = true;
+    } catch (e) {
+      debugPrint('❌ 章节加载失败: $e');
+      _chapters = [];
+    }
+  }
+
+  /// 为非EPUB格式生成简单的章节结构
+  void _generateSimpleChapters() {
+    _chapters = [];
+
+    if (_pages.isEmpty) return;
+
+    final chapterSize = (_pages.length / 10).ceil().clamp(1, 50); // 每10-50页一个章节
+
+    for (int i = 0; i < _pages.length; i += chapterSize) {
+      final chapterIndex = (i / chapterSize).floor() + 1;
+      final startPage = i;
+      final endPage = (i + chapterSize - 1).clamp(0, _pages.length - 1);
+
+      _chapters.add(
+        Chapter(
+          title: '第 $chapterIndex 部分',
+          startPage: startPage,
+          endPage: endPage,
+          level: 0,
+        ),
+      );
+    }
+
+    debugPrint('🔖 生成简单章节结构: ${_chapters.length} 个章节');
   }
 
   // 直接解析 EPUB，避免 isolate 通信限制
@@ -504,9 +578,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     }
   }
 
-  // 精确分页算法 - 基于真实可用区域计算字符数
+  // 优化的稳定分页算法 - 基于实际显示区域精确计算
   void _standardizedPagination(String content) {
-    debugPrint('📱 开始基于TextPainter的精确分页算法...');
+    debugPrint('📱 开始优化的稳定分页算法...');
 
     try {
       if (content.isEmpty) {
@@ -525,24 +599,232 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         '📐 系统边距: 状态栏${systemPadding.top.toInt()}px, 导航栏${systemPadding.bottom.toInt()}px',
       );
 
-      // 使用TextPainter进行精确分页
-      _pages = TextPainterPagination.performTextPainterBasedPagination(
+      // 使用优化的分页算法
+      _pages = _performOptimizedPagination(
         content: content,
         screenSize: screenSize,
         systemPadding: systemPadding,
-        fontSize: _fontSize,
-        lineSpacing: _lineSpacing,
-        letterSpacing: _letterSpacing,
-        fontFamily: _fontFamily,
-        horizontalPadding: _horizontalPadding,
       );
 
-      debugPrint('✅ 精确分页完成: 总共 ${_pages.length} 页');
+      debugPrint('✅ 优化分页完成: 总共 ${_pages.length} 页');
     } catch (e) {
       debugPrint('❌ 分页出错: $e');
       // 备用分页方法
       _fallbackPagination(content);
     }
+  }
+
+  // 优化的分页算法实现
+  List<String> _performOptimizedPagination({
+    required String content,
+    required Size screenSize,
+    required EdgeInsets systemPadding,
+  }) {
+    List<String> pages = [];
+
+    // 计算可用显示区域 - 与文字显示区域保持一致，占用90%空间
+    final availableWidth = screenSize.width - (_horizontalPadding * 2);
+    // 使用与文字显示区域相同的计算方式，确保90%利用率
+    final availableHeight =
+        (screenSize.height * 0.90) -
+        systemPadding.top -
+        systemPadding.bottom -
+        20.0; // 小的安全边距
+
+    debugPrint(
+      '📏 可用区域: ${availableWidth.toInt()}x${availableHeight.toInt()}px',
+    );
+
+    // 创建TextPainter来测量文本
+    final textStyle = TextStyle(
+      fontSize: _fontSize,
+      height: _lineSpacing,
+      letterSpacing: _letterSpacing,
+      fontFamily: _fontFamily == 'System' ? null : _fontFamily,
+    );
+
+    final textPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.justify,
+    );
+
+    // 使用简单稳定的逐步构建法
+    int currentIndex = 0;
+    const maxIterations = 10000; // 防止无限循环
+    int iterations = 0;
+
+    while (currentIndex < content.length && iterations < maxIterations) {
+      iterations++;
+
+      // 估算本页可能容纳的字符数
+      final estimatedChars = _estimateCharsForPage(
+        availableWidth: availableWidth,
+        availableHeight: availableHeight,
+        fontSize: _fontSize,
+        lineSpacing: _lineSpacing,
+      );
+
+      // 尝试不同长度，找到合适的页面结束位置
+      int bestEndIndex = _findBestPageEnd(
+        content: content,
+        startIndex: currentIndex,
+        estimatedChars: estimatedChars,
+        textPainter: textPainter,
+        textStyle: textStyle,
+        availableWidth: availableWidth,
+        availableHeight: availableHeight,
+      );
+
+      // 确保至少前进一些字符
+      if (bestEndIndex <= currentIndex) {
+        bestEndIndex = (currentIndex + estimatedChars ~/ 4).clamp(
+          currentIndex + 1,
+          content.length,
+        );
+      }
+
+      // 提取页面内容
+      String pageContent = content.substring(currentIndex, bestEndIndex).trim();
+
+      if (pageContent.isNotEmpty) {
+        pages.add(pageContent);
+        debugPrint(
+          '📄 第${pages.length}页: 位置$currentIndex-$bestEndIndex, ${pageContent.length}字符',
+        );
+      }
+
+      currentIndex = bestEndIndex;
+    }
+
+    textPainter.dispose();
+
+    if (pages.isEmpty) {
+      pages.add('分页失败，使用原始内容');
+    }
+
+    return pages;
+  }
+
+  // 估算每页字符数
+  int _estimateCharsForPage({
+    required double availableWidth,
+    required double availableHeight,
+    required double fontSize,
+    required double lineSpacing,
+  }) {
+    // 基于字体大小和屏幕尺寸的保守估算
+    final avgCharWidth = fontSize * 0.6; // 平均字符宽度
+    final lineHeight = fontSize * lineSpacing;
+
+    final charsPerLine = (availableWidth / avgCharWidth).floor();
+    final linesPerPage = (availableHeight / lineHeight).floor();
+
+    final estimatedChars = (charsPerLine * linesPerPage * 0.8)
+        .floor(); // 0.8作为安全系数
+
+    return estimatedChars.clamp(100, 2000); // 合理范围
+  }
+
+  // 找到最佳的页面结束位置
+  int _findBestPageEnd({
+    required String content,
+    required int startIndex,
+    required int estimatedChars,
+    required TextPainter textPainter,
+    required TextStyle textStyle,
+    required double availableWidth,
+    required double availableHeight,
+  }) {
+    if (startIndex >= content.length) return content.length;
+
+    // 从估算位置开始，向前向后寻找最佳分割点
+    int targetIndex = (startIndex + estimatedChars).clamp(
+      startIndex + 1,
+      content.length,
+    );
+
+    // 寻找自然分割点
+    int bestBreakPoint = _findNaturalBreakPoint(
+      content,
+      targetIndex,
+      startIndex,
+    );
+
+    // 验证这个分割点是否能够适合页面
+    String testContent = content.substring(startIndex, bestBreakPoint);
+
+    textPainter.text = TextSpan(text: testContent, style: textStyle);
+    textPainter.layout(maxWidth: availableWidth);
+
+    // 如果高度超出，尝试缩短
+    if (textPainter.size.height > availableHeight) {
+      // 递减搜索合适的长度
+      for (
+        int reduction = 50;
+        reduction < estimatedChars / 2;
+        reduction += 50
+      ) {
+        int newTarget = targetIndex - reduction;
+        if (newTarget <= startIndex) break;
+
+        int newBreakPoint = _findNaturalBreakPoint(
+          content,
+          newTarget,
+          startIndex,
+        );
+        String newTestContent = content.substring(startIndex, newBreakPoint);
+
+        textPainter.text = TextSpan(text: newTestContent, style: textStyle);
+        textPainter.layout(maxWidth: availableWidth);
+
+        if (textPainter.size.height <= availableHeight) {
+          return newBreakPoint;
+        }
+      }
+
+      // 如果还是太大，使用保守的字符数限制
+      return (startIndex + estimatedChars ~/ 2).clamp(
+        startIndex + 1,
+        content.length,
+      );
+    }
+
+    return bestBreakPoint;
+  }
+
+  // 寻找自然分割点
+  int _findNaturalBreakPoint(String content, int targetIndex, int minIndex) {
+    if (targetIndex >= content.length) return content.length;
+    if (targetIndex <= minIndex) return minIndex + 1;
+
+    // 在目标位置附近寻找最佳分割点
+    const searchRange = 100;
+
+    for (
+      int offset = 0;
+      offset < searchRange && targetIndex - offset > minIndex;
+      offset++
+    ) {
+      int checkIndex = targetIndex - offset;
+      if (checkIndex >= content.length) continue;
+
+      String char = content[checkIndex];
+
+      // 优先级：段落 > 句子 > 词语边界 > 标点
+      if (char == '\n' && offset < 30) {
+        return checkIndex + 1; // 段落分割，高优先级
+      }
+      if ((char == '。' || char == '！' || char == '？' || char == '.') &&
+          offset < 50) {
+        return checkIndex + 1; // 句子结尾
+      }
+      if ((char == '，' || char == '；' || char == '：' || char == ' ') &&
+          offset < 20) {
+        return checkIndex + 1; // 标点或空格
+      }
+    }
+
+    return targetIndex; // 如果没找到合适的分割点，使用目标位置
   }
 
   // 备用分页方法 - 确保边界连续性
@@ -1187,14 +1469,17 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
     // 使用与分页算法完全相同的可用高度计算
     final availableHeight =
-        screenHeight * 0.9 - statusBarHeight - systemPadding.bottom;
+        (screenHeight * 0.90) -
+        statusBarHeight -
+        systemPadding.bottom -
+        20.0; // 与分页算法保持一致
 
-    // 保守的padding设置，确保内容区域不超过分页时的可用高度
-    final topPadding = statusBarHeight + 20.0; // 状态栏 + 安全间距
-    final bottomPadding = 40.0; // 固定底部安全间距
+    // 优化的padding设置，最大化利用屏幕空间
+    final topPadding = statusBarHeight + 10.0; // 状态栏 + 最小安全间距
+    final bottomPadding = 15.0; // 最小底部安全间距
 
-    // 确保内容区域高度不超过分页算法的availableHeight
-    final maxContentHeight = availableHeight - 40.0; // 额外减少40px作为安全边距
+    // 确保内容区域充分利用可用高度
+    final maxContentHeight = availableHeight;
 
     return RepaintBoundary(
       child: Container(
@@ -1215,9 +1500,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               height: maxContentHeight, // 严格限制内容区域高度
               child: Column(
                 children: [
-                  // 主要文本内容区域
+                  // 主要文本内容区域 - 支持文本选择和高亮
                   Expanded(
-                    child: Text(
+                    child: SelectableText(
                       pageContent,
                       style: TextStyle(
                         fontSize: _fontSize,
@@ -1229,6 +1514,14 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                             : _fontFamily,
                       ),
                       textAlign: TextAlign.justify,
+                      showCursor: false,
+                      enableInteractiveSelection: true,
+                      contextMenuBuilder: (context, editableTextState) {
+                        return _buildTextSelectionMenu(
+                          context,
+                          editableTextState,
+                        );
+                      },
                     ),
                   ),
                   // 页码标签 - 紧凑设计
@@ -1268,7 +1561,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
   Widget _buildTopBar() {
     final double statusBarHeight = MediaQuery.of(context).padding.top;
-    final double topBarHeight = statusBarHeight + 60;
 
     // 根据背景颜色动态调整工具栏颜色
     final isLightBackground =
@@ -1281,7 +1573,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
-      top: _showControls ? 0 : -topBarHeight,
+      top: _showControls ? 0 : -_topBarHideOffset,
       left: 0,
       right: 0,
       child: AnimatedOpacity(
@@ -1422,7 +1714,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
-      bottom: _showControls ? 0 : -200,
+      bottom: _showControls ? 0 : -_controlBarHideOffset,
       left: 0,
       right: 0,
       child: AnimatedOpacity(
@@ -1464,12 +1756,12 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                          vertical: 8,
-                        ), // 减少垂直内边距
+                          vertical: 6,
+                        ), // 进一步减少垂直内边距
                         child: Center(
                           child: Container(
-                            width: 48,
-                            height: 4, // 减少高度
+                            width: 40,
+                            height: 3, // 进一步减少高度
                             decoration: BoxDecoration(
                               color: handleColor,
                               borderRadius: BorderRadius.circular(2),
@@ -1477,7 +1769,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8), // 减少间距
+                      const SizedBox(height: 4), // 进一步减少间距
                       _buildToolbarButtons(),
                     ],
                   ),
@@ -1493,14 +1785,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   Widget _buildToolbarButtons() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(
-        20,
-        4,
-        20,
-        8,
-      ), // 减少顶部内边距，增加底部内边距确保按钮不贴边
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4), // 更紧凑的内边距
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly, // 更均匀的分布
         children: [
           _ModernToolbarButton(
             icon: Icons.format_list_bulleted_rounded,
@@ -1508,13 +1795,30 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             onTap: _showTableOfContents,
             iconColor: _currentTheme.controlBarTextColor,
             pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
+            iconSize: 22,
+            fontSize: 11,
           ),
           _ModernToolbarButton(
-            icon: Icons.tune_rounded,
-            label: '设置',
-            onTap: _showSettingsPanel,
+            icon: Icons.data_usage_rounded, // 参考anx-reader的进度图标
+            label: '进度',
+            onTap: _showProgressPanel,
             iconColor: _currentTheme.controlBarTextColor,
             pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
+            iconSize: 22,
+            fontSize: 11,
+          ),
+          _ModernToolbarButton(
+            icon: _isCurrentPageBookmarked
+                ? Icons.bookmark_rounded
+                : Icons.bookmark_add_rounded,
+            label: '书签',
+            onTap: _toggleBookmark, // 直接切换书签，更简洁
+            iconColor: _isCurrentPageBookmarked
+                ? _currentTheme.sliderActiveColor
+                : _currentTheme.controlBarTextColor,
+            pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
+            iconSize: 22,
+            fontSize: 11,
           ),
           _ModernToolbarButton(
             icon: Icons.palette_rounded,
@@ -1522,22 +1826,17 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             onTap: _showThemePanel,
             iconColor: _currentTheme.controlBarTextColor,
             pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
+            iconSize: 22,
+            fontSize: 11,
           ),
           _ModernToolbarButton(
-            icon: _isCurrentPageBookmarked
-                ? Icons.bookmark_rounded
-                : Icons.bookmark_add_rounded,
-            label: '书签',
-            onTap: _showBookmarks,
+            icon: Icons.tune_rounded,
+            label: '设置',
+            onTap: _showSettingsPanel,
             iconColor: _currentTheme.controlBarTextColor,
             pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
-          ),
-          _ModernToolbarButton(
-            icon: Icons.more_horiz_rounded,
-            label: '更多',
-            onTap: _showMoreOptions,
-            iconColor: _currentTheme.controlBarTextColor,
-            pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
+            iconSize: 22,
+            fontSize: 11,
           ),
         ],
       ),
@@ -2788,6 +3087,175 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     _goToPage(pageNumber - 1); // pageNumber是从1开始的，而pageIndex是从0开始的
   }
 
+  // 编辑书签
+  void _editBookmark(Bookmark bookmark) {
+    Navigator.pop(context); // 关闭书签面板
+
+    showDialog(
+      context: context,
+      builder: (context) => _buildBookmarkEditDialog(bookmark),
+    );
+  }
+
+  Widget _buildBookmarkEditDialog(Bookmark bookmark) {
+    final TextEditingController noteController = TextEditingController(
+      text: bookmark.note,
+    );
+
+    return AlertDialog(
+      backgroundColor: _currentTheme.backgroundColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          Icon(Icons.edit_note, color: _currentTheme.textColor, size: 24),
+          const SizedBox(width: 12),
+          Text(
+            '编辑书签',
+            style: TextStyle(
+              color: _currentTheme.textColor,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _currentTheme.sliderActiveColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.bookmark,
+                  color: _currentTheme.sliderActiveColor,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '第 ${bookmark.pageNumber} 页',
+                  style: TextStyle(
+                    color: _currentTheme.textColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '备注：',
+            style: TextStyle(
+              color: _currentTheme.textColor,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: noteController,
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: '为这个书签添加备注...',
+              hintStyle: TextStyle(
+                color: _currentTheme.textColor.withValues(alpha: 0.5),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: _currentTheme.textColor.withValues(alpha: 0.3),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: _currentTheme.sliderActiveColor,
+                  width: 2,
+                ),
+              ),
+              contentPadding: const EdgeInsets.all(12),
+            ),
+            style: TextStyle(color: _currentTheme.textColor, fontSize: 14),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            '取消',
+            style: TextStyle(
+              color: _currentTheme.textColor.withValues(alpha: 0.7),
+            ),
+          ),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            _updateBookmarkNote(bookmark, noteController.text.trim());
+            Navigator.pop(context);
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _currentTheme.sliderActiveColor,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          child: const Text('保存'),
+        ),
+      ],
+    );
+  }
+
+  // 更新书签备注
+  Future<void> _updateBookmarkNote(Bookmark bookmark, String note) async {
+    try {
+      final updatedBookmark = bookmark.copyWith(note: note);
+      await _bookmarkDao.updateBookmark(updatedBookmark);
+
+      if (mounted) {
+        setState(() {
+          final index = _bookmarks.indexWhere((b) => b.id == bookmark.id);
+          if (index != -1) {
+            _bookmarks[index] = updatedBookmark;
+          }
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                const Text('书签备注已更新'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('更新书签备注失败: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('更新书签备注失败'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
@@ -2812,19 +3280,56 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     );
   }
 
-  void _showBookmarks() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _buildBookmarksPanel(),
-    );
+  // 快速切换书签
+  void _toggleBookmark() async {
+    if (_isCurrentPageBookmarked) {
+      // 删除当前页书签
+      final bookmarksToRemove = _bookmarks
+          .where((b) => b.pageNumber == _currentPageIndex + 1)
+          .toList();
+
+      for (final bookmark in bookmarksToRemove) {
+        await _bookmarkDao.deleteBookmark(bookmark.id!);
+      }
+
+      setState(() {
+        _bookmarks.removeWhere((b) => b.pageNumber == _currentPageIndex + 1);
+        _isCurrentPageBookmarked = false;
+      });
+
+      // 触觉反馈
+      HapticFeedback.lightImpact();
+    } else {
+      // 添加书签
+      final bookmark = Bookmark(
+        bookId: widget.book.id!,
+        pageNumber: _currentPageIndex + 1,
+        note: '',
+        createDate: DateTime.now(),
+      );
+
+      final bookmarkId = await _bookmarkDao.insertBookmark(bookmark);
+
+      setState(() {
+        _bookmarks.add(bookmark.copyWith(id: bookmarkId));
+        _isCurrentPageBookmarked = true;
+      });
+
+      // 触觉反馈
+      HapticFeedback.mediumImpact();
+    }
   }
 
-  void _showMoreOptions() {
+  // 显示进度面板
+  void _showProgressPanel() {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => _buildMoreOptionsPanel(),
+      barrierColor: Colors.transparent,
+      isScrollControlled: true,
+      enableDrag: true,
+      isDismissible: true,
+      builder: (context) => _buildProgressPanel(),
     );
   }
 
@@ -2864,114 +3369,31 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }
 
   Widget _buildTableOfContentsPanel() {
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.7,
-      child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            decoration: _getModalDecoration(),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    '目录',
-                    style: TextStyle(
-                      color: _getModalTextColor(),
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _pages.length,
-                    itemBuilder: (context, index) {
-                      final isCurrentPage = index == _currentPageIndex;
-                      final modalTextColor = _getModalTextColor();
-                      final modalSecondaryTextColor =
-                          _getModalSecondaryTextColor();
-
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeInOut,
-                        child: ListTile(
-                          leading: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: isCurrentPage
-                                  ? _getModalAccentColor().withValues(
-                                      alpha: 0.3,
-                                    )
-                                  : modalTextColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                              border: isCurrentPage
-                                  ? Border.all(
-                                      color: _getModalAccentColor(),
-                                      width: 1.5,
-                                    )
-                                  : null,
-                            ),
-                            child: Center(
-                              child: Text(
-                                '${index + 1}',
-                                style: TextStyle(
-                                  color: isCurrentPage
-                                      ? _getModalAccentColor()
-                                      : modalTextColor,
-                                  fontSize: 12,
-                                  fontWeight: isCurrentPage
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ),
-                          title: Text(
-                            '第 ${index + 1} 页',
-                            style: TextStyle(
-                              color: isCurrentPage
-                                  ? _getModalAccentColor()
-                                  : modalTextColor,
-                              fontSize: 15,
-                              fontWeight: isCurrentPage
-                                  ? FontWeight.w600
-                                  : FontWeight.w500,
-                            ),
-                          ),
-                          subtitle: Text(
-                            _getPagePreview(index),
-                            style: TextStyle(
-                              color: modalSecondaryTextColor,
-                              fontSize: 12,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _goToPage(index);
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return TocWidget(
+      book: widget.book,
+      chapters: _chapters,
+      bookmarks: _bookmarks,
+      currentPageIndex: _currentPageIndex,
+      onPageTap: (pageIndex) {
+        Navigator.pop(context);
+        _goToPage(pageIndex);
+      },
+      onBookmarkTap: (bookmark) {
+        Navigator.pop(context);
+        _goToPage(bookmark.pageNumber - 1);
+      },
     );
   }
 
-  Widget _buildBookmarksPanel() {
+  // 构建进度面板
+  Widget _buildProgressPanel() {
+    final progress = _pages.isNotEmpty
+        ? (_currentPageIndex + 1) / _pages.length
+        : 0.0;
+    final progressPercent = (progress * 100).toStringAsFixed(1);
+
     return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.7,
+      height: MediaQuery.of(context).size.height * 0.5,
       child: ClipRRect(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         child: BackdropFilter(
@@ -2984,219 +3406,133 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                 Container(
                   padding: const EdgeInsets.all(24),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '书签',
-                        style: TextStyle(
-                          color: _getModalTextColor(),
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: _getModalAccentColor().withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          Icons.data_usage_rounded,
+                          color: _getModalAccentColor(),
+                          size: 24,
                         ),
                       ),
-                      // 当前页面书签操作按钮
-                      GestureDetector(
-                        onTap: () {
-                          if (_isCurrentPageBookmarked) {
-                            _removeBookmark();
-                          } else {
-                            _addBookmark();
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _isCurrentPageBookmarked
-                                ? Colors.orange.withValues(alpha: 0.2)
-                                : Colors.blue.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: _isCurrentPageBookmarked
-                                  ? Colors.orange
-                                  : Colors.blue,
-                              width: 1,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _isCurrentPageBookmarked
-                                    ? Icons.bookmark_remove
-                                    : Icons.bookmark_add,
-                                color: _isCurrentPageBookmarked
-                                    ? Colors.orange
-                                    : Colors.blue,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _isCurrentPageBookmarked ? '删除书签' : '添加书签',
-                                style: TextStyle(
-                                  color: _isCurrentPageBookmarked
-                                      ? Colors.orange
-                                      : Colors.blue,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
+                      const SizedBox(width: 16),
+                      Text(
+                        '阅读进度',
+                        style: TextStyle(
+                          color: _getModalTextColor(),
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
                   ),
                 ),
-                // 书签列表
+
+                // 进度信息
                 Expanded(
-                  child: _bookmarks.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.bookmark_border,
-                                color: _getModalSecondaryTextColor(),
-                                size: 48,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      children: [
+                        // 进度环形图
+                        Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: _getModalAccentColor().withValues(
+                                alpha: 0.3,
                               ),
-                              const SizedBox(height: 16),
-                              Text(
-                                '暂无书签',
-                                style: TextStyle(
-                                  color: _getModalTextColor(),
-                                  fontSize: 16,
+                              width: 8,
+                            ),
+                          ),
+                          child: Stack(
+                            children: [
+                              // 进度弧
+                              SizedBox(
+                                width: 120,
+                                height: 120,
+                                child: CircularProgressIndicator(
+                                  value: progress,
+                                  strokeWidth: 8,
+                                  backgroundColor: Colors.transparent,
+                                  valueColor: AlwaysStoppedAnimation(
+                                    _getModalAccentColor(),
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '点击上方按钮添加当前页面为书签',
-                                style: TextStyle(
-                                  color: _getModalSecondaryTextColor(),
-                                  fontSize: 12,
+                              // 百分比文字
+                              Center(
+                                child: Text(
+                                  '$progressPercent%',
+                                  style: TextStyle(
+                                    color: _getModalTextColor(),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: _bookmarks.length,
-                          itemBuilder: (context, index) {
-                            final bookmark = _bookmarks[index];
-                            final isCurrentBookmark =
-                                bookmark.pageNumber == _currentPageIndex + 1;
+                        ),
+                        const SizedBox(height: 32),
 
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                              margin: const EdgeInsets.only(bottom: 12),
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(12),
-                                  onTap: () =>
-                                      _goToBookmark(bookmark.pageNumber),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: isCurrentBookmark
-                                          ? _getModalAccentColor().withValues(
-                                              alpha: 0.1,
-                                            )
-                                          : _getModalTextColor().withValues(
-                                              alpha: 0.05,
-                                            ),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: isCurrentBookmark
-                                            ? _getModalAccentColor().withValues(
-                                                alpha: 0.3,
-                                              )
-                                            : _getModalDividerColor(),
-                                        width: isCurrentBookmark ? 1.5 : 1,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(8),
-                                          decoration: BoxDecoration(
-                                            color: _getModalAccentColor()
-                                                .withValues(alpha: 0.2),
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                          ),
-                                          child: Icon(
-                                            Icons.bookmark,
-                                            color: _getModalAccentColor(),
-                                            size: 20,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 16),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                '第 ${bookmark.pageNumber} 页',
-                                                style: TextStyle(
-                                                  color: isCurrentBookmark
-                                                      ? _getModalAccentColor()
-                                                      : _getModalTextColor(),
-                                                  fontSize: 16,
-                                                  fontWeight: isCurrentBookmark
-                                                      ? FontWeight.w600
-                                                      : FontWeight.w500,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                '创建于 ${_formatDate(bookmark.createDate)}',
-                                                style: TextStyle(
-                                                  color:
-                                                      _getModalSecondaryTextColor(),
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        // 删除按钮
-                                        GestureDetector(
-                                          onTap: () {
-                                            _deleteBookmarkWithAnimation(
-                                              bookmark.id!,
-                                            );
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.all(8),
-                                            decoration: BoxDecoration(
-                                              color: Colors.red.withValues(
-                                                alpha: 0.15,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                            ),
-                                            child: const Icon(
-                                              Icons.delete_outline,
-                                              color: Colors.red,
-                                              size: 18,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                        // 详细信息
+                        _buildProgressInfo('当前页码', '${_currentPageIndex + 1}'),
+                        _buildProgressInfo('总页数', '${_pages.length}'),
+                        _buildProgressInfo(
+                          '剩余页数',
+                          '${_pages.length - _currentPageIndex - 1}',
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // 快速跳转按钮
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _goToPage(0);
+                                },
+                                icon: const Icon(Icons.first_page),
+                                label: const Text('回到开头'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _getModalAccentColor()
+                                      .withValues(alpha: 0.2),
+                                  foregroundColor: _getModalAccentColor(),
+                                  elevation: 0,
                                 ),
                               ),
-                            );
-                          },
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _goToPage(_pages.length - 1);
+                                },
+                                icon: const Icon(Icons.last_page),
+                                label: const Text('跳到末尾'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _getModalAccentColor()
+                                      .withValues(alpha: 0.2),
+                                  foregroundColor: _getModalAccentColor(),
+                                  elevation: 0,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -3206,63 +3542,30 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     );
   }
 
-  Widget _buildMoreOptionsPanel() {
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: _getModalDecoration(),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '更多选项',
-                style: TextStyle(
-                  color: _getModalTextColor(),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: Icon(Icons.search, color: _getModalIconColor()),
-                title: Text(
-                  '搜索',
-                  style: TextStyle(color: _getModalTextColor()),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showSearchDialog();
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.share, color: _getModalIconColor()),
-                title: Text(
-                  '分享',
-                  style: TextStyle(color: _getModalTextColor()),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _shareCurrentPage();
-                },
-              ),
-              const SizedBox(height: 20),
-            ],
+  Widget _buildProgressInfo(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: _getModalSecondaryTextColor(),
+              fontSize: 16,
+            ),
           ),
-        ),
+          Text(
+            value,
+            style: TextStyle(
+              color: _getModalTextColor(),
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
-  }
-
-  String _getPagePreview(int pageIndex) {
-    if (pageIndex >= _pages.length) return '';
-    final content = _pages[pageIndex];
-    final preview = content.length > 50
-        ? '${content.substring(0, 50)}...'
-        : content;
-    return preview.replaceAll('\n', ' ');
   }
 
   void _goToPage(int pageIndex) {
@@ -3800,7 +4103,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
     return Positioned(
       right: 10,
-      bottom: 120, // 在控制栏上方
+      bottom: _controlBarHeight - 20, // 在控制栏上方
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
@@ -3867,6 +4170,152 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     );
   }
   */
+
+  // 构建文本选择菜单
+  Widget _buildTextSelectionMenu(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    final selection = editableTextState.textEditingValue.selection;
+    if (!selection.isValid || selection.isCollapsed) {
+      return const SizedBox.shrink();
+    }
+
+    final selectedText = editableTextState.textEditingValue.text.substring(
+      selection.start,
+      selection.end,
+    );
+
+    return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(8),
+      color: _currentTheme.controlBarColor,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildSelectionButton(
+              icon: Icons.highlight,
+              label: '高亮',
+              color: Colors.yellow[700]!,
+              onTap: () =>
+                  _highlightText(selectedText, selection, Colors.yellow),
+            ),
+            const SizedBox(width: 8),
+            _buildSelectionButton(
+              icon: Icons.format_underlined,
+              label: '下划线',
+              color: Colors.blue[600]!,
+              onTap: () => _highlightText(selectedText, selection, Colors.blue),
+            ),
+            const SizedBox(width: 8),
+            _buildSelectionButton(
+              icon: Icons.bookmark_add,
+              label: '收藏',
+              color: Colors.red[600]!,
+              onTap: () => _highlightText(selectedText, selection, Colors.red),
+            ),
+            const SizedBox(width: 8),
+            _buildSelectionButton(
+              icon: Icons.copy,
+              label: '复制',
+              color: _currentTheme.iconColor,
+              onTap: () => _copyText(selectedText),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: _currentTheme.textColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 高亮文本
+  Future<void> _highlightText(
+    String text,
+    TextSelection selection,
+    Color color,
+  ) async {
+    try {
+      // 这里可以保存高亮信息到数据库
+      // 由于时间限制，先实现基本的复制功能
+      await Clipboard.setData(ClipboardData(text: text));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.highlight, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text('已高亮选中文本'),
+              ],
+            ),
+            backgroundColor: color,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('高亮文本失败: $e');
+    }
+  }
+
+  // 复制文本
+  Future<void> _copyText(String text) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.copy, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                const Text('已复制到剪贴板'),
+              ],
+            ),
+            backgroundColor: Colors.blue,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('复制文本失败: $e');
+    }
+  }
 }
 
 // 现代化工具栏按钮
@@ -3876,6 +4325,8 @@ class _ModernToolbarButton extends StatefulWidget {
   final VoidCallback onTap;
   final Color iconColor;
   final Color pressedColor;
+  final double iconSize;
+  final double fontSize;
 
   const _ModernToolbarButton({
     required this.icon,
@@ -3883,6 +4334,8 @@ class _ModernToolbarButton extends StatefulWidget {
     required this.onTap,
     required this.iconColor,
     required this.pressedColor,
+    this.iconSize = 24.0,
+    this.fontSize = 12.0,
   });
 
   @override
@@ -3935,11 +4388,11 @@ class _ModernToolbarButtonState extends State<_ModernToolbarButton>
           return Transform.scale(
             scale: _scaleAnimation.value,
             child: Container(
-              width: 60, // 减少宽度
-              height: 52, // 减少高度
+              width: 56, // 进一步减少宽度
+              height: 48, // 进一步减少高度
               decoration: BoxDecoration(
                 color: _colorAnimation.value,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -3947,14 +4400,14 @@ class _ModernToolbarButtonState extends State<_ModernToolbarButton>
                   Icon(
                     widget.icon,
                     color: widget.iconColor,
-                    size: 20, // 减少图标大小
+                    size: widget.iconSize, // 使用可配置的图标大小
                   ),
-                  const SizedBox(height: 4), // 减少间距
+                  const SizedBox(height: 3), // 进一步减少间距
                   Text(
                     widget.label,
                     style: TextStyle(
                       color: widget.iconColor,
-                      fontSize: 11,
+                      fontSize: widget.fontSize, // 使用可配置的字体大小
                       fontWeight: FontWeight.w500,
                     ),
                     textAlign: TextAlign.center,

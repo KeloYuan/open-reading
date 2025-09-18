@@ -206,7 +206,7 @@ class ThemeNotifier extends ChangeNotifier {
     // 异步保存设置
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('appTheme', 'custom');
-    await prefs.setInt('customAccentColor', color.value);
+    await prefs.setInt('customAccentColor', color.toARGB32());
   }
 
   // 设置全局强调色（与应用主题分离）
@@ -220,7 +220,7 @@ class ThemeNotifier extends ChangeNotifier {
     // 异步保存设置
     SharedPreferences prefs = await SharedPreferences.getInstance();
     if (color != null) {
-      await prefs.setInt('globalAccentColor', color.value);
+      await prefs.setInt('globalAccentColor', color.toARGB32());
     } else {
       await prefs.remove('globalAccentColor');
     }

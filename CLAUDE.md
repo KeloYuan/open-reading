@@ -1,102 +1,233 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+此文件为Claude AI助手提供在该仓库中工作时的指导信息。
 
-## Project Overview
+## 项目概述
 
-xxread (小元读书) is an elegant Flutter e-book reader application that supports EPUB, TXT, and PDF formats. The app features local storage, reading progress tracking, bookmarks, reading statistics, and responsive design for both mobile and desktop platforms.
+小元读书 (XiaoYuan Reader) 是一个优雅的Flutter跨平台电子书阅读器，支持EPUB、PDF等多种格式。应用具备本地存储、阅读进度追踪、书签管理、阅读统计和响应式设计等功能，支持移动端和桌面端。
 
-## Development Commands
+## 开发命令
 
-### Core Flutter Commands
-- `flutter pub get` - Install dependencies
-- `flutter run` - Run the app in debug mode
-- `flutter build` - Build the app for production
-- `flutter test` - Run unit tests
-- `flutter analyze` - Analyze code for issues and lint violations
+### 核心Flutter命令
+- `flutter pub get` - 安装依赖
+- `flutter run` - 调试模式运行应用
+- `flutter build` - 生产环境构建
+- `flutter test` - 运行单元测试
+- `flutter analyze` - 代码分析和Lint检查
+- `flutter doctor` - 检查开发环境
 
-### Platform-Specific Commands
-- `flutter run -d windows` - Run on Windows
-- `flutter run -d macos` - Run on macOS
-- `flutter run -d linux` - Run on Linux
-- `flutter run -d chrome` - Run on web (Chrome)
-- `flutter build windows` - Build for Windows
-- `flutter build macos` - Build for macOS
-- `flutter build linux` - Build for Linux
-- `flutter build web` - Build for web
+### 平台特定命令
+- `flutter run -d windows` - Windows平台运行
+- `flutter run -d macos` - macOS平台运行
+- `flutter run -d linux` - Linux平台运行
+- `flutter run -d chrome` - Web平台运行
+- `flutter build windows` - Windows平台构建
+- `flutter build macos` - macOS平台构建
+- `flutter build linux` - Linux平台构建
+- `flutter build apk` - Android APK构建
+- `flutter build ios` - iOS平台构建
 
-### Testing
-- `flutter test` - Run all tests
-- `flutter test test/widget_test.dart` - Run specific test file
-- `flutter test --coverage` - Run tests with coverage report
+### 测试和调试
+- `flutter test` - 运行所有测试
+- `flutter test test/widget_test.dart` - 运行特定测试
+- `flutter test --coverage` - 生成覆盖率报告
+- `flutter clean` - 清理缓存和构建文件
 
-## Architecture Overview
+## 技术架构
 
-### Layer Structure
-The app follows a layered architecture:
+### 分层结构
+应用遵循分层架构设计：
 
-1. **Presentation Layer** (`lib/pages/`): UI components and screens
-   - `home_page_responsive.dart` - Main navigation with responsive design
-   - `home_content_enhanced.dart` - Home dashboard with reading stats
-   - `library_page.dart` - Book library management
-   - `reading_page_enhanced.dart` - Enhanced reading interface
-   - `import_book_page.dart` - Book import functionality
-   - `settings_page.dart` - App settings and preferences
+1. **表现层** (`lib/pages/`): UI组件和页面
+   - `home_page_responsive.dart` - 响应式主页，包含药丸导航栏
+   - `home_content_enhanced.dart` - 主页内容，阅读统计仪表板
+   - `library_page.dart` - 书库管理页面
+   - `reading_page_enhanced.dart` - 增强阅读界面，支持主题切换
+   - `settings_page.dart` - 设置页面，主题和强调色配置
+   - `detailed_stats_page.dart` - 详细统计页面，毛玻璃效果
+   - `import_book_page.dart` - 书籍导入功能
 
-2. **Business Logic Layer** (`lib/services/`): Core business logic and data access
-   - `database_service.dart` - SQLite database management singleton
-   - `book_dao.dart` - Book data access operations
-   - `bookmark_dao.dart` - Bookmark data access operations with full CRUD functionality
-   - `reading_stats_dao.dart` - Reading statistics data access
-   - `highlight_dao.dart` - Highlight data access operations
-   - `note_dao.dart` - Note data access operations
-   - `book_import_service.dart` - Book file import and processing
-   - `storage_service.dart` - File storage operations
+2. **业务逻辑层** (`lib/services/`): 核心业务逻辑和数据访问
+   - `database_service.dart` - SQLite数据库管理单例
+   - `book_dao.dart` - 书籍数据访问，包含完整CRUD操作
+   - `bookmark_dao.dart` - 书签数据访问，支持updateBookmark方法
+   - `note_dao.dart` - 笔记数据访问操作
+   - `highlight_dao.dart` - 高亮数据访问操作
+   - `reading_stats_dao.dart` - 阅读统计数据访问
+   - `book_import_service.dart` - 书籍文件导入和处理
+   - `storage_service.dart` - 文件存储操作
+   - `text_paginator.dart` - 文本分页服务
 
-3. **Data Layer** (`lib/models/`): Data models and entities
-   - `book.dart` - Book entity with file path, progress tracking
-   - `bookmark.dart` - Bookmark entity for reading positions
-   - `chapter.dart` - Chapter entity for book structure
-   - `highlight.dart` - Text highlight entity
-   - `note.dart` - User note entity
+3. **数据层** (`lib/models/`): 数据模型和实体
+   - `book.dart` - 书籍实体，包含文件路径和进度追踪
+   - `bookmark.dart` - 书签实体，记录阅读位置
+   - `chapter.dart` - 章节实体，书籍结构
+   - `highlight.dart` - 文本高亮实体
+   - `note.dart` - 用户笔记实体
 
-4. **Utilities** (`lib/utils/`): Helper functions and extensions
-   - `responsive_helper.dart` - Responsive design utilities
-   - `color_extensions.dart` - Color manipulation extensions
-   - `text_selection_helper.dart` - Text selection utilities
+4. **工具类** (`lib/utils/`): 辅助功能和扩展
+   - `app_themes.dart` - 应用主题定义（AppTheme, AppThemes）
+   - `theme_mixin.dart` - 主题混入，为组件提供主题能力
+   - `glass_config.dart` - 毛玻璃效果配置
+   - `progressive_blur.dart` - 渐进模糊效果
+   - `responsive_helper.dart` - 响应式设计工具
+   - `color_extensions.dart` - 颜色操作扩展
+   - `text_selection_helper.dart` - 文本选择辅助
+   - `text_painter_pagination.dart` - 文本绘制分页
+   - `pagination_cache.dart` - 分页缓存管理
 
-5. **Widget Components** (`lib/widgets/`): Reusable UI components
-   - `note_dialog.dart` - Note editing dialog
-   - `text_selection_toolbar.dart` - Custom text selection toolbar
+5. **自定义组件** (`lib/widgets/`): 可复用UI组件
+   - `liquid_glass_navigation.dart` - 液态玻璃导航组件
+   - `floating_capsule_navigation.dart` - 浮动胶囊导航
+   - `custom_slider_components.dart` - 自定义滑块组件
+   - `note_dialog.dart` - 笔记编辑对话框
+   - `toc_widget.dart` - 目录导航组件
+   - `text_selection_toolbar.dart` - 文本选择工具栏
 
-### Database Design
-The app uses SQLite with five main tables:
-- `books` - Stores book metadata and reading progress (with totalPages field)
-- `bookmarks` - Stores user bookmarks with notes and page references
-- `reading_stats` - Tracks daily reading statistics and reading time
-- `highlights` - Stores text highlights with positions and color coding
-- `notes` - Stores user notes with text references and timestamps
+### 主题系统架构
+- **ThemeNotifier** (`main.dart`) - 全局主题状态管理，使用Provider
+- **AppTheme/AppThemes** (`utils/app_themes.dart`) - 主题定义和预设集合
+- **ReadingTheme/ReadingThemes** (`pages/reading_page_enhanced.dart`) - 阅读专用主题
+- **ThemeMixin** - 为组件提供主题访问能力
 
-#### Database Schema Updates
-- **Version 4**: Added highlights and notes tables for annotation features
-- **Bookmark enhancements**: Full CRUD operations with note support
-- **Cross-references**: Proper foreign key relationships between books, bookmarks, highlights, and notes
+### 数据库设计
+应用使用SQLite，包含五个主要表：
+- `books` - 存储书籍元数据和阅读进度（包含totalPages字段）
+- `bookmarks` - 存储用户书签，支持笔记和页面引用
+- `reading_stats` - 追踪每日阅读统计和阅读时长
+- `highlights` - 存储文本高亮，包含位置和颜色编码
+- `notes` - 存储用户笔记，包含文本引用和时间戳
 
-Cross-platform database support:
-- Mobile: Standard SQLite via sqflite
-- Desktop: SQLite FFI via sqflite_common_ffi
+#### 数据库版本更新
+- **版本4**: 添加highlights和notes表，支持注释功能
+- **书签增强**: 支持完整CRUD操作，包含笔记功能
+- **外键关系**: books、bookmarks、highlights、notes之间的正确外键关系
 
-### State Management
-- **Provider pattern** for theme management (`ThemeNotifier` in main.dart)
-- **Shared Preferences** for persistent user settings
-- **Local database state** managed through DAO services
+跨平台数据库支持：
+- 移动端: 通过sqflite使用标准SQLite
+- 桌面端: 通过sqflite_common_ffi使用SQLite FFI
 
-### File Handling
-Books are stored as files with paths in the database rather than content, supporting:
-- EPUB processing via `epubx` package
-- PDF support
-- TXT file reading
-- File picker integration for imports
+### 状态管理
+- **Provider模式** 用于主题管理（main.dart中的ThemeNotifier）
+- **SharedPreferences** 用于持久化用户设置
+- **本地数据库状态** 通过DAO服务管理
+
+### 文件处理
+书籍以文件路径存储在数据库中，而非内容本身，支持：
+- 通过`epubx`包处理EPUB
+- 通过`pdfx`包支持PDF
+- 通过`archive`包处理压缩文件
+- 通过`file_picker`集成文件选择
+
+### UI/UX特性
+- **Material 3设计语言** - 现代化界面设计
+- **毛玻璃效果** - 使用GlassConfig和ProgressiveBlur
+- **渐变背景** - 主页、设置、书库页面的主题色渐变
+- **药丸导航栏** - 浮动胶囊式底部导航
+- **响应式设计** - 适配不同屏幕尺寸
+- **沉浸式模式** - 边到边显示，透明状态栏
+
+## 关键依赖和技术栈
+
+### 核心框架
+- **Flutter** `^3.8.1` - 跨平台UI框架
+- **Dart** `^3.8.1` - 编程语言
+
+### 数据持久化
+- **sqflite** `^2.3.0` - 移动端SQLite
+- **sqflite_common_ffi** `^2.3.6` - 桌面端SQLite
+- **shared_preferences** `^2.2.2` - 用户偏好存储
+- **path_provider** `^2.1.5` - 文件路径管理
+
+### 电子书引擎
+- **epubx** `^4.0.0` - EPUB格式支持
+- **pdfx** `^2.6.0` - PDF格式支持
+- **archive** `^3.4.10` - 压缩文件处理
+
+### UI增强
+- **provider** `^6.1.5` - 状态管理
+- **fl_chart** `^1.0.0` - 图表展示
+- **page_flip** `^0.2.0` - 翻页动画
+- **volume_controller** `^2.0.8` - 音量键控制
+
+### 工具库
+- **file_picker** `^8.0.0+1` - 文件选择
+- **crypto** `^3.0.3` - 加密和哈希
+- **intl** `^0.20.2` - 国际化支持
+- **path** `^1.9.1` - 路径操作
+
+## 开发注意事项
+
+### 代码质量
+- 所有代码通过`flutter analyze`检查，无编译错误和警告
+- 使用Material 3 API，避免废弃的color.value，改用toARGB32()
+- 清理未使用的变量和方法，保持代码整洁
+
+### 主题和样式
+- 继承`ThemeMixin`获得主题访问能力
+- 使用`AppThemes`中的预设主题
+- 支持自定义强调色设置
+- 毛玻璃效果通过`GlassConfig`配置
+
+### 数据访问
+- 所有数据库操作通过DAO层进行
+- 使用异步方法处理数据库操作
+- 书签DAO支持updateBookmark方法
+- 统计数据使用真实DAO而非硬编码
+
+### 布局和间距
+- 主页卡片间距已优化，使用合适的SizedBox和padding
+- 药丸导航栏背景与按钮对齐
+- 首页卡片整体位置通过ListView padding调整
+- 毛玻璃效果避免割裂和过暗问题
+
+### 性能优化
+- 使用分页缓存减少重复计算
+- 文本分页算法与显示区域统一
+- 适当的Widget缓存和生命周期管理
+
+### 平台兼容性
+- 桌面平台需要sqflite_common_ffi初始化
+- 移动平台使用标准sqflite
+- 沉浸式状态栏在main.dart中配置
+- 音量键翻页仅在移动端有效
+
+### 调试和测试
+- 使用`flutter hot reload`进行快速迭代
+- 通过`flutter analyze`检查代码质量
+- 所有DAO方法需要适当的错误处理
+- 界面变更后进行多设备测试
+
+### 最近修复的问题
+- BookmarkDao添加updateBookmark方法支持
+- 清理所有未使用变量和方法
+- 修复color.value废弃API用法
+- 优化字符串插值，避免冗余
+- 药丸导航栏背景与按钮对齐
+- 移除所有页面背景小灰点
+- 统一阅读页面分页算法和显示区域高度
+
+## 项目文件结构说明
+
+### 主要配置文件
+- `pubspec.yaml` - 项目依赖和配置
+- `analysis_options.yaml` - 代码分析配置
+- `flutter_launcher_icons.yaml` - 应用图标配置
+- `devtools_options.yaml` - 开发工具配置
+
+### 平台特定配置
+- `android/` - Android平台配置
+- `ios/` - iOS平台配置
+- `windows/` - Windows平台配置
+- `macos/` - macOS平台配置
+- `linux/` - Linux平台配置
+- `web/` - Web平台配置
+
+### 资源文件
+- `assets/images/` - 应用图片资源
+- `shot/` - 应用截图文件
+
+这个项目是一个功能完整、架构清晰的Flutter电子书阅读器，具备优秀的用户体验和技术实现。
 
 ### Responsive Design
 Navigation adapts based on screen size:
