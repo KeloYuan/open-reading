@@ -18,6 +18,9 @@ import '../services/reading_stats_dao.dart';
 import '../services/book_import_service.dart';
 import '../widgets/custom_slider_components.dart';
 import '../widgets/toc_widget.dart';
+// import '../widgets/text_selection_toolbar.dart';
+// import '../services/highlight_dao.dart';
+// import '../services/note_dao.dart';
 import '../utils/responsive_helper.dart';
 
 // 阅读主题数据结构
@@ -4186,47 +4189,69 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       selection.end,
     );
 
-    return Material(
-      elevation: 8,
-      borderRadius: BorderRadius.circular(8),
-      color: _currentTheme.controlBarColor,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildSelectionButton(
-              icon: Icons.highlight,
-              label: '高亮',
-              color: Colors.yellow[700]!,
-              onTap: () =>
-                  _highlightText(selectedText, selection, Colors.yellow),
-            ),
-            const SizedBox(width: 8),
-            _buildSelectionButton(
-              icon: Icons.format_underlined,
-              label: '下划线',
-              color: Colors.blue[600]!,
-              onTap: () => _highlightText(selectedText, selection, Colors.blue),
-            ),
-            const SizedBox(width: 8),
-            _buildSelectionButton(
-              icon: Icons.bookmark_add,
-              label: '收藏',
-              color: Colors.red[600]!,
-              onTap: () => _highlightText(selectedText, selection, Colors.red),
-            ),
-            const SizedBox(width: 8),
-            _buildSelectionButton(
-              icon: Icons.copy,
-              label: '复制',
-              color: _currentTheme.iconColor,
-              onTap: () => _copyText(selectedText),
-            ),
-          ],
-        ),
+    // 临时注释掉动画工具栏，等修复后再启用
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.copy, size: 20),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: selectedText));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
+            },
+            tooltip: '复制',
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 20),
+            onPressed: () {
+              editableTextState.userUpdateTextEditingValue(
+                editableTextState.textEditingValue.copyWith(
+                  selection: const TextSelection.collapsed(offset: -1),
+                ),
+                SelectionChangedCause.tap,
+              );
+            },
+            tooltip: '关闭',
+          ),
+        ],
       ),
     );
+
+    /*
+    return AnimatedTextSelectionToolbar(
+      selectedText: selectedText,
+      bookId: widget.book.id!,
+      pageNumber: _currentPageIndex + 1,
+      chapterTitle: '第${_currentPageIndex + 1}页',
+      onCopy: () {
+        // 复制处理
+      },
+      onClose: () {
+        // 清除文本选择
+        editableTextState.userUpdateTextEditingValue(
+          editableTextState.textEditingValue.copyWith(
+            selection: const TextSelection.collapsed(offset: -1),
+          ),
+          SelectionChangedCause.tap,
+        );
+      },
+    );
+    */
   }
 
   Widget _buildSelectionButton({
