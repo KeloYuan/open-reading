@@ -19,7 +19,7 @@ import '../services/reading_stats_dao.dart';
 import '../services/book_import_service.dart';
 import '../widgets/custom_slider_components.dart';
 import '../widgets/toc_widget.dart';
-import '../widgets/tts_control_panel.dart';
+import '../widgets/tts_panel_enhanced.dart';
 import '../widgets/share_dialog.dart';
 // import '../widgets/text_selection_toolbar.dart';
 // import '../services/highlight_dao.dart';
@@ -2021,37 +2021,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                             ),
                           ),
                         ),
-                        // 标题栏
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: _getModalAccentColor().withValues(
-                                    alpha: 0.2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  Icons.palette_rounded,
-                                  color: _getModalAccentColor(),
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Text(
-                                '阅读主题',
-                                style: TextStyle(
-                                  color: _getModalTextColor(),
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                         // 主题内容
                         Expanded(
                           child: SingleChildScrollView(
@@ -2147,68 +2116,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                 borderRadius: BorderRadius.circular(2),
                               ),
                             ),
-                          ),
-                        ),
-                        // 标题栏
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              top: BorderSide(
-                                color: _getModalDividerColor(),
-                                width: 1,
-                              ),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: _getModalAccentColor().withValues(
-                                    alpha: 0.2,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  Icons.tune_rounded,
-                                  color: _getModalAccentColor(),
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Text(
-                                '阅读设置',
-                                style: TextStyle(
-                                  color: _getModalTextColor(),
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              const Spacer(),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: _getModalBackgroundColor().withValues(
-                                    alpha: 0.5,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: IconButton(
-                                  icon: Icon(
-                                    Icons.refresh_rounded,
-                                    color: _getModalIconColor(),
-                                    size: 20,
-                                  ),
-                                  onPressed: () {
-                                    _resetSettings();
-                                    setModalState(() {});
-                                    setState(() {});
-                                  },
-                                  tooltip: '重置设置',
-                                ),
-                              ),
-                            ],
                           ),
                         ),
                         // 设置内容
@@ -3479,9 +3386,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       isScrollControlled: true,
       enableDrag: true,
       isDismissible: true,
-      builder: (context) => TtsControlPanel(
+      builder: (context) => TtsPanelEnhanced(
         textToRead: currentPageContent,
-        onClose: () => Navigator.of(context).pop(),
       ),
     );
   }

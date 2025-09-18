@@ -52,6 +52,24 @@ class _TocWidgetState extends State<TocWidget>
     super.dispose();
   }
 
+  void _updateSearchResults(String query) {
+    setState(() {
+      _searchQuery = query;
+      if (query.isEmpty) {
+        _filteredChapters = widget.chapters;
+        _filteredBookmarks = widget.bookmarks;
+      } else {
+        final lowerQuery = query.toLowerCase();
+        _filteredChapters = widget.chapters.where((chapter) {
+          return chapter.title.toLowerCase().contains(lowerQuery);
+        }).toList();
+        _filteredBookmarks = widget.bookmarks.where((bookmark) {
+          return bookmark.note.toLowerCase().contains(lowerQuery);
+        }).toList();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -62,33 +80,53 @@ class _TocWidgetState extends State<TocWidget>
       ),
       child: Column(
         children: [
-          // 顶部标题栏
+          // 拖拽指示器
           Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: Colors.grey.withValues(alpha: 0.3),
-                  width: 1,
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.book.title,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+          ),
+
+          // 搜索框
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: '搜索章节或书签...',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: _searchQuery != null && _searchQuery!.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded),
+                        onPressed: () {
+                          _searchController.clear();
+                          _updateSearchResults('');
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
+                filled: true,
+                fillColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest.withOpacity(0.8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
                 ),
-              ],
+              ),
+              onChanged: _updateSearchResults,
             ),
           ),
 
@@ -105,7 +143,7 @@ class _TocWidgetState extends State<TocWidget>
                   children: [
                     const Icon(Icons.toc, size: 18),
                     const SizedBox(width: 8),
-                    Text('目录 (${widget.chapters.length})'),
+                    Text('目录 (${_filteredChapters.length})'),
                   ],
                 ),
               ),
@@ -115,7 +153,7 @@ class _TocWidgetState extends State<TocWidget>
                   children: [
                     const Icon(Icons.bookmark, size: 18),
                     const SizedBox(width: 8),
-                    Text('书签 (${widget.bookmarks.length})'),
+                    Text('书签 (${_filteredBookmarks.length})'),
                   ],
                 ),
               ),
@@ -152,10 +190,7 @@ class _TocWidgetState extends State<TocWidget>
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                _buildChapterList(),
-                _buildBookmarkList(),
-              ],
+              children: [_buildChapterList(), _buildBookmarkList()],
             ),
           ),
         ],
@@ -231,7 +266,10 @@ class _TocWidgetState extends State<TocWidget>
                       height: 24,
                       margin: const EdgeInsets.only(right: 12),
                       decoration: BoxDecoration(
-                        color: _getChapterLevelColor(chapter.level, isCurrentChapter),
+                        color: _getChapterLevelColor(
+                          chapter.level,
+                          isCurrentChapter,
+                        ),
                         borderRadius: BorderRadius.circular(1),
                       ),
                     ),
@@ -322,7 +360,9 @@ class _TocWidgetState extends State<TocWidget>
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                                  color: Theme.of(
+                                    context,
+                                  ).primaryColor.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
@@ -369,8 +409,8 @@ class _TocWidgetState extends State<TocWidget>
 
         // 子章节 - 递归显示
         if (hasSubChapters && (_expandedChapters[chapter.title] ?? false))
-          ...chapter.subChapters.map((subChapter) =>
-            _buildChapterItem(subChapter, depth: depth + 1)
+          ...chapter.subChapters.map(
+            (subChapter) => _buildChapterItem(subChapter, depth: depth + 1),
           ),
       ],
     );
@@ -445,10 +485,7 @@ class _TocWidgetState extends State<TocWidget>
                       const SizedBox(height: 4),
                       Text(
                         bookmark.note,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -456,10 +493,7 @@ class _TocWidgetState extends State<TocWidget>
                     const SizedBox(height: 4),
                     Text(
                       _formatDate(bookmark.createDate),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                   ],
                 ),
@@ -497,18 +531,11 @@ class _TocWidgetState extends State<TocWidget>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            size: 64,
-            color: Colors.grey[400],
-          ),
+          Icon(icon, size: 64, color: Colors.grey[400]),
           const SizedBox(height: 16),
           Text(
             message,
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
           ),
         ],
       ),
@@ -517,7 +544,7 @@ class _TocWidgetState extends State<TocWidget>
 
   bool _isCurrentChapter(Chapter chapter) {
     return widget.currentPageIndex >= chapter.startPage &&
-           (chapter.endPage == 0 || widget.currentPageIndex <= chapter.endPage);
+        (chapter.endPage == 0 || widget.currentPageIndex <= chapter.endPage);
   }
 
   void _onSearchChanged(String query) {
