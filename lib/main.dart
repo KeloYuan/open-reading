@@ -3,12 +3,16 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+// import 'package:google_fonts/google_fonts.dart';
 
 import 'pages/home_page_responsive.dart';
 import 'utils/app_themes.dart';
+import 'services/tts_service.dart';
+import 'services/share_service.dart';
 
 void main() {
   // 确保可以在 runApp 前安全调用 SystemChrome
@@ -50,8 +54,12 @@ void main() {
   }
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeNotifier(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeNotifier()),
+        ChangeNotifierProvider(create: (_) => TtsService()),
+        ChangeNotifierProvider(create: (_) => ShareService()),
+      ],
       child: const XxReadApp(),
     ),
   );
@@ -280,6 +288,12 @@ class XxReadApp extends StatelessWidget {
           theme: _buildLightTheme(themeNotifier.currentAppTheme),
           darkTheme: _buildDarkTheme(themeNotifier.currentAppTheme),
           themeMode: themeNotifier.themeMode,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [Locale('en'), Locale('zh')],
           home: const HomePageResponsive(),
           builder: (context, child) {
             // 确保在每次构建时都同步系统UI
@@ -323,6 +337,7 @@ class XxReadApp extends StatelessWidget {
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: colorScheme,
+      // fontFamily: GoogleFonts.notoSansSc().fontFamily, // 中文字体支持
       appBarTheme: const AppBarTheme(
         elevation: 0,
         backgroundColor: Colors.transparent,
@@ -350,6 +365,7 @@ class XxReadApp extends StatelessWidget {
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: colorScheme,
+      // fontFamily: GoogleFonts.notoSansSc().fontFamily, // 中文字体支持
       appBarTheme: const AppBarTheme(
         elevation: 0,
         backgroundColor: Colors.transparent,

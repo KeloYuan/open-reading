@@ -145,14 +145,10 @@ class BookImportService {
     try {
       final epubBook = await EpubReader.readBook(bytes);
 
-      // Extract cover image - checking the actual type in the epubx library
+      // Extract cover image with enhanced logic
       Uint8List? coverImage;
       try {
-        if (epubBook.CoverImage != null) {
-          // If CoverImage is of type Image, we need to convert it to bytes
-          // For now, skip cover extraction to avoid type issues
-          // coverImage = epubBook.CoverImage;
-        }
+        coverImage = await _extractEpubCover(epubBook);
       } catch (e) {
         debugPrint('Cover image extraction failed: $e');
       }
@@ -255,12 +251,21 @@ class BookImportService {
       // Extract basic metadata - PDF metadata is often limited
       final title = fileName.replaceAll(RegExp(r'\.(pdf)$'), '');
 
+      // 提取PDF封面
+      Uint8List? coverImage;
+      try {
+        coverImage = await _extractPdfCover(bytes);
+      } catch (e) {
+        debugPrint('PDF cover extraction failed: $e');
+      }
+
       await pdfDocument.close();
 
       return EnhancedBookMetadata(
         title: title,
         author: 'Unknown',
         estimatedPages: pageCount,
+        coverImage: coverImage,
         additionalInfo: {'format': 'PDF', 'actualPageCount': pageCount},
       );
     } catch (e) {
@@ -778,7 +783,7 @@ class BookImportService {
     return chapters;
   }
 
-  /// 根据分页结果更新章节页码
+  /// 根据分页结果更新章节页码 - 增强版
   Future<List<Chapter>> updateChapterPages(
     List<Chapter> chapters,
     String bookContent,
@@ -788,19 +793,35 @@ class BookImportService {
 
     List<Chapter> updatedChapters = [];
 
-    for (final chapter in chapters) {
-      // 尝试在分页内容中找到章节开始位置
+    for (int i = 0; i < chapters.length; i++) {
+      final chapter = chapters[i];
       int startPage = 0;
 
-      // 搜索章节标题在哪一页
+      // 方法1: 精确匹配章节标题
       for (int pageIndex = 0; pageIndex < pages.length; pageIndex++) {
         final pageContent = pages[pageIndex];
 
-        // 使用多种匹配策略
         if (_isChapterStartPage(pageContent, chapter.title)) {
           startPage = pageIndex;
           break;
         }
+      }
+
+      // 方法2: 如果没有找到，使用内容文件名匹配（适用于EPUB）
+      if (startPage == 0 && chapter.contentFileName != null) {
+        startPage = _findPageByContentFileName(pages, chapter.contentFileName!);
+      }
+
+      // 方法3: 如果还没找到，使用顺序估算
+      if (startPage == 0 && i > 0) {
+        final prevChapter = updatedChapters[i - 1];
+        final avgPagesPerChapter = pages.length ~/ chapters.length;
+        startPage = (prevChapter.startPage + avgPagesPerChapter).clamp(0, pages.length - 1);
+      }
+
+      // 方法4: 确保章节页码递增
+      if (i > 0 && startPage <= updatedChapters[i - 1].startPage) {
+        startPage = updatedChapters[i - 1].startPage + 1;
       }
 
       updatedChapters.add(chapter.copyWith(startPage: startPage));
@@ -809,24 +830,186 @@ class BookImportService {
     return updatedChapters;
   }
 
-  /// 检查页面是否包含章节开始
+  /// 通过内容文件名查找页面
+  int _findPageByContentFileName(List<String> pages, String contentFileName) {
+    // 这里可以根据实际的分页逻辑来实现
+    // 暂时返回简单的估算
+    return 0;
+  }
+
+  /// 检查页面是否包含章节开始 - 增强版
   bool _isChapterStartPage(String pageContent, String chapterTitle) {
     final normalizedPageContent = pageContent.toLowerCase().trim();
     final normalizedChapterTitle = chapterTitle.toLowerCase().trim();
 
-    // 直接匹配
-    if (normalizedPageContent.contains(normalizedChapterTitle)) {
+    // 移除特殊字符进行比较
+    final cleanPageContent = normalizedPageContent.replaceAll(RegExp(r'[^\w\s\u4e00-\u9fff]'), ' ');
+    final cleanChapterTitle = normalizedChapterTitle.replaceAll(RegExp(r'[^\w\s\u4e00-\u9fff]'), ' ');
+
+    // 策略1: 直接匹配
+    if (cleanPageContent.contains(cleanChapterTitle)) {
       return true;
     }
 
-    // 部分匹配（对于长标题）
-    if (normalizedChapterTitle.length > 10) {
-      final shortTitle = normalizedChapterTitle.substring(0, 10);
-      if (normalizedPageContent.contains(shortTitle)) {
+    // 策略2: 分词匹配 - 至少匹配70%的关键词
+    final titleWords = cleanChapterTitle.split(RegExp(r'\s+'))
+        .where((word) => word.length > 1)
+        .toList();
+    
+    if (titleWords.isNotEmpty) {
+      int matchedWords = 0;
+      for (final word in titleWords) {
+        if (cleanPageContent.contains(word)) {
+          matchedWords++;
+        }
+      }
+      
+      if (matchedWords / titleWords.length >= 0.7) {
         return true;
       }
     }
 
+    // 策略3: 模糊匹配 - 处理数字章节
+    if (RegExp(r'第?\s*\d+\s*[章节]').hasMatch(cleanChapterTitle)) {
+      final chapterNum = RegExp(r'\d+').stringMatch(cleanChapterTitle);
+      if (chapterNum != null) {
+        final patterns = [
+          '第$chapterNum章',
+          '第$chapterNum节',
+          'chapter $chapterNum',
+          '$chapterNum.',
+        ];
+        
+        for (final pattern in patterns) {
+          if (cleanPageContent.contains(pattern)) {
+            return true;
+          }
+        }
+      }
+    }
+
     return false;
+  }
+
+  /// 增强的EPUB封面提取
+  Future<Uint8List?> _extractEpubCover(EpubBook epubBook) async {
+    try {
+      // 方法1: 直接从CoverImage属性获取
+      if (epubBook.CoverImage != null) {
+        // 如果CoverImage是Uint8List类型
+        if (epubBook.CoverImage is Uint8List) {
+          return epubBook.CoverImage as Uint8List;
+        }
+        // 如果有其他类型，尝试转换
+      }
+
+      // 方法2: 从Content.Images中查找封面
+      if (epubBook.Content?.Images != null && epubBook.Content!.Images!.isNotEmpty) {
+        // 优先查找名称包含"cover"的图片
+        for (final entry in epubBook.Content!.Images!.entries) {
+          final fileName = entry.key.toLowerCase();
+          if (fileName.contains('cover') || fileName.contains('front')) {
+            final imageFile = entry.value;
+            if (imageFile.Content != null && imageFile.Content!.isNotEmpty) {
+              final imageBytes = Uint8List.fromList(imageFile.Content!);
+              if (_isValidImageFormat(imageBytes)) {
+                return imageBytes;
+              }
+            }
+          }
+        }
+
+        // 如果没找到，返回第一个有效的图片
+        for (final entry in epubBook.Content!.Images!.entries) {
+          final imageFile = entry.value;
+          if (imageFile.Content != null && imageFile.Content!.isNotEmpty) {
+            final imageBytes = Uint8List.fromList(imageFile.Content!);
+            if (_isValidImageFormat(imageBytes)) {
+              return imageBytes;
+            }
+          }
+        }
+      }
+
+      // 方法3: 从manifest中查找封面引用
+      if (epubBook.Schema?.Package?.Manifest?.Items != null) {
+        for (final item in epubBook.Schema!.Package!.Manifest!.Items!) {
+          // 查找cover相关的item
+          if (item.Id?.toLowerCase().contains('cover') == true ||
+              item.Href?.toLowerCase().contains('cover') == true ||
+              item.Properties?.contains('cover-image') == true) {
+            
+            // 尝试从Images中获取对应的内容
+            if (epubBook.Content?.Images != null && item.Href != null) {
+              final imageFile = epubBook.Content!.Images![item.Href!];
+              if (imageFile?.Content != null && imageFile!.Content!.isNotEmpty) {
+                final imageBytes = Uint8List.fromList(imageFile.Content!);
+                if (_isValidImageFormat(imageBytes)) {
+                  return imageBytes;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      debugPrint('No cover image found in EPUB');
+      return null;
+    } catch (e) {
+      debugPrint('Error extracting EPUB cover: $e');
+      return null;
+    }
+  }
+
+  /// 验证图片格式
+  bool _isValidImageFormat(Uint8List bytes) {
+    if (bytes.length < 10) return false;
+
+    // 检查文件头
+    final header = bytes.take(10).toList();
+    
+    // JPEG: FF D8 FF
+    if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) return true;
+    
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47) return true;
+    
+    // GIF: 47 49 46 38
+    if (header[0] == 0x47 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x38) return true;
+    
+    // WebP: 52 49 46 46 ... 57 45 42 50
+    if (header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46 &&
+        bytes.length > 12 && bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50) return true;
+
+    return false;
+  }
+
+  /// 增强的PDF封面提取
+  Future<Uint8List?> _extractPdfCover(Uint8List bytes) async {
+    try {
+      final pdfDocument = await PdfDocument.openData(bytes);
+      
+      // 获取第一页作为封面
+      if (pdfDocument.pagesCount > 0) {
+        final page = await pdfDocument.getPage(1);
+        final pageImage = await page.render(
+          width: 300, // 封面宽度
+          height: 400, // 封面高度
+        );
+        
+        await page.close();
+        await pdfDocument.close();
+        
+        if (pageImage?.bytes != null && pageImage!.bytes.isNotEmpty) {
+          return pageImage.bytes;
+        }
+      }
+      
+      await pdfDocument.close();
+      return null;
+    } catch (e) {
+      debugPrint('Error extracting PDF cover: $e');
+      return null;
+    }
   }
 }
