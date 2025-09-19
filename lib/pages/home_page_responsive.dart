@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io';
 import 'dart:ui';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
@@ -717,31 +719,43 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
               : RefreshIndicator(
                   onRefresh: _loadAllStats,
                   strokeWidth: 2.5, // 减细刷新指示器线条
-                  displacement: 60, // 增加下拉距离
+                  displacement: 40, // 优化下拉距离，避免与AppBar冲突
                   color: Theme.of(context).colorScheme.primary, // 主题色
                   backgroundColor: Theme.of(
                     context,
                   ).colorScheme.surface.withValues(alpha: 0.9), // 半透明背景
                   edgeOffset:
                       MediaQuery.of(context).padding.top +
-                      40, // 下拉刷新UI往下移，避开状态栏，调整到40px配合卡片位置
+                      60, // 下拉刷新UI往下移，与ListView的padding和AppBar高度保持一致
                   child: ListView(
                     padding: EdgeInsets.fromLTRB(
                       16,
                       MediaQuery.of(context).padding.top +
-                          60, // 增加顶部padding：状态栏+60px，让卡片下移
+                          80, // 增加顶部padding：状态栏+80px，让整体下移避免下拉冲突
                       16,
                       MediaQuery.of(context).padding.bottom +
-                          20, // 减少底部padding：导航栏+20px
-                    ), // 优化padding：调整上下空白，确保内容完整显示
+                          60, // 增加底部padding：导航栏+40px，解决底部溢出
+                    ),
                     children: [
                       _buildWelcomeCard(),
-                      const SizedBox(height: 6),
-                      _buildSummaryCards(),
-                      const SizedBox(height: 8),
-                      _buildWeeklyChartCard(),
-                      const SizedBox(height: 8),
-                      _buildRecentActivity(),
+                      (!kIsWeb && Platform.isIOS)
+                          ? Transform.translate(
+                              offset: const Offset(0, -50),
+                              child: _buildSummaryCards(),
+                            )
+                          : _buildSummaryCards(),
+                      (!kIsWeb && Platform.isIOS)
+                          ? Transform.translate(
+                              offset: const Offset(0, -65),
+                              child: _buildWeeklyChartCard(),
+                            )
+                          : _buildWeeklyChartCard(),
+                      (!kIsWeb && Platform.isIOS)
+                          ? Transform.translate(
+                              offset: const Offset(0, -30),
+                              child: _buildRecentActivity(),
+                            )
+                          : _buildRecentActivity(),
                     ],
                   ),
                 ),
@@ -780,16 +794,19 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                       16,
                       8, // 减少底部间距
                     ), // 沉浸式：状态栏高度 + 8px间距
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        '首页',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSurface,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '首页',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ),

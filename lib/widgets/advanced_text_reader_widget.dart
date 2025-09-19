@@ -25,7 +25,8 @@ class PaginationConfig {
   const PaginationConfig({
     this.fontSize = 16.0,
     this.lineHeight = 1.6,
-    this.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+    this.fontFamily =
+        '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
     this.letterSpacing = 0.0,
     this.wordSpacing = 0.0,
     this.paragraphSpacing = '1em',
@@ -49,7 +50,8 @@ class PaginationConfig {
       'pagePadding': pagePadding,
       'theme': theme,
       'scrollMode': scrollMode,
-      'backgroundColor': '#${backgroundColor.value.toRadixString(16).padLeft(8, '0')}',
+      'backgroundColor':
+          '#${backgroundColor.value.toRadixString(16).padLeft(8, '0')}',
       'textColor': '#${textColor.value.toRadixString(16).padLeft(8, '0')}',
     };
   }
@@ -65,6 +67,8 @@ class PaginationConfig {
     double? pagePadding,
     String? theme,
     bool? scrollMode,
+    Color? backgroundColor,
+    Color? textColor,
   }) {
     return PaginationConfig(
       fontSize: fontSize ?? this.fontSize,
@@ -77,6 +81,8 @@ class PaginationConfig {
       pagePadding: pagePadding ?? this.pagePadding,
       theme: theme ?? this.theme,
       scrollMode: scrollMode ?? this.scrollMode,
+      backgroundColor: backgroundColor ?? this.backgroundColor,
+      textColor: textColor ?? this.textColor,
     );
   }
 }
@@ -140,7 +146,8 @@ class AdvancedTextReaderWidget extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<AdvancedTextReaderWidget> createState() => _AdvancedTextReaderWidgetState();
+  State<AdvancedTextReaderWidget> createState() =>
+      _AdvancedTextReaderWidgetState();
 }
 
 class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
@@ -161,7 +168,7 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
   @override
   void didUpdateWidget(AdvancedTextReaderWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     // 如果文本或配置发生变化，重新设置内容
     if (oldWidget.text != widget.text || oldWidget.config != widget.config) {
       _setText();
@@ -196,23 +203,19 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
 
     try {
       await _loadCompleter.future; // 等待WebView加载完成
-      
+
       final configMap = widget.config.toMap();
-      final result = await _webViewController!.callAsyncJavaScript(
-        functionBody: '''
-          return new Promise((resolve, reject) => {
-            try {
-              setText(arguments[0], arguments[1]).then(() => {
-                resolve(true);
-              }).catch(reject);
-            } catch (error) {
-              reject(error);
-            }
-          });
+      final result = await _webViewController!.evaluateJavascript(
+        source:
+            '''
+          (function() {
+            const text = ${jsonEncode(widget.text)};
+            const config = ${jsonEncode(configMap)};
+            return setText(text, config);
+          })()
         ''',
-        arguments: [widget.text, configMap],
       );
-      
+
       if (result?.value != true) {
         throw Exception('设置文本失败');
       }
@@ -243,7 +246,7 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
       callback: (args) {
         final data = args.isNotEmpty ? args[0] as Map<String, dynamic> : {};
         debugPrint('分页完成: $data');
-        
+
         if (mounted) {
           setState(() {
             _isLoading = false;
@@ -260,13 +263,13 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
         if (args.isNotEmpty) {
           final data = args[0] as Map<String, dynamic>;
           final pageInfo = PageInfo.fromMap(data);
-          
+
           if (mounted) {
             setState(() {
               _currentPageInfo = pageInfo;
             });
           }
-          
+
           widget.onPageChanged?.call(pageInfo);
         }
       },
@@ -303,15 +306,18 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
   }
 
   /// WebView加载完成
-  Future<void> _onLoadStop(InAppWebViewController controller, WebUri? url) async {
+  Future<void> _onLoadStop(
+    InAppWebViewController controller,
+    WebUri? url,
+  ) async {
     try {
       // 等待DOM完全加载
       await Future.delayed(const Duration(milliseconds: 100));
-      
+
       if (!_loadCompleter.isCompleted) {
         _loadCompleter.complete();
       }
-      
+
       // 设置文本内容
       await _setText();
     } catch (e) {
@@ -325,7 +331,7 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
   /// 下一页
   Future<bool> nextPage() async {
     if (_webViewController == null) return false;
-    
+
     try {
       final result = await _webViewController!.evaluateJavascript(
         source: 'nextPage()',
@@ -340,7 +346,7 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
   /// 上一页
   Future<bool> prevPage() async {
     if (_webViewController == null) return false;
-    
+
     try {
       final result = await _webViewController!.evaluateJavascript(
         source: 'prevPage()',
@@ -355,7 +361,7 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
   /// 跳转到指定页面
   Future<bool> goToPage(int page) async {
     if (_webViewController == null) return false;
-    
+
     try {
       final result = await _webViewController!.evaluateJavascript(
         source: 'goToPage($page)',
@@ -370,32 +376,31 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
   /// 获取当前页面信息
   Future<PageInfo?> getCurrentPageInfo() async {
     if (_webViewController == null) return null;
-    
+
     try {
       final result = await _webViewController!.evaluateJavascript(
         source: 'getCurrentPageInfo()',
       );
-      
+
       if (result is Map<String, dynamic>) {
         return PageInfo.fromMap(result);
       }
     } catch (e) {
       debugPrint('获取页面信息失败: $e');
     }
-    
+
     return null;
   }
 
   /// 搜索文本
   Future<List<SearchResult>> searchText(String query) async {
     if (_webViewController == null || query.isEmpty) return [];
-    
+
     try {
-      final result = await _webViewController!.callAsyncJavaScript(
-        functionBody: 'return searchText(arguments[0]);',
-        arguments: [query],
+      final result = await _webViewController!.evaluateJavascript(
+        source: 'searchText(${jsonEncode(query)})',
       );
-      
+
       if (result?.value is List) {
         final List<dynamic> resultList = result!.value as List<dynamic>;
         return resultList
@@ -406,28 +411,17 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
     } catch (e) {
       debugPrint('搜索文本失败: $e');
     }
-    
+
     return [];
   }
 
   /// 更新配置
   Future<void> updateConfig(PaginationConfig config) async {
     if (_webViewController == null) return;
-    
+
     try {
-      await _webViewController!.callAsyncJavaScript(
-        functionBody: '''
-          return new Promise((resolve, reject) => {
-            try {
-              updateConfig(arguments[0]).then(() => {
-                resolve(true);
-              }).catch(reject);
-            } catch (error) {
-              reject(error);
-            }
-          });
-        ''',
-        arguments: [config.toMap()],
+      await _webViewController!.evaluateJavascript(
+        source: 'updateConfig(${jsonEncode(config.toMap())})',
       );
     } catch (e) {
       debugPrint('更新配置失败: $e');
@@ -481,10 +475,10 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
             }
           },
         ),
-        
+
         // 加载指示器
         if (_isLoading) _buildLoadingWidget(),
-        
+
         // 错误指示器
         if (_hasError) _buildErrorWidget(),
       ],
@@ -494,19 +488,14 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
   /// 构建加载Widget
   Widget _buildLoadingWidget() {
     return Container(
-      color: widget.config.backgroundColor != null 
-          ? Color(int.parse(widget.config.backgroundColor!.replaceFirst('#', '0x')))
-          : const Color(0xFFFFFBF0),
+      color: widget.config.backgroundColor,
       child: const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text(
-              '正在加载阅读器...',
-              style: TextStyle(fontSize: 16),
-            ),
+            Text('正在加载阅读器...', style: TextStyle(fontSize: 16)),
           ],
         ),
       ),
@@ -516,27 +505,19 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
   /// 构建错误Widget
   Widget _buildErrorWidget() {
     return Container(
-      color: widget.config.backgroundColor != null 
-          ? Color(int.parse(widget.config.backgroundColor!.replaceFirst('#', '0x')))
-          : const Color(0xFFFFFBF0),
+      color: widget.config.backgroundColor,
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.error_outline,
-              size: 48,
-              color: Colors.red,
-            ),
+            const Icon(Icons.error_outline, size: 48, color: Colors.red),
             const SizedBox(height: 16),
             Text(
               '加载失败',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: widget.config.textColor != null 
-                    ? Color(int.parse(widget.config.textColor!.replaceFirst('#', '0x')))
-                    : const Color(0xFF2C2C2C),
+                color: widget.config.textColor,
               ),
             ),
             const SizedBox(height: 8),
@@ -544,12 +525,7 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Text(
                 _errorMessage,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: widget.config.textColor != null 
-                      ? Color(int.parse(widget.config.textColor!.replaceFirst('#', '0x')))
-                      : const Color(0xFF2C2C2C),
-                ),
+                style: TextStyle(fontSize: 14, color: widget.config.textColor),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -640,10 +616,12 @@ class ControlledAdvancedTextReaderWidget extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<ControlledAdvancedTextReaderWidget> createState() => _ControlledAdvancedTextReaderWidgetState();
+  State<ControlledAdvancedTextReaderWidget> createState() =>
+      _ControlledAdvancedTextReaderWidgetState();
 }
 
-class _ControlledAdvancedTextReaderWidgetState extends State<ControlledAdvancedTextReaderWidget> {
+class _ControlledAdvancedTextReaderWidgetState
+    extends State<ControlledAdvancedTextReaderWidget> {
   final GlobalKey<_AdvancedTextReaderWidgetState> _readerKey = GlobalKey();
 
   @override

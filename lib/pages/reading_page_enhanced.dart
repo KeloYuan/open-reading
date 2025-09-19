@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
+import 'dart:math' as math;
 
 import 'package:epubx/epubx.dart';
 import 'package:flutter/material.dart';
@@ -21,8 +22,12 @@ import '../widgets/custom_slider_components.dart';
 import '../widgets/toc_widget.dart';
 import '../widgets/tts_panel_enhanced.dart';
 import '../widgets/share_dialog.dart';
-// import '../services/highlight_dao.dart';
-// import '../services/note_dao.dart';
+import '../widgets/enhanced_text_selection_toolbar.dart';
+import '../widgets/highlight_color_picker.dart';
+import '../widgets/custom_selectable_text.dart';
+import '../services/highlight_dao.dart';
+// import '../services/note_dao.dart'; // TODO: 待实现
+import '../models/highlight.dart';
 import '../utils/responsive_helper.dart';
 
 // 性能优化配置
@@ -177,6 +182,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   final _statsDao = ReadingStatsDao();
   final _bookmarkDao = BookmarkDao();
   final _bookImportService = BookImportService();
+  final _highlightDao = HighlightDao();
+  // TODO: 待实现NoteDao
+  // final _noteDao = NoteDao();
 
   // --- 性能优化相关 ---
   final PageCacheManager _pageCacheManager = PageCacheManager(
@@ -209,6 +217,14 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   // --- Bookmark State ---
   List<Bookmark> _bookmarks = [];
   bool _isCurrentPageBookmarked = false;
+
+  // --- Highlight State ---
+  List<Highlight> _currentPageHighlights = [];
+  // bool _isTextSelectionMode = false; // TODO: 待实现
+  String? _selectedText;
+  int? _selectionStart;
+  int? _selectionEnd;
+  OverlayEntry? _selectionToolbarOverlay;
 
   // --- Chapter State ---
   List<Chapter> _chapters = [];
@@ -1022,6 +1038,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         _onPageTurn();
         _preloadAdjacentPages(); // 预加载相邻页面
 
+        // 加载当前页面的高亮
+        _loadCurrentPageHighlights();
+
         // 保存到定时器列表以便清理
         _timers.add(_debounceTimer!);
       }
@@ -1051,6 +1070,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     final screenHeight = MediaQuery.of(context).size.height;
     final tapPosition = details.globalPosition;
 
+    // 如果控制栏显示中，且点击了控制栏区域，则不处理翻页
     if (_showControls &&
         (tapPosition.dy < 150 || tapPosition.dy > screenHeight - 200)) {
       return;
@@ -1060,10 +1080,17 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     final rightBoundary = screenWidth * 2 / 3;
 
     if (tapPosition.dx < leftBoundary) {
-      _goToPreviousPage();
+      // 左侧区域：上一页
+      if (!_showControls) {
+        _goToPreviousPage();
+      }
     } else if (tapPosition.dx > rightBoundary) {
-      _goToNextPage();
+      // 右侧区域：下一页
+      if (!_showControls) {
+        _goToNextPage();
+      }
     } else {
+      // 中间区域：显示/隐藏控制栏
       _toggleControls();
     }
   }
@@ -1315,24 +1342,49 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               0.5 // 双页时减少内边距
         : _horizontalPadding;
 
-    // 智能显示区域计算 - 与分页算法保持严格一致
+    // 智能显示区域计算 - 与增强分页算法保持严格一致
+    final screenSize = MediaQuery.of(context).size;
     final statusBarHeight = MediaQuery.of(context).padding.top;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final systemPadding = MediaQuery.of(context).padding;
+    final isLandscape = screenSize.width > screenSize.height;
 
-    // 使用与分页算法完全相同的可用高度计算
-    final availableHeight =
-        (screenHeight * 0.90) -
-        statusBarHeight -
-        systemPadding.bottom -
-        20.0; // 与分页算法保持一致
+    // 使用与EnhancedTextPaginator完全相同的计算逻辑
+    final targetContentHeight = screenSize.height * 0.90;
+    final safeAreaHeight = screenSize.height * 0.10;
 
-    // 优化的padding设置，最大化利用屏幕空间
-    final topPadding = statusBarHeight + 10.0; // 状态栏 + 最小安全间距
-    final bottomPadding = 15.0; // 最小底部安全间距
+    // 根据设备类型确定安全区域分配比例 - 与分页器保持一致
+    final deviceType = _getDeviceTypeForLayout(screenSize);
+    double topSafeRatio;
+    double bottomSafeRatio;
+
+    switch (deviceType) {
+      case 'tablet':
+        topSafeRatio = isLandscape ? 0.3 : 0.4;
+        bottomSafeRatio = isLandscape ? 0.7 : 0.6;
+        break;
+      case 'largeMobile':
+        topSafeRatio = isLandscape ? 0.35 : 0.4;
+        bottomSafeRatio = isLandscape ? 0.65 : 0.6;
+        break;
+      default: // mobile
+        topSafeRatio = isLandscape ? 0.4 : 0.35;
+        bottomSafeRatio = isLandscape ? 0.6 : 0.65;
+        break;
+    }
+
+    // 计算实际的顶部和底部预留空间
+    final topReserve = math.max(
+      statusBarHeight + (safeAreaHeight * topSafeRatio),
+      statusBarHeight + 10.0,
+    );
+
+    final bottomReserve = math.max(safeAreaHeight * bottomSafeRatio, 20.0);
+
+    // 优化的padding设置，确保与分页算法一致
+    final topPadding = topReserve;
+    final bottomPadding = bottomReserve;
 
     // 确保内容区域充分利用可用高度
-    final maxContentHeight = availableHeight;
+    final maxContentHeight = targetContentHeight - topReserve - bottomReserve;
 
     return RepaintBoundary(
       child: Container(
@@ -1354,28 +1406,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               child: Column(
                 children: [
                   // 主要文本内容区域 - 支持文本选择和高亮
-                  Expanded(
-                    child: SelectableText(
-                      pageContent,
-                      style: TextStyle(
-                        fontSize: _fontSize,
-                        height: _lineSpacing,
-                        letterSpacing: _letterSpacing,
-                        color: _currentTheme.textColor, // 使用阅读主题的文字颜色
-                        fontFamily: _fontFamily == 'System'
-                            ? null
-                            : _fontFamily,
-                      ),
-                      textAlign: TextAlign.justify,
-                      showCursor: false,
-                      enableInteractiveSelection: true,
-                      contextMenuBuilder: (context, editableTextState) {
-                        return AdaptiveTextSelectionToolbar.editableText(
-                          editableTextState: editableTextState,
-                        );
-                      },
-                    ),
-                  ),
+                  Expanded(child: _buildHighlightedText(pageContent)),
                   // 页码标签 - 紧凑设计
                   Container(
                     height: 20.0,
@@ -2275,12 +2306,33 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   Widget _buildFontFamilySelector(StateSetter setModalState) {
     final textColor = _getModalTextColor();
     final cardColor = _getModalBackgroundColor().withValues(alpha: 0.6);
+    final activeColor = _currentTheme.sliderActiveColor;
 
     final fontFamilies = [
-      {'name': '系统默认', 'value': 'System'},
-      {'name': '宋体', 'value': 'Serif'},
-      {'name': '黑体', 'value': 'Sans-serif'},
-      {'name': '等宽字体', 'value': 'Monospace'},
+      {
+        'name': '系统默认',
+        'value': 'System',
+        'description': '跟随系统',
+        'icon': Icons.phone_android,
+      },
+      {
+        'name': '宋体',
+        'value': 'Serif',
+        'description': '经典衬线',
+        'icon': Icons.text_fields,
+      },
+      {
+        'name': '黑体',
+        'value': 'Sans-serif',
+        'description': '现代无衬线',
+        'icon': Icons.format_bold,
+      },
+      {
+        'name': '等宽字体',
+        'value': 'Monospace',
+        'description': '代码风格',
+        'icon': Icons.code,
+      },
     ];
 
     return Container(
@@ -2288,8 +2340,15 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: _getModalDividerColor(), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: _currentTheme.textColor.withValues(alpha: 0.1),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2297,15 +2356,15 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: _currentTheme.sliderActiveColor.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(8),
+                  color: activeColor.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
                   Icons.font_download_rounded,
-                  size: 16,
-                  color: _currentTheme.sliderActiveColor,
+                  size: 18,
+                  color: activeColor,
                 ),
               ),
               const SizedBox(width: 12),
@@ -2319,55 +2378,114 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: fontFamilies.map((font) {
+          const SizedBox(height: 20),
+          // 使用网格布局替代Wrap，更整齐美观
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 3.2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            itemCount: fontFamilies.length,
+            itemBuilder: (context, index) {
+              final font = fontFamilies[index];
               final isSelected = _fontFamily == font['value'];
-              return GestureDetector(
-                onTap: () {
-                  setModalState(() => _fontFamily = font['value']!);
-                  setState(() {});
-                  _saveSetting(
-                    (p) => p.setString('fontFamily', font['value']!),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? _getModalAccentColor()
-                        : _getModalBackgroundColor().withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isSelected
-                          ? _getModalAccentColor()
-                          : _getModalDividerColor(),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Text(
-                    font['name']!,
-                    style: TextStyle(
-                      color: isSelected
-                          ? _getModalBackgroundColor()
-                          : textColor,
-                      fontSize: 14,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.w500,
-                      fontFamily: font['value'] == 'System'
-                          ? null
-                          : font['value'],
+
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      setModalState(
+                        () => _fontFamily = font['value'] as String,
+                      );
+                      setState(() {});
+                      _saveSetting(
+                        (p) =>
+                            p.setString('fontFamily', font['value'] as String),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? activeColor.withValues(alpha: 0.15)
+                            : _getModalBackgroundColor().withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isSelected
+                              ? activeColor
+                              : _getModalDividerColor().withValues(alpha: 0.5),
+                          width: isSelected ? 2 : 1,
+                        ),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: activeColor.withValues(alpha: 0.25),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : [],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                font['icon'] as IconData,
+                                size: 16,
+                                color: isSelected
+                                    ? activeColor
+                                    : textColor.withValues(alpha: 0.7),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  font['name'] as String,
+                                  style: TextStyle(
+                                    color: isSelected ? activeColor : textColor,
+                                    fontSize: 14,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
+                                    fontFamily: font['value'] == 'System'
+                                        ? null
+                                        : font['value'] as String?,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            font['description'] as String,
+                            style: TextStyle(
+                              color: (isSelected ? activeColor : textColor)
+                                  .withValues(alpha: 0.6),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               );
-            }).toList(),
+            },
           ),
         ],
       ),
@@ -3069,6 +3187,504 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       isDismissible: true,
       builder: (context) => TtsPanelEnhanced(textToRead: currentPageContent),
     );
+  }
+
+  /// 获取设备类型用于布局计算 - 与EnhancedTextPaginator保持一致
+  String _getDeviceTypeForLayout(Size screenSize) {
+    final diagonal = math.sqrt(
+      screenSize.width * screenSize.width +
+          screenSize.height * screenSize.height,
+    );
+
+    if (diagonal > 1200) {
+      return 'tablet';
+    } else if (diagonal > 800) {
+      return 'largeMobile';
+    } else {
+      return 'mobile';
+    }
+  }
+
+  // --- 高亮功能 ---
+
+  /// 构建包含高亮的文本
+  Widget _buildHighlightedText(String pageContent) {
+    final textStyle = TextStyle(
+      fontSize: _fontSize,
+      height: _lineSpacing,
+      letterSpacing: _letterSpacing,
+      color: _currentTheme.textColor,
+      fontFamily: _fontFamily == 'System' ? null : _fontFamily,
+    );
+
+    return CustomSelectableText(
+      text: pageContent,
+      style: textStyle,
+      highlights: _currentPageHighlights,
+      textAlign: TextAlign.justify,
+      onTextSelected: (selectedText, startOffset, endOffset) {
+        _handleTextSelected(selectedText, startOffset, endOffset);
+      },
+      onHighlightTap: _handleHighlightTap,
+    );
+  }
+
+  /// 加载当前页面的高亮
+  Future<void> _loadCurrentPageHighlights() async {
+    try {
+      final highlights = await _highlightDao.getHighlightsByPage(
+        widget.book.id!,
+        _currentPageIndex + 1,
+      );
+
+      if (mounted) {
+        setState(() {
+          _currentPageHighlights = highlights;
+        });
+      }
+    } catch (e) {
+      debugPrint('加载高亮失败: $e');
+    }
+  }
+
+  /// 处理文本选择 - 通过SelectableText的内置选择功能
+  void _onTextSelection() {
+    // 这个方法将被 SelectableText 的选择回调触发
+    // 暂时保留为空，等待SelectableText选择回调的实现
+  }
+
+  /// 处理文字选中
+  void _handleTextSelected(
+    String selectedText,
+    int startOffset,
+    int endOffset,
+  ) {
+    setState(() {
+      _selectedText = selectedText;
+      _selectionStart = startOffset;
+      _selectionEnd = endOffset;
+    });
+
+    _showSelectionToolbar();
+  }
+
+  /// 显示选择工具栏
+  void _showSelectionToolbar() {
+    if (_selectedText == null) return;
+
+    _hideSelectionToolbar(); // 确保之前的工具栏被隐藏
+
+    final overlay = Overlay.of(context);
+    _selectionToolbarOverlay = OverlayEntry(
+      builder: (context) => Positioned(
+        bottom: 150, // 在控制栏上方显示
+        left: 20,
+        right: 20,
+        child: Center(
+          child: EnhancedTextSelectionToolbar(
+            selectedText: _selectedText!,
+            bookId: widget.book.id!,
+            pageNumber: _currentPageIndex + 1,
+            chapterTitle: _getCurrentChapterTitle(),
+            onCopy: _handleCopyText,
+            onHighlight: _handleHighlightText,
+            onNote: _handleAddNote,
+            onShare: _handleShareText,
+            onClose: _hideSelectionToolbar,
+            backgroundColor: _currentTheme.controlBarColor,
+            iconColor: _currentTheme.sliderActiveColor,
+            textColor: _currentTheme.controlBarTextColor,
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(_selectionToolbarOverlay!);
+  }
+
+  /// 隐藏选择工具栏
+  void _hideSelectionToolbar() {
+    _selectionToolbarOverlay?.remove();
+    _selectionToolbarOverlay = null;
+
+    setState(() {
+      _selectedText = null;
+      _selectionStart = null;
+      _selectionEnd = null;
+      // _isTextSelectionMode = false; // TODO: 待实现
+    });
+  }
+
+  /// 处理复制文字
+  void _handleCopyText() {
+    // EnhancedTextSelectionToolbar已经处理了复制逻辑
+  }
+
+  /// 处理高亮文字
+  void _handleHighlightText() async {
+    if (_selectedText == null ||
+        _selectionStart == null ||
+        _selectionEnd == null) {
+      return;
+    }
+
+    final color = await showHighlightColorPicker(context: context);
+    if (color == null) return;
+
+    await _createHighlight(
+      selectedText: _selectedText!,
+      startOffset: _selectionStart!,
+      endOffset: _selectionEnd!,
+      color: color,
+    );
+
+    // 隐藏选择工具栏
+    _hideSelectionToolbar();
+  }
+
+  /// 创建高亮
+  Future<void> _createHighlight({
+    required String selectedText,
+    required int startOffset,
+    required int endOffset,
+    required Color color,
+    String? noteText,
+  }) async {
+    try {
+      final highlight = Highlight(
+        bookId: widget.book.id!,
+        pageNumber: _currentPageIndex + 1,
+        selectedText: selectedText,
+        startOffset: startOffset,
+        endOffset: endOffset,
+        color: color,
+        chapter: _getCurrentChapterTitle(),
+        noteText: noteText,
+      );
+
+      await _highlightDao.insertHighlight(highlight);
+      await _loadCurrentPageHighlights(); // 重新加载高亮
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('已添加${Highlight.getColorName(color)}高亮'),
+            backgroundColor: color.withValues(alpha: 0.8),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('创建高亮失败: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('添加高亮失败')));
+      }
+    }
+  }
+
+  /// 处理添加笔记
+  void _handleAddNote() {
+    // 显示笔记输入对话框
+    _showNoteDialog();
+  }
+
+  /// 显示笔记对话框
+  void _showNoteDialog() {
+    final noteController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('添加笔记'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '选中文字：',
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: _currentTheme.textColor.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _currentTheme.backgroundColor.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _selectedText ?? '',
+                style: TextStyle(fontSize: 14, color: _currentTheme.textColor),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: noteController,
+              decoration: const InputDecoration(
+                labelText: '笔记内容',
+                hintText: '请输入您的笔记...',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final noteText = noteController.text.trim();
+              if (noteText.isNotEmpty) {
+                final color = await showHighlightColorPicker(context: context);
+                if (color != null) {
+                  await _createHighlight(
+                    selectedText: _selectedText!,
+                    startOffset: _selectionStart!,
+                    endOffset: _selectionEnd!,
+                    color: color,
+                    noteText: noteText,
+                  );
+                }
+              }
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 处理分享文字
+  void _handleShareText() {
+    // EnhancedTextSelectionToolbar已经处理了分享逻辑
+  }
+
+  /// 处理高亮点击
+  void _handleHighlightTap(Highlight highlight) {
+    // 显示高亮详情
+    _showHighlightDetails(highlight);
+  }
+
+  /// 处理高亮长按
+  void _handleHighlightLongPress(Highlight highlight) {
+    // 显示高亮操作菜单
+    _showHighlightMenu(highlight);
+  }
+
+  /// 显示高亮详情
+  void _showHighlightDetails(Highlight highlight) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                color: highlight.color,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text('${Highlight.getColorName(highlight.color)}高亮'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              highlight.selectedText,
+              style: TextStyle(
+                fontSize: 16,
+                backgroundColor: highlight.color.withValues(alpha: 0.3),
+              ),
+            ),
+            if (highlight.noteText?.isNotEmpty == true) ...[
+              const SizedBox(height: 16),
+              const Text('笔记：', style: TextStyle(fontWeight: FontWeight.w500)),
+              const SizedBox(height: 4),
+              Text(highlight.noteText!),
+            ],
+            const SizedBox(height: 16),
+            Text(
+              '创建时间：${_formatDateTime(highlight.createDate)}',
+              style: TextStyle(
+                fontSize: 12,
+                color: _currentTheme.textColor.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 显示高亮操作菜单
+  void _showHighlightMenu(Highlight highlight) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.edit, color: _currentTheme.sliderActiveColor),
+              title: const Text('编辑笔记'),
+              onTap: () {
+                Navigator.pop(context);
+                _editHighlightNote(highlight);
+              },
+            ),
+            ListTile(
+              leading: Icon(
+                Icons.palette,
+                color: _currentTheme.sliderActiveColor,
+              ),
+              title: const Text('更改颜色'),
+              onTap: () {
+                Navigator.pop(context);
+                _changeHighlightColor(highlight);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('删除高亮'),
+              onTap: () {
+                Navigator.pop(context);
+                _deleteHighlight(highlight);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 编辑高亮笔记
+  void _editHighlightNote(Highlight highlight) {
+    final noteController = TextEditingController(
+      text: highlight.noteText ?? '',
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('编辑笔记'),
+        content: TextField(
+          controller: noteController,
+          decoration: const InputDecoration(
+            labelText: '笔记内容',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final noteText = noteController.text.trim();
+              await _updateHighlight(
+                highlight.copyWith(
+                  noteText: noteText.isEmpty ? null : noteText,
+                  updateDate: DateTime.now(),
+                ),
+              );
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 更改高亮颜色
+  void _changeHighlightColor(Highlight highlight) async {
+    final newColor = await showHighlightColorPicker(
+      context: context,
+      initialColor: highlight.color,
+    );
+
+    if (newColor != null && newColor != highlight.color) {
+      await _updateHighlight(
+        highlight.copyWith(color: newColor, updateDate: DateTime.now()),
+      );
+    }
+  }
+
+  /// 更新高亮
+  Future<void> _updateHighlight(Highlight highlight) async {
+    try {
+      // 注意：这里需要在HighlightDao中添加updateHighlight方法
+      // await _highlightDao.updateHighlight(highlight);
+      await _loadCurrentPageHighlights();
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('高亮已更新')));
+      }
+    } catch (e) {
+      debugPrint('更新高亮失败: $e');
+    }
+  }
+
+  /// 删除高亮
+  void _deleteHighlight(Highlight highlight) async {
+    try {
+      await _highlightDao.deleteHighlight(highlight.id!);
+      await _loadCurrentPageHighlights();
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('高亮已删除')));
+      }
+    } catch (e) {
+      debugPrint('删除高亮失败: $e');
+    }
+  }
+
+  /// 获取当前章节标题
+  String _getCurrentChapterTitle() {
+    if (_chapters.isNotEmpty) {
+      // 寻找当前页面所属的章节
+      for (final chapter in _chapters.reversed) {
+        if (chapter.startPage <= _currentPageIndex + 1) {
+          return chapter.title;
+        }
+      }
+    }
+    return '第${_currentPageIndex + 1}页';
+  }
+
+  /// 格式化日期时间
+  String _formatDateTime(DateTime dateTime) {
+    return '${dateTime.year}年${dateTime.month}月${dateTime.day}日 '
+        '${dateTime.hour.toString().padLeft(2, '0')}:'
+        '${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
   // 显示分享对话框

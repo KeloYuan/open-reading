@@ -353,6 +353,96 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 20),
               _buildSectionCard(
+                title: '阅读体验',
+                icon: Icons.menu_book,
+                children: [
+                  _buildSwitchSetting(
+                    title: '音量键翻页',
+                    subtitle: '使用音量键控制翻页',
+                    value: _enableVolumeKeyTurn,
+                    onChanged: (value) =>
+                        setState(() => _enableVolumeKeyTurn = value),
+                    icon: Icons.volume_up,
+                  ),
+                  _buildSwitchSetting(
+                    title: '全屏阅读',
+                    subtitle: '隐藏状态栏和导航栏',
+                    value: _enableFullscreen,
+                    onChanged: (value) =>
+                        setState(() => _enableFullscreen = value),
+                    icon: Icons.fullscreen,
+                  ),
+                  _buildSwitchSetting(
+                    title: '页面动画',
+                    subtitle: '翻页时的动画效果',
+                    value: _enablePageAnimation,
+                    onChanged: (value) =>
+                        setState(() => _enablePageAnimation = value),
+                    icon: Icons.animation,
+                  ),
+                  _buildDropdownSetting(
+                    title: '翻页方向',
+                    subtitle: '选择翻页的滑动方向',
+                    value: _swipeDirection,
+                    options: const [
+                      {'value': 'horizontal', 'label': '水平滑动'},
+                      {'value': 'vertical', 'label': '垂直滑动'},
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _swipeDirection = value),
+                    icon: Icons.swipe,
+                  ),
+                  _buildDropdownSetting(
+                    title: '翻页效果',
+                    subtitle: '选择翻页的动画效果',
+                    value: _pageTransition,
+                    options: const [
+                      {'value': 'slide', 'label': '滑动效果'},
+                      {'value': 'fade', 'label': '淡入淡出'},
+                      {'value': 'none', 'label': '无动画'},
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _pageTransition = value),
+                    icon: Icons.slideshow,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildSectionCard(
+                title: '高亮和笔记',
+                icon: Icons.highlight_alt,
+                children: [
+                  _buildActionSetting(
+                    title: '高亮管理',
+                    subtitle: '查看和管理所有高亮',
+                    onTap: _showHighlightManager,
+                    icon: Icons.highlight_alt,
+                  ),
+                  _buildActionSetting(
+                    title: '笔记管理',
+                    subtitle: '查看和管理所有笔记',
+                    onTap: _showNoteManager,
+                    icon: Icons.note,
+                  ),
+                  _buildActionSetting(
+                    title: '导出高亮笔记',
+                    subtitle: '导出为Markdown或文档',
+                    onTap: _exportHighlightsAndNotes,
+                    icon: Icons.file_download,
+                  ),
+                  _buildSwitchSetting(
+                    title: '自动备份笔记',
+                    subtitle: '定期备份高亮和笔记数据',
+                    value: true, // 默认开启
+                    onChanged: (value) {
+                      // TODO: 实现自动备份逻辑
+                    },
+                    icon: Icons.backup,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildSectionCard(
                 title: '书籍管理',
                 icon: Icons.library_books,
                 children: [
@@ -1253,6 +1343,145 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  /// 构建下拉设置项
+  Widget _buildDropdownSetting({
+    required String title,
+    required String subtitle,
+    required String value,
+    required List<Map<String, String>> options,
+    required Function(String) onChanged,
+    required IconData icon,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showDropdownDialog(title, value, options, onChanged),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 显示下拉选择对话框
+  void _showDropdownDialog(
+    String title,
+    String currentValue,
+    List<Map<String, String>> options,
+    Function(String) onChanged,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: options.map((option) {
+            final isSelected = option['value'] == currentValue;
+            return ListTile(
+              leading: Radio<String>(
+                value: option['value']!,
+                groupValue: currentValue,
+                onChanged: (value) {
+                  if (value != null) {
+                    onChanged(value);
+                    Navigator.pop(context);
+                  }
+                },
+              ),
+              title: Text(option['label']!),
+              selected: isSelected,
+              onTap: () {
+                onChanged(option['value']!);
+                Navigator.pop(context);
+              },
+            );
+          }).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 显示高亮管理器
+  void _showHighlightManager() {
+    // TODO: 实现高亮管理界面
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('高亮管理功能即将推出')));
+  }
+
+  /// 显示笔记管理器
+  void _showNoteManager() {
+    // TODO: 实现笔记管理界面
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('笔记管理功能即将推出')));
+  }
+
+  /// 导出高亮和笔记
+  void _exportHighlightsAndNotes() {
+    // TODO: 实现导出功能
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('导出功能即将推出')));
+  }
+
   // WebDAV配置对话框
   Future<void> _showWebDavConfig() async {
     final result = await showDialog<bool>(
@@ -1886,14 +2115,14 @@ class _SettingsPageState extends State<SettingsPage> {
 
       if (confirmed == true) {
         // TODO: 实现重新提取封面的逻辑
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('封面提取功能正在开发中...')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('封面提取功能正在开发中...')));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('操作失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('操作失败: $e')));
     }
   }
 
@@ -1901,13 +2130,13 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _cleanCoverCache() async {
     try {
       // TODO: 实现清理封面缓存的逻辑
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('缓存清理功能正在开发中...')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('缓存清理功能正在开发中...')));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('清理失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('清理失败: $e')));
     }
   }
 }

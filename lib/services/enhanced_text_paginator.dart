@@ -91,7 +91,7 @@ class EnhancedTextPaginator {
     }
   }
 
-  /// 计算文本显示区域
+  /// 计算文本显示区域 - 优化为使用90%屏幕区域
   static Size _calculateTextArea({
     required Size screenSize,
     required EdgeInsets padding,
@@ -99,34 +99,58 @@ class EnhancedTextPaginator {
     required DeviceType deviceType,
     required bool isLandscape,
   }) {
-    // 根据设备类型调整预留空间
-    double bottomReserve;
-    double topReserve;
+    // 使用90%的屏幕高度用于内容显示
+    final targetContentHeight = screenSize.height * 0.90;
+
+    // 计算剩余10%作为安全区域，分配给顶部和底部
+    final safeAreaHeight = screenSize.height * 0.10;
+
+    // 根据设备类型和方向调整安全区域分配比例
+    double topSafeRatio;
+    double bottomSafeRatio;
 
     switch (deviceType) {
       case DeviceType.tablet:
-        bottomReserve = isLandscape ? 100.0 : 120.0;
-        topReserve = isLandscape ? 60.0 : 80.0;
+        // 平板设备顶部稍多一些空间用于状态栏
+        topSafeRatio = isLandscape ? 0.3 : 0.4;
+        bottomSafeRatio = isLandscape ? 0.7 : 0.6;
         break;
       case DeviceType.largeMobile:
-        bottomReserve = isLandscape ? 80.0 : 100.0;
-        topReserve = isLandscape ? 50.0 : 70.0;
+        topSafeRatio = isLandscape ? 0.35 : 0.4;
+        bottomSafeRatio = isLandscape ? 0.65 : 0.6;
         break;
       case DeviceType.mobile:
-        bottomReserve = isLandscape ? 70.0 : 90.0;
-        topReserve = isLandscape ? 40.0 : 60.0;
+        // 手机设备底部需要更多空间用于导航栏
+        topSafeRatio = isLandscape ? 0.4 : 0.35;
+        bottomSafeRatio = isLandscape ? 0.6 : 0.65;
         break;
     }
 
-    final width = screenSize.width - padding.horizontal;
-    final height =
-        screenSize.height -
-        padding.vertical -
-        statusBarHeight -
-        topReserve -
-        bottomReserve;
+    // 计算实际的顶部和底部预留空间
+    final topReserve = math.max(
+      statusBarHeight + (safeAreaHeight * topSafeRatio),
+      statusBarHeight + 10.0, // 最小顶部安全间距
+    );
 
-    return Size(width, height);
+    final bottomReserve = math.max(
+      safeAreaHeight * bottomSafeRatio,
+      20.0, // 最小底部安全间距
+    );
+
+    // 计算可用尺寸
+    final width = screenSize.width - padding.horizontal;
+    final height = targetContentHeight - topReserve - bottomReserve;
+
+    debugPrint(
+      '📐 屏幕分析: ${screenSize.width.toInt()}x${screenSize.height.toInt()}px',
+    );
+    debugPrint('📐 内容目标高度: ${targetContentHeight.toInt()}px (90%)');
+    debugPrint(
+      '📐 安全区域: 顶部${topReserve.toInt()}px, 底部${bottomReserve.toInt()}px',
+    );
+    debugPrint('📐 最终文本区域: ${width.toInt()}x${height.toInt()}px');
+
+    return Size(width, math.max(height, 200)); // 确保最小高度
   }
 
   /// 测量字符尺寸
