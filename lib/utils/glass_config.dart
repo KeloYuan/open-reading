@@ -3,7 +3,6 @@
 
 import 'package:flutter/material.dart';
 import 'progressive_blur.dart';
-import 'color_extensions.dart';
 
 class GlassEffectConfig {
   // ============ 模糊强度配置 (sigmaX/sigmaY) ============
@@ -177,12 +176,10 @@ class GlassEffectHelper {
         decoration: BoxDecoration(
           color: Theme.of(
             context,
-          ).colorScheme.surface.withOpacityValues(scaledOpacity),
+          ).colorScheme.surface.withOpacity(scaledOpacity),
           border: Border(
             bottom: BorderSide(
-              color: Theme.of(
-                context,
-              ).colorScheme.outline.withOpacityValues(0.16),
+              color: Theme.of(context).colorScheme.outline.withOpacity(0.16),
               width: 0.5,
             ),
           ),
@@ -197,7 +194,7 @@ class GlassEffectHelper {
         decoration: BoxDecoration(
           color: Theme.of(
             context,
-          ).colorScheme.surface.withOpacityValues(scaledOpacity),
+          ).colorScheme.surface.withOpacity(scaledOpacity),
         ),
         child: child,
       ),
@@ -220,19 +217,15 @@ class GlassEffectHelper {
       // 使用更清晰的实体卡片样式
       return Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withOpacityValues(0.98),
+          color: Theme.of(context).colorScheme.surface.withOpacity(0.98),
           borderRadius: borderRadius,
           border: Border.all(
-            color: Theme.of(
-              context,
-            ).colorScheme.outline.withOpacityValues(0.16),
+            color: Theme.of(context).colorScheme.outline.withOpacity(0.16),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Theme.of(
-                context,
-              ).colorScheme.shadow.withOpacityValues(0.12),
+              color: Theme.of(context).colorScheme.shadow.withOpacity(0.12),
               blurRadius: 18,
               offset: const Offset(0, 8),
             ),
@@ -245,12 +238,12 @@ class GlassEffectHelper {
     return ProgressiveBlurPresets.radialBlur(
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withOpacityValues(
-            GlassEffectConfig.cardOpacity,
-          ),
+          color: Theme.of(
+            context,
+          ).colorScheme.surface.withOpacity(GlassEffectConfig.cardOpacity),
           borderRadius: borderRadius,
           border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withOpacityValues(0.2),
+            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
             width: 1,
           ),
         ),
@@ -298,10 +291,10 @@ class GlassEffectHelper {
             colors: [
               Theme.of(
                 context,
-              ).colorScheme.surface.withOpacityValues(config['opacity']! + 0.1),
+              ).colorScheme.surface.withOpacity(config['opacity']! + 0.1),
               Theme.of(
                 context,
-              ).colorScheme.surface.withOpacityValues(config['opacity']!),
+              ).colorScheme.surface.withOpacity(config['opacity']!),
               Colors.transparent,
             ],
             stops: const [0.0, 0.7, 1.0],
@@ -325,7 +318,7 @@ BackdropFilter(
     sigmaY: GlassEffectConfig.appBarBlur,
   ),
   child: Container(
-    color: Theme.of(context).colorScheme.surface.withOpacityValues(
+    color: Theme.of(context).colorScheme.surface.withOpacity(
       GlassEffectConfig.appBarOpacity
     ),
   ),
@@ -339,7 +332,7 @@ BackdropFilter(
     sigmaY: config['blur']!,
   ),
   child: Container(
-    color: Theme.of(context).colorScheme.surface.withOpacityValues(
+    color: Theme.of(context).colorScheme.surface.withOpacity(
       config['opacity']!
     ),
   ),

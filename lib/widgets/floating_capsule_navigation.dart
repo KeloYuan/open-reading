@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../utils/glass_config.dart';
-import '../utils/color_extensions.dart';
 
 // 悬浮胶囊式导航栏组件
 // 仿iOS风格的胶囊选择器，支持毛玻璃效果和平滑动画
@@ -60,8 +59,12 @@ class _FloatingCapsuleNavigationState extends State<FloatingCapsuleNavigation>
       vsync: this,
     );
 
-    _bounceAnimation = Tween<double>(begin: 1.0, end: 1.03).animate( // 减少弹跳幅度
-      CurvedAnimation(parent: _bounceController, curve: Curves.easeOutCubic), // 改为平滑曲线
+    _bounceAnimation = Tween<double>(begin: 1.0, end: 1.03).animate(
+      // 减少弹跳幅度
+      CurvedAnimation(
+        parent: _bounceController,
+        curve: Curves.easeOutCubic,
+      ), // 改为平滑曲线
     );
 
     // 按压效果控制器
@@ -70,7 +73,8 @@ class _FloatingCapsuleNavigationState extends State<FloatingCapsuleNavigation>
       vsync: this,
     );
 
-    _pressAnimation = Tween<double>(begin: 1.0, end: 0.97).animate( // 减少按压幅度
+    _pressAnimation = Tween<double>(begin: 1.0, end: 0.97).animate(
+      // 减少按压幅度
       CurvedAnimation(parent: _pressController, curve: Curves.easeInOut),
     );
 
@@ -134,13 +138,13 @@ class _FloatingCapsuleNavigationState extends State<FloatingCapsuleNavigation>
         boxShadow: [
           // 悬浮效果阴影 - 增强阴影让Q弹感更强
           BoxShadow(
-            color: Colors.black.withOpacityValues(0.12),
+            color: Colors.black.withOpacity(0.12),
             blurRadius: 25,
             offset: const Offset(0, 10),
             spreadRadius: 0,
           ),
           BoxShadow(
-            color: Colors.black.withOpacityValues(0.08),
+            color: Colors.black.withOpacity(0.08),
             blurRadius: 45,
             offset: const Offset(0, 20),
             spreadRadius: 0,
@@ -157,14 +161,10 @@ class _FloatingCapsuleNavigationState extends State<FloatingCapsuleNavigation>
           ),
           child: Container(
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.surface.withOpacityValues(0.9),
+              color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
               borderRadius: BorderRadius.circular(borderRadius),
               border: Border.all(
-                color: Theme.of(
-                  context,
-                ).colorScheme.outline.withOpacityValues(0.2),
+                color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
                 width: 0.5,
               ),
             ),
@@ -196,10 +196,10 @@ class _FloatingCapsuleNavigationState extends State<FloatingCapsuleNavigation>
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 6), // 增加边距
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary.withOpacityValues(0.15),
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
           borderRadius: BorderRadius.circular(borderRadius),
           border: Border.all(
-            color: Theme.of(context).colorScheme.primary.withOpacityValues(0.3),
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
             width: 1,
           ),
         ),
@@ -209,9 +209,7 @@ class _FloatingCapsuleNavigationState extends State<FloatingCapsuleNavigation>
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Container(
               decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withOpacityValues(0.1),
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(borderRadius),
               ),
             ),
@@ -409,7 +407,8 @@ class _CapsuleNavigationItemState extends State<_CapsuleNavigationItem>
       vsync: this,
     );
 
-    _hoverAnimation = Tween<double>(begin: 1.0, end: 1.02).animate( // 减少悬停缩放幅度
+    _hoverAnimation = Tween<double>(begin: 1.0, end: 1.02).animate(
+      // 减少悬停缩放幅度
       CurvedAnimation(parent: _hoverController, curve: Curves.easeOutCubic),
     );
 
@@ -418,7 +417,8 @@ class _CapsuleNavigationItemState extends State<_CapsuleNavigationItem>
       end: 0.97, // 减少点击缩放幅度
     ).animate(CurvedAnimation(parent: _tapController, curve: Curves.easeInOut));
 
-    _iconScaleAnimation = Tween<double>(begin: 1.0, end: 1.1).animate( // 减少图标缩放幅度
+    _iconScaleAnimation = Tween<double>(begin: 1.0, end: 1.1).animate(
+      // 减少图标缩放幅度
       CurvedAnimation(parent: _hoverController, curve: Curves.easeOutCubic),
     );
   }
@@ -459,9 +459,7 @@ class _CapsuleNavigationItemState extends State<_CapsuleNavigationItem>
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(widget.borderRadius),
                   color: _isHovering
-                      ? Theme.of(
-                          context,
-                        ).colorScheme.primary.withOpacityValues(0.05)
+                      ? Theme.of(context).colorScheme.primary.withOpacity(0.05)
                       : Colors.transparent,
                 ),
                 child: Row(
@@ -483,8 +481,9 @@ class _CapsuleNavigationItemState extends State<_CapsuleNavigationItem>
                                 size: 18,
                                 color: widget.isSelected
                                     ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(context).colorScheme.onSurface
-                                          .withOpacityValues(0.6),
+                                    : Theme.of(
+                                        context,
+                                      ).colorScheme.onSurface.withOpacity(0.6),
                               ),
                             ),
                           );
@@ -501,7 +500,7 @@ class _CapsuleNavigationItemState extends State<_CapsuleNavigationItem>
                             ? Theme.of(context).colorScheme.primary
                             : Theme.of(
                                 context,
-                              ).colorScheme.onSurface.withOpacityValues(0.6),
+                              ).colorScheme.onSurface.withOpacity(0.6),
                         fontWeight: widget.isSelected
                             ? FontWeight.w600
                             : FontWeight.w400,

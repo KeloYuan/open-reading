@@ -3,7 +3,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'dart:ui';
 import '../services/book_dao.dart';
 import '../services/reading_stats_dao.dart';
-import '../utils/color_extensions.dart';
 import '../utils/glass_config.dart';
 import '../utils/responsive_helper.dart';
 import 'detailed_stats_page.dart';
@@ -83,7 +82,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                 bottom: BorderSide(
                   color: Theme.of(
                     context,
-                  ).colorScheme.outline.withOpacityValues(0.2),
+                  ).colorScheme.outline.withValues(alpha: 0.2),
                   width: 0.5,
                 ),
               ),
@@ -190,12 +189,12 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(
                 context,
-              ).colorScheme.outline.withOpacityValues(0.2),
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -209,7 +208,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                     decoration: BoxDecoration(
                       color: Theme.of(
                         context,
-                      ).colorScheme.primary.withOpacityValues(0.1),
+                      ).colorScheme.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
@@ -237,7 +236,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                               ?.copyWith(
                                 color: Theme.of(
                                   context,
-                                ).colorScheme.onSurface.withOpacityValues(0.7),
+                                ).colorScheme.onSurface.withValues(alpha: 0.7),
                               ),
                         ),
                       ],
@@ -254,10 +253,10 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                       colors: [
                         Theme.of(
                           context,
-                        ).colorScheme.primaryContainer.withOpacityValues(0.4),
+                        ).colorScheme.primaryContainer.withValues(alpha: 0.4),
                         Theme.of(
                           context,
-                        ).colorScheme.secondaryContainer.withOpacityValues(0.3),
+                        ).colorScheme.secondaryContainer.withValues(alpha: 0.3),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(12),
@@ -269,7 +268,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                         decoration: BoxDecoration(
                           color: Theme.of(
                             context,
-                          ).colorScheme.primary.withOpacityValues(0.2),
+                          ).colorScheme.primary.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Icon(
@@ -499,12 +498,12 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(
                 context,
-              ).colorScheme.outline.withOpacityValues(0.2),
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -518,7 +517,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                     decoration: BoxDecoration(
                       color: Theme.of(
                         context,
-                      ).colorScheme.secondary.withOpacityValues(0.1),
+                      ).colorScheme.secondary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -596,7 +595,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                         return FlLine(
                           color: Theme.of(
                             context,
-                          ).colorScheme.outline.withOpacityValues(0.1),
+                          ).colorScheme.outline.withValues(alpha: 0.1),
                           strokeWidth: 1,
                         );
                       },
@@ -614,7 +613,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                               colors: [
                                 Theme.of(
                                   context,
-                                ).colorScheme.primary.withOpacityValues(0.8),
+                                ).colorScheme.primary.withValues(alpha: 0.8),
                                 Theme.of(context).colorScheme.primary,
                               ],
                             ),
@@ -645,12 +644,12 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacityValues(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(
                 context,
-              ).colorScheme.outline.withOpacityValues(0.2),
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -664,7 +663,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                     decoration: BoxDecoration(
                       color: Theme.of(
                         context,
-                      ).colorScheme.tertiary.withOpacityValues(0.1),
+                      ).colorScheme.tertiary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -723,7 +722,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacityValues(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -731,7 +730,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacityValues(0.2),
+              color: color.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: color, size: 20),
@@ -752,7 +751,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Theme.of(
                       context,
-                    ).colorScheme.onSurface.withOpacityValues(0.6),
+                    ).colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -799,7 +798,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
         text = '';
     }
     return SideTitleWidget(
-      meta: meta,
+      axisSide: AxisSide.bottom,
       space: 4.0,
       child: Text(text, style: style),
     );
@@ -843,7 +842,7 @@ class _StatCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: Theme.of(
                 context,
-              ).colorScheme.surface.withOpacityValues(0.8),
+              ).colorScheme.surface.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(
                 ResponsiveHelper.getValue(
                   context,
@@ -855,7 +854,7 @@ class _StatCard extends StatelessWidget {
               border: Border.all(
                 color: Theme.of(
                   context,
-                ).colorScheme.outline.withOpacityValues(0.2),
+                ).colorScheme.outline.withValues(alpha: 0.2),
                 width: 1,
               ),
             ),
@@ -874,7 +873,7 @@ class _StatCard extends StatelessWidget {
                     ),
                   ),
                   decoration: BoxDecoration(
-                    color: color.withOpacityValues(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(
                       ResponsiveHelper.getValue(
                         context,
@@ -914,7 +913,7 @@ class _StatCard extends StatelessWidget {
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacityValues(0.8),
+                          ).colorScheme.onSurface.withValues(alpha: 0.8),
                           fontSize: 12,
                         ),
                         maxLines: 1,
@@ -959,7 +958,7 @@ class _StatCard extends StatelessWidget {
                                     color: Theme.of(context)
                                         .colorScheme
                                         .onSurface
-                                        .withOpacityValues(0.6),
+                                        .withValues(alpha: 0.6),
                                     fontSize: 10,
                                   ),
                             ),

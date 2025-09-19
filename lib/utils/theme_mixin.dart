@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../main.dart';
-import 'app_themes.dart';
 
 /// 主题助手 Mixin，为组件提供主题访问能力
 mixin ThemeMixin<T extends StatefulWidget> on State<T> {
@@ -15,8 +14,8 @@ mixin ThemeMixin<T extends StatefulWidget> on State<T> {
   Color getTextColor(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     return brightness == Brightness.dark
-        ? Colors.white.withOpacity(0.9)
-        : Colors.black.withOpacity(0.8);
+        ? Colors.white.withValues(alpha:0.9)
+        : Colors.black.withValues(alpha:0.8);
   }
 
   /// 获取当前主题的背景色

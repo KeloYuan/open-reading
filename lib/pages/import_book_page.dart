@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/book_import_service.dart';
 import '../utils/color_extensions.dart';
-import 'reading_page_enhanced.dart';
+import 'reading_page_enhanced.dart' as reading;
 
 class ImportBookPage extends StatefulWidget {
   const ImportBookPage({super.key});
@@ -21,20 +21,20 @@ class _ImportBookPageState extends State<ImportBookPage> {
 
     try {
       final book = await BookImportService().importBook();
-      
+
       if (book != null && mounted) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => ReadingPageEnhanced(book: book),
+            builder: (context) => reading.ReadingPageEnhanced(book: book),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导入失败: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('导入失败: $e')));
       }
     } finally {
       if (mounted) {
@@ -80,7 +80,9 @@ class _ImportBookPageState extends State<ImportBookPage> {
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary.withOpacityValues(0.12),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withOpacity(0.12),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Icon(
@@ -92,23 +94,27 @@ class _ImportBookPageState extends State<ImportBookPage> {
                       const SizedBox(height: 24),
                       Text(
                         '选择电子书文件',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 12),
                       Text(
                         '支持 TXT、EPUB 格式',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface.withOpacityValues(0.7),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withOpacity(0.7),
                         ),
                       ),
                       const SizedBox(height: 32),
                       ElevatedButton(
                         onPressed: _isLoading ? null : _pickFile,
                         style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 32,
+                            vertical: 16,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -120,11 +126,11 @@ class _ImportBookPageState extends State<ImportBookPage> {
                               const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               ),
-                            if (_isLoading) ...[
-                              const SizedBox(width: 8),
-                            ],
+                            if (_isLoading) ...[const SizedBox(width: 8)],
                             if (!_isLoading) ...[
                               const Icon(Icons.folder_open),
                               const SizedBox(width: 8),

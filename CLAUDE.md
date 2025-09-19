@@ -4,7 +4,7 @@
 
 ## 项目概述
 
-小元读书 (XiaoYuan Reader) 是一个优雅的Flutter跨平台电子书阅读器，支持EPUB、PDF等多种格式。应用具备本地存储、阅读进度追踪、书签管理、阅读统计和响应式设计等功能，支持移动端和桌面端。
+小元读书 (XiaoYuan Reader) 是一个功能丰富的Flutter跨平台电子书阅读器，支持EPUB、PDF等多种格式。应用具备本地存储、阅读进度追踪、书签管理、阅读统计、TTS朗读、云端同步、高亮笔记、智能分页和响应式设计等高级功能，支持移动端和桌面端。
 
 ## 开发命令
 
@@ -48,21 +48,36 @@
    - `import_book_page.dart` - 书籍导入功能
 
 2. **业务逻辑层** (`lib/services/`): 核心业务逻辑和数据访问
-   - `database_service.dart` - SQLite数据库管理单例
-   - `book_dao.dart` - 书籍数据访问，包含完整CRUD操作
-   - `bookmark_dao.dart` - 书签数据访问，支持updateBookmark方法
-   - `note_dao.dart` - 笔记数据访问操作
-   - `highlight_dao.dart` - 高亮数据访问操作
-   - `reading_stats_dao.dart` - 阅读统计数据访问
-   - `book_import_service.dart` - 书籍文件导入和处理
-   - `storage_service.dart` - 文件存储操作
-   - `text_paginator.dart` - 文本分页服务
+   - **数据访问层**:
+     - `database_service.dart` - SQLite数据库管理单例
+     - `book_dao.dart` - 书籍数据访问，包含完整CRUD操作
+     - `bookmark_dao.dart` - 书签数据访问，支持updateBookmark方法
+     - `note_dao.dart` - 笔记数据访问操作
+     - `highlight_dao.dart` - 高亮数据访问操作
+     - `reading_stats_dao.dart` - 阅读统计数据访问
+   - **文件和内容处理**:
+     - `book_import_service.dart` - 书籍文件导入和处理
+     - `storage_service.dart` - 文件存储操作
+     - `enhanced_book_service.dart` - 增强书籍处理，目录分析、封面提取、元数据处理
+   - **文本分页系统**:
+     - `text_paginator.dart` - 基础文本分页服务
+     - `enhanced_text_paginator.dart` - 智能文本分页器，根据设备特性优化
+     - `advanced_text_paginator.dart` - WebView精确分页算法，支持JavaScript渲染
+   - **TTS朗读系统** (`tts/`):
+     - `base_tts.dart` - TTS抽象基类
+     - `system_tts.dart` - 系统TTS实现
+     - `tts_factory.dart` - TTS工厂模式管理
+     - `tts_handler.dart` - TTS控制器，处理播放状态和音频会话
+   - **云端同步** (`webdav/`):
+     - `webdav_sync_service.dart` - WebDAV云端同步服务
+   - **导出功能**:
+     - `note_export_service.dart` - 笔记导出服务，支持Markdown/JSON/CSV格式
 
 3. **数据层** (`lib/models/`): 数据模型和实体
    - `book.dart` - 书籍实体，包含文件路径和进度追踪
    - `bookmark.dart` - 书签实体，记录阅读位置
-   - `chapter.dart` - 章节实体，书籍结构
-   - `highlight.dart` - 文本高亮实体
+   - `chapter.dart` - 增强章节实体，支持层级结构、EPUB映射、智能章节检测
+   - `highlight.dart` - 增强高亮实体，支持颜色管理、笔记附加、导出功能
    - `note.dart` - 用户笔记实体
 
 4. **工具类** (`lib/utils/`): 辅助功能和扩展
@@ -77,12 +92,20 @@
    - `pagination_cache.dart` - 分页缓存管理
 
 5. **自定义组件** (`lib/widgets/`): 可复用UI组件
-   - `liquid_glass_navigation.dart` - 液态玻璃导航组件
-   - `floating_capsule_navigation.dart` - 浮动胶囊导航
-   - `custom_slider_components.dart` - 自定义滑块组件
-   - `note_dialog.dart` - 笔记编辑对话框
-   - `toc_widget.dart` - 目录导航组件
-   - `text_selection_toolbar.dart` - 文本选择工具栏
+   - **导航组件**:
+     - `liquid_glass_navigation.dart` - 液态玻璃导航组件
+     - `floating_capsule_navigation.dart` - 浮动胶囊导航
+   - **阅读相关组件**:
+     - `chapter_panel.dart` - 智能章节面板，支持层级分析和导航
+     - `enhanced_text_selection_toolbar.dart` - 增强文本选择工具栏，支持复制、高亮、笔记、分享
+     - `highlight_note_panel.dart` - 高亮笔记管理面板，支持查看、编辑、导出
+     - `text_selection_toolbar.dart` - 基础文本选择工具栏
+     - `toc_widget.dart` - 目录导航组件
+   - **设置和配置**:
+     - `webdav_config_dialog.dart` - WebDAV云端同步配置对话框
+   - **其他组件**:
+     - `custom_slider_components.dart` - 自定义滑块组件
+     - `note_dialog.dart` - 笔记编辑对话框
 
 ### 主题系统架构
 - **ThemeNotifier** (`main.dart`) - 全局主题状态管理，使用Provider
@@ -146,15 +169,84 @@
 
 ### UI增强
 - **provider** `^6.1.5` - 状态管理
-- **fl_chart** `^1.0.0` - 图表展示
+- **fl_chart** `^0.68.0` - 图表展示
 - **page_flip** `^0.2.0` - 翻页动画
 - **volume_controller** `^2.0.8` - 音量键控制
+- **google_fonts** `^6.1.0` - 中文字体支持
+
+### 高级功能
+- **flutter_tts** `^4.2.2` - TTS文本朗读功能
+- **share_plus** `^11.1.0` - 增强分享功能
+- **webdav_client** `^1.2.2` - WebDAV云端同步
+- **dio** `^5.4.3+1` - HTTP客户端，支持WebDAV
+- **audio_service** `^0.18.16` - 后台音频播放服务
+- **audio_session** `^0.1.23` - 音频会话管理
+- **connectivity_plus** `^6.1.3` - 网络连接检测
+
+### WebView和高级UI
+- **webview_flutter** `^4.4.2` - WebView支持
+- **shelf** `^1.4.1` - 本地HTTP服务器
+- **shelf_static** `^1.1.2` - 静态文件服务
 
 ### 工具库
 - **file_picker** `^8.0.0+1` - 文件选择
 - **crypto** `^3.0.3` - 加密和哈希
 - **intl** `^0.20.2` - 国际化支持
 - **path** `^1.9.1` - 路径操作
+- **uuid** `^4.5.1` - 唯一标识符生成
+
+## 高级功能特性
+
+### TTS朗读系统
+- **架构设计**: 采用工厂模式和抽象基类设计，支持多TTS引擎
+- **核心功能**: 语音朗读、语速调节、音调控制、连续翻页朗读
+- **平台适配**: Android/iOS系统TTS优化适配
+- **音频管理**: 集成audio_service支持后台播放和音频会话管理
+- **智能控制**: 支持播放/暂停/上一页/下一页语音控制
+
+### 智能分页系统
+- **Enhanced Text Paginator**: 根据设备类型智能调整分页参数
+  - 自动检测设备类型（手机/大屏手机/平板）
+  - 智能字符测量和行高计算
+  - 设备特性适配的保守系数调整
+- **Advanced Text Paginator**: WebView+JavaScript精确分页
+  - HTML5+CSS3精确文本渲染
+  - JavaScript分页算法，支持响应式布局
+  - 触摸手势、键盘导航支持
+  - 多列布局和滚动模式切换
+
+### 高亮笔记系统
+- **智能高亮**: 多颜色荧光笔标记，支持自定义颜色
+- **关联笔记**: 高亮可附加文字笔记
+- **章节关联**: 自动识别章节信息
+- **位置精确**: CFI定位支持，确保跨设备一致性
+- **导出功能**: 支持Markdown、JSON、CSV多格式导出
+- **智能工具栏**: 动画效果的选择工具栏，一键复制、高亮、笔记、分享
+
+### WebDAV云端同步
+- **配置管理**: 直观的WebDAV服务器配置界面
+- **数据同步**: 书籍、进度、书签、笔记、高亮全面同步
+- **网络检测**: 智能网络状态检测和错误处理
+- **安全存储**: 加密存储同步配置信息
+- **状态管理**: 实时同步状态显示和错误反馈
+
+### 增强章节导航
+- **智能解析**: 自动识别章节结构和层级关系
+- **类型检测**: 智能识别主章节、子章节、前言、后记等
+- **可视化**: 层级结构可视化显示，支持折叠展开
+- **快速跳转**: 点击章节快速定位到对应页面
+
+### 增强书籍处理
+- **元数据提取**: 自动提取EPUB/PDF书籍元信息
+- **封面提取**: 智能提取书籍封面图片
+- **目录分析**: 深度分析书籍目录结构
+- **格式支持**: 完善的EPUB、PDF格式支持
+
+### 分享和导出
+- **多格式导出**: 笔记支持Markdown、JSON、CSV格式
+- **阅读统计**: 自动生成阅读报告和统计信息
+- **社交分享**: 格式化的文字摘录分享功能
+- **批量操作**: 支持批量导出和管理
 
 ## 开发注意事项
 

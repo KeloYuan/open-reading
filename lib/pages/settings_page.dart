@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import '../utils/glass_config.dart';
 import '../utils/app_themes.dart';
+import '../services/webdav/webdav_sync_service.dart';
+import '../widgets/webdav_config_dialog.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -20,6 +22,26 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _keepScreenOn = false;
   int _autoSaveInterval = 30;
 
+  // TTS设置
+  bool _enableTTS = true;
+  double _ttsSpeed = 0.5;
+  double _ttsVolume = 1.0;
+  double _ttsPitch = 1.0;
+
+  // 阅读设置
+  String _pageTransition = 'slide'; // slide, fade, none
+  bool _enablePageAnimation = true;
+  String _swipeDirection = 'horizontal'; // horizontal, vertical
+  bool _enableVolumeKeyTurn = true;
+
+  // WebDAV设置
+  final WebDavSyncService _webdavService = WebDavSyncService();
+
+  // 其他设置
+  bool _enableBatteryOptimization = true;
+  bool _enableFullscreen = false;
+  String _language = 'zh-CN';
+
   @override
   void initState() {
     super.initState();
@@ -33,7 +55,28 @@ class _SettingsPageState extends State<SettingsPage> {
       _enableAutoSave = prefs.getBool('enableAutoSave') ?? true;
       _keepScreenOn = prefs.getBool('keepScreenOn') ?? false;
       _autoSaveInterval = prefs.getInt('autoSaveInterval') ?? 30;
+
+      // TTS设置
+      _enableTTS = prefs.getBool('enableTTS') ?? true;
+      _ttsSpeed = prefs.getDouble('ttsSpeed') ?? 0.5;
+      _ttsVolume = prefs.getDouble('ttsVolume') ?? 1.0;
+      _ttsPitch = prefs.getDouble('ttsPitch') ?? 1.0;
+
+      // 阅读设置
+      _pageTransition = prefs.getString('pageTransition') ?? 'slide';
+      _enablePageAnimation = prefs.getBool('enablePageAnimation') ?? true;
+      _swipeDirection = prefs.getString('swipeDirection') ?? 'horizontal';
+      _enableVolumeKeyTurn = prefs.getBool('enableVolumeKeyTurn') ?? true;
+
+      // 其他设置
+      _enableBatteryOptimization =
+          prefs.getBool('enableBatteryOptimization') ?? true;
+      _enableFullscreen = prefs.getBool('enableFullscreen') ?? false;
+      _language = prefs.getString('language') ?? 'zh-CN';
     });
+
+    // 初始化WebDAV服务
+    await _webdavService.initialize();
   }
 
   Future<void> _saveSettings() async {
@@ -42,6 +85,26 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setBool('enableAutoSave', _enableAutoSave);
     await prefs.setBool('keepScreenOn', _keepScreenOn);
     await prefs.setInt('autoSaveInterval', _autoSaveInterval);
+
+    // TTS设置
+    await prefs.setBool('enableTTS', _enableTTS);
+    await prefs.setDouble('ttsSpeed', _ttsSpeed);
+    await prefs.setDouble('ttsVolume', _ttsVolume);
+    await prefs.setDouble('ttsPitch', _ttsPitch);
+
+    // 阅读设置
+    await prefs.setString('pageTransition', _pageTransition);
+    await prefs.setBool('enablePageAnimation', _enablePageAnimation);
+    await prefs.setString('swipeDirection', _swipeDirection);
+    await prefs.setBool('enableVolumeKeyTurn', _enableVolumeKeyTurn);
+
+    // 其他设置
+    await prefs.setBool(
+      'enableBatteryOptimization',
+      _enableBatteryOptimization,
+    );
+    await prefs.setBool('enableFullscreen', _enableFullscreen);
+    await prefs.setString('language', _language);
   }
 
   @override
@@ -167,6 +230,157 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 20),
               _buildSectionCard(
+                title: '阅读设置',
+                icon: Icons.book_outlined,
+                children: [
+                  _buildOptionSetting(
+                    title: '翻页方式',
+                    subtitle: _swipeDirection == 'horizontal' ? '左右滑动' : '上下滑动',
+                    value: _swipeDirection,
+                    options: const {'horizontal': '左右滑动', 'vertical': '上下滑动'},
+                    onChanged: (value) =>
+                        setState(() => _swipeDirection = value),
+                    icon: Icons.swipe,
+                  ),
+                  _buildOptionSetting(
+                    title: '翻页动画',
+                    subtitle: _getPageTransitionName(_pageTransition),
+                    value: _pageTransition,
+                    options: const {
+                      'slide': '滑动效果',
+                      'fade': '淡入淡出',
+                      'none': '无动画',
+                    },
+                    onChanged: (value) =>
+                        setState(() => _pageTransition = value),
+                    icon: Icons.animation,
+                  ),
+                  _buildSwitchSetting(
+                    title: '音量键翻页',
+                    subtitle: '使用音量键控制翻页',
+                    value: _enableVolumeKeyTurn,
+                    onChanged: (value) =>
+                        setState(() => _enableVolumeKeyTurn = value),
+                    icon: Icons.volume_up,
+                  ),
+                  _buildSwitchSetting(
+                    title: '全屏阅读',
+                    subtitle: '隐藏状态栏和导航栏',
+                    value: _enableFullscreen,
+                    onChanged: (value) =>
+                        setState(() => _enableFullscreen = value),
+                    icon: Icons.fullscreen,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildSectionCard(
+                title: 'TTS朗读',
+                icon: Icons.record_voice_over,
+                children: [
+                  _buildSwitchSetting(
+                    title: '启用朗读功能',
+                    subtitle: '开启文本转语音朗读',
+                    value: _enableTTS,
+                    onChanged: (value) => setState(() => _enableTTS = value),
+                    icon: Icons.play_circle_outline,
+                  ),
+                  if (_enableTTS) ...[
+                    _buildSliderSetting(
+                      title: '朗读速度',
+                      subtitle: '调整朗读的快慢',
+                      value: _ttsSpeed,
+                      min: 0.1,
+                      max: 2.0,
+                      divisions: 19,
+                      onChanged: (value) => setState(() => _ttsSpeed = value),
+                      icon: Icons.speed,
+                      formatter: (value) => '${(value * 100).round()}%',
+                    ),
+                    _buildSliderSetting(
+                      title: '朗读音量',
+                      subtitle: '调整朗读音量大小',
+                      value: _ttsVolume,
+                      min: 0.0,
+                      max: 1.0,
+                      divisions: 10,
+                      onChanged: (value) => setState(() => _ttsVolume = value),
+                      icon: Icons.volume_up,
+                      formatter: (value) => '${(value * 100).round()}%',
+                    ),
+                    _buildSliderSetting(
+                      title: '音调高低',
+                      subtitle: '调整朗读音调',
+                      value: _ttsPitch,
+                      min: 0.5,
+                      max: 2.0,
+                      divisions: 15,
+                      onChanged: (value) => setState(() => _ttsPitch = value),
+                      icon: Icons.graphic_eq,
+                      formatter: (value) => '${(value * 100).round()}%',
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildSectionCard(
+                title: '云端同步',
+                icon: Icons.cloud_sync,
+                children: [
+                  _buildActionSetting(
+                    title: 'WebDAV配置',
+                    subtitle: _webdavService.isConfigured
+                        ? '已配置 - ${_webdavService.serverUrl}'
+                        : '点击配置WebDAV服务器',
+                    onTap: _showWebDavConfig,
+                    icon: Icons.cloud,
+                    trailing: _webdavService.isConfigured
+                        ? Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: 20,
+                          )
+                        : null,
+                  ),
+                  if (_webdavService.isConfigured)
+                    _buildActionSetting(
+                      title: '立即同步',
+                      subtitle: '手动同步阅读数据',
+                      onTap: _syncNow,
+                      icon: Icons.sync,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildSectionCard(
+                title: '书籍管理',
+                icon: Icons.library_books,
+                children: [
+                  _buildSwitchSetting(
+                    title: '自动提取封面',
+                    subtitle: '导入时自动提取书籍封面',
+                    value: true, // 默认开启
+                    onChanged: (value) {
+                      // TODO: 实现封面提取开关逻辑
+                    },
+                    icon: Icons.image,
+                  ),
+                  _buildActionSetting(
+                    title: '重新提取封面',
+                    subtitle: '为现有书籍重新提取封面',
+                    onTap: _refreshAllCovers,
+                    icon: Icons.refresh,
+                  ),
+                  _buildActionSetting(
+                    title: '清理封面缓存',
+                    subtitle: '清理无效的封面文件',
+                    onTap: _cleanCoverCache,
+                    icon: Icons.cleaning_services,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildSectionCard(
                 title: '系统设置',
                 icon: Icons.settings_outlined,
                 children: [
@@ -184,6 +398,14 @@ class _SettingsPageState extends State<SettingsPage> {
                     onChanged: (value) =>
                         setState(() => _enableAutoSave = value),
                     icon: Icons.save_outlined,
+                  ),
+                  _buildSwitchSetting(
+                    title: '电池优化',
+                    subtitle: '启用省电模式',
+                    value: _enableBatteryOptimization,
+                    onChanged: (value) =>
+                        setState(() => _enableBatteryOptimization = value),
+                    icon: Icons.battery_saver,
                   ),
                 ],
               ),
@@ -1017,6 +1239,359 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // 新增方法：获取翻页动画名称
+  String _getPageTransitionName(String transition) {
+    switch (transition) {
+      case 'slide':
+        return '滑动效果';
+      case 'fade':
+        return '淡入淡出';
+      case 'none':
+        return '无动画';
+      default:
+        return '滑动效果';
+    }
+  }
+
+  // WebDAV配置对话框
+  Future<void> _showWebDavConfig() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => const WebDavConfigDialog(),
+    );
+
+    if (result == true) {
+      setState(() {});
+    }
+  }
+
+  // 立即同步
+  Future<void> _syncNow() async {
+    setState(() {});
+
+    try {
+      final success = await _webdavService.syncBooks();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? '同步成功' : '同步失败'),
+            backgroundColor: success ? Colors.green : Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('同步失败: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  // 构建选项设置
+  Widget _buildOptionSetting({
+    required String title,
+    required String subtitle,
+    required String value,
+    required Map<String, String> options,
+    required Function(String) onChanged,
+    required IconData icon,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showOptionModal(title, value, options, onChanged),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 构建滑块设置
+  Widget _buildSliderSetting({
+    required String title,
+    required String subtitle,
+    required double value,
+    required double min,
+    required double max,
+    int? divisions,
+    required Function(double) onChanged,
+    required IconData icon,
+    String Function(double)? formatter,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.secondary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            title,
+                            style: Theme.of(context).textTheme.bodyLarge
+                                ?.copyWith(fontWeight: FontWeight.w500),
+                          ),
+                          Text(
+                            formatter?.call(value) ?? value.toStringAsFixed(1),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 4,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+              ),
+              child: Slider(
+                value: value,
+                min: min,
+                max: max,
+                divisions: divisions,
+                onChanged: (newValue) {
+                  onChanged(newValue);
+                  _saveSettings();
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 构建操作设置
+  Widget _buildActionSetting({
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    required IconData icon,
+    Widget? trailing,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.tertiary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.tertiary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (trailing != null) ...[
+                  const SizedBox(width: 8),
+                  trailing,
+                ] else
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.4),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 显示选项模态框
+  void _showOptionModal(
+    String title,
+    String currentValue,
+    Map<String, String> options,
+    Function(String) onChanged,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 20),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ...options.entries.map((entry) {
+              final isSelected = entry.key == currentValue;
+              return ListTile(
+                title: Text(entry.value),
+                trailing: isSelected
+                    ? Icon(
+                        Icons.check,
+                        color: Theme.of(context).colorScheme.primary,
+                      )
+                    : null,
+                selected: isSelected,
+                onTap: () {
+                  onChanged(entry.key);
+                  _saveSettings();
+                  Navigator.pop(context);
+                },
+              );
+            }),
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 20),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showGlobalAccentColorModal(ThemeNotifier themeNotifier) {
     showModalBottomSheet(
       context: context,
@@ -1285,5 +1860,54 @@ class _SettingsPageState extends State<SettingsPage> {
         },
       ),
     );
+  }
+
+  // 重新提取所有书籍封面
+  Future<void> _refreshAllCovers() async {
+    try {
+      // 显示确认对话框
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('重新提取封面'),
+          content: const Text('此操作将为所有书籍重新提取封面，可能需要较长时间。确定继续吗？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        // TODO: 实现重新提取封面的逻辑
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('封面提取功能正在开发中...')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('操作失败: $e')),
+      );
+    }
+  }
+
+  // 清理封面缓存
+  Future<void> _cleanCoverCache() async {
+    try {
+      // TODO: 实现清理封面缓存的逻辑
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('缓存清理功能正在开发中...')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('清理失败: $e')),
+      );
+    }
   }
 }

@@ -29,6 +29,7 @@ class BookDao {
           'importDate',
           'file_modified_time',
           'content_hash',
+          'cover_image_path',
         ],
         orderBy: 'importDate DESC',
       );
@@ -140,6 +141,24 @@ class BookDao {
       }
     } catch (e) {
       throw Exception('更新书籍文件路径失败: $e');
+    }
+  }
+
+  // 更新书籍封面图片路径
+  Future<void> updateBookCoverPath(int bookId, String? coverImagePath) async {
+    try {
+      final db = await _dbService.database;
+      final result = await db.update(
+        'books',
+        {'cover_image_path': coverImagePath},
+        where: 'id = ?',
+        whereArgs: [bookId],
+      );
+      if (result == 0) {
+        throw Exception('书籍不存在');
+      }
+    } catch (e) {
+      throw Exception('更新书籍封面失败: $e');
     }
   }
 

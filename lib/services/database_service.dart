@@ -11,7 +11,7 @@ class DatabaseService {
 
   static Database? _database;
   static const String _dbName = 'xxread_v2.db';
-  static const int _dbVersion = 5; // <-- Version incremented for content caching
+  static const int _dbVersion = 6; // <-- Version incremented for cover image path
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -110,6 +110,10 @@ class DatabaseService {
       await db.execute('ALTER TABLE books ADD COLUMN content_hash TEXT');
       await db.execute('ALTER TABLE books ADD COLUMN table_of_contents TEXT');
     }
+    if (oldVersion < 6) {
+      // Add cover image path field to books table
+      await db.execute('ALTER TABLE books ADD COLUMN cover_image_path TEXT');
+    }
   }
 
   Future<void> _createTables(Database db) async {
@@ -127,7 +131,8 @@ class DatabaseService {
         cached_pages TEXT,
         file_modified_time INTEGER,
         content_hash TEXT,
-        table_of_contents TEXT
+        table_of_contents TEXT,
+        cover_image_path TEXT
       )
     ''');
 

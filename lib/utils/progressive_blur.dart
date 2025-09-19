@@ -3,7 +3,6 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'color_extensions.dart';
 
 class ProgressiveBlur extends StatelessWidget {
   final Widget child;
@@ -32,10 +31,7 @@ class ProgressiveBlur extends StatelessWidget {
     Widget content = child;
 
     if (borderRadius != null) {
-      content = ClipRRect(
-        borderRadius: borderRadius!,
-        child: content,
-      );
+      content = ClipRRect(borderRadius: borderRadius!, child: content);
     }
 
     return Stack(
@@ -43,9 +39,7 @@ class ProgressiveBlur extends StatelessWidget {
         content,
         // 渐进模糊层（忽略指针，避免遮挡交互）
         Positioned.fill(
-          child: IgnorePointer(
-            child: _buildProgressiveBlurOverlay(context),
-          ),
+          child: IgnorePointer(child: _buildProgressiveBlurOverlay(context)),
         ),
       ],
     );
@@ -62,13 +56,13 @@ class ProgressiveBlur extends StatelessWidget {
           gradient: LinearGradient(
             begin: beginAlignment,
             end: endAlignment,
-            colors: gradientColors.isNotEmpty 
-                ? gradientColors 
+            colors: gradientColors.isNotEmpty
+                ? gradientColors
                 : [
                     Colors.transparent,
                     // 降低默认覆盖层不透明度，减少内容发灰
-                    Theme.of(context).colorScheme.surface.withOpacityValues(0.06),
-                    Theme.of(context).colorScheme.surface.withOpacityValues(0.12),
+                    Theme.of(context).colorScheme.surface.withOpacity(0.06),
+                    Theme.of(context).colorScheme.surface.withOpacity(0.12),
                   ],
             stops: stops ?? [0.0, 0.55, 1.0],
           ),
@@ -77,10 +71,7 @@ class ProgressiveBlur extends StatelessWidget {
     );
 
     if (borderRadius != null) {
-      overlay = ClipRRect(
-        borderRadius: borderRadius!,
-        child: overlay,
-      );
+      overlay = ClipRRect(borderRadius: borderRadius!, child: overlay);
     }
 
     // 统一裁剪模糊区域，避免不同图层混合造成的竖向接缝
@@ -107,8 +98,8 @@ class ProgressiveBlurPresets {
       gradientColors: [
         // 以透明开始，减少整体发灰，解决顶栏下方发暗问题
         Colors.transparent,
-        Theme.of(context).colorScheme.surface.withOpacityValues(0.6),
-        Theme.of(context).colorScheme.surface.withOpacityValues(0.4),
+        Theme.of(context).colorScheme.surface.withOpacity(0.6),
+        Theme.of(context).colorScheme.surface.withOpacity(0.4),
       ],
       stops: const [0.0, 0.6, 1.0],
       borderRadius: borderRadius,
@@ -133,7 +124,10 @@ class ProgressiveBlurPresets {
               // 覆盖层忽略指针，防止遮挡按钮点击
               child: BackdropFilter(
                 // 降低模糊强度，避免内容变糊
-                filter: ImageFilter.blur(sigmaX: maxBlur * 0.4, sigmaY: maxBlur * 0.4),
+                filter: ImageFilter.blur(
+                  sigmaX: maxBlur * 0.4,
+                  sigmaY: maxBlur * 0.4,
+                ),
                 child: Container(
                   decoration: BoxDecoration(
                     gradient: RadialGradient(
@@ -142,8 +136,8 @@ class ProgressiveBlurPresets {
                       colors: [
                         Colors.transparent,
                         // 明显降低覆盖层不透明度
-                        Theme.of(context).colorScheme.surface.withOpacityValues(0.04),
-                        Theme.of(context).colorScheme.surface.withOpacityValues(0.08),
+                        Theme.of(context).colorScheme.surface.withOpacity(0.04),
+                        Theme.of(context).colorScheme.surface.withOpacity(0.08),
                       ],
                       stops: const [0.0, 0.75, 1.0],
                     ),
@@ -183,10 +177,10 @@ class ProgressiveBlurPresets {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Theme.of(context).colorScheme.surface.withOpacityValues(0.85),
-                      Theme.of(context).colorScheme.surface.withOpacityValues(0.65),
-                      Theme.of(context).colorScheme.surface.withOpacityValues(0.7),
-                      Theme.of(context).colorScheme.surface.withOpacityValues(0.9),
+                      Theme.of(context).colorScheme.surface.withOpacity(0.85),
+                      Theme.of(context).colorScheme.surface.withOpacity(0.65),
+                      Theme.of(context).colorScheme.surface.withOpacity(0.7),
+                      Theme.of(context).colorScheme.surface.withOpacity(0.9),
                     ],
                     stops: const [0.0, 0.3, 0.7, 1.0],
                   ),
@@ -212,8 +206,8 @@ class ProgressiveBlurPresets {
       beginAlignment: Alignment.bottomCenter,
       endAlignment: Alignment.topCenter,
       gradientColors: [
-        Theme.of(context).colorScheme.surface.withOpacityValues(0.75),
-        Theme.of(context).colorScheme.surface.withOpacityValues(0.5),
+        Theme.of(context).colorScheme.surface.withOpacity(0.75),
+        Theme.of(context).colorScheme.surface.withOpacity(0.5),
         Colors.transparent,
       ],
       stops: const [0.0, 0.6, 1.0],
@@ -247,24 +241,21 @@ class AdvancedProgressiveBlur extends StatelessWidget {
     return Stack(
       children: [
         content,
-        ...layers.map((layer) => Positioned.fill(
-          child: _buildLayer(context, layer),
-        )),
+        ...layers.map(
+          (layer) => Positioned.fill(child: _buildLayer(context, layer)),
+        ),
       ],
     );
   }
 
   Widget _buildLayer(BuildContext context, BlurLayer layer) {
     Widget layerWidget = BackdropFilter(
-      filter: ImageFilter.blur(
-        sigmaX: layer.blur,
-        sigmaY: layer.blur,
-      ),
+      filter: ImageFilter.blur(sigmaX: layer.blur, sigmaY: layer.blur),
       child: Container(
         decoration: BoxDecoration(
-          gradient: layer.gradient ?? LinearGradient(
-            colors: [Colors.transparent, layer.color],
-          ),
+          gradient:
+              layer.gradient ??
+              LinearGradient(colors: [Colors.transparent, layer.color]),
         ),
       ),
     );
@@ -286,9 +277,5 @@ class BlurLayer {
   final Color color;
   final Gradient? gradient;
 
-  const BlurLayer({
-    required this.blur,
-    required this.color,
-    this.gradient,
-  });
+  const BlurLayer({required this.blur, required this.color, this.gradient});
 }

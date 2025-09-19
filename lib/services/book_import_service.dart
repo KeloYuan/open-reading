@@ -6,7 +6,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:xxread/services/book_dao.dart';
 import 'package:epubx/epubx.dart';
 import 'package:pdfx/pdfx.dart';
-import 'dart:typed_data';
 import 'dart:convert';
 
 import '../models/book.dart';
@@ -83,8 +82,9 @@ class BookImportService {
         final metadata = await _extractEnhancedMetadata(pickedFile);
 
         // 4. Save cover image if available
+        String? coverImagePath;
         if (metadata.coverImage != null) {
-          await _saveCoverImage(metadata.coverImage!, pickedFile.name);
+          coverImagePath = await _saveCoverImage(metadata.coverImage!, pickedFile.name);
         }
 
         // 5. Create Book object with enhanced metadata
@@ -94,6 +94,7 @@ class BookImportService {
           filePath: newFilePath,
           format: pickedFile.extension?.toUpperCase() ?? 'UNKNOWN',
           totalPages: metadata.estimatedPages,
+          coverImagePath: coverImagePath,
         );
 
         // 6. Insert metadata into the database
@@ -816,7 +817,10 @@ class BookImportService {
       if (startPage == 0 && i > 0) {
         final prevChapter = updatedChapters[i - 1];
         final avgPagesPerChapter = pages.length ~/ chapters.length;
-        startPage = (prevChapter.startPage + avgPagesPerChapter).clamp(0, pages.length - 1);
+        startPage = (prevChapter.startPage + avgPagesPerChapter).clamp(
+          0,
+          pages.length - 1,
+        );
       }
 
       // 方法4: 确保章节页码递增
@@ -843,8 +847,14 @@ class BookImportService {
     final normalizedChapterTitle = chapterTitle.toLowerCase().trim();
 
     // 移除特殊字符进行比较
-    final cleanPageContent = normalizedPageContent.replaceAll(RegExp(r'[^\w\s\u4e00-\u9fff]'), ' ');
-    final cleanChapterTitle = normalizedChapterTitle.replaceAll(RegExp(r'[^\w\s\u4e00-\u9fff]'), ' ');
+    final cleanPageContent = normalizedPageContent.replaceAll(
+      RegExp(r'[^\w\s\u4e00-\u9fff]'),
+      ' ',
+    );
+    final cleanChapterTitle = normalizedChapterTitle.replaceAll(
+      RegExp(r'[^\w\s\u4e00-\u9fff]'),
+      ' ',
+    );
 
     // 策略1: 直接匹配
     if (cleanPageContent.contains(cleanChapterTitle)) {
@@ -852,10 +862,11 @@ class BookImportService {
     }
 
     // 策略2: 分词匹配 - 至少匹配70%的关键词
-    final titleWords = cleanChapterTitle.split(RegExp(r'\s+'))
+    final titleWords = cleanChapterTitle
+        .split(RegExp(r'\s+'))
         .where((word) => word.length > 1)
         .toList();
-    
+
     if (titleWords.isNotEmpty) {
       int matchedWords = 0;
       for (final word in titleWords) {
@@ -863,7 +874,7 @@ class BookImportService {
           matchedWords++;
         }
       }
-      
+
       if (matchedWords / titleWords.length >= 0.7) {
         return true;
       }
@@ -879,7 +890,7 @@ class BookImportService {
           'chapter $chapterNum',
           '$chapterNum.',
         ];
-        
+
         for (final pattern in patterns) {
           if (cleanPageContent.contains(pattern)) {
             return true;
@@ -904,7 +915,8 @@ class BookImportService {
       }
 
       // 方法2: 从Content.Images中查找封面
-      if (epubBook.Content?.Images != null && epubBook.Content!.Images!.isNotEmpty) {
+      if (epubBook.Content?.Images != null &&
+          epubBook.Content!.Images!.isNotEmpty) {
         // 优先查找名称包含"cover"的图片
         for (final entry in epubBook.Content!.Images!.entries) {
           final fileName = entry.key.toLowerCase();
@@ -938,11 +950,11 @@ class BookImportService {
           if (item.Id?.toLowerCase().contains('cover') == true ||
               item.Href?.toLowerCase().contains('cover') == true ||
               item.Properties?.contains('cover-image') == true) {
-            
             // 尝试从Images中获取对应的内容
             if (epubBook.Content?.Images != null && item.Href != null) {
               final imageFile = epubBook.Content!.Images![item.Href!];
-              if (imageFile?.Content != null && imageFile!.Content!.isNotEmpty) {
+              if (imageFile?.Content != null &&
+                  imageFile!.Content!.isNotEmpty) {
                 final imageBytes = Uint8List.fromList(imageFile.Content!);
                 if (_isValidImageFormat(imageBytes)) {
                   return imageBytes;
@@ -967,19 +979,36 @@ class BookImportService {
 
     // 检查文件头
     final header = bytes.take(10).toList();
-    
+
     // JPEG: FF D8 FF
-    if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) return true;
-    
+    if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF)
+      return true;
+
     // PNG: 89 50 4E 47 0D 0A 1A 0A
-    if (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47) return true;
-    
+    if (header[0] == 0x89 &&
+        header[1] == 0x50 &&
+        header[2] == 0x4E &&
+        header[3] == 0x47)
+      return true;
+
     // GIF: 47 49 46 38
-    if (header[0] == 0x47 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x38) return true;
-    
+    if (header[0] == 0x47 &&
+        header[1] == 0x49 &&
+        header[2] == 0x46 &&
+        header[3] == 0x38)
+      return true;
+
     // WebP: 52 49 46 46 ... 57 45 42 50
-    if (header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46 &&
-        bytes.length > 12 && bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50) return true;
+    if (header[0] == 0x52 &&
+        header[1] == 0x49 &&
+        header[2] == 0x46 &&
+        header[3] == 0x46 &&
+        bytes.length > 12 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50)
+      return true;
 
     return false;
   }
@@ -988,7 +1017,7 @@ class BookImportService {
   Future<Uint8List?> _extractPdfCover(Uint8List bytes) async {
     try {
       final pdfDocument = await PdfDocument.openData(bytes);
-      
+
       // 获取第一页作为封面
       if (pdfDocument.pagesCount > 0) {
         final page = await pdfDocument.getPage(1);
@@ -996,15 +1025,15 @@ class BookImportService {
           width: 300, // 封面宽度
           height: 400, // 封面高度
         );
-        
+
         await page.close();
         await pdfDocument.close();
-        
+
         if (pageImage?.bytes != null && pageImage!.bytes.isNotEmpty) {
           return pageImage.bytes;
         }
       }
-      
+
       await pdfDocument.close();
       return null;
     } catch (e) {

@@ -5,7 +5,6 @@ import 'dart:ui';
 import 'package:epubx/epubx.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
@@ -17,15 +16,14 @@ import '../services/book_dao.dart';
 import '../services/bookmark_dao.dart';
 import '../services/reading_stats_dao.dart';
 import '../services/book_import_service.dart';
+import '../services/enhanced_text_paginator.dart';
 import '../widgets/custom_slider_components.dart';
 import '../widgets/toc_widget.dart';
 import '../widgets/tts_panel_enhanced.dart';
 import '../widgets/share_dialog.dart';
-// import '../widgets/text_selection_toolbar.dart';
+import '../widgets/enhanced_text_selection_toolbar.dart';
 // import '../services/highlight_dao.dart';
 // import '../services/note_dao.dart';
-import '../services/tts_service.dart';
-import '../services/share_service.dart';
 import '../utils/responsive_helper.dart';
 
 // 性能优化配置
@@ -631,76 +629,78 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     _splitIntoPagesAsync(_bookContent);
   }
 
-  // 异步分页处理，避免UI阻塞
+  // 异步分页处理，使用增强分页器
   Future<void> _splitIntoPagesAsync(String content) async {
     try {
-      // 分批处理内容以避免长时间阻塞UI
-      final chunks = _splitContentIntoChunks(content, 10000); // 每次处理10000字符
-      final pages = <String>[];
+      debugPrint('🔄 使用增强分页器处理内容，长度: ${content.length}');
 
-      for (int i = 0; i < chunks.length; i++) {
-        final chunkPages = await _processContentChunk(chunks[i], i == 0);
-        pages.addAll(chunkPages);
+      final screenSize = MediaQuery.of(context).size;
+      final statusBarHeight = MediaQuery.of(context).padding.top;
+      final isLandscape = screenSize.width > screenSize.height;
 
-        // 每处理一个chunk后让UI更新
-        if (i % 3 == 0) {
-          await Future.delayed(const Duration(milliseconds: 1));
-        }
-      }
+      // 使用增强分页器计算最佳参数
+      final params = EnhancedTextPaginator.calculateOptimalParams(
+        screenSize: screenSize,
+        fontSize: _fontSize,
+        lineHeight: _lineSpacing,
+        padding: EdgeInsets.symmetric(
+          horizontal: _horizontalPadding,
+          vertical: _pageMargin,
+        ),
+        statusBarHeight: statusBarHeight,
+        isLandscape: isLandscape,
+        customSampleText: content.length > 100
+            ? content.substring(0, 100)
+            : content,
+      );
+
+      // 执行智能分页
+      final pages = await EnhancedTextPaginator.paginateText(
+        text: content,
+        params: params,
+      );
 
       if (mounted && !_isDisposed) {
         setState(() {
-          _pages = pages;
+          _pages = pages.where((page) => page.trim().isNotEmpty).toList();
+
+          // 确保页面索引在有效范围内
           if (_currentPageIndex >= _pages.length) {
             _currentPageIndex = _pages.isNotEmpty ? _pages.length - 1 : 0;
           }
+          if (_currentPageIndex < 0) {
+            _currentPageIndex = 0;
+          }
         });
+
+        // 更新页面控制器到正确位置
+        if (_pageController.hasClients && _pages.isNotEmpty) {
+          _pageController.animateToPage(
+            _currentPageIndex,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
 
         // 更新数据库页数
         _updateBookTotalPages();
+
+        debugPrint('✅ 增强分页完成: ${_pages.length}页');
       }
     } catch (e) {
-      debugPrint('异步分页处理失败: $e');
+      debugPrint('❌ 增强分页处理失败: $e');
       if (mounted && !_isDisposed) {
         setState(() {
-          _pages = ['分页处理失败: $e'];
+          _pages = ['分页处理失败: $e\n\n请尝试调整字体大小或重新加载'];
         });
       }
     }
   }
 
-  // 将内容分割成小块
-  List<String> _splitContentIntoChunks(String content, int chunkSize) {
-    final chunks = <String>[];
-    for (int i = 0; i < content.length; i += chunkSize) {
-      final end = (i + chunkSize < content.length)
-          ? i + chunkSize
-          : content.length;
-      chunks.add(content.substring(i, end));
-    }
-    return chunks;
-  }
+  // 移除旧的分块方法，已被增强分页器替代
 
   // 处理单个内容块
-  Future<List<String>> _processContentChunk(
-    String chunk,
-    bool isFirstChunk,
-  ) async {
-    // 简化处理，避免compute的复杂性
-    final pages = <String>[];
-
-    // 这里直接使用现有的分页逻辑，但在后台线程中处理
-    await Future.delayed(const Duration(milliseconds: 1)); // 让UI有机会更新
-
-    // 简单的按字符数分页（可以后续优化为更复杂的算法）
-    const pageSize = 1000; // 每页大约1000字符
-    for (int i = 0; i < chunk.length; i += pageSize) {
-      final end = (i + pageSize < chunk.length) ? i + pageSize : chunk.length;
-      pages.add(chunk.substring(i, end));
-    }
-
-    return pages;
-  }
+  // 移除旧的分块处理方法，已被增强分页器替代
 
   // 更新书籍总页数
   void _updateBookTotalPages() {
@@ -717,279 +717,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
   // [已删除] 原_standardizedPagination函数，已使用更高效的异步分页
 
-  // 优化的分页算法实现
-  List<String> _performOptimizedPagination({
-    required String content,
-    required Size screenSize,
-    required EdgeInsets systemPadding,
-  }) {
-    List<String> pages = [];
-
-    // 计算可用显示区域 - 与文字显示区域保持一致，占用90%空间
-    final availableWidth = screenSize.width - (_horizontalPadding * 2);
-    // 使用与文字显示区域相同的计算方式，确保90%利用率
-    final availableHeight =
-        (screenSize.height * 0.90) -
-        systemPadding.top -
-        systemPadding.bottom -
-        20.0; // 小的安全边距
-
-    debugPrint(
-      '📏 可用区域: ${availableWidth.toInt()}x${availableHeight.toInt()}px',
-    );
-
-    // 创建TextPainter来测量文本
-    final textStyle = TextStyle(
-      fontSize: _fontSize,
-      height: _lineSpacing,
-      letterSpacing: _letterSpacing,
-      fontFamily: _fontFamily == 'System' ? null : _fontFamily,
-    );
-
-    final textPainter = TextPainter(
-      textDirection: TextDirection.ltr,
-      textAlign: TextAlign.justify,
-    );
-
-    // 使用简单稳定的逐步构建法
-    int currentIndex = 0;
-    const maxIterations = 10000; // 防止无限循环
-    int iterations = 0;
-
-    while (currentIndex < content.length && iterations < maxIterations) {
-      iterations++;
-
-      // 估算本页可能容纳的字符数
-      final estimatedChars = _estimateCharsForPage(
-        availableWidth: availableWidth,
-        availableHeight: availableHeight,
-        fontSize: _fontSize,
-        lineSpacing: _lineSpacing,
-      );
-
-      // 尝试不同长度，找到合适的页面结束位置
-      int bestEndIndex = _findBestPageEnd(
-        content: content,
-        startIndex: currentIndex,
-        estimatedChars: estimatedChars,
-        textPainter: textPainter,
-        textStyle: textStyle,
-        availableWidth: availableWidth,
-        availableHeight: availableHeight,
-      );
-
-      // 确保至少前进一些字符
-      if (bestEndIndex <= currentIndex) {
-        bestEndIndex = (currentIndex + estimatedChars ~/ 4).clamp(
-          currentIndex + 1,
-          content.length,
-        );
-      }
-
-      // 提取页面内容
-      String pageContent = content.substring(currentIndex, bestEndIndex).trim();
-
-      if (pageContent.isNotEmpty) {
-        pages.add(pageContent);
-        debugPrint(
-          '📄 第${pages.length}页: 位置$currentIndex-$bestEndIndex, ${pageContent.length}字符',
-        );
-      }
-
-      currentIndex = bestEndIndex;
-    }
-
-    textPainter.dispose();
-
-    if (pages.isEmpty) {
-      pages.add('分页失败，使用原始内容');
-    }
-
-    return pages;
-  }
-
-  // 估算每页字符数
-  int _estimateCharsForPage({
-    required double availableWidth,
-    required double availableHeight,
-    required double fontSize,
-    required double lineSpacing,
-  }) {
-    // 基于字体大小和屏幕尺寸的保守估算
-    final avgCharWidth = fontSize * 0.6; // 平均字符宽度
-    final lineHeight = fontSize * lineSpacing;
-
-    final charsPerLine = (availableWidth / avgCharWidth).floor();
-    final linesPerPage = (availableHeight / lineHeight).floor();
-
-    final estimatedChars = (charsPerLine * linesPerPage * 0.8)
-        .floor(); // 0.8作为安全系数
-
-    return estimatedChars.clamp(100, 2000); // 合理范围
-  }
-
-  // 找到最佳的页面结束位置
-  int _findBestPageEnd({
-    required String content,
-    required int startIndex,
-    required int estimatedChars,
-    required TextPainter textPainter,
-    required TextStyle textStyle,
-    required double availableWidth,
-    required double availableHeight,
-  }) {
-    if (startIndex >= content.length) return content.length;
-
-    // 从估算位置开始，向前向后寻找最佳分割点
-    int targetIndex = (startIndex + estimatedChars).clamp(
-      startIndex + 1,
-      content.length,
-    );
-
-    // 寻找自然分割点
-    int bestBreakPoint = _findNaturalBreakPoint(
-      content,
-      targetIndex,
-      startIndex,
-    );
-
-    // 验证这个分割点是否能够适合页面
-    String testContent = content.substring(startIndex, bestBreakPoint);
-
-    textPainter.text = TextSpan(text: testContent, style: textStyle);
-    textPainter.layout(maxWidth: availableWidth);
-
-    // 如果高度超出，尝试缩短
-    if (textPainter.size.height > availableHeight) {
-      // 递减搜索合适的长度
-      for (
-        int reduction = 50;
-        reduction < estimatedChars / 2;
-        reduction += 50
-      ) {
-        int newTarget = targetIndex - reduction;
-        if (newTarget <= startIndex) break;
-
-        int newBreakPoint = _findNaturalBreakPoint(
-          content,
-          newTarget,
-          startIndex,
-        );
-        String newTestContent = content.substring(startIndex, newBreakPoint);
-
-        textPainter.text = TextSpan(text: newTestContent, style: textStyle);
-        textPainter.layout(maxWidth: availableWidth);
-
-        if (textPainter.size.height <= availableHeight) {
-          return newBreakPoint;
-        }
-      }
-
-      // 如果还是太大，使用保守的字符数限制
-      return (startIndex + estimatedChars ~/ 2).clamp(
-        startIndex + 1,
-        content.length,
-      );
-    }
-
-    return bestBreakPoint;
-  }
-
-  // 寻找自然分割点
-  int _findNaturalBreakPoint(String content, int targetIndex, int minIndex) {
-    if (targetIndex >= content.length) return content.length;
-    if (targetIndex <= minIndex) return minIndex + 1;
-
-    // 在目标位置附近寻找最佳分割点
-    const searchRange = 100;
-
-    for (
-      int offset = 0;
-      offset < searchRange && targetIndex - offset > minIndex;
-      offset++
-    ) {
-      int checkIndex = targetIndex - offset;
-      if (checkIndex >= content.length) continue;
-
-      String char = content[checkIndex];
-
-      // 优先级：段落 > 句子 > 词语边界 > 标点
-      if (char == '\n' && offset < 30) {
-        return checkIndex + 1; // 段落分割，高优先级
-      }
-      if ((char == '。' || char == '！' || char == '？' || char == '.') &&
-          offset < 50) {
-        return checkIndex + 1; // 句子结尾
-      }
-      if ((char == '，' || char == '；' || char == '：' || char == ' ') &&
-          offset < 20) {
-        return checkIndex + 1; // 标点或空格
-      }
-    }
-
-    return targetIndex; // 如果没找到合适的分割点，使用目标位置
-  }
-
-  // 备用分页方法 - 确保边界连续性
-  void _fallbackPagination(String content) {
-    debugPrint('🆘 使用备用分页方法...');
-    _pages.clear();
-
-    if (content.isEmpty) {
-      _pages.add('内容为空');
-      return;
-    }
-
-    const int charsPerPage = 1200; // 增加每页字符数以提高文本密度
-    int currentPos = 0;
-
-    while (currentPos < content.length) {
-      int endPos = currentPos + charsPerPage;
-
-      // 如果超出内容长度，直接到末尾
-      if (endPos >= content.length) {
-        final lastPageContent = content.substring(currentPos);
-        if (lastPageContent.isNotEmpty) {
-          _pages.add(lastPageContent);
-        }
-        break;
-      }
-
-      // 尝试在合适位置分割，避免断字
-      int actualEndPos = endPos;
-      for (int offset = 0; offset < 50; offset++) {
-        int checkPos = endPos - offset;
-        if (checkPos <= currentPos) break;
-
-        String char = content[checkPos];
-        if (char == '。' ||
-            char == '！' ||
-            char == '？' ||
-            char == '\n' ||
-            char == ' ') {
-          actualEndPos = char == '\n' ? checkPos : checkPos + 1;
-          break;
-        }
-      }
-
-      String pageContent = content.substring(currentPos, actualEndPos);
-      // 只移除开头结尾的换行，保持内容完整性
-      pageContent = pageContent
-          .replaceAll(RegExp(r'^\n+'), '')
-          .replaceAll(RegExp(r'\n+$'), '');
-
-      if (pageContent.isNotEmpty) {
-        _pages.add(pageContent);
-        debugPrint(
-          '🆘 备用分页第${_pages.length}页: 位置$currentPos-$actualEndPos, 长度${pageContent.length}字符',
-        );
-      }
-
-      currentPos = actualEndPos;
-    }
-
-    debugPrint('🆘 备用分页完成: 总共 ${_pages.length} 页');
-  }
+  // 优化的分页算法实现 - 未使用，已移除避免语法错误
 
   // --- Settings Persistence ---
   Future<void> _loadSettings() async {
@@ -1086,15 +814,15 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   /// 为二级页面提供统一的主题配置
   BoxDecoration _getModalDecoration() {
     return BoxDecoration(
-      color: _currentTheme.controlBarColor.withValues(alpha: 0.98),
+      color: _currentTheme.controlBarColor.withOpacity( 0.98),
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       border: Border.all(
-        color: _currentTheme.iconColor.withValues(alpha: 0.3),
+        color: _currentTheme.iconColor.withOpacity( 0.3),
         width: 1,
       ),
       boxShadow: [
         BoxShadow(
-          color: _currentTheme.textColor.withValues(alpha: 0.1),
+          color: _currentTheme.textColor.withOpacity( 0.1),
           blurRadius: 20,
           offset: const Offset(0, -5),
         ),
@@ -1152,7 +880,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       case 'sepia':
         return const Color(0xFFE6D7C3); // 浅棕褐色分割线
       default:
-        return _currentTheme.iconColor.withValues(alpha: 0.3);
+        return _currentTheme.iconColor.withOpacity( 0.3);
     }
   }
 
@@ -1188,7 +916,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       case 'sepia':
         return const Color(0xFF7D6E5D); // 中棕褐色次要文字
       default:
-        return _getModalTextColor().withValues(alpha: 0.7);
+        return _getModalTextColor().withOpacity( 0.7);
     }
   }
 
@@ -1415,7 +1143,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                 '正在初始化阅读器...',
                 style: TextStyle(
                   fontSize: 16,
-                  color: _currentTheme.textColor.withValues(alpha: 0.7),
+                  color: _currentTheme.textColor.withOpacity( 0.7),
                 ),
               ),
             ],
@@ -1446,7 +1174,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                     fontSize: 16,
                     color: isError
                         ? Colors.red.shade300
-                        : _currentTheme.textColor.withValues(alpha: 0.7),
+                        : _currentTheme.textColor.withOpacity( 0.7),
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -1530,7 +1258,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               Container(
                 width: 1,
                 height: double.infinity,
-                color: _currentTheme.textColor.withValues(alpha: 0.2),
+                color: _currentTheme.textColor.withOpacity( 0.2),
               ),
               // 右页
               Expanded(
@@ -1575,7 +1303,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             '页面内容为空',
             style: TextStyle(
               fontSize: 16,
-              color: _currentTheme.textColor.withValues(alpha: 0.5),
+              color: _currentTheme.textColor.withOpacity( 0.5),
             ),
           ),
         ),
@@ -1658,7 +1386,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                       '${index + 1} / ${_pages.length}',
                       style: TextStyle(
                         fontSize: 11,
-                        color: _currentTheme.textColor.withValues(alpha: 0.6),
+                        color: _currentTheme.textColor.withOpacity( 0.6),
                         fontFamily: 'System',
                       ),
                     ),
@@ -1693,8 +1421,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         _currentTheme.backgroundColor.computeLuminance() > 0.5;
     final textColor = isLightBackground ? Colors.black87 : Colors.white;
     final iconBgColor = isLightBackground
-        ? Colors.grey.withValues(alpha: 0.2)
-        : Colors.grey.withValues(alpha: 0.3);
+        ? Colors.grey.withOpacity( 0.2)
+        : Colors.grey.withOpacity( 0.3);
 
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 300),
@@ -1730,20 +1458,20 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                     _currentTheme.backgroundColor,
                     isLightBackground ? Colors.white : Colors.black,
                     0.15,
-                  )!.withValues(alpha: 0.85),
+                  )!.withOpacity( 0.85),
                   borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(20),
                     bottomRight: Radius.circular(20),
                   ),
                   border: Border.all(
                     color: isLightBackground
-                        ? Colors.black.withValues(alpha: 0.08)
-                        : Colors.white.withValues(alpha: 0.1),
+                        ? Colors.black.withOpacity( 0.08)
+                        : Colors.white.withOpacity( 0.1),
                     width: 0.5,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
+                      color: Colors.black.withOpacity( 0.1),
                       blurRadius: 10,
                       offset: const Offset(0, 2),
                     ),
@@ -1801,10 +1529,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.2),
+                        color: Colors.blue.withOpacity( 0.2),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Colors.blue.withValues(alpha: 0.4),
+                          color: Colors.blue.withOpacity( 0.4),
                           width: 1,
                         ),
                       ),
@@ -1830,12 +1558,14 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }
 
   Widget _buildBottomToolbar() {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    // final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final double bottomPadding = MediaQuery.of(context).padding.bottom;
 
-    final Color toolbarBgColor = _currentTheme.controlBarColor;
-
-    final Color handleColor = _currentTheme.iconColor.withValues(alpha: 0.6);
+    // 统一的控制栏背景色，与阅读主题保持一致
+    // final Color toolbarBgColor = _currentTheme.controlBarColor;
+    // final Color handleColor = _currentTheme.iconColor.withOpacity( 0.8);
+    // final Color iconColor = _currentTheme.iconColor;
+    // final Color textColor = _currentTheme.controlBarTextColor;
 
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 300),
@@ -1850,44 +1580,54 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           ignoring: !_showControls,
           child: Container(
             width: double.infinity,
-            padding: EdgeInsets.only(
-              top: 8, // 只保留顶部内边距，让背景延伸到底部
-            ),
+            padding: const EdgeInsets.only(top: 12),
             child: ClipRRect(
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
+                top: Radius.circular(28),
               ),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
                 child: Container(
                   padding: EdgeInsets.only(
-                    bottom: bottomPadding + 8, // 内容区域保持底部间距
+                    left: 16,
+                    right: 16,
+                    top: 8,
+                    bottom: bottomPadding + 12,
                   ),
                   decoration: BoxDecoration(
-                    color: toolbarBgColor.withValues(alpha: 0.95),
+                    // 使用阅读主题的控制栏颜色，提高透明度以获得更好的毛玻璃效果
+                    color: toolbarBgColor.withOpacity( 0.92),
                     borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(24),
+                      top: Radius.circular(28),
                     ),
                     border: Border.all(
-                      color: isDarkMode
-                          ? Colors.white.withValues(alpha: 0.1)
-                          : Colors.black.withValues(alpha: 0.08),
-                      width: 0.5,
+                      color: _currentTheme.sliderActiveColor.withValues(
+                        alpha: 0.2,
+                      ),
+                      width: 1,
                     ),
+                    // 添加微妙的阴影以增强层次感
+                    boxShadow: [
+                      BoxShadow(
+                        color: _currentTheme.backgroundColor.withValues(
+                          alpha: 0.1,
+                        ),
+                        blurRadius: 20,
+                        offset: const Offset(0, -8),
+                      ),
+                    ],
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // 可拖拽的小横条指示器
+                      // 可拖拽的小横条指示器 - 使用主题色
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 6,
-                        ), // 进一步减少垂直内边距
+                        padding: const EdgeInsets.symmetric(vertical: 8),
                         child: Center(
                           child: Container(
-                            width: 40,
-                            height: 3, // 进一步减少高度
+                            width: 36,
+                            height: 4,
                             decoration: BoxDecoration(
                               color: handleColor,
                               borderRadius: BorderRadius.circular(2),
@@ -1895,7 +1635,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 4), // 进一步减少间距
+                      const SizedBox(height: 8),
                       _buildToolbarButtons(),
                     ],
                   ),
@@ -1911,67 +1651,79 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   Widget _buildToolbarButtons() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4), // 更紧凑的内边距
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly, // 更均匀的分布
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _ModernToolbarButton(
             icon: Icons.format_list_bulleted_rounded,
             label: '目录',
             onTap: _showTableOfContents,
             iconColor: _currentTheme.controlBarTextColor,
-            pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
-            iconSize: 22,
-            fontSize: 11,
+            pressedColor: _currentTheme.sliderActiveColor.withValues(
+              alpha: 0.15,
+            ),
+            iconSize: 24,
+            fontSize: 12,
           ),
           _ModernToolbarButton(
             icon: Icons.record_voice_over_rounded,
             label: '朗读',
             onTap: _showTtsPanel,
             iconColor: _currentTheme.controlBarTextColor,
-            pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
-            iconSize: 22,
-            fontSize: 11,
+            pressedColor: _currentTheme.sliderActiveColor.withValues(
+              alpha: 0.15,
+            ),
+            iconSize: 24,
+            fontSize: 12,
           ),
           _ModernToolbarButton(
             icon: _isCurrentPageBookmarked
                 ? Icons.bookmark_rounded
                 : Icons.bookmark_add_rounded,
             label: '书签',
-            onTap: _toggleBookmark, // 直接切换书签，更简洁
+            onTap: _toggleBookmark,
             iconColor: _isCurrentPageBookmarked
                 ? _currentTheme.sliderActiveColor
                 : _currentTheme.controlBarTextColor,
-            pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
-            iconSize: 22,
-            fontSize: 11,
+            pressedColor: _currentTheme.sliderActiveColor.withValues(
+              alpha: 0.15,
+            ),
+            iconSize: 24,
+            fontSize: 12,
           ),
           _ModernToolbarButton(
             icon: Icons.share_rounded,
             label: '分享',
             onTap: _showShareDialog,
             iconColor: _currentTheme.controlBarTextColor,
-            pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
-            iconSize: 22,
-            fontSize: 11,
+            pressedColor: _currentTheme.sliderActiveColor.withValues(
+              alpha: 0.15,
+            ),
+            iconSize: 24,
+            fontSize: 12,
           ),
           _ModernToolbarButton(
             icon: Icons.palette_rounded,
             label: '主题',
             onTap: _showThemePanel,
             iconColor: _currentTheme.controlBarTextColor,
-            pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
-            iconSize: 22,
-            fontSize: 11,
+            pressedColor: _currentTheme.sliderActiveColor.withValues(
+              alpha: 0.15,
+            ),
+            iconSize: 24,
+            fontSize: 12,
           ),
           _ModernToolbarButton(
             icon: Icons.tune_rounded,
             label: '设置',
             onTap: _showSettingsPanel,
             iconColor: _currentTheme.controlBarTextColor,
-            pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
-            iconSize: 22,
-            fontSize: 11,
+            pressedColor: _currentTheme.sliderActiveColor.withValues(
+              alpha: 0.15,
+            ),
+            iconSize: 24,
+            fontSize: 12,
           ),
         ],
       ),
@@ -2121,7 +1873,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                         // 设置内容
                         Expanded(
                           child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(20),
+                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -2339,9 +2091,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     required List<Widget> children,
   }) {
     final textColor = _getModalTextColor();
-    final sectionBgColor = _getModalBackgroundColor().withValues(alpha: 0.6);
+    final sectionBgColor = _getModalBackgroundColor().withOpacity( 0.6);
     final sectionBorderColor = _getModalDividerColor();
-    final iconBgColor = _currentTheme.sliderActiveColor.withValues(alpha: 0.3);
+    final iconBgColor = _currentTheme.sliderActiveColor.withOpacity( 0.3);
     final iconColor = _currentTheme.sliderActiveColor;
 
     return Container(
@@ -2352,7 +2104,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         border: Border.all(color: sectionBorderColor, width: 1),
         boxShadow: [
           BoxShadow(
-            color: _currentTheme.textColor.withValues(alpha: 0.1),
+            color: _currentTheme.textColor.withOpacity( 0.1),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -2401,88 +2153,110 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     required ValueChanged<double> onChanged,
   }) {
     final textColor = _getModalTextColor();
-    final activeColor = _getModalAccentColor();
-    final inactiveColor = _getModalDividerColor();
-    final badgeColor = _getModalAccentColor().withValues(alpha: 0.3);
+    final activeColor = _currentTheme.sliderActiveColor;
+    final inactiveColor = _getModalDividerColor().withOpacity( 0.5);
+    final badgeColor = activeColor.withOpacity( 0.15);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: _getModalBackgroundColor().withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _getModalDividerColor(), width: 1),
+        color: _getModalBackgroundColor().withOpacity( 0.3),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: activeColor.withOpacity( 0.2),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
-            color: _currentTheme.textColor.withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: activeColor.withOpacity( 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
           ),
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: badgeColor,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  icon,
-                  color: _currentTheme.sliderActiveColor,
-                  size: 18,
-                ),
+                child: Icon(icon, color: activeColor, size: 20),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${value.toStringAsFixed(unit == 'x' ? 1 : 0)}$unit',
+                      style: TextStyle(
+                        color: activeColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              // 右侧值显示
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
+                  horizontal: 16,
+                  vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: activeColor.withValues(alpha: 0.2),
+                  color: activeColor.withOpacity( 0.12),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: activeColor.withValues(alpha: 0.3),
+                    color: activeColor.withOpacity( 0.25),
                     width: 1,
                   ),
                 ),
-                child: Text(
-                  '${value.toStringAsFixed(1)}$unit',
-                  style: TextStyle(
-                    color: activeColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: Column(
+                  children: [
+                    Icon(Icons.tune, color: activeColor, size: 16),
+                    const SizedBox(height: 2),
+                    Text(
+                      value.toStringAsFixed(unit == 'x' ? 1 : 0),
+                      style: TextStyle(
+                        color: activeColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              trackHeight: 6,
+              trackHeight: 8,
               thumbShape: CustomSliderThumbShape(
-                enabledThumbRadius: 12,
+                enabledThumbRadius: 14,
                 thumbColor: activeColor,
               ),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
               activeTrackColor: activeColor,
               inactiveTrackColor: inactiveColor,
-              overlayColor: activeColor.withValues(alpha: 0.1),
+              overlayColor: activeColor.withOpacity( 0.15),
               trackShape: CustomSliderTrackShape(),
             ),
             child: Slider(
@@ -2500,7 +2274,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
   Widget _buildFontFamilySelector(StateSetter setModalState) {
     final textColor = _getModalTextColor();
-    final cardColor = _getModalBackgroundColor().withValues(alpha: 0.6);
+    final cardColor = _getModalBackgroundColor().withOpacity( 0.6);
 
     final fontFamilies = [
       {'name': '系统默认', 'value': 'System'},
@@ -2525,7 +2299,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: _currentTheme.sliderActiveColor.withValues(alpha: 0.3),
+                  color: _currentTheme.sliderActiveColor.withOpacity( 0.3),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -2567,7 +2341,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                   decoration: BoxDecoration(
                     color: isSelected
                         ? _getModalAccentColor()
-                        : _getModalBackgroundColor().withValues(alpha: 0.8),
+                        : _getModalBackgroundColor().withOpacity( 0.8),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isSelected
@@ -2613,12 +2387,12 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
-        color: _getModalBackgroundColor().withValues(alpha: 0.4),
+        color: _getModalBackgroundColor().withOpacity( 0.4),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _getModalDividerColor(), width: 1),
         boxShadow: [
           BoxShadow(
-            color: _currentTheme.textColor.withValues(alpha: 0.1),
+            color: _currentTheme.textColor.withOpacity( 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -2630,7 +2404,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: activeColor.withValues(alpha: 0.2),
+                color: activeColor.withOpacity( 0.2),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: activeColor, size: 18),
@@ -2650,10 +2424,16 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: _getModalBackgroundColor(),
+            thumbColor: WidgetStateProperty.resolveWith<Color?>((
+              Set<WidgetState> states,
+            ) {
+              if (states.contains(WidgetState.selected)) {
+                return _getModalBackgroundColor();
+              }
+              return _getModalIconColor();
+            }),
             activeTrackColor: activeColor,
             inactiveTrackColor: _getModalDividerColor(),
-            inactiveThumbColor: _getModalIconColor(),
           ),
         ],
       ),
@@ -2719,14 +2499,14 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                   boxShadow: isSelected
                       ? [
                           BoxShadow(
-                            color: selectedBorderColor.withValues(alpha: 0.3),
+                            color: selectedBorderColor.withOpacity( 0.3),
                             blurRadius: 12,
                             spreadRadius: 2,
                           ),
                         ]
                       : [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
+                            color: Colors.black.withOpacity( 0.1),
                             blurRadius: 4,
                             offset: const Offset(0, 2),
                           ),
@@ -2740,7 +2520,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                         Container(
                           padding: const EdgeInsets.all(6), // 减少padding从8到6
                           decoration: BoxDecoration(
-                            color: theme.textColor.withValues(alpha: 0.1),
+                            color: theme.textColor.withOpacity( 0.1),
                             borderRadius: BorderRadius.circular(6), // 相应减少圆角
                           ),
                           child: Icon(
@@ -2838,81 +2618,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     );
   }
 
-  Future<void> _addBookmark() async {
-    try {
-      final bookmark = Bookmark(
-        bookId: widget.book.id!,
-        pageNumber: _currentPageIndex + 1,
-        note: '',
-        createDate: DateTime.now(),
-      );
-
-      // 立即更新UI状态
-      if (mounted) {
-        setState(() {
-          _isCurrentPageBookmarked = true;
-        });
-      }
-
-      // 后台保存到数据库
-      final insertedId = await _bookmarkDao.insertBookmark(bookmark);
-
-      // 立即添加到本地列表，避免重新查询数据库
-      if (mounted && insertedId > 0) {
-        final bookmarkWithId = Bookmark(
-          id: insertedId,
-          bookId: bookmark.bookId,
-          pageNumber: bookmark.pageNumber,
-          note: bookmark.note,
-          createDate: bookmark.createDate,
-        );
-
-        setState(() {
-          _bookmarks.add(bookmarkWithId);
-          _bookmarks.sort((a, b) => a.pageNumber.compareTo(b.pageNumber));
-        });
-
-        // 显示成功提示
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.bookmark_added, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Text('已添加书签：第${_currentPageIndex + 1}页'),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
-            action: SnackBarAction(
-              label: '撤销',
-              textColor: Colors.white,
-              onPressed: () => _removeBookmark(),
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('添加书签失败: $e');
-
-      // 回滚UI状态
-      if (mounted) {
-        setState(() {
-          _isCurrentPageBookmarked = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('添加书签失败'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
-  }
-
+  // 未使用的方法 - 保留作为参考
+  /*
   Future<void> _removeBookmark() async {
     // 保存要删除的书签信息（用于撤销功能）
     final bookmarkToRemove = _bookmarks.firstWhere(
@@ -2935,16 +2642,11 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           );
         });
       }
-
-      // 后台从数据库删除
-      await _bookmarkDao.deleteBookmarkOnPage(
-        widget.book.id!,
-        _currentPageIndex + 1,
-      );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+    } catch (e) {
+      // TODO: Handle error
+    }
+  }
+  */
             content: Row(
               children: [
                 const Icon(
@@ -3046,7 +2748,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     }
   }
 
-  Future<void> _deleteBookmarkWithAnimation(int bookmarkId) async {
+  // Future<void> _deleteBookmarkWithAnimation(int bookmarkId) async {
     // 找到要删除的书签
     final bookmarkToDelete = _bookmarks.firstWhere(
       (bookmark) => bookmark.id == bookmarkId,
@@ -3124,13 +2826,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     }
   }
 
-  void _goToBookmark(int pageNumber) {
-    Navigator.pop(context); // 关闭书签面板
-    _goToPage(pageNumber - 1); // pageNumber是从1开始的，而pageIndex是从0开始的
-  }
-
-  // 编辑书签
-  void _editBookmark(Bookmark bookmark) {
+  // 编辑书签 - 未使用的方法
+  // void _editBookmark(Bookmark bookmark) {
     Navigator.pop(context); // 关闭书签面板
 
     showDialog(
@@ -3168,7 +2865,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: _currentTheme.sliderActiveColor.withValues(alpha: 0.1),
+              color: _currentTheme.sliderActiveColor.withOpacity( 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -3206,12 +2903,12 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             decoration: InputDecoration(
               hintText: '为这个书签添加备注...',
               hintStyle: TextStyle(
-                color: _currentTheme.textColor.withValues(alpha: 0.5),
+                color: _currentTheme.textColor.withOpacity( 0.5),
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide(
-                  color: _currentTheme.textColor.withValues(alpha: 0.3),
+                  color: _currentTheme.textColor.withOpacity( 0.3),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
@@ -3233,7 +2930,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           child: Text(
             '取消',
             style: TextStyle(
-              color: _currentTheme.textColor.withValues(alpha: 0.7),
+              color: _currentTheme.textColor.withOpacity( 0.7),
             ),
           ),
         ),
@@ -3295,21 +2992,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           ),
         );
       }
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inDays == 0) {
-      return '今天 ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    } else if (difference.inDays == 1) {
-      return '昨天 ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}天前';
-    } else {
-      return '${date.month}月${date.day}日';
     }
   }
 
@@ -3386,9 +3068,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       isScrollControlled: true,
       enableDrag: true,
       isDismissible: true,
-      builder: (context) => TtsPanelEnhanced(
-        textToRead: currentPageContent,
-      ),
+      builder: (context) => TtsPanelEnhanced(textToRead: currentPageContent),
     );
   }
 
@@ -3501,7 +3181,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: _getModalAccentColor().withValues(alpha: 0.2),
+                          color: _getModalAccentColor().withOpacity( 0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
@@ -3596,7 +3276,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                 label: const Text('回到开头'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: _getModalAccentColor()
-                                      .withValues(alpha: 0.2),
+                                      .withOpacity( 0.2),
                                   foregroundColor: _getModalAccentColor(),
                                   elevation: 0,
                                 ),
@@ -3613,7 +3293,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                 label: const Text('跳到末尾'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: _getModalAccentColor()
-                                      .withValues(alpha: 0.2),
+                                      .withOpacity( 0.2),
                                   foregroundColor: _getModalAccentColor(),
                                   elevation: 0,
                                 ),
@@ -3786,7 +3466,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   void _showSearchDialog() {
     showDialog(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.7),
+      barrierColor: Colors.black.withOpacity( 0.7),
       builder: (context) {
         String searchQuery = '';
         return AlertDialog(
@@ -3803,7 +3483,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             decoration: InputDecoration(
               hintText: '输入要搜索的内容...',
               hintStyle: TextStyle(
-                color: _currentTheme.controlBarTextColor.withValues(alpha: 0.6),
+                color: _currentTheme.controlBarTextColor.withOpacity( 0.6),
               ),
               enabledBorder: UnderlineInputBorder(
                 borderSide: BorderSide(
@@ -3865,7 +3545,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('未找到："$query"'),
-          backgroundColor: Colors.red.withValues(alpha: 0.8),
+          backgroundColor: Colors.red.withOpacity( 0.8),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -3896,7 +3576,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       builder: (context) => Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: _currentTheme.controlBarColor.withValues(alpha: 0.95),
+          color: _currentTheme.controlBarColor.withOpacity( 0.95),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -4002,7 +3682,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: _getModalBackgroundColor().withValues(alpha: 0.95),
+        color: _getModalBackgroundColor().withOpacity( 0.95),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border.all(color: _getModalDividerColor(), width: 1),
       ),
@@ -4024,7 +3704,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _getModalAccentColor().withValues(alpha: 0.2),
+                color: _getModalAccentColor().withOpacity( 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(Icons.content_copy, color: _getModalAccentColor()),
@@ -4048,7 +3728,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _getModalAccentColor().withValues(alpha: 0.2),
+                color: _getModalAccentColor().withOpacity( 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(Icons.timeline, color: _getModalAccentColor()),
@@ -4072,7 +3752,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _getModalAccentColor().withValues(alpha: 0.2),
+                color: _getModalAccentColor().withOpacity( 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(Icons.format_quote, color: _getModalAccentColor()),
@@ -4096,7 +3776,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.2),
+                color: Colors.orange.withOpacity( 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.book, color: Colors.orange),
@@ -4134,7 +3814,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           behavior: SnackBarBehavior.floating,
         ),
       );
-    }
   }
 
   void _copyReadingProgress() {
@@ -4218,281 +3897,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-  }
-
-  /// 构建调试信息显示
-  /*
-  Widget _buildDebugInfo() {
-    if (_pages.isEmpty) return const SizedBox.shrink();
-
-    final currentPage = _pages[_currentPageIndex];
-    final isLastPage = _currentPageIndex >= _pages.length - 1;
-    final isFirstPage = _currentPageIndex <= 0;
-
-    // 获取当前页面的边界字符
-    String currentPageInfo = '';
-    if (currentPage.isNotEmpty) {
-      final firstChar = currentPage[0];
-      final lastChar = currentPage[currentPage.length - 1];
-      currentPageInfo = '首"$firstChar" 尾"$lastChar"';
-    }
-
-    // 获取下一页第一个字符（如果存在）
-    String nextPageInfo = '';
-    if (!isLastPage && _currentPageIndex + 1 < _pages.length) {
-      final nextPage = _pages[_currentPageIndex + 1];
-      if (nextPage.isNotEmpty) {
-        final nextFirstChar = nextPage[0];
-        nextPageInfo = '下页首"$nextFirstChar"';
-      }
-    }
-
-    // 获取上一页最后一个字符（如果存在）
-    String prevPageInfo = '';
-    if (!isFirstPage && _currentPageIndex - 1 >= 0) {
-      final prevPage = _pages[_currentPageIndex - 1];
-      if (prevPage.isNotEmpty) {
-        final prevLastChar = prevPage[prevPage.length - 1];
-        prevPageInfo = '上页尾"$prevLastChar"';
-      }
-    }
-
-    return Positioned(
-      right: 10,
-      bottom: _controlBarHeight - 20, // 在控制栏上方
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: _currentTheme.backgroundColor.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: _currentTheme.textColor.withValues(alpha: 0.3),
-            width: 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '第${_currentPageIndex + 1}/${_pages.length}页',
-              style: TextStyle(
-                color: _currentTheme.textColor.withValues(alpha: 0.7),
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '长度:${currentPage.length}字符',
-              style: TextStyle(
-                color: _currentTheme.textColor.withValues(alpha: 0.6),
-                fontSize: 9,
-              ),
-            ),
-            if (currentPageInfo.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(
-                currentPageInfo,
-                style: TextStyle(
-                  color: _currentTheme.textColor.withValues(alpha: 0.6),
-                  fontSize: 9,
-                ),
-              ),
-            ],
-            if (prevPageInfo.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(
-                prevPageInfo,
-                style: TextStyle(
-                  color: Colors.blue.withValues(alpha: 0.6),
-                  fontSize: 9,
-                ),
-              ),
-            ],
-            if (nextPageInfo.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(
-                nextPageInfo,
-                style: TextStyle(
-                  color: Colors.green.withValues(alpha: 0.6),
-                  fontSize: 9,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-  */
-
-  // 构建文本选择菜单
-  Widget _buildTextSelectionMenu(
-    BuildContext context,
-    EditableTextState editableTextState,
-  ) {
-    final selection = editableTextState.textEditingValue.selection;
-    if (!selection.isValid || selection.isCollapsed) {
-      return const SizedBox.shrink();
-    }
-
-    final selectedText = editableTextState.textEditingValue.text.substring(
-      selection.start,
-      selection.end,
-    );
-
-    // 临时注释掉动画工具栏，等修复后再启用
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.copy, size: 20),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: selectedText));
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
-            },
-            tooltip: '复制',
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 20),
-            onPressed: () {
-              editableTextState.userUpdateTextEditingValue(
-                editableTextState.textEditingValue.copyWith(
-                  selection: const TextSelection.collapsed(offset: -1),
-                ),
-                SelectionChangedCause.tap,
-              );
-            },
-            tooltip: '关闭',
-          ),
-        ],
-      ),
-    );
-
-    /*
-    return AnimatedTextSelectionToolbar(
-      selectedText: selectedText,
-      bookId: widget.book.id!,
-      pageNumber: _currentPageIndex + 1,
-      chapterTitle: '第${_currentPageIndex + 1}页',
-      onCopy: () {
-        // 复制处理
-      },
-      onClose: () {
-        // 清除文本选择
-        editableTextState.userUpdateTextEditingValue(
-          editableTextState.textEditingValue.copyWith(
-            selection: const TextSelection.collapsed(offset: -1),
-          ),
-          SelectionChangedCause.tap,
-        );
-      },
-    );
-    */
-  }
-
-  Widget _buildSelectionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                color: _currentTheme.textColor,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // 高亮文本
-  Future<void> _highlightText(
-    String text,
-    TextSelection selection,
-    Color color,
-  ) async {
-    try {
-      // 这里可以保存高亮信息到数据库
-      // 由于时间限制，先实现基本的复制功能
-      await Clipboard.setData(ClipboardData(text: text));
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.highlight, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Text('已高亮选中文本'),
-              ],
-            ),
-            backgroundColor: color,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('高亮文本失败: $e');
-    }
-  }
-
-  // 复制文本
-  Future<void> _copyText(String text) async {
-    try {
-      await Clipboard.setData(ClipboardData(text: text));
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.copy, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                const Text('已复制到剪贴板'),
-              ],
-            ),
-            backgroundColor: Colors.blue,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 1),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('复制文本失败: $e');
-    }
   }
 }
 

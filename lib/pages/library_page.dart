@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import '../models/book.dart';
 import '../services/book_dao.dart';
 import 'import_book_page.dart';
-import 'reading_page_enhanced.dart';
+import 'reading_page_enhanced.dart' as reading;
 import '../utils/responsive_helper.dart';
 import '../utils/color_extensions.dart';
 
@@ -74,14 +74,12 @@ class _LibraryPageState extends State<LibraryPage> {
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Container(
                 decoration: BoxDecoration(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.surface.withValues(alpha: 0.8),
+                  color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
                   border: Border(
                     bottom: BorderSide(
                       color: Theme.of(
                         context,
-                      ).colorScheme.outline.withValues(alpha: 0.2),
+                      ).colorScheme.outline.withOpacity(0.2),
                       width: 0.5,
                     ),
                   ),
@@ -99,14 +97,14 @@ class _LibraryPageState extends State<LibraryPage> {
               colors: [
                 Theme.of(
                   context,
-                ).colorScheme.secondaryContainer.withOpacityValues(0.12),
-                Theme.of(context).colorScheme.surface.withOpacityValues(0.98),
+                ).colorScheme.secondaryContainer.withOpacity(0.12),
+                Theme.of(context).colorScheme.surface.withOpacity(0.98),
                 Theme.of(
                   context,
-                ).colorScheme.primaryContainer.withOpacityValues(0.08),
+                ).colorScheme.primaryContainer.withOpacity(0.08),
                 Theme.of(
                   context,
-                ).colorScheme.tertiaryContainer.withOpacityValues(0.10),
+                ).colorScheme.tertiaryContainer.withOpacity(0.10),
               ],
             ),
           ),
@@ -124,7 +122,7 @@ class _LibraryPageState extends State<LibraryPage> {
                       color: Theme.of(context).colorScheme.primary, // 主题色
                       backgroundColor: Theme.of(
                         context,
-                      ).colorScheme.surface.withValues(alpha: 0.9), // 半透明背景
+                      ).colorScheme.surface.withOpacity(0.9), // 半透明背景
                       child: _buildBooksGrid(),
                     ),
               // 移除顶部自定义 Positioned 毛玻璃，改用 AppBar 的 flexibleSpace
@@ -138,9 +136,7 @@ class _LibraryPageState extends State<LibraryPage> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withOpacityValues(0.3),
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
                 spreadRadius: 0,
@@ -166,7 +162,7 @@ class _LibraryPageState extends State<LibraryPage> {
                 },
                 backgroundColor: Theme.of(
                   context,
-                ).colorScheme.primary.withOpacityValues(0.9),
+                ).colorScheme.primary.withOpacity(0.9),
                 foregroundColor: Colors.white,
                 elevation: 0,
                 heroTag: "add_book_fab", // 添加唯一标识避免冲突
@@ -199,14 +195,10 @@ class _LibraryPageState extends State<LibraryPage> {
             child: Container(
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surface.withOpacityValues(0.8),
+                color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.outline.withOpacityValues(0.2),
+                  color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
                   width: 1,
                 ),
               ),
@@ -218,7 +210,7 @@ class _LibraryPageState extends State<LibraryPage> {
                     decoration: BoxDecoration(
                       color: Theme.of(
                         context,
-                      ).colorScheme.primary.withOpacityValues(0.1),
+                      ).colorScheme.primary.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Icon(
@@ -241,7 +233,7 @@ class _LibraryPageState extends State<LibraryPage> {
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(
                         context,
-                      ).colorScheme.onSurface.withOpacityValues(0.7),
+                      ).colorScheme.onSurface.withOpacity(0.7),
                       height: 1.5,
                     ),
                   ),
@@ -317,14 +309,10 @@ class _LibraryPageState extends State<LibraryPage> {
           end: Alignment.bottomCenter,
           stops: const [0.0, 0.3, 0.7, 1.0],
           colors: [
-            Theme.of(context).colorScheme.surface.withOpacityValues(0.0),
-            Theme.of(
-              context,
-            ).colorScheme.primaryContainer.withOpacityValues(0.03),
-            Theme.of(
-              context,
-            ).colorScheme.secondaryContainer.withOpacityValues(0.03),
-            Theme.of(context).colorScheme.surface.withOpacityValues(0.0),
+            Theme.of(context).colorScheme.surface.withOpacity(0.0),
+            Theme.of(context).colorScheme.primaryContainer.withOpacity(0.03),
+            Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.03),
+            Theme.of(context).colorScheme.surface.withOpacity(0.0),
           ],
         ),
       ),
@@ -379,17 +367,13 @@ class _LibraryPageState extends State<LibraryPage> {
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25), // 较强模糊创造深度感
           child: Container(
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.surface.withOpacityValues(0.9),
+              color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(24),
               ),
               border: Border(
                 top: BorderSide(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.outline.withOpacityValues(0.2),
+                  color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
                   width: 1,
                 ),
               ),
@@ -404,7 +388,7 @@ class _LibraryPageState extends State<LibraryPage> {
                       width: 44,
                       height: 5,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.9),
+                        color: Colors.white.withOpacity(0.9),
                         borderRadius: BorderRadius.circular(2.5),
                       ),
                     ),
@@ -419,7 +403,7 @@ class _LibraryPageState extends State<LibraryPage> {
                   decoration: BoxDecoration(
                     color: Theme.of(
                       context,
-                    ).colorScheme.errorContainer.withOpacityValues(0.1),
+                    ).colorScheme.errorContainer.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: ListTile(
@@ -461,13 +445,11 @@ class _LibraryPageState extends State<LibraryPage> {
             child: AlertDialog(
               backgroundColor: Theme.of(
                 context,
-              ).colorScheme.surface.withOpacityValues(0.95),
+              ).colorScheme.surface.withOpacity(0.95),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
                 side: BorderSide(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.outline.withOpacityValues(0.2),
+                  color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
                   width: 1,
                 ),
               ),
@@ -552,7 +534,7 @@ class _BookCoverItem extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacityValues(0.1),
+                        color: Colors.black.withOpacity(0.1),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -572,22 +554,24 @@ class _BookCoverItem extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: Theme.of(
                             context,
-                          ).colorScheme.surface.withOpacityValues(0.9),
+                          ).colorScheme.surface.withOpacity(0.9),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
                             color: Theme.of(
                               context,
-                            ).colorScheme.outline.withOpacityValues(0.2),
+                            ).colorScheme.outline.withOpacity(0.2),
                             width: 1,
                           ),
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              Theme.of(context).colorScheme.primaryContainer
-                                  .withOpacityValues(0.3),
-                              Theme.of(context).colorScheme.secondaryContainer
-                                  .withOpacityValues(0.3),
+                              Theme.of(
+                                context,
+                              ).colorScheme.primaryContainer.withOpacity(0.3),
+                              Theme.of(
+                                context,
+                              ).colorScheme.secondaryContainer.withOpacity(0.3),
                             ],
                           ),
                         ),
@@ -624,23 +608,20 @@ class _BookCoverItem extends StatelessWidget {
                                                   color: Theme.of(context)
                                                       .colorScheme
                                                       .primary
-                                                      .withOpacityValues(0.15),
+                                                      .withOpacity(0.15),
                                                   borderRadius:
                                                       BorderRadius.circular(12),
                                                   border: Border.all(
                                                     color: Theme.of(context)
                                                         .colorScheme
                                                         .primary
-                                                        .withOpacityValues(0.2),
+                                                        .withOpacity(0.2),
                                                     width: 0.5,
                                                   ),
                                                 ),
-                                                child: Icon(
-                                                  Icons.menu_book,
-                                                  size: 24,
-                                                  color: Theme.of(
-                                                    context,
-                                                  ).colorScheme.primary,
+                                                child: _buildCoverImage(
+                                                  context,
+                                                  book,
                                                 ),
                                               ),
                                             ),
@@ -671,10 +652,9 @@ class _BookCoverItem extends StatelessWidget {
                                     Container(
                                       height: 3,
                                       decoration: BoxDecoration(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .outline
-                                            .withOpacityValues(0.2),
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.outline.withOpacity(0.2),
                                         borderRadius: BorderRadius.circular(2),
                                       ),
                                       child: FractionallySizedBox(
@@ -775,7 +755,7 @@ class _BookCoverItem extends StatelessWidget {
                               ?.copyWith(
                                 color: Theme.of(
                                   context,
-                                ).colorScheme.onSurface.withOpacityValues(0.7),
+                                ).colorScheme.onSurface.withOpacity(0.7),
                                 fontSize: 10,
                               ),
                         ),
@@ -786,7 +766,7 @@ class _BookCoverItem extends StatelessWidget {
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacityValues(0.5),
+                          ).colorScheme.onSurface.withOpacity(0.5),
                           fontSize: 9,
                         ),
                       ),
@@ -799,5 +779,33 @@ class _BookCoverItem extends StatelessWidget {
         },
       ),
     );
+  }
+
+  Widget _buildCoverImage(BuildContext context, Book book) {
+    if (book.coverImagePath != null &&
+        File(book.coverImagePath!).existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.file(
+          File(book.coverImagePath!),
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Icon(
+              Icons.menu_book,
+              size: 24,
+              color: Theme.of(context).colorScheme.primary,
+            );
+          },
+        ),
+      );
+    } else {
+      return Icon(
+        Icons.menu_book,
+        size: 24,
+        color: Theme.of(context).colorScheme.primary,
+      );
+    }
   }
 }

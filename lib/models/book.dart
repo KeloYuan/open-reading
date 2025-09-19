@@ -13,6 +13,7 @@ class Book {
   final int? fileModifiedTime;
   final String? contentHash;
   final String? tableOfContents;
+  final String? coverImagePath; // 书籍封面图片路径
 
   Book({
     this.id,
@@ -28,6 +29,7 @@ class Book {
     this.fileModifiedTime,
     this.contentHash,
     this.tableOfContents,
+    this.coverImagePath,
   }) : importDate = importDate ?? DateTime.now();
 
   // content 字段已被移除
@@ -47,6 +49,7 @@ class Book {
       'file_modified_time': fileModifiedTime,
       'content_hash': contentHash,
       'table_of_contents': tableOfContents,
+      'cover_image_path': coverImagePath,
     };
   }
 
@@ -65,6 +68,7 @@ class Book {
       fileModifiedTime: map['file_modified_time'],
       contentHash: map['content_hash'],
       tableOfContents: map['table_of_contents'],
+      coverImagePath: map['cover_image_path'],
     );
   }
 
@@ -82,6 +86,7 @@ class Book {
     int? fileModifiedTime,
     String? contentHash,
     String? tableOfContents,
+    String? coverImagePath,
   }) {
     return Book(
       id: id ?? this.id,
@@ -97,6 +102,7 @@ class Book {
       fileModifiedTime: fileModifiedTime ?? this.fileModifiedTime,
       contentHash: contentHash ?? this.contentHash,
       tableOfContents: tableOfContents ?? this.tableOfContents,
+      coverImagePath: coverImagePath ?? this.coverImagePath,
     );
   }
 }

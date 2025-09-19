@@ -37,7 +37,10 @@
       "Bash(./gradlew --stop)",
       "Bash(./gradlew:*)",
       "Bash(nc localhost 54393)",
-      "Bash(/dev/null)"
+      "Bash(/dev/null)",
+      "Bash(for file in lib/pages/detailed_stats_page.dart lib/pages/home_content_enhanced.dart lib/pages/home_page_responsive.dart lib/pages/import_book_page.dart lib/pages/library_page.dart lib/utils/color_extensions.dart lib/utils/glass_config.dart lib/utils/progressive_blur.dart lib/utils/theme_mixin.dart)",
+      "Bash(do echo \"Processing $file...\")",
+      "Bash(done)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

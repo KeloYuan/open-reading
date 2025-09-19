@@ -89,7 +89,7 @@ class _TocWidgetState extends State<TocWidget>
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.5),
+                  color: Colors.grey.withOpacity(0.5),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -227,7 +227,7 @@ class _TocWidgetState extends State<TocWidget>
           ),
           elevation: isCurrentChapter ? 2 : 0,
           color: isCurrentChapter
-              ? Theme.of(context).primaryColor.withValues(alpha: 0.1)
+              ? Theme.of(context).primaryColor.withOpacity(0.1)
               : null,
           child: InkWell(
             onTap: () => widget.onPageTap(chapter.startPage),
@@ -287,7 +287,7 @@ class _TocWidgetState extends State<TocWidget>
                                 margin: const EdgeInsets.only(right: 8),
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
-                                  color: Colors.blue.withValues(alpha: 0.2),
+                                  color: Colors.blue.withOpacity(0.2),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Icon(
@@ -301,7 +301,7 @@ class _TocWidgetState extends State<TocWidget>
                                 margin: const EdgeInsets.only(right: 8),
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
-                                  color: Colors.orange.withValues(alpha: 0.2),
+                                  color: Colors.orange.withOpacity(0.2),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Icon(
@@ -315,7 +315,7 @@ class _TocWidgetState extends State<TocWidget>
                                 margin: const EdgeInsets.only(right: 8),
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
-                                  color: Colors.green.withValues(alpha: 0.2),
+                                  color: Colors.green.withOpacity(0.2),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Icon(
@@ -362,7 +362,7 @@ class _TocWidgetState extends State<TocWidget>
                                 decoration: BoxDecoration(
                                   color: Theme.of(
                                     context,
-                                  ).primaryColor.withValues(alpha: 0.1),
+                                  ).primaryColor.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
@@ -438,7 +438,7 @@ class _TocWidgetState extends State<TocWidget>
       margin: const EdgeInsets.only(bottom: 8),
       elevation: isCurrentPage ? 2 : 0,
       color: isCurrentPage
-          ? Theme.of(context).primaryColor.withValues(alpha: 0.1)
+          ? Theme.of(context).primaryColor.withOpacity(0.1)
           : null,
       child: InkWell(
         onTap: () => widget.onBookmarkTap(bookmark),
@@ -452,8 +452,8 @@ class _TocWidgetState extends State<TocWidget>
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: isCurrentPage
-                      ? Theme.of(context).primaryColor.withValues(alpha: 0.2)
-                      : Colors.grey.withValues(alpha: 0.1),
+                      ? Theme.of(context).primaryColor.withOpacity(0.2)
+                      : Colors.grey.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -596,13 +596,13 @@ class _TocWidgetState extends State<TocWidget>
 
     switch (level) {
       case 0:
-        return Theme.of(context).primaryColor.withValues(alpha: 0.7);
+        return Theme.of(context).primaryColor.withOpacity(0.7);
       case 1:
-        return Colors.orange.withValues(alpha: 0.6);
+        return Colors.orange.withOpacity(0.6);
       case 2:
-        return Colors.green.withValues(alpha: 0.6);
+        return Colors.green.withOpacity(0.6);
       default:
-        return Colors.grey.withValues(alpha: 0.5);
+        return Colors.grey.withOpacity(0.5);
     }
   }
 
