@@ -269,16 +269,23 @@ class BookPlayerServer {
     String? textColor,
     double fontSize = 16.0,
     double lineHeight = 1.5,
+    double? screenWidth,
+    double? screenHeight,
   }) {
     try {
       final indexHtmlPath = "http://127.0.0.1:$_port/foliate-js/index.html";
       // 不需要编码bookPath，因为稍后在JSON编码时会自动处理
       final bookUrl = 'http://127.0.0.1:$_port/book$bookPath';
 
-      // 完整样式对象，参考anx-reader实现
-      // 注意：fontSize应该是相对值(em)，不是像素值！
+      // 响应式样式配置，根据屏幕尺寸动态调整
+      final responsiveConfig = _calculateResponsiveConfig(
+        screenWidth: screenWidth,
+        screenHeight: screenHeight,
+        fontSize: fontSize,
+      );
+
       final style = {
-        'fontSize': 1.4, // 使用anx-reader的默认值1.4em，而不是像素值
+        'fontSize': responsiveConfig['fontSize'], // 响应式字体大小
         'fontName': 'System',
         'fontPath': '',
         'fontWeight': 400,
@@ -286,11 +293,11 @@ class BookPlayerServer {
         'spacing': lineHeight,
         'paragraphSpacing': 1.0,
         'textIndent': 0,
-        'fontColor': textColor ?? '#2c2c2c',
-        'backgroundColor': backgroundColor ?? '#fffbf0',
-        'topMargin': 90, // 参考anx-reader的默认值
-        'bottomMargin': 50, // 参考anx-reader的默认值
-        'sideMargin': 6, // 参考anx-reader的默认值
+        'fontColor': '#${textColor ?? '2C2C2C'}',
+        'backgroundColor': '#${backgroundColor ?? 'FFFBF0'}',
+        'topMargin': responsiveConfig['topMargin'], // 响应式上边距
+        'bottomMargin': responsiveConfig['bottomMargin'], // 响应式下边距
+        'sideMargin': responsiveConfig['sideMargin'], // 响应式侧边距
         'justify': true,
         'hyphenate': false,
         'pageTurnStyle': 'slide',
@@ -331,5 +338,82 @@ class BookPlayerServer {
       print('生成URL失败: $e');
       rethrow;
     }
+  }
+
+  /// 根据屏幕尺寸计算响应式配置
+  Map<String, dynamic> _calculateResponsiveConfig({
+    double? screenWidth,
+    double? screenHeight,
+    required double fontSize,
+  }) {
+    // 设置默认值（适用于中等尺寸屏幕）
+    double baseFontSize = 1.0;
+    int topMargin = 60;
+    int bottomMargin = 40;
+    int sideMargin = 20;
+
+    if (screenWidth != null && screenHeight != null) {
+      // iPhone 16系列精确适配
+      if (screenHeight > 920) {
+        // iPhone 16 Pro Max (screenHeight ≈ 956)
+        baseFontSize = fontSize / 13.0; // 更大的字体
+        topMargin = 60; // 为动态岛和状态栏留足空间
+        bottomMargin = 40;
+        sideMargin = 20;
+      } else if (screenHeight > 880) {
+        // iPhone 16 Pro (screenHeight ≈ 932)
+        baseFontSize = fontSize / 13.5;
+        topMargin = 55; // 动态岛适配
+        bottomMargin = 35;
+        sideMargin = 18;
+      } else if (screenHeight > 850) {
+        // iPhone 16 Plus (screenHeight ≈ 874)
+        baseFontSize = fontSize / 14.0;
+        topMargin = 50;
+        bottomMargin = 35;
+        sideMargin = 18;
+      } else if (screenHeight > 800) {
+        // iPhone 16 标准版 (screenHeight ≈ 852)
+        baseFontSize = fontSize / 14.0;
+        topMargin = 45;
+        bottomMargin = 30;
+        sideMargin = 16;
+      } else if (screenHeight > 700) {
+        // 中等尺寸屏幕 (iPhone 12/13/14 标准版)
+        baseFontSize = fontSize / 15.0;
+        topMargin = 40;
+        bottomMargin = 35;
+        sideMargin = 18;
+      } else {
+        // 小屏幕设备 (iPhone SE 等)
+        baseFontSize = fontSize / 16.0;
+        topMargin = 50;
+        bottomMargin = 40;
+        sideMargin = 15;
+      }
+
+      // 根据屏幕宽度进一步调整侧边距
+      if (screenWidth > 0) {
+        final screenRatio = screenWidth / 375.0; // 以iPhone X/11/12标准宽度为基准
+        sideMargin = (sideMargin * screenRatio).round();
+
+        // 限制侧边距范围
+        sideMargin = sideMargin.clamp(12, 30);
+      }
+
+      print(
+        '响应式配置: 屏幕=${screenWidth}x${screenHeight}, 字体=${baseFontSize.toStringAsFixed(2)}, 边距=T:$topMargin B:$bottomMargin S:$sideMargin',
+      );
+    } else {
+      // 没有屏幕尺寸信息时使用默认配置
+      baseFontSize = fontSize / 16.0;
+    }
+
+    return {
+      'fontSize': baseFontSize,
+      'topMargin': topMargin,
+      'bottomMargin': bottomMargin,
+      'sideMargin': sideMargin,
+    };
   }
 }

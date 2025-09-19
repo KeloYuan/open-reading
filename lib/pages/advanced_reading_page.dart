@@ -153,7 +153,14 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
       setState(() {
         _isLoading = false;
         _hasError = true;
-        _errorMessage = e.toString();
+        // 简化错误消息，提供用户友好的提示
+        if (e.toString().contains('书籍文件不存在')) {
+          _errorMessage = '书籍文件似乎已被移动或删除。请尝试重新导入此书籍。';
+        } else if (e.toString().contains('加载书籍内容失败')) {
+          _errorMessage = '无法读取书籍文件。文件可能已损坏或格式不支持。';
+        } else {
+          _errorMessage = '初始化阅读器时出现问题。请稍后重试。';
+        }
       });
     }
   }

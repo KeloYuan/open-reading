@@ -10,6 +10,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 // import 'package:google_fonts/google_fonts.dart';
 
 import 'pages/home_page_responsive.dart';
+import 'pages/user_agreement_page.dart';
 import 'utils/app_themes.dart';
 import 'services/tts_service.dart';
 import 'services/share_service.dart';
@@ -156,9 +157,11 @@ class ThemeNotifier extends ChangeNotifier {
       // 加载自定义主题
       _customAccentColor = Color(customColorValue);
       _currentAppTheme = AppThemes.createCustomTheme(_customAccentColor!);
+      debugPrint('🎨 加载自定义主题: ${_customAccentColor.toString()}');
     } else {
       _customAccentColor = null;
       _currentAppTheme = AppThemes.getThemeByName(appThemeName);
+      debugPrint('🎨 加载预设主题: ${_currentAppTheme.displayName}');
     }
 
     _isInitialized = true;
@@ -189,6 +192,7 @@ class ThemeNotifier extends ChangeNotifier {
   void setAppTheme(AppTheme theme) async {
     if (_currentAppTheme.name == theme.name) return; // 避免重复设置
 
+    debugPrint('🎨 切换应用主题到: ${theme.displayName}');
     _currentAppTheme = theme;
     _customAccentColor = null; // 清除自定义强调色
 
@@ -199,14 +203,26 @@ class ThemeNotifier extends ChangeNotifier {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('appTheme', theme.name);
     await prefs.remove('customAccentColor'); // 移除自定义颜色设置
+    debugPrint('🎨 主题已保存: ${theme.name}');
   }
 
   // 设置自定义强调色
   void setCustomAccentColor(Color color) async {
+    debugPrint('🎨 设置自定义强调色: ${color.toString()}');
+
+    // 清除可能冲突的全局强调色
+    _globalAccentColor = null;
+    AppThemes.setGlobalAccentColor(null);
+    debugPrint('🎨 已清除全局强调色，避免冲突');
+
     _customAccentColor = color;
     final customTheme = AppThemes.createCustomTheme(color);
 
     _currentAppTheme = customTheme;
+    debugPrint('🎨 当前主题已更新为: ${_currentAppTheme.displayName}');
+    debugPrint(
+      '🎨 自定义主题主色调: ${customTheme.lightColorScheme.primary.toString()}',
+    );
 
     // 立即通知监听器更新UI
     notifyListeners();
@@ -215,6 +231,8 @@ class ThemeNotifier extends ChangeNotifier {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('appTheme', 'custom');
     await prefs.setInt('customAccentColor', color.toARGB32());
+    await prefs.remove('globalAccentColor'); // 清除全局强调色设置
+    debugPrint('🎨 自定义颜色已保存: ${color.toARGB32()}');
   }
 
   // 设置全局强调色（与应用主题分离）
@@ -265,8 +283,46 @@ class ThemeNotifier extends ChangeNotifier {
   }
 }
 
-class XxReadApp extends StatelessWidget {
+class XxReadApp extends StatefulWidget {
   const XxReadApp({super.key});
+
+  @override
+  State<XxReadApp> createState() => _XxReadAppState();
+}
+
+class _XxReadAppState extends State<XxReadApp> {
+  bool? _hasAcceptedAgreement;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAgreementStatus();
+  }
+
+  /// 检查用户是否已同意协议
+  Future<void> _checkAgreementStatus() async {
+    final hasAccepted = await UserAgreementService.hasUserAcceptedAgreement();
+    setState(() {
+      _hasAcceptedAgreement = hasAccepted;
+    });
+    debugPrint('📋 协议状态检查: ${hasAccepted ? "已同意" : "未同意"}');
+  }
+
+  /// 处理用户同意协议
+  void _onAgreementAccepted() {
+    setState(() {
+      _hasAcceptedAgreement = true;
+    });
+    debugPrint('✅ 用户协议已同意，进入主应用');
+  }
+
+  /// 处理用户拒绝协议
+  void _onAgreementRejected() {
+    // 退出应用
+    debugPrint('❌ 用户拒绝协议，退出应用');
+    // 这里可以调用 SystemNavigator.pop() 或其他退出逻辑
+    // SystemNavigator.pop();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -297,7 +353,7 @@ class XxReadApp extends StatelessWidget {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: const [Locale('en'), Locale('zh')],
-          home: const HomePageResponsive(),
+          home: _buildHome(),
           builder: (context, child) {
             // 确保在每次构建时都同步系统UI
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -324,8 +380,86 @@ class XxReadApp extends StatelessWidget {
     return notifier.themeMode;
   }
 
+  /// 根据协议状态决定显示哪个页面
+  Widget _buildHome() {
+    // 如果还在检查协议状态，显示加载页面
+    if (_hasAcceptedAgreement == null) {
+      return _buildLoadingPage();
+    }
+
+    // 如果未同意协议，显示协议页面
+    if (!_hasAcceptedAgreement!) {
+      return UserAgreementPage(
+        onAgreed: _onAgreementAccepted,
+        onDisagreed: _onAgreementRejected,
+      );
+    }
+
+    // 已同意协议，显示主页面
+    return const HomePageResponsive();
+  }
+
+  /// 构建加载页面
+  Widget _buildLoadingPage() {
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.05),
+              Theme.of(context).colorScheme.surface,
+            ],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Theme.of(context).colorScheme.primary,
+                      Theme.of(context).colorScheme.secondary,
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.auto_stories_rounded,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '小元读书',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 40),
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   ThemeData _buildLightTheme(AppTheme appTheme) {
     ColorScheme colorScheme = appTheme.lightColorScheme;
+    debugPrint('🎨 构建浅色主题 - 基础主题: ${appTheme.displayName}');
+    debugPrint('🎨 基础主色调: ${colorScheme.primary.toString()}');
 
     // 如果有全局强调色，应用到color scheme
     final globalAccent = AppThemes.getGlobalAccentColor();
@@ -336,6 +470,8 @@ class XxReadApp extends StatelessWidget {
         globalAccent,
       );
       debugPrint('🎨 新的主要颜色: ${colorScheme.primary.toString()}');
+    } else {
+      debugPrint('🎨 没有全局强调色，使用主题默认色');
     }
 
     return ThemeData(

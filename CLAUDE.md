@@ -59,19 +59,26 @@
      - `book_import_service.dart` - 书籍文件导入和处理
      - `storage_service.dart` - 文件存储操作
      - `enhanced_book_service.dart` - 增强书籍处理，目录分析、封面提取、元数据处理
-   - **文本分页系统**:
+   - **高级文本分页系统**:
      - `text_paginator.dart` - 基础文本分页服务
      - `enhanced_text_paginator.dart` - 智能文本分页器，根据设备特性优化
      - `advanced_text_paginator.dart` - WebView精确分页算法，支持JavaScript渲染
+     - `flutter_advanced_paginator.dart` - Flutter原生高级分页器
+   - **WebView阅读引擎**:
+     - `simple_webview_reader.dart` - 简单WebView阅读器
+     - `enhanced_webview_reader.dart` - 增强WebView阅读器，集成Foliate-js
+     - `book_player_server.dart` - 本地HTTP服务器，支持EPUB渲染
    - **TTS朗读系统** (`tts/`):
      - `base_tts.dart` - TTS抽象基类
      - `system_tts.dart` - 系统TTS实现
      - `tts_factory.dart` - TTS工厂模式管理
      - `tts_handler.dart` - TTS控制器，处理播放状态和音频会话
+     - `tts_service.dart` - 统一TTS服务管理
+   - **分享和导出服务**:
+     - `share_service.dart` - 增强分享服务，支持多种格式和平台
+     - `note_export_service.dart` - 笔记导出服务，支持Markdown/JSON/CSV格式
    - **云端同步** (`webdav/`):
      - `webdav_sync_service.dart` - WebDAV云端同步服务
-   - **导出功能**:
-     - `note_export_service.dart` - 笔记导出服务，支持Markdown/JSON/CSV格式
 
 3. **数据层** (`lib/models/`): 数据模型和实体
    - `book.dart` - 书籍实体，包含文件路径和进度追踪
@@ -95,12 +102,23 @@
    - **导航组件**:
      - `liquid_glass_navigation.dart` - 液态玻璃导航组件
      - `floating_capsule_navigation.dart` - 浮动胶囊导航
+   - **高级阅读组件**:
+     - `advanced_text_reader_widget.dart` - 高级文本阅读器组件
+     - `flutter_advanced_reader_widget.dart` - Flutter原生高级阅读器
+     - `custom_selectable_text.dart` - 自定义可选择文本组件
+     - `text_highlight_renderer.dart` - 文本高亮渲染器
    - **阅读相关组件**:
      - `chapter_panel.dart` - 智能章节面板，支持层级分析和导航
      - `enhanced_text_selection_toolbar.dart` - 增强文本选择工具栏，支持复制、高亮、笔记、分享
      - `highlight_note_panel.dart` - 高亮笔记管理面板，支持查看、编辑、导出
-     - `text_selection_toolbar.dart` - 基础文本选择工具栏
+     - `highlight_color_picker.dart` - 高亮颜色选择器
      - `toc_widget.dart` - 目录导航组件
+   - **TTS和分享组件**:
+     - `tts_control_panel.dart` - TTS控制面板
+     - `tts_panel_enhanced.dart` - 增强TTS面板
+     - `share_dialog.dart` - 分享对话框
+   - **布局和适配组件**:
+     - `ios_adaptive_layout.dart` - iOS自适应布局组件
    - **设置和配置**:
      - `webdav_config_dialog.dart` - WebDAV云端同步配置对话框
    - **其他组件**:
@@ -185,8 +203,28 @@
 
 ### WebView和高级UI
 - **webview_flutter** `^4.4.2` - WebView支持
+- **flutter_inappwebview** `^6.0.0` - 高级WebView功能
 - **shelf** `^1.4.1` - 本地HTTP服务器
 - **shelf_static** `^1.1.2` - 静态文件服务
+
+### anx-reader 集成依赖
+- **wakelock_plus** `^1.2.8` - 屏幕常亮管理
+- **icons_plus** `^5.0.0` - 图标库增强
+- **battery_plus** `^6.2.1` - 电池状态监控
+- **device_info_plus** `^11.3.2` - 设备信息获取
+- **url_launcher** `^6.2.6` - URL启动器
+- **permission_handler** `^11.3.1` - 权限管理
+
+### 增强UI体验
+- **photo_view** `^0.15.0` - 图片查看器
+- **sticky_headers** `^0.3.0+2` - 粘性头部
+- **flutter_smart_dialog** `^4.9.8+1` - 智能对话框
+- **saver_gallery** `^4.0.1` - 图片保存库
+
+### 数据处理增强
+- **logging** `^1.2.0` - 日志记录
+- **html** `^0.15.4` - HTML解析
+- **flutter_html** `^3.0.0-beta.2` - HTML渲染
 
 ### 工具库
 - **file_picker** `^8.0.0+1` - 文件选择
@@ -197,23 +235,35 @@
 
 ## 高级功能特性
 
+### Foliate-js 阅读引擎集成
+- **Foliate-js核心**: 集成开源的Foliate-js阅读引擎，基于MIT许可证
+- **WebView渲染**: 通过flutter_inappwebview实现高性能WebView渲染
+- **JavaScript交互**: 完整的JavaScript API支持，与Flutter双向通信
+- **多格式支持**: 原生支持EPUB、PDF等多种电子书格式
+- **渐进式渲染**: 支持大文件的分块加载和渐进式渲染
+
 ### TTS朗读系统
 - **架构设计**: 采用工厂模式和抽象基类设计，支持多TTS引擎
 - **核心功能**: 语音朗读、语速调节、音调控制、连续翻页朗读
 - **平台适配**: Android/iOS系统TTS优化适配
 - **音频管理**: 集成audio_service支持后台播放和音频会话管理
 - **智能控制**: 支持播放/暂停/上一页/下一页语音控制
+- **服务集成**: 统一的TtsService管理多种TTS实现
 
-### 智能分页系统
+### 多层级智能分页系统
 - **Enhanced Text Paginator**: 根据设备类型智能调整分页参数
   - 自动检测设备类型（手机/大屏手机/平板）
   - 智能字符测量和行高计算
-  - 设备特性适配的保守系数调整
+  - 设备特性适配的保conservative系数调整
 - **Advanced Text Paginator**: WebView+JavaScript精确分页
   - HTML5+CSS3精确文本渲染
   - JavaScript分页算法，支持响应式布局
   - 触摸手势、键盘导航支持
   - 多列布局和滚动模式切换
+- **Flutter Advanced Paginator**: 原生Flutter分页实现
+  - 纯Dart实现的高性能分页算法
+  - 自定义渲染管道优化
+  - 内存使用优化和缓存管理
 
 ### 高亮笔记系统
 - **智能高亮**: 多颜色荧光笔标记，支持自定义颜色
@@ -242,11 +292,25 @@
 - **目录分析**: 深度分析书籍目录结构
 - **格式支持**: 完善的EPUB、PDF格式支持
 
-### 分享和导出
+### 增强分享和导出系统
+- **ShareService**: 统一分享服务，支持多平台和多格式
 - **多格式导出**: 笔记支持Markdown、JSON、CSV格式
 - **阅读统计**: 自动生成阅读报告和统计信息
 - **社交分享**: 格式化的文字摘录分享功能
 - **批量操作**: 支持批量导出和管理
+- **智能分享对话框**: 动态适应不同内容类型的分享界面
+
+### iOS平台优化
+- **自适应布局**: ios_adaptive_layout组件确保iOS平台的最佳显示效果
+- **平台特性**: 充分利用iOS平台的UI特性和交互模式
+- **性能优化**: 针对iOS设备的性能特点进行专门优化
+
+### anx-reader 功能集成
+- **屏幕管理**: wakelock_plus确保阅读时屏幕常亮
+- **设备信息**: device_info_plus获取设备特性用于优化
+- **电池监控**: battery_plus监控电池状态，智能调整性能
+- **权限管理**: permission_handler统一管理各种系统权限
+- **图片处理**: photo_view和saver_gallery增强图片查看和保存功能
 
 ## 开发注意事项
 
@@ -317,7 +381,31 @@
 
 ### 资源文件
 - `assets/images/` - 应用图片资源
+- `assets/foliate-js/` - Foliate-js阅读引擎资源
+  - `dist/` - 编译后的JavaScript文件
+  - `src/` - 源代码文件
+  - `index.html` - WebView加载入口
 - `shot/` - 应用截图文件
+
+### 新增架构目录（Clean Architecture）
+- `lib/core/` - 核心层
+  - `constants/` - 常量定义
+  - `di/` - 依赖注入
+- `lib/data/` - 数据层
+  - `datasources/` - 数据源
+- `lib/domain/` - 领域层
+  - `entities/` - 实体
+  - `repositories/` - 仓库接口
+  - `usecases/` - 用例
+- `lib/presentation/` - 表现层
+  - `providers/` - 状态提供者
+  - `themes/` - 主题定义
+
+### 示例和演示代码
+- `lib/demo_main.dart` - 演示主程序
+- `lib/examples/` - 使用示例
+- `lib/pages/advanced_reader_demo_page.dart` - 高级阅读器演示页面
+- `lib/pages/reading_mode_selector.dart` - 阅读模式选择器
 
 这个项目是一个功能完整、架构清晰的Flutter电子书阅读器，具备优秀的用户体验和技术实现。
 

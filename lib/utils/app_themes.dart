@@ -396,17 +396,20 @@ class AppThemes {
 
   // 从种子颜色创建自定义主题
   static AppTheme createCustomTheme(Color seedColor) {
+    final lightScheme = ColorScheme.fromSeed(
+      seedColor: seedColor,
+      brightness: Brightness.light,
+    );
+    final darkScheme = ColorScheme.fromSeed(
+      seedColor: seedColor,
+      brightness: Brightness.dark,
+    );
+
     return AppTheme(
       name: 'custom',
       displayName: '自定义',
-      lightColorScheme: ColorScheme.fromSeed(
-        seedColor: seedColor,
-        brightness: Brightness.light,
-      ),
-      darkColorScheme: ColorScheme.fromSeed(
-        seedColor: seedColor,
-        brightness: Brightness.dark,
-      ),
+      lightColorScheme: lightScheme,
+      darkColorScheme: darkScheme,
     );
   }
 
@@ -475,10 +478,50 @@ class AppThemes {
   ) {
     if (accentColor == null) return baseScheme;
 
-    // 完全使用用户选择的强调色作为种子色生成新的ColorScheme
-    return ColorScheme.fromSeed(
-      seedColor: accentColor,
-      brightness: baseScheme.brightness,
+    // 只修改强调色相关属性，保持其他颜色不变
+    // 使用强调色生成相关的色调变化
+    final HSLColor accentHSL = HSLColor.fromColor(accentColor);
+    final bool isDark = baseScheme.brightness == Brightness.dark;
+
+    // 为深色和浅色模式生成合适的变体
+    final Color primaryColor = accentColor;
+    final Color onPrimaryColor = _getContrastingColor(primaryColor);
+    final Color primaryContainerColor = isDark
+        ? accentHSL
+              .withLightness((accentHSL.lightness * 0.2).clamp(0.0, 1.0))
+              .toColor()
+        : accentHSL
+              .withLightness((accentHSL.lightness * 0.9).clamp(0.0, 1.0))
+              .toColor();
+    final Color onPrimaryContainerColor = _getContrastingColor(
+      primaryContainerColor,
     );
+
+    // 生成secondary颜色（基于primary的相似色调）
+    final Color secondaryColor = accentHSL
+        .withHue((accentHSL.hue + 30) % 360)
+        .withSaturation((accentHSL.saturation * 0.7).clamp(0.0, 1.0))
+        .toColor();
+
+    return baseScheme.copyWith(
+      primary: primaryColor,
+      onPrimary: onPrimaryColor,
+      primaryContainer: primaryContainerColor,
+      onPrimaryContainer: onPrimaryContainerColor,
+      secondary: secondaryColor,
+      onSecondary: _getContrastingColor(secondaryColor),
+      inversePrimary: isDark
+          ? primaryColor
+          : accentHSL.withLightness(0.8).toColor(),
+      surfaceTint: primaryColor,
+    );
+  }
+
+  // 获取对比色（黑色或白色）
+  static Color _getContrastingColor(Color color) {
+    // 计算颜色的相对亮度
+    final double luminance = color.computeLuminance();
+    // 如果亮度大于0.5，返回黑色，否则返回白色
+    return luminance > 0.5 ? Colors.black : Colors.white;
   }
 }

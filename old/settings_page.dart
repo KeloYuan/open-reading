@@ -29,7 +29,9 @@ class _SettingsPageState extends State<SettingsPage> {
   double _ttsPitch = 1.0;
 
   // 阅读设置
+  String _pageTransition = 'slide'; // slide, fade, none
   bool _enablePageAnimation = true;
+  String _swipeDirection = 'horizontal'; // horizontal, vertical
   bool _enableVolumeKeyTurn = true;
 
   // WebDAV设置
@@ -61,7 +63,9 @@ class _SettingsPageState extends State<SettingsPage> {
       _ttsPitch = prefs.getDouble('ttsPitch') ?? 1.0;
 
       // 阅读设置
+      _pageTransition = prefs.getString('pageTransition') ?? 'slide';
       _enablePageAnimation = prefs.getBool('enablePageAnimation') ?? true;
+      _swipeDirection = prefs.getString('swipeDirection') ?? 'horizontal';
       _enableVolumeKeyTurn = prefs.getBool('enableVolumeKeyTurn') ?? true;
 
       // 其他设置
@@ -89,7 +93,9 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setDouble('ttsPitch', _ttsPitch);
 
     // 阅读设置
+    await prefs.setString('pageTransition', _pageTransition);
     await prefs.setBool('enablePageAnimation', _enablePageAnimation);
+    await prefs.setString('swipeDirection', _swipeDirection);
     await prefs.setBool('enableVolumeKeyTurn', _enableVolumeKeyTurn);
 
     // 其他设置
@@ -227,6 +233,28 @@ class _SettingsPageState extends State<SettingsPage> {
                 title: '阅读设置',
                 icon: Icons.book_outlined,
                 children: [
+                  _buildOptionSetting(
+                    title: '翻页方式',
+                    subtitle: _swipeDirection == 'horizontal' ? '左右滑动' : '上下滑动',
+                    value: _swipeDirection,
+                    options: const {'horizontal': '左右滑动', 'vertical': '上下滑动'},
+                    onChanged: (value) =>
+                        setState(() => _swipeDirection = value),
+                    icon: Icons.swipe,
+                  ),
+                  _buildOptionSetting(
+                    title: '翻页动画',
+                    subtitle: _getPageTransitionName(_pageTransition),
+                    value: _pageTransition,
+                    options: const {
+                      'slide': '滑动效果',
+                      'fade': '淡入淡出',
+                      'none': '无动画',
+                    },
+                    onChanged: (value) =>
+                        setState(() => _pageTransition = value),
+                    icon: Icons.animation,
+                  ),
                   _buildSwitchSetting(
                     title: '音量键翻页',
                     subtitle: '使用音量键控制翻页',
@@ -927,8 +955,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ),
                       Text(
-                        (themeNotifier.currentAppTheme.name == 'custom' &&
-                                themeNotifier.customAccentColor != null)
+                        themeNotifier.customAccentColor != null
                             ? '已选择自定义颜色'
                             : '点击选择强调色',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -940,8 +967,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ],
                   ),
                 ),
-                if (themeNotifier.currentAppTheme.name == 'custom' &&
-                    themeNotifier.customAccentColor != null)
+                if (themeNotifier.customAccentColor != null)
                   Container(
                     width: 24,
                     height: 24,
@@ -1053,20 +1079,13 @@ class _SettingsPageState extends State<SettingsPage> {
                       itemBuilder: (context, index) {
                         final color = AppThemes.accentColors[index];
                         final isSelected =
-                            themeNotifier.currentAppTheme.name == 'custom' &&
                             themeNotifier.customAccentColor?.toARGB32() ==
-                                color.toARGB32();
-                        debugPrint(
-                          '🎨 颜色 ${color.toString()} 选中状态: $isSelected',
-                        );
+                            color.toARGB32();
 
                         return GestureDetector(
                           onTap: () {
-                            debugPrint('🎨 用户选择了颜色: ${color.toString()}');
                             themeNotifier.setCustomAccentColor(color);
                             setModalState(() {});
-                            // 关闭弹窗以立即看到效果
-                            Navigator.pop(context);
                           },
                           child: Container(
                             decoration: BoxDecoration(
@@ -1220,6 +1239,20 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // 新增方法：获取翻页动画名称
+  String _getPageTransitionName(String transition) {
+    switch (transition) {
+      case 'slide':
+        return '滑动效果';
+      case 'fade':
+        return '淡入淡出';
+      case 'none':
+        return '无动画';
+      default:
+        return '滑动效果';
+    }
+  }
+
   // WebDAV配置对话框
   Future<void> _showWebDavConfig() async {
     final result = await showDialog<bool>(
@@ -1253,6 +1286,76 @@ class _SettingsPageState extends State<SettingsPage> {
         );
       }
     }
+  }
+
+  // 构建选项设置
+  Widget _buildOptionSetting({
+    required String title,
+    required String subtitle,
+    required String value,
+    required Map<String, String> options,
+    required Function(String) onChanged,
+    required IconData icon,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showOptionModal(title, value, options, onChanged),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // 构建滑块设置
@@ -1418,6 +1521,72 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // 显示选项模态框
+  void _showOptionModal(
+    String title,
+    String currentValue,
+    Map<String, String> options,
+    Function(String) onChanged,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 20),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ...options.entries.map((entry) {
+              final isSelected = entry.key == currentValue;
+              return ListTile(
+                title: Text(entry.value),
+                trailing: isSelected
+                    ? Icon(
+                        Icons.check,
+                        color: Theme.of(context).colorScheme.primary,
+                      )
+                    : null,
+                selected: isSelected,
+                onTap: () {
+                  onChanged(entry.key);
+                  _saveSettings();
+                  Navigator.pop(context);
+                },
+              );
+            }),
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 20),
+          ],
         ),
       ),
     );
@@ -1717,14 +1886,14 @@ class _SettingsPageState extends State<SettingsPage> {
 
       if (confirmed == true) {
         // TODO: 实现重新提取封面的逻辑
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('封面提取功能正在开发中...')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('封面提取功能正在开发中...')),
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('操作失败: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('操作失败: $e')),
+      );
     }
   }
 
@@ -1732,13 +1901,13 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _cleanCoverCache() async {
     try {
       // TODO: 实现清理封面缓存的逻辑
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('缓存清理功能正在开发中...')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('缓存清理功能正在开发中...')),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('清理失败: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('清理失败: $e')),
+      );
     }
   }
 }

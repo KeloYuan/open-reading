@@ -73,6 +73,7 @@ class _SimpleWebViewReaderState extends State<SimpleWebViewReader>
   // 动画控制器（保留原有开书动画）
   late AnimationController _fadeAnimationController;
   late Animation<double> _fadeAnimation;
+  bool _animationCompleted = false;
 
   // 阅读信息显示
   Timer? _batteryTimer;
@@ -104,6 +105,15 @@ class _SimpleWebViewReaderState extends State<SimpleWebViewReader>
       CurvedAnimation(parent: _fadeAnimationController, curve: Curves.easeOut),
     );
 
+    // 监听动画完成
+    _fadeAnimationController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        setState(() {
+          _animationCompleted = true;
+        });
+      }
+    });
+
     // 启动淡入动画（模拟开书动画）
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _fadeAnimationController.forward();
@@ -118,7 +128,7 @@ class _SimpleWebViewReaderState extends State<SimpleWebViewReader>
         await _server.stop();
         await Future.delayed(const Duration(milliseconds: 200));
       }
-      
+
       await _server.start();
 
       // 等待一小段时间确保服务器完全就绪
@@ -162,26 +172,15 @@ class _SimpleWebViewReaderState extends State<SimpleWebViewReader>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: widget.backgroundColor,
-      body: Stack(
-        children: [
-          // 根据服务器状态显示不同内容
-          if (!_isServerReady)
-            _buildServerLoadingWidget()
-          else if (_serverError != null)
-            _buildServerErrorWidget()
-          else
-            _buildWebView(),
-
-          // 阅读信息覆盖层（保持你的UI风格）
-          if (_isServerReady && _serverError == null)
-            _buildReadingInfoOverlay(),
-
-          // 历史导航按钮
-          if (_showHistory && _isServerReady) _buildHistoryNavigation(),
-
-          // 开书动画覆盖层
-          if (_isServerReady) _buildBookOpeningAnimation(),
-        ],
+      body: SafeArea(
+        // 为iPhone 16 Pro Max等设备确保顶部安全区域
+        top: true,
+        bottom: false, // 底部交给控制栏处理
+        child: !_isServerReady
+            ? _buildServerLoadingWidget()
+            : _serverError != null
+            ? _buildServerErrorWidget()
+            : _buildWebView(),
       ),
     );
   }
@@ -200,12 +199,21 @@ class _SimpleWebViewReaderState extends State<SimpleWebViewReader>
     final backgroundColor = _colorToHex(widget.backgroundColor);
     final textColor = _colorToHex(widget.textColor);
 
+    // 获取屏幕尺寸和安全区域进行响应式适配
+    final screenSize = MediaQuery.of(context).size;
+    final safeArea = MediaQuery.of(context).padding;
+
+    debugPrint('屏幕信息: ${screenSize.width}x${screenSize.height}');
+    debugPrint('安全区域: 顶部=${safeArea.top}, 底部=${safeArea.bottom}');
+
     final url = _server.generateUrl(
       bookPath,
       backgroundColor: backgroundColor,
       textColor: textColor,
       fontSize: widget.fontSize,
       lineHeight: widget.lineHeight,
+      screenWidth: screenSize.width,
+      screenHeight: screenSize.height,
     );
 
     debugPrint('WebView URL: $url');
@@ -221,10 +229,10 @@ class _SimpleWebViewReaderState extends State<SimpleWebViewReader>
         supportZoom: false,
         transparentBackground: true,
         isInspectable: kDebugMode,
+        // 确保WebView使用正确的背景色
+        allowsBackForwardNavigationGestures: false,
         javaScriptEnabled: true,
         domStorageEnabled: true,
-        allowsInlineMediaPlayback: true,
-        mediaPlaybackRequiresUserGesture: false,
       ),
       onWebViewCreated: (controller) {
         _webViewController = controller;
@@ -233,7 +241,7 @@ class _SimpleWebViewReaderState extends State<SimpleWebViewReader>
       onLoadStart: (controller, url) {
         debugPrint('WebView开始加载: $url');
       },
-      onLoadStop: (controller, url) {
+      onLoadStop: (controller, url) async {
         debugPrint('WebView加载完成: $url');
       },
       onReceivedError: (controller, request, error) {
@@ -440,81 +448,84 @@ class _SimpleWebViewReaderState extends State<SimpleWebViewReader>
   }
 
   Widget _buildReadingInfoOverlay() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 顶部信息
-          Padding(
-            padding: const EdgeInsets.only(top: 40),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: Text(
-                    _chapterCurrentPage == 1
-                        ? widget.book.title
-                        : _chapterTitle,
+    return IgnorePointer(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        // 参考anx-reader: 不设置color属性，完全透明
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 顶部信息
+            Padding(
+              padding: const EdgeInsets.only(top: 40),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Text(
+                      _chapterCurrentPage == 1
+                          ? widget.book.title
+                          : _chapterTitle,
+                      style: TextStyle(
+                        color: widget.textColor.withOpacity(0.6),
+                        fontSize: 12,
+                        fontFamily: widget.fontFamily,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    '${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}',
                     style: TextStyle(
                       color: widget.textColor.withOpacity(0.6),
                       fontSize: 12,
                       fontFamily: widget.fontFamily,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                Text(
-                  '${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}',
-                  style: TextStyle(
-                    color: widget.textColor.withOpacity(0.6),
-                    fontSize: 12,
-                    fontFamily: widget.fontFamily,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const Spacer(),
-          // 底部信息
-          Padding(
-            padding: const EdgeInsets.only(bottom: 40),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '$_chapterCurrentPage/$_chapterTotalPages',
-                  style: TextStyle(
-                    color: widget.textColor.withOpacity(0.6),
-                    fontSize: 12,
-                    fontFamily: widget.fontFamily,
+            const Spacer(),
+            // 底部信息
+            Padding(
+              padding: const EdgeInsets.only(bottom: 40),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '$_chapterCurrentPage/$_chapterTotalPages',
+                    style: TextStyle(
+                      color: widget.textColor.withOpacity(0.6),
+                      fontSize: 12,
+                      fontFamily: widget.fontFamily,
+                    ),
                   ),
-                ),
-                Row(
-                  children: [
-                    Text(
-                      '${(_percentage * 100).toStringAsFixed(1)}%',
-                      style: TextStyle(
-                        color: widget.textColor.withOpacity(0.6),
-                        fontSize: 12,
-                        fontFamily: widget.fontFamily,
+                  Row(
+                    children: [
+                      Text(
+                        '${(_percentage * 100).toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          color: widget.textColor.withOpacity(0.6),
+                          fontSize: 12,
+                          fontFamily: widget.fontFamily,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Text(
-                      '$_batteryLevel%',
-                      style: TextStyle(
-                        color: widget.textColor.withOpacity(0.6),
-                        fontSize: 12,
-                        fontFamily: widget.fontFamily,
+                      const SizedBox(width: 16),
+                      Text(
+                        '$_batteryLevel%',
+                        style: TextStyle(
+                          color: widget.textColor.withOpacity(0.6),
+                          fontSize: 12,
+                          fontFamily: widget.fontFamily,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -639,7 +650,10 @@ class _SimpleWebViewReaderState extends State<SimpleWebViewReader>
   // --- 颜色转换工具 ---
 
   String _colorToHex(Color color) {
-    return color.value.toRadixString(16).padLeft(8, '0').substring(2);
+    // 确保返回正确的6位十六进制颜色值（不包含alpha通道）
+    final hex = color.value.toRadixString(16).padLeft(8, '0').substring(2);
+    debugPrint('颜色转换: ${color.toString()} -> $hex');
+    return hex;
   }
 
   Widget _buildErrorWidget(String message) {
