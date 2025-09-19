@@ -247,15 +247,11 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
     lineHeight: _lineSpacing,
     letterSpacing: _letterSpacing,
     pagePadding: 20.0,
-    columnGap: 30.0,
     paragraphSpacing: '0.8em',
     textIndent: '2em',
-    maxColumnCount: _maxColumnCount,
-    flow: _isScrollMode ? 'scrolled' : 'paginated',
-    backgroundColor:
-        '#${_currentTheme.backgroundColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
-    textColor:
-        '#${_currentTheme.textColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
+    scrollMode: _isScrollMode,
+    backgroundColor: _currentTheme.backgroundColor,
+    textColor: _currentTheme.textColor,
   );
 
   // --- 翻页控制 ---

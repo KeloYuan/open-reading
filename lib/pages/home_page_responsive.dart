@@ -738,18 +738,27 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                     ),
                     children: [
                       _buildWelcomeCard(),
+                      // Android端添加间距，iOS端使用Transform.translate抵消系统默认间距
+                      if (!kIsWeb && !Platform.isIOS)
+                        const SizedBox(height: 16),
                       (!kIsWeb && Platform.isIOS)
                           ? Transform.translate(
                               offset: const Offset(0, -50),
                               child: _buildSummaryCards(),
                             )
                           : _buildSummaryCards(),
+                      // Android端添加间距，iOS端使用Transform.translate抵消系统默认间距
+                      if (!kIsWeb && !Platform.isIOS)
+                        const SizedBox(height: 16),
                       (!kIsWeb && Platform.isIOS)
                           ? Transform.translate(
                               offset: const Offset(0, -65),
                               child: _buildWeeklyChartCard(),
                             )
                           : _buildWeeklyChartCard(),
+                      // Android端添加间距，iOS端使用Transform.translate抵消系统默认间距
+                      if (!kIsWeb && !Platform.isIOS)
+                        const SizedBox(height: 16),
                       (!kIsWeb && Platform.isIOS)
                           ? Transform.translate(
                               offset: const Offset(0, -30),

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/share_service.dart';
 import '../utils/theme_mixin.dart';
-import '../utils/glass_config.dart';
 
 /// 分享对话框
 /// 提供优雅的分享选项界面，保持应用的毛玻璃主题风格

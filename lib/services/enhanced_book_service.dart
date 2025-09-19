@@ -49,46 +49,12 @@ class EnhancedBookService {
     }
   }
 
-  /// 从HTML内容中提取标题
-  String _extractTitleFromHtml(String htmlContent, int defaultIndex) {
-    // 正则表达式匹配常见的标题标签
-    final titlePatterns = [
-      RegExp(r'<h[1-6][^>]*>([^<]*)</h[1-6]>', caseSensitive: false),
-      RegExp(r'<title[^>]*>([^<]*)</title>', caseSensitive: false),
-      RegExp(
-        r'<p[^>]*class="[^"]*title[^"]*"[^>]*>([^<]*)</p>',
-        caseSensitive: false,
-      ),
-      RegExp(r'第\s*[零一二三四五六七八九十百千万\d]+\s*[章节回部篇集卷]', caseSensitive: false),
-    ];
-
-    for (final pattern in titlePatterns) {
-      final match = pattern.firstMatch(htmlContent);
-      if (match != null) {
-        String title = match.group(1) ?? match.group(0) ?? '';
-        title = _cleanChapterTitle(title);
-        if (title.isNotEmpty && title.length < 100) {
-          return title;
-        }
-      }
-    }
-
-    return '第${defaultIndex}章';
-  }
-
-  /// 清理章节标题
-  String _cleanChapterTitle(String title) {
-    return title
-        .replaceAll(RegExp(r'<[^>]*>'), '') // 移除HTML标签
-        .replaceAll(RegExp(r'\s+'), ' ') // 合并空白字符
-        .trim();
-  }
-
   /// 提取EPUB封面
   Future<Uint8List?> extractEpubCover(String filePath) async {
     try {
-      final bytes = await File(filePath).readAsBytes();
-      final epubBook = await EpubReader.readBook(bytes);
+      // 暂时注释掉epub解析，因为CoverImage API存在兼容性问题
+      // final bytes = await File(filePath).readAsBytes();
+      // final epubBook = await EpubReader.readBook(bytes);
 
       // 尝试获取封面图片
       // TODO: 修复CoverImage API兼容性问题
@@ -97,7 +63,7 @@ class EnhancedBookService {
       //   return Uint8List.fromList(coverImage);
       // }
 
-      debugPrint('未找到EPUB封面');
+      debugPrint('EPUB封面提取暂不支持，等待API修复');
       return null;
     } catch (e) {
       debugPrint('EPUB封面提取失败: $e');
@@ -133,53 +99,6 @@ class EnhancedBookService {
       debugPrint('PDF封面提取失败: $e');
       return null;
     }
-  }
-
-  /// 从HTML中提取图片URL
-  String? _extractImageUrlFromHtml(String htmlContent) {
-    final imgPattern = RegExp(r'<img[^>]+src="([^"]+)"', caseSensitive: false);
-    final match = imgPattern.firstMatch(htmlContent);
-    return match?.group(1);
-  }
-
-  /// 验证图片格式
-  bool _isValidImageFormat(Uint8List bytes) {
-    if (bytes.length < 10) return false;
-
-    // 检查文件头
-    final header = bytes.take(10).toList();
-
-    // JPEG: FF D8 FF
-    if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF)
-      return true;
-
-    // PNG: 89 50 4E 47 0D 0A 1A 0A
-    if (header[0] == 0x89 &&
-        header[1] == 0x50 &&
-        header[2] == 0x4E &&
-        header[3] == 0x47)
-      return true;
-
-    // GIF: 47 49 46 38
-    if (header[0] == 0x47 &&
-        header[1] == 0x49 &&
-        header[2] == 0x46 &&
-        header[3] == 0x38)
-      return true;
-
-    // WebP: 52 49 46 46 ... 57 45 42 50
-    if (header[0] == 0x52 &&
-        header[1] == 0x49 &&
-        header[2] == 0x46 &&
-        header[3] == 0x46 &&
-        bytes.length > 12 &&
-        bytes[8] == 0x57 &&
-        bytes[9] == 0x45 &&
-        bytes[10] == 0x42 &&
-        bytes[11] == 0x50)
-      return true;
-
-    return false;
   }
 
   /// 分析PDF目录结构

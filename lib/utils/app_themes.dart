@@ -475,12 +475,10 @@ class AppThemes {
   ) {
     if (accentColor == null) return baseScheme;
 
+    // 完全使用用户选择的强调色作为种子色生成新的ColorScheme
     return ColorScheme.fromSeed(
       seedColor: accentColor,
       brightness: baseScheme.brightness,
-      // 保持原有的surface色调
-      surface: baseScheme.surface,
-      onSurface: baseScheme.onSurface,
     );
   }
 }

@@ -156,7 +156,6 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
-  PageInfo? _currentPageInfo;
   final Completer<void> _loadCompleter = Completer<void>();
 
   @override
@@ -266,7 +265,7 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
 
           if (mounted) {
             setState(() {
-              _currentPageInfo = pageInfo;
+              // 页面信息更新，目前暂不处理
             });
           }
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/book_import_service.dart';
-import 'reading_page_enhanced.dart' as reading;
+import 'reading_mode_selector.dart';
 
 class ImportBookPage extends StatefulWidget {
   const ImportBookPage({super.key});
@@ -25,7 +25,7 @@ class _ImportBookPageState extends State<ImportBookPage> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => reading.ReadingPageEnhanced(book: book),
+            builder: (context) => ReadingModeSelector(book: book),
           ),
         );
       }
@@ -98,7 +98,7 @@ class _ImportBookPageState extends State<ImportBookPage> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        '支持 TXT、EPUB 格式',
+                        '支持 EPUB、PDF、TXT、MOBI 等多种格式',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(

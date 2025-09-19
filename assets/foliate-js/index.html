@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>XXRead</title>
+<style>
+  html {
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  body {
+    user-select: none;
+    margin: 0 !important;
+    height: 100vh;  
+  }
+
+
+  #footnote-dialog {
+    /*
+    padding: var(safe-area-inset-top) var(safe-area-inset-right) var(safe-area-inset-bottom) var(safe-area-inset-left);
+    */
+    position: fixed;
+    width: 80vw;
+    height: 80vh;
+    max-width: 400px;
+    max-height: 200px;
+    min-width: 300px;
+    min-height: 200px;
+    border-radius: 15px;
+    border: 1px solid grey;
+    user-select: none;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    outline: none;
+    z-index: 1000;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+  }
+
+  #footnote-dialog main {
+    overflow: auto;
+    width: 100%;
+    height: 100%;
+  }
+</style>
+<div id="footnote-dialog">
+  <main></main>
+</div>
+<script>
+  console.log("AnxUA", navigator.userAgent);
+</script>
+<script src="./dist/bundle.js" type="module"></script>
+<script src="./dist/pdf-legacy.js"></script>
+<!-- <script src="./src/vendor/pdfjs/pdf.js"></script> -->
+<!-- <script src="./src/book.js" type="module"></script> -->

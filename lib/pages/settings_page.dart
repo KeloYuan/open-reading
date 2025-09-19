@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -230,51 +231,6 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 20),
               _buildSectionCard(
-                title: '阅读设置',
-                icon: Icons.book_outlined,
-                children: [
-                  _buildOptionSetting(
-                    title: '翻页方式',
-                    subtitle: _swipeDirection == 'horizontal' ? '左右滑动' : '上下滑动',
-                    value: _swipeDirection,
-                    options: const {'horizontal': '左右滑动', 'vertical': '上下滑动'},
-                    onChanged: (value) =>
-                        setState(() => _swipeDirection = value),
-                    icon: Icons.swipe,
-                  ),
-                  _buildOptionSetting(
-                    title: '翻页动画',
-                    subtitle: _getPageTransitionName(_pageTransition),
-                    value: _pageTransition,
-                    options: const {
-                      'slide': '滑动效果',
-                      'fade': '淡入淡出',
-                      'none': '无动画',
-                    },
-                    onChanged: (value) =>
-                        setState(() => _pageTransition = value),
-                    icon: Icons.animation,
-                  ),
-                  _buildSwitchSetting(
-                    title: '音量键翻页',
-                    subtitle: '使用音量键控制翻页',
-                    value: _enableVolumeKeyTurn,
-                    onChanged: (value) =>
-                        setState(() => _enableVolumeKeyTurn = value),
-                    icon: Icons.volume_up,
-                  ),
-                  _buildSwitchSetting(
-                    title: '全屏阅读',
-                    subtitle: '隐藏状态栏和导航栏',
-                    value: _enableFullscreen,
-                    onChanged: (value) =>
-                        setState(() => _enableFullscreen = value),
-                    icon: Icons.fullscreen,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _buildSectionCard(
                 title: 'TTS朗读',
                 icon: Icons.record_voice_over,
                 children: [
@@ -360,24 +316,30 @@ class _SettingsPageState extends State<SettingsPage> {
                     title: '音量键翻页',
                     subtitle: '使用音量键控制翻页',
                     value: _enableVolumeKeyTurn,
-                    onChanged: (value) =>
-                        setState(() => _enableVolumeKeyTurn = value),
+                    onChanged: (value) {
+                      setState(() => _enableVolumeKeyTurn = value);
+                      _saveSettings();
+                    },
                     icon: Icons.volume_up,
                   ),
                   _buildSwitchSetting(
                     title: '全屏阅读',
                     subtitle: '隐藏状态栏和导航栏',
                     value: _enableFullscreen,
-                    onChanged: (value) =>
-                        setState(() => _enableFullscreen = value),
+                    onChanged: (value) {
+                      setState(() => _enableFullscreen = value);
+                      _saveSettings();
+                    },
                     icon: Icons.fullscreen,
                   ),
                   _buildSwitchSetting(
                     title: '页面动画',
                     subtitle: '翻页时的动画效果',
                     value: _enablePageAnimation,
-                    onChanged: (value) =>
-                        setState(() => _enablePageAnimation = value),
+                    onChanged: (value) {
+                      setState(() => _enablePageAnimation = value);
+                      _saveSettings();
+                    },
                     icon: Icons.animation,
                   ),
                   _buildDropdownSetting(
@@ -388,8 +350,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       {'value': 'horizontal', 'label': '水平滑动'},
                       {'value': 'vertical', 'label': '垂直滑动'},
                     ],
-                    onChanged: (value) =>
-                        setState(() => _swipeDirection = value),
+                    onChanged: (value) {
+                      setState(() => _swipeDirection = value);
+                      _saveSettings();
+                    },
                     icon: Icons.swipe,
                   ),
                   _buildDropdownSetting(
@@ -401,8 +365,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       {'value': 'fade', 'label': '淡入淡出'},
                       {'value': 'none', 'label': '无动画'},
                     ],
-                    onChanged: (value) =>
-                        setState(() => _pageTransition = value),
+                    onChanged: (value) {
+                      setState(() => _pageTransition = value);
+                      _saveSettings();
+                    },
                     icon: Icons.slideshow,
                   ),
                 ],
@@ -1288,7 +1254,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             ? AppThemes.getAccentColorName(
                                 themeNotifier.globalAccentColor!,
                               )
-                            : '跟随系统',
+                            : '跟随当前主题色',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(
                             context,
@@ -1327,20 +1293,6 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     );
-  }
-
-  // 新增方法：获取翻页动画名称
-  String _getPageTransitionName(String transition) {
-    switch (transition) {
-      case 'slide':
-        return '滑动效果';
-      case 'fade':
-        return '淡入淡出';
-      case 'none':
-        return '无动画';
-      default:
-        return '滑动效果';
-    }
   }
 
   /// 构建下拉设置项
@@ -1517,76 +1469,6 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  // 构建选项设置
-  Widget _buildOptionSetting({
-    required String title,
-    required String subtitle,
-    required String value,
-    required Map<String, String> options,
-    required Function(String) onChanged,
-    required IconData icon,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 1),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _showOptionModal(title, value, options, onChanged),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      Text(
-                        subtitle,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.4),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   // 构建滑块设置
   Widget _buildSliderSetting({
     required String title,
@@ -1755,72 +1637,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  // 显示选项模态框
-  void _showOptionModal(
-    String title,
-    String currentValue,
-    Map<String, String> options,
-    Function(String) onChanged,
-  ) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 20),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onSurface,
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ...options.entries.map((entry) {
-              final isSelected = entry.key == currentValue;
-              return ListTile(
-                title: Text(entry.value),
-                trailing: isSelected
-                    ? Icon(
-                        Icons.check,
-                        color: Theme.of(context).colorScheme.primary,
-                      )
-                    : null,
-                selected: isSelected,
-                onTap: () {
-                  onChanged(entry.key);
-                  _saveSettings();
-                  Navigator.pop(context);
-                },
-              );
-            }),
-            SizedBox(height: MediaQuery.of(context).padding.bottom + 20),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _showGlobalAccentColorModal(ThemeNotifier themeNotifier) {
     showModalBottomSheet(
       context: context,
@@ -1876,7 +1692,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Text(
-                    '设置应用界面的全局强调色，独立于阅读主题',
+                    '设置应用界面的全局强调色，将覆盖所有主题的强调色',
                     style: TextStyle(
                       fontSize: 14,
                       color: Theme.of(
@@ -1895,6 +1711,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       onTap: () {
                         themeNotifier.setGlobalAccentColor(null);
                         setModalState(() {});
+                        // 给用户一个视觉反馈
+                        HapticFeedback.lightImpact();
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
@@ -1925,7 +1743,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    '跟随系统',
+                                    '跟随主题',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w600,
                                       color:
@@ -1940,7 +1758,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                     ),
                                   ),
                                   Text(
-                                    '使用当前应用主题的默认强调色',
+                                    '使用当前选中主题的原生强调色',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Theme.of(context)
@@ -2001,6 +1819,8 @@ class _SettingsPageState extends State<SettingsPage> {
                           onTap: () {
                             themeNotifier.setGlobalAccentColor(color);
                             setModalState(() {});
+                            // 给用户一个视觉反馈
+                            HapticFeedback.lightImpact();
                           },
                           child: Column(
                             children: [

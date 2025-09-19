@@ -219,6 +219,9 @@ class ThemeNotifier extends ChangeNotifier {
 
   // 设置全局强调色（与应用主题分离）
   void setGlobalAccentColor(Color? color) async {
+    if (_globalAccentColor == color) return; // 避免重复设置
+
+    debugPrint('🎨 设置全局强调色: ${color?.toString() ?? "null (跟随主题)"}');
     _globalAccentColor = color;
     AppThemes.setGlobalAccentColor(color);
 
@@ -327,10 +330,12 @@ class XxReadApp extends StatelessWidget {
     // 如果有全局强调色，应用到color scheme
     final globalAccent = AppThemes.getGlobalAccentColor();
     if (globalAccent != null) {
+      debugPrint('🎨 应用全局强调色 (浅色主题): ${globalAccent.toString()}');
       colorScheme = AppThemes.getColorSchemeWithAccent(
         colorScheme,
         globalAccent,
       );
+      debugPrint('🎨 新的主要颜色: ${colorScheme.primary.toString()}');
     }
 
     return ThemeData(
@@ -355,10 +360,12 @@ class XxReadApp extends StatelessWidget {
     // 如果有全局强调色，应用到color scheme
     final globalAccent = AppThemes.getGlobalAccentColor();
     if (globalAccent != null) {
+      debugPrint('🎨 应用全局强调色 (深色主题): ${globalAccent.toString()}');
       colorScheme = AppThemes.getColorSchemeWithAccent(
         colorScheme,
         globalAccent,
       );
+      debugPrint('🎨 新的主要颜色: ${colorScheme.primary.toString()}');
     }
 
     return ThemeData(
