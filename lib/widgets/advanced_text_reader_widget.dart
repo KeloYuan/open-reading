@@ -7,6 +7,114 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../services/advanced_text_paginator.dart';
 
+/// 分页配置类
+class PaginationConfig {
+  final double fontSize;
+  final double lineHeight;
+  final String fontFamily;
+  final double letterSpacing;
+  final double wordSpacing;
+  final String paragraphSpacing;
+  final String textIndent;
+  final double pagePadding;
+  final String theme;
+  final bool scrollMode;
+  final Color backgroundColor;
+  final Color textColor;
+
+  const PaginationConfig({
+    this.fontSize = 16.0,
+    this.lineHeight = 1.6,
+    this.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+    this.letterSpacing = 0.0,
+    this.wordSpacing = 0.0,
+    this.paragraphSpacing = '1em',
+    this.textIndent = '2em',
+    this.pagePadding = 20.0,
+    this.theme = 'light',
+    this.scrollMode = false,
+    this.backgroundColor = const Color(0xFFFFFBF0),
+    this.textColor = const Color(0xFF2C2C2C),
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'fontSize': fontSize,
+      'lineHeight': lineHeight,
+      'fontFamily': fontFamily,
+      'letterSpacing': letterSpacing,
+      'wordSpacing': wordSpacing,
+      'paragraphSpacing': paragraphSpacing,
+      'textIndent': textIndent,
+      'pagePadding': pagePadding,
+      'theme': theme,
+      'scrollMode': scrollMode,
+      'backgroundColor': '#${backgroundColor.value.toRadixString(16).padLeft(8, '0')}',
+      'textColor': '#${textColor.value.toRadixString(16).padLeft(8, '0')}',
+    };
+  }
+
+  PaginationConfig copyWith({
+    double? fontSize,
+    double? lineHeight,
+    String? fontFamily,
+    double? letterSpacing,
+    double? wordSpacing,
+    String? paragraphSpacing,
+    String? textIndent,
+    double? pagePadding,
+    String? theme,
+    bool? scrollMode,
+  }) {
+    return PaginationConfig(
+      fontSize: fontSize ?? this.fontSize,
+      lineHeight: lineHeight ?? this.lineHeight,
+      fontFamily: fontFamily ?? this.fontFamily,
+      letterSpacing: letterSpacing ?? this.letterSpacing,
+      wordSpacing: wordSpacing ?? this.wordSpacing,
+      paragraphSpacing: paragraphSpacing ?? this.paragraphSpacing,
+      textIndent: textIndent ?? this.textIndent,
+      pagePadding: pagePadding ?? this.pagePadding,
+      theme: theme ?? this.theme,
+      scrollMode: scrollMode ?? this.scrollMode,
+    );
+  }
+}
+
+/// 页面信息类
+class PageInfo {
+  final int currentPage;
+  final int totalPages;
+  final double progress;
+
+  const PageInfo({
+    required this.currentPage,
+    required this.totalPages,
+    required this.progress,
+  });
+
+  factory PageInfo.fromMap(Map<String, dynamic> map) {
+    return PageInfo(
+      currentPage: map['currentPage'] ?? 0,
+      totalPages: map['totalPages'] ?? 0,
+      progress: (map['progress'] ?? 0.0).toDouble(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'currentPage': currentPage,
+      'totalPages': totalPages,
+      'progress': progress,
+    };
+  }
+
+  @override
+  String toString() {
+    return 'PageInfo(currentPage: $currentPage, totalPages: $totalPages, progress: $progress)';
+  }
+}
+
 /// 高级文本阅读器Widget
 /// 基于WebView实现的精确分页阅读器
 class AdvancedTextReaderWidget extends StatefulWidget {
@@ -94,7 +202,7 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
         functionBody: '''
           return new Promise((resolve, reject) => {
             try {
-              setText($1, $2).then(() => {
+              setText(arguments[0], arguments[1]).then(() => {
                 resolve(true);
               }).catch(reject);
             } catch (error) {
@@ -284,7 +392,7 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
     
     try {
       final result = await _webViewController!.callAsyncJavaScript(
-        functionBody: 'return searchText($1);',
+        functionBody: 'return searchText(arguments[0]);',
         arguments: [query],
       );
       
@@ -311,7 +419,7 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
         functionBody: '''
           return new Promise((resolve, reject) => {
             try {
-              updateConfig($1).then(() => {
+              updateConfig(arguments[0]).then(() => {
                 resolve(true);
               }).catch(reject);
             } catch (error) {

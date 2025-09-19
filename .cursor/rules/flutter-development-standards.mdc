@@ -1,0 +1,395 @@
+---
+alwaysApply: true
+description: Flutter项目开发标准和代码质量保证规则
+---
+
+# Flutter项目开发标准和代码质量保证规则
+
+## 📋 项目理解要求
+
+### 1. 项目文档优先读取
+- **强制要求**: 在开始任何代码修改前，必须先阅读 [CLAUDE.md](mdc:CLAUDE.md) 文件了解项目架构和开发规范
+- **架构理解**: 深入理解项目的分层架构、核心功能模块、数据流向
+- **功能特性**: 了解已实现的高级功能（TTS、WebDAV同步、智能分页等）
+- **代码约定**: 遵循项目既定的命名规范、文件组织方式、UI设计风格
+
+### 2. 现有代码分析
+- **代码审查**: 在修改前仔细阅读相关现有代码，理解实现逻辑
+- **依赖关系**: 识别代码间的依赖关系，避免破坏现有功能
+- **设计模式**: 保持与现有代码一致的设计模式和架构风格
+
+## 🔧 代码生成标准
+
+### 1. 代码注释要求
+- **类级注释**: 每个类必须包含详细的功能说明、使用场景、核心方法概述
+- **方法注释**: 所有public方法必须包含：
+  - 功能描述
+  - 参数说明（类型、用途、约束）
+  - 返回值说明
+  - 可能抛出的异常
+  - 使用示例（复杂方法）
+- **复杂逻辑注释**: 对于复杂的业务逻辑、算法实现，必须添加步骤解释
+- **TODO注释**: 对于临时方案或待优化代码，明确标注TODO和改进方向
+
+```dart
+/// 智能文本分页器
+/// 
+/// 根据设备特性和文本内容自动调整分页参数，
+/// 提供精确的文本测量和页面分割功能
+/// 
+/// 核心方法：
+/// - [calculatePages] 计算总页数
+/// - [getPageContent] 获取指定页面内容
+/// - [measureText] 测量文本尺寸
+class EnhancedTextPaginator {
+  /// 计算文本总页数
+  /// 
+  /// [text] 待分页的文本内容
+  /// [constraints] 页面布局约束
+  /// [style] 文本样式设置
+  /// 
+  /// Returns: 总页数
+  /// Throws: [ArgumentError] 当文本为空时
+  /// 
+  /// 使用示例：
+  /// ```dart
+  /// final paginator = EnhancedTextPaginator();
+  /// final pageCount = await paginator.calculatePages(
+  ///   text: bookContent,
+  ///   constraints: BoxConstraints(maxWidth: 300),
+  ///   style: TextStyle(fontSize: 16),
+  /// );
+  /// ```
+  Future<int> calculatePages(String text, BoxConstraints constraints, TextStyle style) async {
+    // TODO: 优化长文本的分页性能
+    // 1. 预处理文本，移除多余空白字符
+    final cleanText = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    
+    // 2. 测量单个字符的平均尺寸
+    final charSize = await _measureCharacterSize(style);
+    
+    // 3. 根据约束计算每页可容纳的字符数
+    final charsPerPage = _calculateCharsPerPage(constraints, charSize);
+    
+    // 4. 计算总页数（向上取整）
+    return (cleanText.length / charsPerPage).ceil();
+  }
+}
+```
+
+### 2. 错误处理标准
+- **异常捕获**: 所有可能失败的操作必须包含try-catch
+- **错误类型**: 使用具体的异常类型，避免使用通用Exception
+- **错误信息**: 提供有意义的错误信息，便于调试
+- **回退机制**: 为关键功能提供fallback方案
+
+```dart
+/// 书籍导入服务
+/// 处理EPUB、PDF等格式的书籍文件导入
+class BookImportService {
+  /// 导入书籍文件
+  /// 
+  /// [filePath] 书籍文件路径
+  /// Returns: 导入成功的书籍信息
+  /// Throws: [FileNotFoundException] 文件不存在
+  /// Throws: [UnsupportedFormatException] 不支持的文件格式
+  /// Throws: [CorruptedFileException] 文件损坏
+  Future<Book> importBook(String filePath) async {
+    try {
+      // 1. 验证文件存在性
+      final file = File(filePath);
+      if (!await file.exists()) {
+        throw FileNotFoundException('书籍文件不存在: $filePath');
+      }
+      
+      // 2. 检查文件格式
+      final extension = path.extension(filePath).toLowerCase();
+      if (!_supportedFormats.contains(extension)) {
+        throw UnsupportedFormatException('不支持的文件格式: $extension');
+      }
+      
+      // 3. 解析书籍内容
+      final bookData = await _parseBookFile(file, extension);
+      
+      // 4. 提取元数据
+      final metadata = await _extractMetadata(bookData);
+      
+      // 5. 生成书籍实体
+      return Book.fromMetadata(metadata, filePath);
+      
+    } on FileSystemException catch (e) {
+      // 文件系统相关错误
+      throw FileNotFoundException('文件访问失败: ${e.message}');
+    } on FormatException catch (e) {
+      // 文件格式解析错误
+      throw CorruptedFileException('文件格式损坏: ${e.message}');
+    } catch (e) {
+      // 未知错误，提供调试信息
+      debugPrint('书籍导入未知错误: $e');
+      rethrow;
+    }
+  }
+}
+```
+
+## 🧪 单元测试标准
+
+### 1. 测试覆盖要求
+- **核心业务逻辑**: 覆盖率需达到80%以上
+- **数据访问层**: 所有DAO方法必须有对应测试
+- **服务层**: 关键服务类测试覆盖率需达到90%以上
+- **工具类**: 所有public方法必须有测试用例
+
+### 2. 测试用例规范
+- **命名规范**: `should_[expectedBehavior]_when_[condition]`
+- **测试结构**: 使用AAA模式（Arrange, Act, Assert）
+- **边界测试**: 包含正常情况、边界情况、异常情况
+- **Mock使用**: 对外部依赖进行mock，确保测试独立性
+
+```dart
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/mockito.dart';
+import 'package:xxread/services/book_dao.dart';
+import 'package:xxread/models/book.dart';
+
+// Mock类生成
+class MockDatabaseService extends Mock implements DatabaseService {}
+
+void main() {
+  group('BookDao Tests', () {
+    late BookDao bookDao;
+    late MockDatabaseService mockDatabase;
+
+    setUp(() {
+      // Arrange: 初始化测试环境
+      mockDatabase = MockDatabaseService();
+      bookDao = BookDao(mockDatabase);
+    });
+
+    test('should_return_book_list_when_getAllBooks_called', () async {
+      // Arrange: 准备测试数据
+      final expectedBooks = [
+        Book(id: 1, title: '测试书籍1', filePath: '/path/book1.epub'),
+        Book(id: 2, title: '测试书籍2', filePath: '/path/book2.pdf'),
+      ];
+      when(mockDatabase.query('books')).thenAnswer((_) async => [
+        {'id': 1, 'title': '测试书籍1', 'file_path': '/path/book1.epub'},
+        {'id': 2, 'title': '测试书籍2', 'file_path': '/path/book2.pdf'},
+      ]);
+
+      // Act: 执行测试方法
+      final result = await bookDao.getAllBooks();
+
+      // Assert: 验证结果
+      expect(result, hasLength(2));
+      expect(result[0].title, equals('测试书籍1'));
+      expect(result[1].title, equals('测试书籍2'));
+      verify(mockDatabase.query('books')).called(1);
+    });
+
+    test('should_throw_exception_when_database_error_occurs', () async {
+      // Arrange: 模拟数据库错误
+      when(mockDatabase.query('books')).thenThrow(DatabaseException('连接失败'));
+
+      // Act & Assert: 验证异常抛出
+      expect(
+        () async => await bookDao.getAllBooks(),
+        throwsA(isA<DatabaseException>()),
+      );
+    });
+
+    test('should_handle_empty_result_when_no_books_exist', () async {
+      // Arrange: 模拟空结果
+      when(mockDatabase.query('books')).thenAnswer((_) async => []);
+
+      // Act: 执行测试
+      final result = await bookDao.getAllBooks();
+
+      // Assert: 验证空列表处理
+      expect(result, isEmpty);
+    });
+  });
+}
+```
+
+### 3. Widget测试要求
+- **UI组件**: 关键UI组件必须有widget测试
+- **交互测试**: 用户交互流程的测试覆盖
+- **状态测试**: Provider状态变化的测试验证
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:xxread/widgets/chapter_panel.dart';
+import 'package:xxread/models/chapter.dart';
+
+void main() {
+  group('ChapterPanel Widget Tests', () {
+    testWidgets('should_display_chapter_list_when_chapters_provided', (WidgetTester tester) async {
+      // Arrange: 准备测试数据
+      final chapters = [
+        Chapter(id: 1, title: '第一章', level: 0),
+        Chapter(id: 2, title: '第二章', level: 0),
+        Chapter(id: 3, title: '2.1 小节', level: 1),
+      ];
+
+      // Act: 构建Widget
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChapterPanel(
+              chapters: chapters,
+              onChapterTap: (chapter) {},
+            ),
+          ),
+        ),
+      );
+
+      // Assert: 验证UI元素
+      expect(find.text('第一章'), findsOneWidget);
+      expect(find.text('第二章'), findsOneWidget);
+      expect(find.text('2.1 小节'), findsOneWidget);
+    });
+
+    testWidgets('should_call_callback_when_chapter_tapped', (WidgetTester tester) async {
+      // Arrange: 准备回调捕获
+      Chapter? tappedChapter;
+      final chapters = [Chapter(id: 1, title: '第一章', level: 0)];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ChapterPanel(
+              chapters: chapters,
+              onChapterTap: (chapter) => tappedChapter = chapter,
+            ),
+          ),
+        ),
+      );
+
+      // Act: 模拟点击
+      await tester.tap(find.text('第一章'));
+      await tester.pump();
+
+      // Assert: 验证回调调用
+      expect(tappedChapter, isNotNull);
+      expect(tappedChapter!.title, equals('第一章'));
+    });
+  });
+}
+```
+
+## 🔍 代码质量检查
+
+### 1. 静态代码分析
+- **每次代码生成后必须运行**: `flutter analyze`
+- **修复所有warnings**: 不允许提交包含warning的代码
+- **Lint规则遵循**: 严格遵循 [analysis_options.yaml](mdc:analysis_options.yaml) 配置
+
+### 2. 格式化标准
+- **自动格式化**: 使用 `dart format` 格式化所有代码
+- **import排序**: 按照Flutter官方规范排序import语句
+- **行长度限制**: 每行不超过120字符
+
+### 3. 性能检查
+- **避免在build方法中创建对象**: 将复杂对象移至成员变量
+- **正确使用const构造函数**: 为不可变Widget添加const
+- **合理使用Builder**: 避免不必要的Widget重建
+
+## 🏗️ Build和测试流程
+
+### 1. 代码生成后必须执行的命令序列
+```bash
+# 1. 代码静态分析
+flutter analyze
+
+# 2. 代码格式化
+dart format .
+
+# 3. 单元测试执行
+flutter test
+
+# 4. Widget测试执行
+flutter test test/widget_test.dart
+
+# 5. 构建检查（Debug模式）
+flutter build apk --debug
+
+# 6. 构建检查（Release模式）
+flutter build apk --release
+```
+
+### 2. 持续集成标准
+- **测试必须通过**: 所有单元测试和Widget测试必须通过
+- **覆盖率检查**: 使用 `flutter test --coverage` 检查测试覆盖率
+- **构建成功**: Debug和Release模式都必须构建成功
+
+## 📱 Flutter特定规范
+
+### 1. 状态管理
+- **Provider使用**: 遵循现有的Provider架构模式
+- **状态不可变**: 确保状态对象的不可变性
+- **合理粒度**: 避免过度细分或过度聚合状态
+
+### 2. 异步编程
+- **Future处理**: 正确处理异步操作，避免阻塞UI
+- **Stream使用**: 合理使用Stream进行数据流管理
+- **取消订阅**: 在dispose中正确取消Stream订阅
+
+### 3. 资源管理
+- **图片资源**: 使用适当的图片格式和尺寸
+- **内存管理**: 及时释放不需要的资源
+- **文件处理**: 正确关闭文件流和数据库连接
+
+## 🚨 错误规避检查清单
+
+### 1. 常见Flutter错误
+- [ ] 检查setState是否在正确的生命周期中调用
+- [ ] 验证异步操作是否正确处理
+- [ ] 确认Widget的key使用是否合理
+- [ ] 检查是否存在内存泄漏风险
+
+### 2. 性能问题检查
+- [ ] 避免在build方法中执行重计算
+- [ ] 检查是否存在过度的Widget重建
+- [ ] 验证List渲染是否使用了正确的优化策略
+- [ ] 确认图片加载是否使用了缓存
+
+### 3. 兼容性检查
+- [ ] 验证不同屏幕尺寸的适配
+- [ ] 检查iOS和Android平台的兼容性
+- [ ] 确认新版本Flutter/Dart的兼容性
+
+## 📝 代码审查要点
+
+### 1. 代码可读性
+- **命名清晰**: 变量、方法、类名能够自解释
+- **逻辑清晰**: 复杂逻辑有充分的注释说明
+- **结构合理**: 代码层次分明，职责单一
+
+### 2. 可维护性
+- **模块解耦**: 模块间依赖关系清晰
+- **扩展性**: 为未来功能扩展预留接口
+- **配置化**: 硬编码值提取为配置项
+
+### 3. 安全性
+- **输入验证**: 对用户输入进行有效性验证
+- **权限检查**: 敏感操作需要权限验证
+- **数据保护**: 敏感数据需要加密存储
+
+## 🔄 反馈和改进机制
+
+### 1. 代码审查反馈
+- **详细说明**: 对修改原因和实现方案进行详细说明
+- **示例提供**: 为复杂实现提供使用示例
+- **最佳实践**: 遵循Flutter和Dart的最佳实践
+
+### 2. 持续改进
+- **性能监控**: 定期检查应用性能指标
+- **用户反馈**: 根据用户反馈调整功能实现
+- **技术更新**: 跟进Flutter生态的技术更新
+
+---
+
+**注意**: 这些规则旨在确保代码质量、可维护性和项目的长期健康发展。每次代码生成都应严格遵循这些标准，确保代码的专业性和可靠性。

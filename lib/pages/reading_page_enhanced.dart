@@ -21,7 +21,6 @@ import '../widgets/custom_slider_components.dart';
 import '../widgets/toc_widget.dart';
 import '../widgets/tts_panel_enhanced.dart';
 import '../widgets/share_dialog.dart';
-import '../widgets/enhanced_text_selection_toolbar.dart';
 // import '../services/highlight_dao.dart';
 // import '../services/note_dao.dart';
 import '../utils/responsive_helper.dart';
@@ -814,15 +813,15 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   /// 为二级页面提供统一的主题配置
   BoxDecoration _getModalDecoration() {
     return BoxDecoration(
-      color: _currentTheme.controlBarColor.withOpacity( 0.98),
+      color: _currentTheme.controlBarColor.withValues(alpha: 0.98),
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       border: Border.all(
-        color: _currentTheme.iconColor.withOpacity( 0.3),
+        color: _currentTheme.iconColor.withValues(alpha: 0.3),
         width: 1,
       ),
       boxShadow: [
         BoxShadow(
-          color: _currentTheme.textColor.withOpacity( 0.1),
+          color: _currentTheme.textColor.withValues(alpha: 0.1),
           blurRadius: 20,
           offset: const Offset(0, -5),
         ),
@@ -880,7 +879,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       case 'sepia':
         return const Color(0xFFE6D7C3); // 浅棕褐色分割线
       default:
-        return _currentTheme.iconColor.withOpacity( 0.3);
+        return _currentTheme.iconColor.withValues(alpha: 0.3);
     }
   }
 
@@ -916,7 +915,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       case 'sepia':
         return const Color(0xFF7D6E5D); // 中棕褐色次要文字
       default:
-        return _getModalTextColor().withOpacity( 0.7);
+        return _getModalTextColor().withValues(alpha: 0.7);
     }
   }
 
@@ -1143,7 +1142,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                 '正在初始化阅读器...',
                 style: TextStyle(
                   fontSize: 16,
-                  color: _currentTheme.textColor.withOpacity( 0.7),
+                  color: _currentTheme.textColor.withValues(alpha: 0.7),
                 ),
               ),
             ],
@@ -1174,7 +1173,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                     fontSize: 16,
                     color: isError
                         ? Colors.red.shade300
-                        : _currentTheme.textColor.withOpacity( 0.7),
+                        : _currentTheme.textColor.withValues(alpha: 0.7),
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -1258,7 +1257,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               Container(
                 width: 1,
                 height: double.infinity,
-                color: _currentTheme.textColor.withOpacity( 0.2),
+                color: _currentTheme.textColor.withValues(alpha: 0.2),
               ),
               // 右页
               Expanded(
@@ -1303,7 +1302,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             '页面内容为空',
             style: TextStyle(
               fontSize: 16,
-              color: _currentTheme.textColor.withOpacity( 0.5),
+              color: _currentTheme.textColor.withValues(alpha: 0.5),
             ),
           ),
         ),
@@ -1371,9 +1370,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                       showCursor: false,
                       enableInteractiveSelection: true,
                       contextMenuBuilder: (context, editableTextState) {
-                        return _buildTextSelectionMenu(
-                          context,
-                          editableTextState,
+                        return AdaptiveTextSelectionToolbar.editableText(
+                          editableTextState: editableTextState,
                         );
                       },
                     ),
@@ -1386,7 +1384,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                       '${index + 1} / ${_pages.length}',
                       style: TextStyle(
                         fontSize: 11,
-                        color: _currentTheme.textColor.withOpacity( 0.6),
+                        color: _currentTheme.textColor.withValues(alpha: 0.6),
                         fontFamily: 'System',
                       ),
                     ),
@@ -1421,8 +1419,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         _currentTheme.backgroundColor.computeLuminance() > 0.5;
     final textColor = isLightBackground ? Colors.black87 : Colors.white;
     final iconBgColor = isLightBackground
-        ? Colors.grey.withOpacity( 0.2)
-        : Colors.grey.withOpacity( 0.3);
+        ? Colors.grey.withValues(alpha: 0.2)
+        : Colors.grey.withValues(alpha: 0.3);
 
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 300),
@@ -1458,20 +1456,20 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                     _currentTheme.backgroundColor,
                     isLightBackground ? Colors.white : Colors.black,
                     0.15,
-                  )!.withOpacity( 0.85),
+                  )!.withValues(alpha: 0.85),
                   borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(20),
                     bottomRight: Radius.circular(20),
                   ),
                   border: Border.all(
                     color: isLightBackground
-                        ? Colors.black.withOpacity( 0.08)
-                        : Colors.white.withOpacity( 0.1),
+                        ? Colors.black.withValues(alpha: 0.08)
+                        : Colors.white.withValues(alpha: 0.1),
                     width: 0.5,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity( 0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 10,
                       offset: const Offset(0, 2),
                     ),
@@ -1529,10 +1527,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity( 0.2),
+                        color: Colors.blue.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: Colors.blue.withOpacity( 0.4),
+                          color: Colors.blue.withValues(alpha: 0.4),
                           width: 1,
                         ),
                       ),
@@ -1563,7 +1561,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
     // 统一的控制栏背景色，与阅读主题保持一致
     // final Color toolbarBgColor = _currentTheme.controlBarColor;
-    // final Color handleColor = _currentTheme.iconColor.withOpacity( 0.8);
+    // final Color handleColor = _currentTheme.iconColor.withValues(alpha:  0.8);
     // final Color iconColor = _currentTheme.iconColor;
     // final Color textColor = _currentTheme.controlBarTextColor;
 
@@ -1596,7 +1594,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                   ),
                   decoration: BoxDecoration(
                     // 使用阅读主题的控制栏颜色，提高透明度以获得更好的毛玻璃效果
-                    color: toolbarBgColor.withOpacity( 0.92),
+                    color: _currentTheme.controlBarColor.withValues(
+                      alpha: 0.92,
+                    ),
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(28),
                     ),
@@ -1629,7 +1629,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                             width: 36,
                             height: 4,
                             decoration: BoxDecoration(
-                              color: handleColor,
+                              color: _currentTheme.sliderActiveColor,
                               borderRadius: BorderRadius.circular(2),
                             ),
                           ),
@@ -2091,9 +2091,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     required List<Widget> children,
   }) {
     final textColor = _getModalTextColor();
-    final sectionBgColor = _getModalBackgroundColor().withOpacity( 0.6);
+    final sectionBgColor = _getModalBackgroundColor().withValues(alpha: 0.6);
     final sectionBorderColor = _getModalDividerColor();
-    final iconBgColor = _currentTheme.sliderActiveColor.withOpacity( 0.3);
+    final iconBgColor = _currentTheme.sliderActiveColor.withValues(alpha: 0.3);
     final iconColor = _currentTheme.sliderActiveColor;
 
     return Container(
@@ -2104,7 +2104,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         border: Border.all(color: sectionBorderColor, width: 1),
         boxShadow: [
           BoxShadow(
-            color: _currentTheme.textColor.withOpacity( 0.1),
+            color: _currentTheme.textColor.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -2154,22 +2154,22 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }) {
     final textColor = _getModalTextColor();
     final activeColor = _currentTheme.sliderActiveColor;
-    final inactiveColor = _getModalDividerColor().withOpacity( 0.5);
-    final badgeColor = activeColor.withOpacity( 0.15);
+    final inactiveColor = _getModalDividerColor().withValues(alpha: 0.5);
+    final badgeColor = activeColor.withValues(alpha: 0.15);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: _getModalBackgroundColor().withOpacity( 0.3),
+        color: _getModalBackgroundColor().withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: activeColor.withOpacity( 0.2),
+          color: activeColor.withValues(alpha: 0.2),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: activeColor.withOpacity( 0.08),
+            color: activeColor.withValues(alpha: 0.08),
             blurRadius: 12,
             offset: const Offset(0, 4),
             spreadRadius: 0,
@@ -2221,10 +2221,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: activeColor.withOpacity( 0.12),
+                  color: activeColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: activeColor.withOpacity( 0.25),
+                    color: activeColor.withValues(alpha: 0.25),
                     width: 1,
                   ),
                 ),
@@ -2256,7 +2256,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
               activeTrackColor: activeColor,
               inactiveTrackColor: inactiveColor,
-              overlayColor: activeColor.withOpacity( 0.15),
+              overlayColor: activeColor.withValues(alpha: 0.15),
               trackShape: CustomSliderTrackShape(),
             ),
             child: Slider(
@@ -2274,7 +2274,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
   Widget _buildFontFamilySelector(StateSetter setModalState) {
     final textColor = _getModalTextColor();
-    final cardColor = _getModalBackgroundColor().withOpacity( 0.6);
+    final cardColor = _getModalBackgroundColor().withValues(alpha: 0.6);
 
     final fontFamilies = [
       {'name': '系统默认', 'value': 'System'},
@@ -2299,7 +2299,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: _currentTheme.sliderActiveColor.withOpacity( 0.3),
+                  color: _currentTheme.sliderActiveColor.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -2341,7 +2341,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                   decoration: BoxDecoration(
                     color: isSelected
                         ? _getModalAccentColor()
-                        : _getModalBackgroundColor().withOpacity( 0.8),
+                        : _getModalBackgroundColor().withValues(alpha: 0.8),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isSelected
@@ -2387,12 +2387,12 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
-        color: _getModalBackgroundColor().withOpacity( 0.4),
+        color: _getModalBackgroundColor().withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _getModalDividerColor(), width: 1),
         boxShadow: [
           BoxShadow(
-            color: _currentTheme.textColor.withOpacity( 0.1),
+            color: _currentTheme.textColor.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -2404,7 +2404,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: activeColor.withOpacity( 0.2),
+                color: activeColor.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: activeColor, size: 18),
@@ -2499,14 +2499,14 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                   boxShadow: isSelected
                       ? [
                           BoxShadow(
-                            color: selectedBorderColor.withOpacity( 0.3),
+                            color: selectedBorderColor.withValues(alpha: 0.3),
                             blurRadius: 12,
                             spreadRadius: 2,
                           ),
                         ]
                       : [
                           BoxShadow(
-                            color: Colors.black.withOpacity( 0.1),
+                            color: Colors.black.withValues(alpha: 0.1),
                             blurRadius: 4,
                             offset: const Offset(0, 2),
                           ),
@@ -2520,7 +2520,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                         Container(
                           padding: const EdgeInsets.all(6), // 减少padding从8到6
                           decoration: BoxDecoration(
-                            color: theme.textColor.withOpacity( 0.1),
+                            color: theme.textColor.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(6), // 相应减少圆角
                           ),
                           child: Icon(
@@ -2642,33 +2642,31 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           );
         });
       }
-    } catch (e) {
-      // TODO: Handle error
-    }
-  }
-  */
-            content: Row(
-              children: [
-                const Icon(
-                  Icons.bookmark_remove,
-                  color: Colors.white,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text('已删除书签：第${_currentPageIndex + 1}页'),
-              ],
-            ),
-            backgroundColor: Colors.orange,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 3),
-            action: SnackBarAction(
-              label: '撤销',
-              textColor: Colors.white,
-              onPressed: () => _restoreBookmark(bookmarkToRemove),
-            ),
+
+      // 显示撤销消息
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(
+                Icons.bookmark_remove,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text('已删除书签：第${_currentPageIndex + 1}页'),
+            ],
           ),
-        );
-      }
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: '撤销',
+            textColor: Colors.white,
+            onPressed: () => _restoreBookmark(bookmarkToRemove),
+          ),
+        ),
+      );
     } catch (e) {
       debugPrint('删除书签失败: $e');
 
@@ -2690,6 +2688,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       }
     }
   }
+  */
 
   Future<void> _restoreBookmark(Bookmark bookmark) async {
     try {
@@ -2748,7 +2747,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     }
   }
 
-  // Future<void> _deleteBookmarkWithAnimation(int bookmarkId) async {
+  Future<void> _deleteBookmarkWithAnimation(int bookmarkId) async {
     // 找到要删除的书签
     final bookmarkToDelete = _bookmarks.firstWhere(
       (bookmark) => bookmark.id == bookmarkId,
@@ -2826,8 +2825,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     }
   }
 
-  // 编辑书签 - 未使用的方法
-  // void _editBookmark(Bookmark bookmark) {
+  // 编辑书签
+  void _editBookmark(Bookmark bookmark) {
     Navigator.pop(context); // 关闭书签面板
 
     showDialog(
@@ -2865,7 +2864,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: _currentTheme.sliderActiveColor.withOpacity( 0.1),
+              color: _currentTheme.sliderActiveColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -2903,12 +2902,12 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             decoration: InputDecoration(
               hintText: '为这个书签添加备注...',
               hintStyle: TextStyle(
-                color: _currentTheme.textColor.withOpacity( 0.5),
+                color: _currentTheme.textColor.withValues(alpha: 0.5),
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide(
-                  color: _currentTheme.textColor.withOpacity( 0.3),
+                  color: _currentTheme.textColor.withValues(alpha: 0.3),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
@@ -2930,7 +2929,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           child: Text(
             '取消',
             style: TextStyle(
-              color: _currentTheme.textColor.withOpacity( 0.7),
+              color: _currentTheme.textColor.withValues(alpha: 0.7),
             ),
           ),
         ),
@@ -3181,7 +3180,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: _getModalAccentColor().withOpacity( 0.2),
+                          color: _getModalAccentColor().withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
@@ -3276,7 +3275,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                 label: const Text('回到开头'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: _getModalAccentColor()
-                                      .withOpacity( 0.2),
+                                      .withValues(alpha: 0.2),
                                   foregroundColor: _getModalAccentColor(),
                                   elevation: 0,
                                 ),
@@ -3293,7 +3292,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
                                 label: const Text('跳到末尾'),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: _getModalAccentColor()
-                                      .withOpacity( 0.2),
+                                      .withValues(alpha: 0.2),
                                   foregroundColor: _getModalAccentColor(),
                                   elevation: 0,
                                 ),
@@ -3466,7 +3465,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   void _showSearchDialog() {
     showDialog(
       context: context,
-      barrierColor: Colors.black.withOpacity( 0.7),
+      barrierColor: Colors.black.withValues(alpha: 0.7),
       builder: (context) {
         String searchQuery = '';
         return AlertDialog(
@@ -3483,7 +3482,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             decoration: InputDecoration(
               hintText: '输入要搜索的内容...',
               hintStyle: TextStyle(
-                color: _currentTheme.controlBarTextColor.withOpacity( 0.6),
+                color: _currentTheme.controlBarTextColor.withValues(alpha: 0.6),
               ),
               enabledBorder: UnderlineInputBorder(
                 borderSide: BorderSide(
@@ -3545,7 +3544,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('未找到："$query"'),
-          backgroundColor: Colors.red.withOpacity( 0.8),
+          backgroundColor: Colors.red.withValues(alpha: 0.8),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -3576,7 +3575,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       builder: (context) => Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: _currentTheme.controlBarColor.withOpacity( 0.95),
+          color: _currentTheme.controlBarColor.withValues(alpha: 0.95),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -3682,7 +3681,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: _getModalBackgroundColor().withOpacity( 0.95),
+        color: _getModalBackgroundColor().withValues(alpha: 0.95),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border.all(color: _getModalDividerColor(), width: 1),
       ),
@@ -3704,7 +3703,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _getModalAccentColor().withOpacity( 0.2),
+                color: _getModalAccentColor().withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(Icons.content_copy, color: _getModalAccentColor()),
@@ -3728,7 +3727,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _getModalAccentColor().withOpacity( 0.2),
+                color: _getModalAccentColor().withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(Icons.timeline, color: _getModalAccentColor()),
@@ -3752,7 +3751,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: _getModalAccentColor().withOpacity( 0.2),
+                color: _getModalAccentColor().withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(Icons.format_quote, color: _getModalAccentColor()),
@@ -3776,7 +3775,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.orange.withOpacity( 0.2),
+                color: Colors.orange.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.book, color: Colors.orange),
@@ -3814,6 +3813,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+    }
   }
 
   void _copyReadingProgress() {
