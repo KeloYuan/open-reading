@@ -19,6 +19,7 @@ import '../services/reading_stats_dao.dart';
 import '../services/enhanced_book_service.dart';
 import '../widgets/tts_control_panel.dart';
 import 'advanced_reading_page.dart'; // 引入你的主题定义
+import 'webview_reading_page_enhanced_toc.dart';
 
 /// 基于WebView的增强阅读页面
 /// 完全保留你的原有UI风格和主题系统
@@ -58,8 +59,8 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
   double _horizontalPadding = 16.0; // 新增：左右留白距离
   String _fontFamily = 'System';
 
-  // WebView Reader引用
-  SimpleWebViewReader? _webViewReader;
+  // WebView Reader引用 (暂未实现)
+  // SimpleWebViewReader? _webViewReader;
 
   // --- UI状态（保持你的原有设计） ---
   bool _showControlBar = false;
@@ -99,31 +100,46 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
 
   @override
   void dispose() {
+    // 优化资源释放，减少退出卡顿
     _controlBarAnimationController.dispose();
     _pageFlipAnimationController.dispose();
     _searchController.dispose();
     _hideControlBarTimer?.cancel();
-    _saveReadingProgress();
-    _updateReadingStats();
+
+    // 异步保存数据，避免阻塞UI线程
+    _saveDataAsync();
+
     super.dispose();
+  }
+
+  /// 异步保存阅读数据，避免阻塞UI
+  void _saveDataAsync() {
+    Future.microtask(() async {
+      try {
+        await _saveReadingProgress();
+        await _updateReadingStats();
+      } catch (e) {
+        debugPrint('保存阅读数据时出错: $e');
+      }
+    });
   }
 
   // --- 初始化方法（保持你的原有逻辑） ---
 
   void _initializeAnimations() {
     _controlBarAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 180), // 减少动画时间，提升响应速度
+      duration: const Duration(milliseconds: 300), // 恢复合理的标准动画时间
       vsync: this,
     );
 
     // 添加翻页动画控制器
     _pageFlipAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 500), // 优化翻页动画速度
+      duration: const Duration(milliseconds: 800), // 恢复合理的翻页动画时间
       vsync: this,
     );
     _pageFlipAnimation = CurvedAnimation(
       parent: _pageFlipAnimationController,
-      curve: Curves.fastEaseInToSlowEaseOut, // 使用更平滑的曲线
+      curve: Curves.easeInOutCubic, // 使用更自然的缓动曲线
     );
   }
 
@@ -919,13 +935,13 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
 
     // 使用AnimatedPositioned实现伸出和收回动画，参考enhanced版本
     return AnimatedPositioned(
-      duration: const Duration(milliseconds: 180), // 更快的动画时间
-      curve: Curves.fastEaseInToSlowEaseOut, // 更丝滑的曲线
+      duration: const Duration(milliseconds: 300), // 恢复合理的动画时间
+      curve: Curves.easeInOutCubic, // 更自然的缓动曲线
       bottom: _showControlBar ? 0 : -150.0,
       left: 0,
       right: 0,
       child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 160), // 稍快的透明度动画
+        duration: const Duration(milliseconds: 300), // 同步透明度动画
         opacity: _showControlBar ? 1.0 : 0.0,
         child: IgnorePointer(
           ignoring: !_showControlBar,
@@ -937,11 +953,11 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
                 top: Radius.circular(24),
               ),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20), // 增强毛玻璃模糊效果
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), // 适度的毛玻璃模糊效果
                 child: Container(
                   padding: EdgeInsets.only(bottom: bottomPadding + 8),
                   decoration: BoxDecoration(
-                    color: toolbarBgColor.withOpacity(0.88), // 调整透明度，更加通透
+                    color: toolbarBgColor.withOpacity(0.45), // 降低透明度，让毛玻璃效果更明显
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(24),
                     ),
@@ -1064,15 +1080,15 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
         : Colors.grey.withOpacity(0.3);
 
     return AnimatedPositioned(
-      duration: const Duration(milliseconds: 180), // 更快的动画时间
-      curve: Curves.fastEaseInToSlowEaseOut, // 更丝滑的曲线
+      duration: const Duration(milliseconds: 300), // 恢复合理的动画时间
+      curve: Curves.easeInOutCubic, // 更自然的缓动曲线
       top: _showControlBar ? 0 : -80.0,
       left: 0,
       right: 0,
       child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 160), // 稍快的透明度动画
+        duration: const Duration(milliseconds: 300), // 同步透明度动画
         opacity: _showControlBar ? 1.0 : 0.0,
-        curve: Curves.fastEaseInToSlowEaseOut, // 统一曲线
+        curve: Curves.easeInOutCubic, // 统一曲线
         child: IgnorePointer(
           ignoring: !_showControlBar,
           child: ClipRRect(
@@ -1081,7 +1097,7 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
               bottomRight: Radius.circular(20),
             ),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25), // 更强的毛玻璃效果
+              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), // 适度的毛玻璃效果
               child: Container(
                 width: double.infinity,
                 padding: EdgeInsets.only(
@@ -1095,7 +1111,7 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
                     _currentTheme.backgroundColor,
                     isLightBackground ? Colors.white : Colors.black,
                     0.15,
-                  )!.withOpacity(0.82), // 调整透明度，更加通透
+                  )!.withOpacity(0.45), // 降低透明度，让毛玻璃效果更明显
                   borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(20),
                     bottomRight: Radius.circular(20),
@@ -1160,29 +1176,60 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.blue.withOpacity(0.4),
-                          width: 1,
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        // 页码显示
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.blue.withOpacity(0.4),
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            '${_currentPageNum}/${_totalPages}',
+                            style: TextStyle(
+                              color: isLightBackground
+                                  ? Colors.blue[700]
+                                  : Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
-                      ),
-                      child: Text(
-                        '${_currentPageNum}/${_totalPages}',
-                        style: TextStyle(
-                          color: isLightBackground
-                              ? Colors.blue[700]
-                              : Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                        const SizedBox(height: 2),
+                        // 百分比显示
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _currentTheme.sliderActiveColor.withOpacity(
+                              0.2,
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${(_currentProgress * 100).toStringAsFixed(1)}%',
+                            style: TextStyle(
+                              color: isLightBackground
+                                  ? _currentTheme.sliderActiveColor
+                                  : Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
@@ -1473,24 +1520,6 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
         return const Color(0xFFFAF6F0); // 浅棕褐色背景
       default:
         return _currentTheme.controlBarColor;
-    }
-  }
-
-  /// 获取模态框的次要文字颜色
-  Color _getModalSecondaryTextColor() {
-    switch (_currentTheme.name) {
-      case 'day':
-        return const Color(0xFF757575); // 中灰色次要文字
-      case 'night':
-        return const Color(0xFF9E9E9E); // 浅灰色次要文字
-      case 'eye_protection':
-        return const Color(0xFF4A6B4A); // 中绿色次要文字
-      case 'parchment':
-        return const Color(0xFF8B7355); // 中棕色次要文字
-      case 'sepia':
-        return const Color(0xFF7D6E5D); // 中棕褐色次要文字
-      default:
-        return _getModalTextColor().withValues(alpha: 0.7);
     }
   }
 
@@ -1964,206 +1993,25 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (context) {
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          height: MediaQuery.of(context).size.height * 0.7,
-          child: ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-              child: Container(
-                decoration: _getModalDecoration(),
-                child: Column(
-                  children: [
-                    // 拖拽指示器
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: _getModalIconColor(),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                    ),
-                    // 标题栏
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: _getModalAccentColor().withValues(
-                                alpha: 0.2,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              Icons.format_list_bulleted_rounded,
-                              color: _getModalAccentColor(),
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Text(
-                            '目录',
-                            style: TextStyle(
-                              color: _getModalTextColor(),
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // 目录内容
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: _chapters.isEmpty
-                            ? Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.menu_book,
-                                      size: 64,
-                                      color: _getModalIconColor().withValues(
-                                        alpha: 0.5,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 24),
-                                    Text(
-                                      '暂无目录信息',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        color: _getModalTextColor(),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      '该书籍可能没有标准目录结构',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: _getModalSecondaryTextColor(),
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : ListView.builder(
-                                itemCount: _chapters.length,
-                                itemBuilder: (context, index) {
-                                  final chapter = _chapters[index];
-                                  return _buildChapterItem(chapter, index);
-                                },
-                              ),
-                      ),
-                    ),
-                    // 底部按钮
-                    Container(
-                      padding: EdgeInsets.only(
-                        left: 24,
-                        right: 24,
-                        bottom: MediaQuery.of(context).padding.bottom + 20,
-                        top: 16,
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          top: BorderSide(
-                            color: _getModalDividerColor(),
-                            width: 1,
-                          ),
-                        ),
-                      ),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.pop(context),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _getModalAccentColor(),
-                            foregroundColor: _getModalBackgroundColor(),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: const Text(
-                            '关闭',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+        return EnhancedTocModal(
+          chapters: _chapters,
+          bookmarks: _bookmarks,
+          currentTheme: _currentTheme,
+          onChapterTap: _goToChapter,
+          onBookmarkTap: _goToBookmark,
         );
       },
     );
   }
 
-  Widget _buildChapterItem(Chapter chapter, int index) {
-    return ListTile(
-      contentPadding: EdgeInsets.only(
-        left: (chapter.level * 16.0) + 8.0,
-        right: 8.0,
-        top: 4.0,
-        bottom: 4.0,
-      ),
-      leading: chapter.level == 0
-          ? Icon(
-              Icons.folder_open,
-              color: _currentTheme.sliderActiveColor,
-              size: 20,
-            )
-          : Icon(
-              Icons.article,
-              color: _currentTheme.controlBarTextColor.withOpacity(0.6),
-              size: 16,
-            ),
-      title: Text(
-        chapter.title.isEmpty ? '第${index + 1}章' : chapter.title,
-        style: TextStyle(
-          color: _currentTheme.controlBarTextColor,
-          fontSize: chapter.level == 0 ? 16 : 14,
-          fontWeight: chapter.level == 0 ? FontWeight.w600 : FontWeight.normal,
-        ),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: chapter.level == 0 && chapter.startPage > 0
-          ? Text(
-              '第${chapter.startPage + 1}页',
-              style: TextStyle(
-                fontSize: 12,
-                color: _currentTheme.controlBarTextColor.withOpacity(0.5),
-              ),
-            )
-          : null,
-      onTap: () {
-        // 关闭模态框
-        Navigator.pop(context);
-        // 跳转到章节
-        _goToChapter(chapter);
-      },
-    );
+  void _goToBookmark(Bookmark bookmark) {
+    try {
+      Navigator.pop(context);
+      // TODO: 实现书签跳转
+      _showMessage('跳转到书签: ${bookmark.note}');
+    } catch (e) {
+      debugPrint('书签跳转失败: $e');
+    }
   }
 
   void _goToChapter(Chapter chapter) {

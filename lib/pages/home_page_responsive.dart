@@ -15,6 +15,7 @@ import 'detailed_stats_page.dart';
 import '../utils/responsive_helper.dart';
 import '../utils/glass_config.dart';
 import '../utils/app_themes.dart';
+import '../utils/page_transitions.dart';
 import '../services/book_dao.dart';
 import '../services/reading_stats_dao.dart';
 import '../main.dart';
@@ -297,23 +298,27 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
       ),
       body: Stack(
         children: [
-          // 主内容 - 使用PageView添加滑动动画，优化性能
-          PageView.builder(
+          // 主内容 - 优化的PageView，减少卡顿
+          PageView(
             controller: _pageController,
             onPageChanged: (index) {
-              setState(() => _selectedIndex = index);
+              // 使用Future.microtask避免在build过程中调用setState
+              Future.microtask(() {
+                if (mounted) {
+                  setState(() => _selectedIndex = index);
+                }
+              });
             },
-            itemCount: _navigationItems.length,
-            itemBuilder: (context, index) {
-              // 使用RepaintBoundary隔离重绘
-              return RepaintBoundary(
-                child: _buildPageWrapper(_navigationItems[index].page),
-              );
-            },
-            // 添加缓存页面数量，减少重建
-            allowImplicitScrolling: true,
-            // 优化滚动物理效果
-            physics: const ClampingScrollPhysics(),
+            children: _navigationItems.map((item) {
+              // 使用RepaintBoundary和AutomaticKeepAliveClientMixin优化重绘和内存管理
+              return RepaintBoundary(child: _buildPageWrapper(item.page));
+            }).toList(),
+            // 优化滚动物理效果，减少过度滚动
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            // 禁用页面捕捉以减少卡顿
+            pageSnapping: true,
           ),
           // 悬浮药丸导航栏
           Positioned(
@@ -384,13 +389,19 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                               item: item,
                               isSelected: isSelected,
                               onTap: () {
+                                // 优化导航响应性能
+                                if (_selectedIndex == index) return; // 避免重复点击
+
+                                // 立即更新选中状态，提升响应速度
                                 setState(() => _selectedIndex = index);
+
+                                // 使用更流畅的动画参数
                                 _pageController.animateToPage(
                                   index,
                                   duration: const Duration(
-                                    milliseconds: 250,
-                                  ), // 减少到250ms，提升响应速度
-                                  curve: Curves.easeOutQuart, // 使用更快的缓动曲线
+                                    milliseconds: 300, // 适当增加时长，让动画更流畅
+                                  ),
+                                  curve: Curves.easeOutCubic, // 使用更自然的缓动曲线
                                 );
                               },
                             );
@@ -426,10 +437,8 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
   }
 
   void _navigateToImport() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const ImportBookPage()),
-    );
+    // 使用淡入缩放动画，适合模态页面
+    Navigator.of(context).pushWithFadeScale(const ImportBookPage());
   }
 
   // 导航头部组件 - 专为平板和桌面优化
@@ -549,14 +558,17 @@ class _BounceNavigationItemState extends State<_BounceNavigationItem>
   void initState() {
     super.initState();
 
-    // 只使用一个动画控制器，简化动画
+    // 优化动画控制器性能
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 150), // 减少持续时间
+      duration: const Duration(milliseconds: 120), // 进一步减少持续时间，提升响应性
       vsync: this,
     );
 
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.96).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeOutQuint, // 使用更快速的缓动曲线
+      ),
     );
   }
 
@@ -579,8 +591,8 @@ class _BounceNavigationItemState extends State<_BounceNavigationItem>
           return Transform.scale(
             scale: _scaleAnimation.value,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200), // 减少动画时间
-              curve: Curves.easeOut, // 简化曲线
+              duration: const Duration(milliseconds: 150), // 进一步减少动画时间
+              curve: Curves.easeOutCirc, // 使用更快的缓动曲线
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               margin: const EdgeInsets.symmetric(horizontal: 5),
               decoration: BoxDecoration(
@@ -608,8 +620,8 @@ class _BounceNavigationItemState extends State<_BounceNavigationItem>
                   ),
                   const SizedBox(height: 4),
                   AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOut,
+                    duration: const Duration(milliseconds: 150), // 与容器动画同步
+                    curve: Curves.easeOutCirc, // 保持一致的缓动曲线
                     style: TextStyle(
                       fontSize: widget.isSelected ? 12.5 : 12,
                       fontWeight: widget.isSelected
@@ -682,10 +694,8 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
   }
 
   void _navigateToDetailedStats() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const DetailedStatsPage()),
-    );
+    // 使用滑动缩放动画，适合详情页面
+    Navigator.of(context).pushWithSlideScale(const DetailedStatsPage());
   }
 
   @override

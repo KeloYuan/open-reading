@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/book.dart';
+import '../utils/page_transitions.dart';
 import 'webview_reading_page.dart';
 
 /// WebView阅读引导页面
@@ -32,14 +33,19 @@ class _ReadingModeSelectorState extends State<ReadingModeSelector> {
   }
 
   void _startWebViewReading() {
+    // 使用自定义的滑动缩放过渡动画，提供更流畅的进入体验
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(
-        builder: (context) => WebViewReadingPage(
+      CustomPageTransitions.createSlideScaleRoute(
+        WebViewReadingPage(
           book: widget.book,
           initialChapterIndex: widget.initialChapterIndex,
           initialProgress: widget.initialProgress,
         ),
+        duration: const Duration(milliseconds: 400), // 稍微增加进入时间，更自然
+        reverseDuration: const Duration(milliseconds: 300), // 退出时更快
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
       ),
     );
   }

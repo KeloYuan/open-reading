@@ -10,6 +10,7 @@ import 'dart:convert';
 
 import '../models/book.dart';
 import '../models/chapter.dart';
+import 'enhanced_txt_import_service.dart';
 
 class EnhancedBookMetadata {
   final String title;
@@ -41,6 +42,7 @@ class EnhancedBookMetadata {
 
 class BookImportService {
   final _bookDao = BookDao();
+  final _enhancedTxtService = EnhancedTxtImportService();
 
   Future<Book?> importBook() async {
     try {
@@ -282,71 +284,36 @@ class BookImportService {
     }
   }
 
-  /// Extract TXT metadata with smart content analysis
+  /// 使用增强服务提取TXT元数据
   Future<EnhancedBookMetadata> _extractTxtMetadata(
     Uint8List bytes,
     String fileName,
   ) async {
     try {
-      final content = utf8.decode(bytes);
-      final lines = content.split('\n');
-
-      // Try to extract title and author from first few lines
-      String title = fileName.replaceAll(RegExp(r'\.(txt)$'), '');
-      String author = 'Unknown';
-      String? description;
-
-      // Smart parsing for common TXT book formats
-      if (lines.isNotEmpty) {
-        // First line might be title
-        final firstLine = lines[0].trim();
-        if (firstLine.isNotEmpty && firstLine.length < 100) {
-          title = firstLine;
-        }
-
-        // Look for author in first few lines
-        for (int i = 1; i < lines.length.clamp(0, 10); i++) {
-          final line = lines[i].trim().toLowerCase();
-          if (line.contains('author:') ||
-              line.contains('by ') ||
-              line.contains('作者：')) {
-            author = lines[i]
-                .trim()
-                .replaceAll(
-                  RegExp(r'(author:|by |作者：)', caseSensitive: false),
-                  '',
-                )
-                .trim();
-            break;
-          }
-        }
-
-        // Extract description from first paragraph
-        for (int i = 2; i < lines.length.clamp(0, 20); i++) {
-          final line = lines[i].trim();
-          if (line.isNotEmpty && line.length > 50 && line.length < 500) {
-            description = line;
-            break;
-          }
-        }
+      // 使用增强的TXT导入服务
+      final content = _enhancedTxtService.detectTextEncoding(bytes);
+      final txtMetadata = _enhancedTxtService.extractTxtMetadata(content, fileName);
+      
+      debugPrint('增强TXT元数据提取完成:');
+      debugPrint('标题: ${txtMetadata.title}');
+      debugPrint('作者: ${txtMetadata.author}');
+      debugPrint('语言: ${txtMetadata.language ?? '未知'}');
+      debugPrint('预估页数: ${txtMetadata.estimatedPages}');
+      if (txtMetadata.description != null) {
+        debugPrint('简介: ${txtMetadata.description!.substring(0, 
+          txtMetadata.description!.length.clamp(0, 100))}...');
       }
 
-      final estimatedPages = (content.length / 1500).ceil().clamp(1, 9999);
-
       return EnhancedBookMetadata(
-        title: title,
-        author: author,
-        description: description,
-        estimatedPages: estimatedPages,
-        language: _detectLanguage(content),
-        additionalInfo: {
-          'format': 'TXT',
-          'characterCount': content.length,
-          'lineCount': lines.length,
-        },
+        title: txtMetadata.title,
+        author: txtMetadata.author,
+        description: txtMetadata.description,
+        estimatedPages: txtMetadata.estimatedPages,
+        language: txtMetadata.language,
+        additionalInfo: txtMetadata.additionalInfo,
       );
     } catch (e) {
-      debugPrint('TXT metadata extraction failed: $e');
+      debugPrint('增强TXT元数据提取失败，回退到基础提取: $e');
       return _extractBasicMetadata(bytes, fileName);
     }
   }
@@ -491,21 +458,6 @@ class BookImportService {
     );
   }
 
-  /// Detect content language (basic implementation)
-  String? _detectLanguage(String content) {
-    // Simple language detection based on character patterns
-    final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length;
-    final englishCount = RegExp(r'[a-zA-Z]').allMatches(content).length;
-    final totalChars = content.length;
-
-    if (chineseCount > totalChars * 0.3) {
-      return 'zh';
-    } else if (englishCount > totalChars * 0.5) {
-      return 'en';
-    }
-
-    return null;
-  }
 
   /// Save cover image to disk
   Future<String?> _saveCoverImage(
@@ -565,6 +517,33 @@ class BookImportService {
         .replaceAll(RegExp(r'\s+'), ' ')
         .replaceAll(RegExp(r'&[a-zA-Z0-9#]+;'), ' ') // Remove XML entities
         .trim();
+  }
+
+  /// 从TXT文件解析章节信息
+  Future<List<Chapter>> extractTxtChapters(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        debugPrint('TXT文件不存在: $filePath');
+        return [];
+      }
+
+      final bytes = await file.readAsBytes();
+      
+      // 使用增强的TXT导入服务检测编码和分析章节
+      final content = _enhancedTxtService.detectTextEncoding(bytes);
+      final chapters = _enhancedTxtService.analyzeChapterStructure(content);
+      
+      debugPrint('TXT章节分析完成，共提取到 ${chapters.length} 个章节');
+      for (final chapter in chapters) {
+        debugPrint('章节: ${chapter.title} (层级: ${chapter.level})');
+      }
+      
+      return chapters;
+    } catch (e) {
+      debugPrint('TXT章节解析失败: $e');
+      return [];
+    }
   }
 
   /// 从EPUB文件解析章节信息

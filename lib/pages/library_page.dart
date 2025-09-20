@@ -7,6 +7,7 @@ import '../services/book_dao.dart';
 import 'import_book_page.dart';
 import 'reading_mode_selector.dart';
 import '../utils/responsive_helper.dart';
+import '../utils/page_transitions.dart';
 
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
@@ -341,17 +342,14 @@ class _LibraryPageState extends State<LibraryPage> {
               final fullBook = await _bookDao.getBookById(book.id!);
               if (fullBook != null && mounted) {
                 if (context.mounted) {
-                  // 使用阅读模式选择器，让用户选择原生或WebView引擎
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ReadingModeSelector(
-                        book: fullBook,
-                        initialChapterIndex: 0,
-                        initialProgress:
-                            fullBook.currentPage /
-                            (fullBook.totalPages > 0 ? fullBook.totalPages : 1),
-                      ),
+                  // 使用优化的阅读页面过渡动画，减少卡顿
+                  await Navigator.of(context).pushReaderPage(
+                    ReadingModeSelector(
+                      book: fullBook,
+                      initialChapterIndex: 0,
+                      initialProgress:
+                          fullBook.currentPage /
+                          (fullBook.totalPages > 0 ? fullBook.totalPages : 1),
                     ),
                   );
                 }
