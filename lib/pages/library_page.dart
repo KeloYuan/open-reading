@@ -414,11 +414,7 @@ class _LibraryPageState extends State<LibraryPage> {
                       Navigator.pop(context);
                       final fullBook = await _bookDao.getBookById(book.id!);
                       if (fullBook != null && context.mounted) {
-                        await ReadingRouterService.openBook(
-                          context,
-                          fullBook,
-                          forceShowComparison: true,
-                        );
+                        await ReadingRouterService.openBook(context, fullBook);
                         _loadBooks();
                       }
                     },
