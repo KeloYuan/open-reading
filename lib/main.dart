@@ -19,6 +19,17 @@ void main() {
   // 确保可以在 runApp 前安全调用 SystemChrome
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 🚀 启用120Hz高刷新率支持
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    // 检查并启用设备的最高刷新率
+    SystemChrome.setApplicationSwitcherDescription(
+      const ApplicationSwitcherDescription(
+        label: '小元读书',
+        primaryColor: 0xFF1976D2,
+      ),
+    );
+  }
+
   // 在桌面平台上初始化 sqflite_common_ffi
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
     sqfliteFfiInit();
@@ -344,6 +355,10 @@ class _XxReadAppState extends State<XxReadApp> {
         return MaterialApp(
           title: '小元读书',
           debugShowCheckedModeBanner: false,
+          // 🚀 启用高性能渲染，支持120Hz高刷新率
+          scrollBehavior: const MaterialScrollBehavior().copyWith(
+            physics: const BouncingScrollPhysics(),
+          ),
           theme: _buildLightTheme(themeNotifier.currentAppTheme),
           darkTheme: _buildDarkTheme(themeNotifier.currentAppTheme),
           themeMode: themeNotifier.themeMode,

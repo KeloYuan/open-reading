@@ -952,44 +952,41 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(24),
               ),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), // 适度的毛玻璃模糊效果
-                child: Container(
-                  padding: EdgeInsets.only(bottom: bottomPadding + 8),
-                  decoration: BoxDecoration(
-                    color: toolbarBgColor.withOpacity(0.45), // 降低透明度，让毛玻璃效果更明显
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(24),
-                    ),
-                    border: Border.all(
-                      color: isDarkMode
-                          ? Colors.white.withOpacity(0.1)
-                          : Colors.black.withOpacity(0.08),
-                      width: 0.5,
-                    ),
+              child: Container(
+                padding: EdgeInsets.only(bottom: bottomPadding + 8),
+                decoration: BoxDecoration(
+                  color: toolbarBgColor, // 完全不透明，确保可见
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // 拖拽指示器
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Center(
-                          child: Container(
-                            width: 40,
-                            height: 3,
-                            decoration: BoxDecoration(
-                              color: handleColor,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
+                  border: Border.all(
+                    color: isDarkMode
+                        ? Colors.white.withOpacity(0.1)
+                        : Colors.black.withOpacity(0.08),
+                    width: 0.5,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 拖拽指示器
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Center(
+                        child: Container(
+                          width: 40,
+                          height: 3,
+                          decoration: BoxDecoration(
+                            color: handleColor,
+                            borderRadius: BorderRadius.circular(2),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      _buildToolbarButtons(),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 4),
+                    _buildToolbarButtons(),
+                  ],
                 ),
               ),
             ),
@@ -1111,7 +1108,7 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
                     _currentTheme.backgroundColor,
                     isLightBackground ? Colors.white : Colors.black,
                     0.15,
-                  )!.withOpacity(0.45), // 降低透明度，让毛玻璃效果更明显
+                  )!, // 完全不透明，确保可见
                   borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(20),
                     bottomRight: Radius.circular(20),
