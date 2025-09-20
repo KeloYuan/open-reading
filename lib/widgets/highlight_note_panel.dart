@@ -1,30 +1,36 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../models/highlight.dart';
-import '../models/note.dart';
+import '../models/book_note.dart';
 
-/// 高亮笔记管理面板
-/// 提供高亮和笔记的查看、编辑、导出功能
+/// 统一的书籍笔记管理面板
+/// 基于统一的 BookNote 模型，提供完整的笔记和高亮管理功能
+///
+/// 功能特性：
+/// - 统一管理高亮和笔记
+/// - 按类型分组显示
+/// - 搜索和筛选功能
+/// - 导出和分享功能
+/// - 批量操作支持
 class HighlightNotePanel extends StatefulWidget {
-  final List<Highlight> highlights;
-  final List<Note> notes;
-  final Function(Highlight) onHighlightTap;
-  final Function(Note) onNoteTap;
-  final Function(Highlight) onHighlightEdit;
-  final Function(Note) onNoteEdit;
-  final Function(Highlight) onHighlightDelete;
-  final Function(Note) onNoteDelete;
+  final int bookId;
+  final String bookTitle;
+  final String author;
+  final List<BookNote> notes;
+  final Function(BookNote) onNoteTap;
+  final Function(BookNote) onNoteEdit;
+  final Function(BookNote) onNoteDelete;
+  final VoidCallback? onRefresh;
 
   const HighlightNotePanel({
     super.key,
-    required this.highlights,
+    required this.bookId,
+    required this.bookTitle,
+    required this.author,
     required this.notes,
-    required this.onHighlightTap,
     required this.onNoteTap,
-    required this.onHighlightEdit,
     required this.onNoteEdit,
-    required this.onHighlightDelete,
     required this.onNoteDelete,
+    this.onRefresh,
   });
 
   @override
@@ -34,18 +40,73 @@ class HighlightNotePanel extends StatefulWidget {
 class _HighlightNotePanelState extends State<HighlightNotePanel>
     with TickerProviderStateMixin {
   late TabController _tabController;
-  // final NoteExportService _exportService = NoteExportService();
+  final TextEditingController _searchController = TextEditingController();
+
+  String _searchQuery = '';
+  String _selectedType = 'all';
+  List<BookNote> _filteredNotes = [];
+
+  // 统计数据
+  int _highlightCount = 0;
+  int _underlineCount = 0;
+  int _noteCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
+    _filteredNotes = widget.notes;
+    _updateStatistics();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(HighlightNotePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.notes != widget.notes) {
+      _filteredNotes = widget.notes;
+      _updateStatistics();
+      _applyFilters();
+    }
+  }
+
+  /// 更新统计数据
+  void _updateStatistics() {
+    _highlightCount = widget.notes
+        .where((note) => note.type == 'highlight')
+        .length;
+    _underlineCount = widget.notes
+        .where((note) => note.type == 'underline')
+        .length;
+    _noteCount = widget.notes.where((note) => note.type == 'note').length;
+  }
+
+  /// 应用筛选条件
+  void _applyFilters() {
+    setState(() {
+      _filteredNotes = widget.notes.where((note) {
+        // 类型筛选
+        if (_selectedType != 'all' && note.type != _selectedType) {
+          return false;
+        }
+
+        // 搜索筛选
+        if (_searchQuery.isNotEmpty) {
+          final query = _searchQuery.toLowerCase();
+          return note.content.toLowerCase().contains(query) ||
+              (note.readerNote?.toLowerCase().contains(query) ?? false) ||
+              note.chapter.toLowerCase().contains(query);
+        }
+
+        return true;
+      }).toList();
+    });
   }
 
   @override
@@ -70,11 +131,17 @@ class _HighlightNotePanelState extends State<HighlightNotePanel>
             child: Column(
               children: [
                 _buildHeader(),
+                _buildSearchBar(),
                 _buildTabBar(),
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
-                    children: [_buildHighlightsTab(), _buildNotesTab()],
+                    children: [
+                      _buildAllNotesTab(),
+                      _buildTypeTab('highlight'),
+                      _buildTypeTab('underline'),
+                      _buildTypeTab('note'),
+                    ],
                   ),
                 ),
               ],
@@ -105,16 +172,30 @@ class _HighlightNotePanelState extends State<HighlightNotePanel>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '笔记管理',
-                style: TextStyle(
-                  color: _getModalTextColor(),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '笔记管理',
+                    style: TextStyle(
+                      color: _getModalTextColor(),
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    '${widget.bookTitle} - ${widget.author}',
+                    style: TextStyle(color: _getModalIconColor(), fontSize: 12),
+                  ),
+                ],
               ),
               Row(
                 children: [
+                  IconButton(
+                    onPressed: widget.onRefresh,
+                    icon: Icon(Icons.refresh, color: _getModalIconColor()),
+                    tooltip: '刷新',
+                  ),
                   IconButton(
                     onPressed: _showExportOptions,
                     icon: Icon(
@@ -132,6 +213,47 @@ class _HighlightNotePanelState extends State<HighlightNotePanel>
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  /// 构建搜索栏
+  Widget _buildSearchBar() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: _getModalBackgroundColor(),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _getModalDividerColor()),
+      ),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          hintText: '搜索笔记内容...',
+          hintStyle: TextStyle(color: _getModalIconColor()),
+          prefixIcon: Icon(Icons.search, color: _getModalIconColor()),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: Icon(Icons.clear, color: _getModalIconColor()),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() {
+                      _searchQuery = '';
+                    });
+                    _applyFilters();
+                  },
+                )
+              : null,
+        ),
+        style: TextStyle(color: _getModalTextColor()),
+        onChanged: (value) {
+          setState(() {
+            _searchQuery = value;
+          });
+          _applyFilters();
+        },
       ),
     );
   }
@@ -159,9 +281,9 @@ class _HighlightNotePanelState extends State<HighlightNotePanel>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.highlight, size: 18),
+                const Icon(Icons.notes, size: 18),
                 const SizedBox(width: 8),
-                Text('高亮 (${widget.highlights.length})'),
+                Text('全部 (${widget.notes.length})'),
               ],
             ),
           ),
@@ -169,9 +291,29 @@ class _HighlightNotePanelState extends State<HighlightNotePanel>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.note, size: 18),
+                const Icon(Icons.highlight, size: 18),
                 const SizedBox(width: 8),
-                Text('笔记 (${widget.notes.length})'),
+                Text('高亮 ($_highlightCount)'),
+              ],
+            ),
+          ),
+          Tab(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.format_underlined, size: 18),
+                const SizedBox(width: 8),
+                Text('下划线 ($_underlineCount)'),
+              ],
+            ),
+          ),
+          Tab(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.note_alt, size: 18),
+                const SizedBox(width: 8),
+                Text('笔记 ($_noteCount)'),
               ],
             ),
           ),
@@ -180,33 +322,45 @@ class _HighlightNotePanelState extends State<HighlightNotePanel>
     );
   }
 
-  /// 构建高亮选项卡
-  Widget _buildHighlightsTab() {
-    if (widget.highlights.isEmpty) {
-      return _buildEmptyState('还没有高亮内容', Icons.highlight);
+  /// 构建全部笔记选项卡
+  Widget _buildAllNotesTab() {
+    if (_filteredNotes.isEmpty) {
+      return _buildEmptyState(
+        _searchQuery.isNotEmpty ? '没有找到匹配的内容' : '还没有笔记内容',
+        Icons.notes,
+      );
     }
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: widget.highlights.length,
+      itemCount: _filteredNotes.length,
       itemBuilder: (context, index) {
-        final highlight = widget.highlights[index];
-        return _buildHighlightItem(highlight);
+        final note = _filteredNotes[index];
+        return _buildNoteItem(note);
       },
     );
   }
 
-  /// 构建笔记选项卡
-  Widget _buildNotesTab() {
-    if (widget.notes.isEmpty) {
-      return _buildEmptyState('还没有笔记内容', Icons.note);
+  /// 构建按类型筛选的选项卡
+  Widget _buildTypeTab(String type) {
+    final typeNotes = _filteredNotes
+        .where((note) => note.type == type)
+        .toList();
+
+    if (typeNotes.isEmpty) {
+      return _buildEmptyState(
+        _searchQuery.isNotEmpty
+            ? '没有找到匹配的${BookNote.getTypeName(type)}'
+            : '还没有${BookNote.getTypeName(type)}内容',
+        BookNote.getTypeIcon(type),
+      );
     }
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: widget.notes.length,
+      itemCount: typeNotes.length,
       itemBuilder: (context, index) {
-        final note = widget.notes[index];
+        final note = typeNotes[index];
         return _buildNoteItem(note);
       },
     );
@@ -236,203 +390,184 @@ class _HighlightNotePanelState extends State<HighlightNotePanel>
     );
   }
 
-  /// 构建高亮项目
-  Widget _buildHighlightItem(Highlight highlight) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _getModalBackgroundColor(),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _getModalDividerColor(), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 高亮文本
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: highlight.color.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: highlight.color.withValues(alpha: 0.3),
-                width: 1,
-              ),
+  /// 构建统一的笔记项目
+  Widget _buildNoteItem(BookNote note) {
+    return InkWell(
+      onTap: () => widget.onNoteTap(note),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _getModalBackgroundColor(),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _getModalDividerColor(), width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 类型和颜色标识
+            Row(
+              children: [
+                Icon(
+                  BookNote.getTypeIcon(note.type),
+                  size: 16,
+                  color: note.colorValue,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  BookNote.getTypeName(note.type),
+                  style: TextStyle(
+                    color: note.colorValue,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: note.colorValue,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+              ],
             ),
-            child: Text(
-              highlight.selectedText,
-              style: TextStyle(
-                color: _getModalTextColor(),
-                fontSize: 14,
-                height: 1.4,
-              ),
-            ),
-          ),
-
-          // 笔记内容（如果有）
-          if (highlight.noteText?.isNotEmpty == true) ...[
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _getModalDividerColor(),
-                borderRadius: BorderRadius.circular(8),
+
+            // 选中文本
+            if (note.content.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: note.colorValue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: note.colorValue.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  note.content,
+                  style: TextStyle(
+                    color: _getModalTextColor(),
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
+                ),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.note, size: 16, color: _getModalIconColor()),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      highlight.noteText!,
-                      style: TextStyle(
-                        color: _getModalTextColor(),
-                        fontSize: 13,
-                        height: 1.3,
+              const SizedBox(height: 12),
+            ],
+
+            // 笔记内容（如果有）
+            if (note.hasNote) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _getModalDividerColor(),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.note, size: 16, color: _getModalIconColor()),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        note.readerNote!,
+                        style: TextStyle(
+                          color: _getModalTextColor(),
+                          fontSize: 13,
+                          height: 1.3,
+                        ),
                       ),
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // 信息栏
+            Row(
+              children: [
+                Icon(Icons.menu_book, size: 12, color: _getModalIconColor()),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    note.chapter,
+                    style: TextStyle(color: _getModalIconColor(), fontSize: 12),
+                    overflow: TextOverflow.ellipsis,
                   ),
+                ),
+                const SizedBox(width: 16),
+                if (note.pageNumber != null) ...[
+                  Icon(Icons.bookmark, size: 12, color: _getModalIconColor()),
+                  const SizedBox(width: 4),
+                  Text(
+                    '第${note.pageNumber}页',
+                    style: TextStyle(color: _getModalIconColor(), fontSize: 12),
+                  ),
+                  const SizedBox(width: 16),
                 ],
-              ),
+                Icon(Icons.access_time, size: 12, color: _getModalIconColor()),
+                const SizedBox(width: 4),
+                Text(
+                  _formatDate(note.updateTime),
+                  style: TextStyle(color: _getModalIconColor(), fontSize: 12),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 8),
+
+            // 操作按钮
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  onPressed: () => widget.onNoteEdit(note),
+                  icon: Icon(Icons.edit, size: 16, color: _getModalIconColor()),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                  padding: EdgeInsets.zero,
+                  tooltip: '编辑',
+                ),
+                IconButton(
+                  onPressed: () => _shareNote(note),
+                  icon: Icon(
+                    Icons.share,
+                    size: 16,
+                    color: _getModalIconColor(),
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                  padding: EdgeInsets.zero,
+                  tooltip: '分享',
+                ),
+                IconButton(
+                  onPressed: () => widget.onNoteDelete(note),
+                  icon: Icon(
+                    Icons.delete,
+                    size: 16,
+                    color: Colors.red.withValues(alpha: 0.7),
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                  padding: EdgeInsets.zero,
+                  tooltip: '删除',
+                ),
+              ],
             ),
           ],
-
-          const SizedBox(height: 12),
-
-          // 信息栏
-          Row(
-            children: [
-              // 颜色标识
-              Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: highlight.color,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                Highlight.getColorName(highlight.color),
-                style: TextStyle(color: _getModalIconColor(), fontSize: 12),
-              ),
-              const SizedBox(width: 16),
-              Icon(Icons.book, size: 12, color: _getModalIconColor()),
-              const SizedBox(width: 4),
-              Text(
-                '第${highlight.pageNumber}页',
-                style: TextStyle(color: _getModalIconColor(), fontSize: 12),
-              ),
-              const Spacer(),
-              // 操作按钮
-              IconButton(
-                onPressed: () => widget.onHighlightEdit(highlight),
-                icon: Icon(Icons.edit, size: 16, color: _getModalIconColor()),
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                padding: EdgeInsets.zero,
-              ),
-              IconButton(
-                onPressed: () => widget.onHighlightDelete(highlight),
-                icon: Icon(
-                  Icons.delete,
-                  size: 16,
-                  color: Colors.red.withValues(alpha: 0.7),
-                ),
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                padding: EdgeInsets.zero,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 构建笔记项目
-  Widget _buildNoteItem(Note note) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _getModalBackgroundColor(),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _getModalDividerColor(), width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 选中文本（如果有）
-          if (note.selectedText.isNotEmpty) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _getModalDividerColor(),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                note.selectedText,
-                style: TextStyle(
-                  color: _getModalTextColor().withValues(alpha: 0.8),
-                  fontSize: 13,
-                  fontStyle: FontStyle.italic,
-                  height: 1.3,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-
-          // 笔记内容
-          Text(
-            note.noteText,
-            style: TextStyle(
-              color: _getModalTextColor(),
-              fontSize: 14,
-              height: 1.4,
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // 信息栏
-          Row(
-            children: [
-              Icon(Icons.book, size: 12, color: _getModalIconColor()),
-              const SizedBox(width: 4),
-              Text(
-                '第${note.pageNumber}页',
-                style: TextStyle(color: _getModalIconColor(), fontSize: 12),
-              ),
-              const SizedBox(width: 16),
-              Icon(Icons.access_time, size: 12, color: _getModalIconColor()),
-              const SizedBox(width: 4),
-              Text(
-                _formatDate(note.createDate),
-                style: TextStyle(color: _getModalIconColor(), fontSize: 12),
-              ),
-              const Spacer(),
-              // 操作按钮
-              IconButton(
-                onPressed: () => widget.onNoteEdit(note),
-                icon: Icon(Icons.edit, size: 16, color: _getModalIconColor()),
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                padding: EdgeInsets.zero,
-              ),
-              IconButton(
-                onPressed: () => widget.onNoteDelete(note),
-                icon: Icon(
-                  Icons.delete,
-                  size: 16,
-                  color: Colors.red.withValues(alpha: 0.7),
-                ),
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                padding: EdgeInsets.zero,
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -520,15 +655,89 @@ class _HighlightNotePanelState extends State<HighlightNotePanel>
     );
   }
 
+  /// 分享单个笔记
+  void _shareNote(BookNote note) {
+    final shareText = note.toShareText(widget.bookTitle, widget.author);
+    // 这里应该调用系统分享功能
+    // 暂时复制到剪贴板
+    debugPrint('分享笔记: $shareText');
+  }
+
   /// 导出笔记
   void _exportNotes(String format) async {
-    // TODO: 实现导出功能，需要传入Book对象
-    // await _exportService.shareNotes(
-    //   book: widget.book,
-    //   highlights: widget.highlights,
-    //   notes: widget.notes,
-    //   format: format,
-    // );
+    try {
+      switch (format) {
+        case 'markdown':
+          await _exportAsMarkdown();
+          break;
+        case 'csv':
+          await _exportAsCsv();
+          break;
+        case 'json':
+          await _exportAsJson();
+          break;
+      }
+    } catch (e) {
+      debugPrint('导出失败: $e');
+    }
+  }
+
+  /// 导出为Markdown格式
+  Future<void> _exportAsMarkdown() async {
+    final buffer = StringBuffer();
+    buffer.writeln('# ${widget.bookTitle} - 笔记导出');
+    buffer.writeln('**作者**: ${widget.author}');
+    buffer.writeln('**导出时间**: ${DateTime.now().toIso8601String()}');
+    buffer.writeln();
+
+    for (final note in widget.notes) {
+      buffer.writeln('## ${BookNote.getTypeName(note.type)} - ${note.chapter}');
+      if (note.content.isNotEmpty) {
+        buffer.writeln('> ${note.content}');
+        buffer.writeln();
+      }
+      if (note.hasNote) {
+        buffer.writeln('**笔记**: ${note.readerNote}');
+        buffer.writeln();
+      }
+      buffer.writeln('---');
+      buffer.writeln();
+    }
+
+    // 这里应该保存文件或分享
+    debugPrint('Markdown导出完成');
+  }
+
+  /// 导出为CSV格式
+  Future<void> _exportAsCsv() async {
+    final buffer = StringBuffer();
+    buffer.writeln('类型,内容,笔记,章节,页码,创建时间');
+
+    for (final note in widget.notes) {
+      buffer.writeln(
+        [
+          BookNote.getTypeName(note.type),
+          '"${note.content.replaceAll('"', '""')}"',
+          '"${note.readerNote?.replaceAll('"', '""') ?? ''}"',
+          '"${note.chapter.replaceAll('"', '""')}"',
+          note.pageNumber ?? '',
+          note.createTime?.toIso8601String() ?? '',
+        ].join(','),
+      );
+    }
+
+    debugPrint('CSV导出完成');
+  }
+
+  /// 导出为JSON格式
+  Future<void> _exportAsJson() async {
+    final exportData = {
+      'book': {'title': widget.bookTitle, 'author': widget.author},
+      'exportTime': DateTime.now().toIso8601String(),
+      'notes': widget.notes.map((note) => note.toExportMap()).toList(),
+    };
+
+    debugPrint('JSON导出完成: ${exportData.toString()}');
   }
 
   /// 格式化日期

@@ -87,10 +87,12 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
           filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
           child: Container(
             decoration: BoxDecoration(
-              color: widget.currentTheme.backgroundColor.withValues(alpha: 0.45),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              color: widget.currentTheme.backgroundColor.withOpacity(0.45),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
               border: Border.all(
-                color: widget.currentTheme.sliderActiveColor.withValues(alpha: 0.2),
+                color: widget.currentTheme.sliderActiveColor.withOpacity(0.2),
                 width: 1,
               ),
             ),
@@ -105,7 +107,8 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                       width: 40,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: widget.currentTheme.controlBarTextColor.withValues(alpha: 0.3),
+                        color: widget.currentTheme.controlBarTextColor
+                            .withOpacity(0.3),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -114,7 +117,10 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
 
                 // 搜索栏
                 Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 8,
+                  ),
                   child: TextField(
                     controller: _searchController,
                     onChanged: _updateSearch,
@@ -122,7 +128,7 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                     decoration: InputDecoration(
                       hintText: '搜索章节或书签...',
                       hintStyle: TextStyle(
-                        color: widget.currentTheme.textColor.withValues(alpha: 0.5),
+                        color: widget.currentTheme.textColor.withOpacity(0.5),
                       ),
                       prefixIcon: Icon(
                         Icons.search_rounded,
@@ -132,7 +138,8 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                           ? IconButton(
                               icon: Icon(
                                 Icons.clear_rounded,
-                                color: widget.currentTheme.textColor.withValues(alpha: 0.7),
+                                color: widget.currentTheme.textColor
+                                    .withOpacity(0.7),
                               ),
                               onPressed: () {
                                 _searchController.clear();
@@ -143,13 +150,15 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
                         borderSide: BorderSide(
-                          color: widget.currentTheme.sliderActiveColor.withValues(alpha: 0.3),
+                          color: widget.currentTheme.sliderActiveColor
+                              .withOpacity(0.3),
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
                         borderSide: BorderSide(
-                          color: widget.currentTheme.sliderActiveColor.withValues(alpha: 0.2),
+                          color: widget.currentTheme.sliderActiveColor
+                              .withOpacity(0.2),
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
@@ -160,7 +169,8 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                         ),
                       ),
                       filled: true,
-                      fillColor: widget.currentTheme.backgroundColor.withValues(alpha: 0.3),
+                      fillColor: widget.currentTheme.backgroundColor
+                          .withOpacity(0.3),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 12,
@@ -173,13 +183,14 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 24),
                   decoration: BoxDecoration(
-                    color: widget.currentTheme.backgroundColor.withValues(alpha: 0.3),
+                    color: widget.currentTheme.backgroundColor.withOpacity(0.3),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: TabBar(
                     controller: _tabController,
                     labelColor: widget.currentTheme.sliderActiveColor,
-                    unselectedLabelColor: widget.currentTheme.textColor.withValues(alpha: 0.6),
+                    unselectedLabelColor: widget.currentTheme.textColor
+                        .withOpacity(0.6),
                     indicatorColor: widget.currentTheme.sliderActiveColor,
                     indicatorWeight: 3,
                     dividerColor: Colors.transparent,
@@ -188,7 +199,10 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.format_list_bulleted_rounded, size: 18),
+                            const Icon(
+                              Icons.format_list_bulleted_rounded,
+                              size: 18,
+                            ),
                             const SizedBox(width: 8),
                             Text('目录 (${_filteredChapters.length})'),
                           ],
@@ -212,10 +226,7 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
-                    children: [
-                      _buildChapterList(),
-                      _buildBookmarkList(),
-                    ],
+                    children: [_buildChapterList(), _buildBookmarkList()],
                   ),
                 ),
               ],
@@ -250,12 +261,12 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: isCurrentChapter
-            ? widget.currentTheme.sliderActiveColor.withValues(alpha: 0.1)
-            : widget.currentTheme.backgroundColor.withValues(alpha: 0.3),
+            ? widget.currentTheme.sliderActiveColor.withOpacity(0.1)
+            : widget.currentTheme.backgroundColor.withOpacity(0.3),
         borderRadius: BorderRadius.circular(12),
         border: isCurrentChapter
             ? Border.all(
-                color: widget.currentTheme.sliderActiveColor.withValues(alpha: 0.3),
+                color: widget.currentTheme.sliderActiveColor.withOpacity(0.3),
                 width: 1,
               )
             : null,
@@ -312,10 +323,12 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                     Container(
                       margin: const EdgeInsets.only(right: 12),
                       child: Icon(
-                        chapter.level == 0 ? Icons.book_rounded : Icons.article_rounded,
+                        chapter.level == 0
+                            ? Icons.book_rounded
+                            : Icons.article_rounded,
                         color: isCurrentChapter
                             ? widget.currentTheme.sliderActiveColor
-                            : widget.currentTheme.textColor.withValues(alpha: 0.6),
+                            : widget.currentTheme.textColor.withOpacity(0.6),
                         size: chapter.level == 0 ? 20 : 16,
                       ),
                     ),
@@ -326,7 +339,9 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          chapter.title.isEmpty ? '第${index + 1}章' : chapter.title,
+                          chapter.title.isEmpty
+                              ? '第${index + 1}章'
+                              : chapter.title,
                           style: TextStyle(
                             color: isCurrentChapter
                                 ? widget.currentTheme.sliderActiveColor
@@ -347,7 +362,8 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                                 '第${chapter.startPage + 1}页',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: widget.currentTheme.textColor.withValues(alpha: 0.6),
+                                  color: widget.currentTheme.textColor
+                                      .withOpacity(0.6),
                                 ),
                               ),
                               if (hasSubChapters) ...[
@@ -358,14 +374,16 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: widget.currentTheme.sliderActiveColor.withValues(alpha: 0.2),
+                                    color: widget.currentTheme.sliderActiveColor
+                                        .withOpacity(0.2),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
                                     '${chapter.subChapters.length}节',
                                     style: TextStyle(
                                       fontSize: 10,
-                                      color: widget.currentTheme.sliderActiveColor,
+                                      color:
+                                          widget.currentTheme.sliderActiveColor,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -435,7 +453,7 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: widget.currentTheme.backgroundColor.withValues(alpha: 0.3),
+        color: widget.currentTheme.backgroundColor.withOpacity(0.3),
         borderRadius: BorderRadius.circular(12),
       ),
       child: InkWell(
@@ -449,7 +467,7 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: widget.currentTheme.sliderActiveColor.withValues(alpha: 0.2),
+                  color: widget.currentTheme.sliderActiveColor.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -479,7 +497,7 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                         bookmark.note,
                         style: TextStyle(
                           fontSize: 14,
-                          color: widget.currentTheme.textColor.withValues(alpha: 0.7),
+                          color: widget.currentTheme.textColor.withOpacity(0.7),
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -490,7 +508,7 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
                       _formatDate(bookmark.createDate),
                       style: TextStyle(
                         fontSize: 12,
-                        color: widget.currentTheme.textColor.withValues(alpha: 0.5),
+                        color: widget.currentTheme.textColor.withOpacity(0.5),
                       ),
                     ),
                   ],
@@ -511,14 +529,14 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
           Icon(
             icon,
             size: 64,
-            color: widget.currentTheme.textColor.withValues(alpha: 0.3),
+            color: widget.currentTheme.textColor.withOpacity(0.3),
           ),
           const SizedBox(height: 16),
           Text(
             message,
             style: TextStyle(
               fontSize: 16,
-              color: widget.currentTheme.textColor.withValues(alpha: 0.6),
+              color: widget.currentTheme.textColor.withOpacity(0.6),
             ),
           ),
         ],
@@ -531,11 +549,11 @@ class _EnhancedTocModalState extends State<EnhancedTocModal>
       case 0:
         return widget.currentTheme.sliderActiveColor;
       case 1:
-        return Colors.orange.withValues(alpha: 0.8);
+        return Colors.orange.withOpacity(0.8);
       case 2:
-        return Colors.green.withValues(alpha: 0.8);
+        return Colors.green.withOpacity(0.8);
       default:
-        return widget.currentTheme.textColor.withValues(alpha: 0.5);
+        return widget.currentTheme.textColor.withOpacity(0.5);
     }
   }
 

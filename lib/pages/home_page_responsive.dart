@@ -1448,22 +1448,15 @@ class _SettingsPageWrapper extends StatefulWidget {
 }
 
 class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
-  double _fontSize = 18.0;
-  double _lineSpacing = 1.8;
-  double _letterSpacing = 0.2;
-  double _pageMargin = 16.0;
   bool _enableAnimations = true;
   bool _enableAutoSave = true;
   bool _keepScreenOn = false;
-  String _fontFamily = 'System';
   int _autoSaveInterval = 30;
 
-  final List<String> _fontFamilies = [
-    'System',
-    'Serif',
-    'Sans-serif',
-    'Monospace',
-  ];
+  // 阅读设置
+  bool _enableVolumeKeyTurn = true;
+  bool _enableFullscreen = false;
+  String _defaultReadingEngine = 'webview_optimized'; // 默认阅读引擎
 
   @override
   void initState() {
@@ -1474,29 +1467,30 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
   Future<void> _loadSettings() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
-      _fontSize = prefs.getDouble('fontSize') ?? 18.0;
-      _lineSpacing = prefs.getDouble('lineSpacing') ?? 1.8;
-      _letterSpacing = prefs.getDouble('letterSpacing') ?? 0.2;
-      _pageMargin = prefs.getDouble('pageMargin') ?? 16.0;
       _enableAnimations = prefs.getBool('enableAnimations') ?? true;
       _enableAutoSave = prefs.getBool('enableAutoSave') ?? true;
       _keepScreenOn = prefs.getBool('keepScreenOn') ?? false;
-      _fontFamily = prefs.getString('fontFamily') ?? 'System';
       _autoSaveInterval = prefs.getInt('autoSaveInterval') ?? 30;
+
+      // 阅读设置
+      _enableVolumeKeyTurn = prefs.getBool('enableVolumeKeyTurn') ?? true;
+      _enableFullscreen = prefs.getBool('enableFullscreen') ?? false;
+      _defaultReadingEngine =
+          prefs.getString('defaultReadingEngine') ?? 'webview_optimized';
     });
   }
 
   Future<void> _saveSettings() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('fontSize', _fontSize);
-    await prefs.setDouble('lineSpacing', _lineSpacing);
-    await prefs.setDouble('letterSpacing', _letterSpacing);
-    await prefs.setDouble('pageMargin', _pageMargin);
     await prefs.setBool('enableAnimations', _enableAnimations);
     await prefs.setBool('enableAutoSave', _enableAutoSave);
     await prefs.setBool('keepScreenOn', _keepScreenOn);
-    await prefs.setString('fontFamily', _fontFamily);
     await prefs.setInt('autoSaveInterval', _autoSaveInterval);
+
+    // 阅读设置
+    await prefs.setBool('enableVolumeKeyTurn', _enableVolumeKeyTurn);
+    await prefs.setBool('enableFullscreen', _enableFullscreen);
+    await prefs.setString('defaultReadingEngine', _defaultReadingEngine);
   }
 
   @override
@@ -1547,51 +1541,78 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
               ),
               const SizedBox(height: 20),
               _buildSectionCard(
-                title: '阅读设置',
-                icon: Icons.auto_stories_outlined,
+                title: '阅读提示',
+                icon: Icons.info_outline,
                 children: [
-                  _buildSliderSetting(
-                    title: '字体大小',
-                    subtitle: '${_fontSize.round()} pt',
-                    value: _fontSize,
-                    min: 12.0,
-                    max: 32.0,
-                    divisions: 20,
-                    onChanged: (value) => setState(() => _fontSize = value),
-                    icon: Icons.format_size,
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primary.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.font_download_rounded,
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 32,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          '字体设置已移至阅读界面',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '打开任意书籍，点击屏幕中央，在底部控制栏中点击"设置"按钮，即可调整字体大小、行间距、字符间距、页面边距等阅读设置。',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.7),
+                            fontSize: 14,
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  _buildSliderSetting(
-                    title: '行间距',
-                    subtitle: _lineSpacing.toStringAsFixed(1),
-                    value: _lineSpacing,
-                    min: 1.0,
-                    max: 3.0,
-                    divisions: 20,
-                    onChanged: (value) => setState(() => _lineSpacing = value),
-                    icon: Icons.format_line_spacing,
-                  ),
-                  _buildSliderSetting(
-                    title: '字符间距',
-                    subtitle: _letterSpacing.toStringAsFixed(1),
-                    value: _letterSpacing,
-                    min: 0.0,
-                    max: 2.0,
-                    divisions: 20,
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildSectionCard(
+                title: '阅读设置',
+                icon: Icons.book_outlined,
+                children: [
+                  _buildReadingEngineSelector(),
+                  _buildSwitchSetting(
+                    title: '音量键翻页',
+                    subtitle: '使用音量键控制翻页',
+                    value: _enableVolumeKeyTurn,
                     onChanged: (value) =>
-                        setState(() => _letterSpacing = value),
-                    icon: Icons.text_fields,
+                        setState(() => _enableVolumeKeyTurn = value),
+                    icon: Icons.volume_up,
                   ),
-                  _buildSliderSetting(
-                    title: '页面边距',
-                    subtitle: '${_pageMargin.round()} px',
-                    value: _pageMargin,
-                    min: 8.0,
-                    max: 32.0,
-                    divisions: 24,
-                    onChanged: (value) => setState(() => _pageMargin = value),
-                    icon: Icons.format_indent_increase,
+                  _buildSwitchSetting(
+                    title: '全屏阅读',
+                    subtitle: '隐藏状态栏和导航栏',
+                    value: _enableFullscreen,
+                    onChanged: (value) =>
+                        setState(() => _enableFullscreen = value),
+                    icon: Icons.fullscreen,
                   ),
-                  _buildFontFamilySelector(),
                 ],
               ),
               const SizedBox(height: 20),
@@ -1832,181 +1853,354 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
     );
   }
 
-  Widget _buildSliderSetting({
-    required String title,
-    required String subtitle,
-    required double value,
-    required double min,
-    required double max,
-    required int divisions,
-    required Function(double) onChanged,
-    required IconData icon,
-  }) {
+  // 构建阅读引擎选择器
+  Widget _buildReadingEngineSelector() {
     return Container(
       margin: const EdgeInsets.only(bottom: 1),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showReadingEngineModal(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    _getReadingEngineIcon(_defaultReadingEngine),
+                    size: 16,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '默认阅读引擎',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        _getReadingEngineName(_defaultReadingEngine),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
                   color: Theme.of(
                     context,
-                  ).colorScheme.tertiary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(6),
+                  ).colorScheme.onSurface.withValues(alpha: 0.4),
                 ),
-                child: Icon(
-                  icon,
-                  size: 16,
-                  color: Theme.of(context).colorScheme.tertiary,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 4,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-              activeTrackColor: Theme.of(context).colorScheme.primary,
-              inactiveTrackColor: Theme.of(
-                context,
-              ).colorScheme.outline.withValues(alpha: 0.3),
-              thumbColor: Theme.of(context).colorScheme.primary,
-              overlayColor: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.2),
-            ),
-            child: Slider(
-              value: value,
-              min: min,
-              max: max,
-              divisions: divisions,
-              onChanged: onChanged,
-              onChangeEnd: (value) => _saveSettings(),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildFontFamilySelector() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 1),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.secondary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Icon(
-                  Icons.font_download,
-                  size: 16,
-                  color: Theme.of(context).colorScheme.secondary,
-                ),
+  // 获取阅读引擎名称
+  String _getReadingEngineName(String engine) {
+    switch (engine) {
+      case 'native':
+        return 'Flutter原生阅读器 (最快)';
+      case 'webview_optimized':
+        return 'WebView优化版 (推荐)';
+      case 'webview_standard':
+        return 'WebView标准版 (完整功能)';
+      default:
+        return 'WebView优化版';
+    }
+  }
+
+  // 获取阅读引擎图标
+  IconData _getReadingEngineIcon(String engine) {
+    switch (engine) {
+      case 'native':
+        return Icons.speed;
+      case 'webview_optimized':
+        return Icons.auto_fix_high;
+      case 'webview_standard':
+        return Icons.web;
+      default:
+        return Icons.auto_fix_high;
+    }
+  }
+
+  // 显示阅读引擎选择对话框
+  void _showReadingEngineModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.65,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '字体样式',
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Text(
-                      _fontFamily,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            children: _fontFamilies.map((font) {
-              final isSelected = _fontFamily == font;
-              return GestureDetector(
-                onTap: () {
-                  setState(() => _fontFamily = font);
-                  _saveSettings();
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
+            ),
+            child: Column(
+              children: [
+                // 拖拽指示条
+                Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 20),
+                  width: 40,
+                  height: 4,
                   decoration: BoxDecoration(
-                    color: isSelected
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(
-                            context,
-                          ).colorScheme.outline.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isSelected
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(
-                              context,
-                            ).colorScheme.outline.withValues(alpha: 0.3),
-                    ),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
                   ),
+                ),
+                // 标题
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.auto_stories,
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        '选择阅读引擎',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Text(
-                    font,
+                    '选择适合您的阅读方式，各引擎特点不同',
                     style: TextStyle(
-                      color: isSelected
-                          ? Theme.of(context).colorScheme.onPrimary
-                          : Theme.of(context).colorScheme.onSurface,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.normal,
-                      fontSize: 12,
+                      fontSize: 14,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.7),
                     ),
                   ),
                 ),
-              );
-            }).toList(),
+                const SizedBox(height: 24),
+                // 引擎选项
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    children: [
+                      _buildEngineOption(
+                        engine: 'webview_optimized',
+                        title: 'WebView优化版',
+                        subtitle: '性能优化，推荐使用',
+                        description: '• 批量更新机制，减少卡顿\n• 保留完整功能\n• 适合日常阅读',
+                        icon: Icons.auto_fix_high,
+                        color: Colors.blue,
+                        isRecommended: true,
+                        setModalState: setModalState,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildEngineOption(
+                        engine: 'native',
+                        title: 'Flutter原生阅读器',
+                        subtitle: '极致性能，启动最快',
+                        description: '• 零WebView开销\n• 最佳性能表现\n• 主要支持TXT格式',
+                        icon: Icons.speed,
+                        color: Colors.green,
+                        isRecommended: false,
+                        setModalState: setModalState,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildEngineOption(
+                        engine: 'webview_standard',
+                        title: 'WebView标准版',
+                        subtitle: '完整功能，稳定可靠',
+                        description: '• 功能最完整\n• 支持所有格式\n• 资源占用较高',
+                        icon: Icons.web,
+                        color: Colors.orange,
+                        isRecommended: false,
+                        setModalState: setModalState,
+                      ),
+                    ],
+                  ),
+                ),
+                // 底部按钮
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    16,
+                    24,
+                    MediaQuery.of(context).padding.bottom + 16,
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        '完成',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // 构建引擎选项
+  Widget _buildEngineOption({
+    required String engine,
+    required String title,
+    required String subtitle,
+    required String description,
+    required IconData icon,
+    required Color color,
+    required bool isRecommended,
+    required StateSetter setModalState,
+  }) {
+    final isSelected = _defaultReadingEngine == engine;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() => _defaultReadingEngine = engine);
+        setModalState(() {});
+        _saveSettings();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? color.withValues(alpha: 0.1)
+              : Theme.of(context).colorScheme.surfaceContainer,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? color
+                : Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+            width: isSelected ? 2 : 1,
           ),
-        ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ),
+                          if (isRecommended) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.green,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                '推荐',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isSelected)
+                  Icon(Icons.check_circle, color: color, size: 24),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

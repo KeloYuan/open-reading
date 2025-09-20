@@ -11,7 +11,8 @@ class DatabaseService {
 
   static Database? _database;
   static const String _dbName = 'xxread_v2.db';
-  static const int _dbVersion = 6; // <-- Version incremented for cover image path
+  static const int _dbVersion =
+      7; // <-- Version incremented for unified book_notes table
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -20,13 +21,15 @@ class DatabaseService {
   }
 
   Future<Database> _initDatabase() async {
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    if (!kIsWeb &&
+        (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
 
     String dbPath;
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    if (!kIsWeb &&
+        (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       // 桌面平台使用 path_provider
       final appDocDir = await getApplicationDocumentsDirectory();
       dbPath = appDocDir.path;
@@ -34,7 +37,7 @@ class DatabaseService {
       // 移动平台使用 sqflite 的默认路径
       dbPath = await getDatabasesPath();
     }
-    
+
     final path = join(dbPath, _dbName);
 
     return await openDatabase(
@@ -60,12 +63,14 @@ class DatabaseService {
       ''');
     }
     if (oldVersion < 3) {
-      await db.execute('ALTER TABLE books ADD COLUMN totalPages INTEGER DEFAULT 1');
+      await db.execute(
+        'ALTER TABLE books ADD COLUMN totalPages INTEGER DEFAULT 1',
+      );
     }
     if (oldVersion < 4) {
       // Check if notes table exists before creating
       final notesTableExists = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='notes'"
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='notes'",
       );
       if (notesTableExists.isEmpty) {
         await db.execute('''
@@ -81,10 +86,10 @@ class DatabaseService {
           )
         ''');
       }
-      
+
       // Check if highlights table exists before creating
       final highlightsTableExists = await db.rawQuery(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='highlights'"
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='highlights'",
       );
       if (highlightsTableExists.isEmpty) {
         await db.execute('''
@@ -106,7 +111,9 @@ class DatabaseService {
       // Add content caching fields to books table
       await db.execute('ALTER TABLE books ADD COLUMN cached_content TEXT');
       await db.execute('ALTER TABLE books ADD COLUMN cached_pages TEXT');
-      await db.execute('ALTER TABLE books ADD COLUMN file_modified_time INTEGER');
+      await db.execute(
+        'ALTER TABLE books ADD COLUMN file_modified_time INTEGER',
+      );
       await db.execute('ALTER TABLE books ADD COLUMN content_hash TEXT');
       await db.execute('ALTER TABLE books ADD COLUMN table_of_contents TEXT');
     }
@@ -114,10 +121,87 @@ class DatabaseService {
       // Add cover image path field to books table
       await db.execute('ALTER TABLE books ADD COLUMN cover_image_path TEXT');
     }
+    if (oldVersion < 7) {
+      // Create unified book_notes table
+      await db.execute('''
+        CREATE TABLE book_notes(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          book_id INTEGER NOT NULL,
+          content TEXT NOT NULL,
+          cfi TEXT NOT NULL,
+          chapter TEXT NOT NULL,
+          type TEXT NOT NULL,
+          color TEXT NOT NULL,
+          reader_note TEXT,
+          page_number INTEGER,
+          start_offset INTEGER,
+          end_offset INTEGER,
+          create_time TEXT,
+          update_time TEXT NOT NULL,
+          FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
+        )
+      ''');
+
+      // Migrate data from highlights table
+      final highlightsData = await db.query('highlights');
+      for (final highlight in highlightsData) {
+        await db.insert('book_notes', {
+          'book_id': highlight['bookId'],
+          'content': highlight['selectedText'],
+          'cfi':
+              'offset-${highlight['startOffset']}-${highlight['endOffset']}', // Generate CFI
+          'chapter': 'Unknown Chapter',
+          'type': 'highlight',
+          'color': _intToHexColor(highlight['colorValue'] as int),
+          'reader_note': null,
+          'page_number': highlight['pageNumber'],
+          'start_offset': highlight['startOffset'],
+          'end_offset': highlight['endOffset'],
+          'create_time': DateTime.fromMillisecondsSinceEpoch(
+            highlight['createDate'] as int,
+          ).toIso8601String(),
+          'update_time': DateTime.fromMillisecondsSinceEpoch(
+            highlight['createDate'] as int,
+          ).toIso8601String(),
+        });
+      }
+
+      // Migrate data from notes table
+      final notesData = await db.query('notes');
+      for (final note in notesData) {
+        await db.insert('book_notes', {
+          'book_id': note['bookId'],
+          'content': note['selectedText'],
+          'cfi':
+              'page-${note['pageNumber']}', // Generate CFI for page-based notes
+          'chapter': 'Unknown Chapter',
+          'type': 'note',
+          'color': '66CCFF', // Default color
+          'reader_note': note['noteText'],
+          'page_number': note['pageNumber'],
+          'start_offset': null,
+          'end_offset': null,
+          'create_time': DateTime.fromMillisecondsSinceEpoch(
+            note['createDate'] as int,
+          ).toIso8601String(),
+          'update_time': note['updateDate'] != null
+              ? DateTime.fromMillisecondsSinceEpoch(
+                  note['updateDate'] as int,
+                ).toIso8601String()
+              : DateTime.fromMillisecondsSinceEpoch(
+                  note['createDate'] as int,
+                ).toIso8601String(),
+        });
+      }
+
+      // Drop old tables after migration
+      await db.execute('DROP TABLE IF EXISTS highlights');
+      await db.execute('DROP TABLE IF EXISTS notes');
+    }
   }
 
   Future<void> _createTables(Database db) async {
-     await db.execute('''
+    await db.execute('''
       CREATE TABLE books(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
@@ -156,30 +240,31 @@ class DatabaseService {
     ''');
 
     await db.execute('''
-      CREATE TABLE notes(
+      CREATE TABLE book_notes(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        bookId INTEGER NOT NULL,
-        pageNumber INTEGER NOT NULL,
-        selectedText TEXT NOT NULL,
-        noteText TEXT NOT NULL,
-        createDate INTEGER NOT NULL,
-        updateDate INTEGER,
-        FOREIGN KEY (bookId) REFERENCES books (id) ON DELETE CASCADE
+        book_id INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        cfi TEXT NOT NULL,
+        chapter TEXT NOT NULL,
+        type TEXT NOT NULL,
+        color TEXT NOT NULL,
+        reader_note TEXT,
+        page_number INTEGER,
+        start_offset INTEGER,
+        end_offset INTEGER,
+        create_time TEXT,
+        update_time TEXT NOT NULL,
+        FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
       )
     ''');
-    
-    await db.execute('''
-      CREATE TABLE highlights(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        bookId INTEGER NOT NULL,
-        pageNumber INTEGER NOT NULL,
-        selectedText TEXT NOT NULL,
-        startOffset INTEGER NOT NULL,
-        endOffset INTEGER NOT NULL,
-        colorValue INTEGER NOT NULL,
-        createDate INTEGER NOT NULL,
-        FOREIGN KEY (bookId) REFERENCES books (id) ON DELETE CASCADE
-      )
-    ''');
+  }
+
+  /// 将整数颜色值转换为十六进制字符串（不含#前缀）
+  String _intToHexColor(int colorValue) {
+    return colorValue
+        .toRadixString(16)
+        .padLeft(8, '0')
+        .substring(2)
+        .toUpperCase();
   }
 }

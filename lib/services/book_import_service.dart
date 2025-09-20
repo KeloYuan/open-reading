@@ -11,6 +11,7 @@ import 'dart:convert';
 import '../models/book.dart';
 import '../models/chapter.dart';
 import 'enhanced_txt_import_service.dart';
+import 'webview_book_parser.dart';
 
 class EnhancedBookMetadata {
   final String title;
@@ -43,6 +44,7 @@ class EnhancedBookMetadata {
 class BookImportService {
   final _bookDao = BookDao();
   final _enhancedTxtService = EnhancedTxtImportService();
+  final _webViewParser = WebViewBookParser();
 
   Future<Book?> importBook() async {
     try {
@@ -59,6 +61,8 @@ class BookImportService {
           'rtf',
           'doc',
           'docx',
+          'cbz',
+          'cbr',
         ],
         withData: true,
       );
@@ -86,7 +90,10 @@ class BookImportService {
         // 4. Save cover image if available
         String? coverImagePath;
         if (metadata.coverImage != null) {
-          coverImagePath = await _saveCoverImage(metadata.coverImage!, pickedFile.name);
+          coverImagePath = await _saveCoverImage(
+            metadata.coverImage!,
+            pickedFile.name,
+          );
         }
 
         // 5. Create Book object with enhanced metadata
@@ -131,8 +138,15 @@ class BookImportService {
         return await _extractPdfMetadata(bytes, pickedFile.name);
       case 'txt':
         return await _extractTxtMetadata(bytes, pickedFile.name);
+      case 'mobi':
+      case 'azw':
+      case 'azw3':
+        return await _extractMobiMetadata(bytes, pickedFile.name);
       case 'fb2':
         return await _extractFb2Metadata(bytes, pickedFile.name);
+      case 'cbz':
+      case 'cbr':
+        return await _extractComicMetadata(bytes, pickedFile.name);
       case 'rtf':
         return await _extractRtfMetadata(bytes, pickedFile.name);
       default:
@@ -292,16 +306,20 @@ class BookImportService {
     try {
       // 使用增强的TXT导入服务
       final content = _enhancedTxtService.detectTextEncoding(bytes);
-      final txtMetadata = _enhancedTxtService.extractTxtMetadata(content, fileName);
-      
+      final txtMetadata = _enhancedTxtService.extractTxtMetadata(
+        content,
+        fileName,
+      );
+
       debugPrint('增强TXT元数据提取完成:');
       debugPrint('标题: ${txtMetadata.title}');
       debugPrint('作者: ${txtMetadata.author}');
       debugPrint('语言: ${txtMetadata.language ?? '未知'}');
       debugPrint('预估页数: ${txtMetadata.estimatedPages}');
       if (txtMetadata.description != null) {
-        debugPrint('简介: ${txtMetadata.description!.substring(0, 
-          txtMetadata.description!.length.clamp(0, 100))}...');
+        debugPrint(
+          '简介: ${txtMetadata.description!.substring(0, txtMetadata.description!.length.clamp(0, 100))}...',
+        );
       }
 
       return EnhancedBookMetadata(
@@ -324,6 +342,73 @@ class BookImportService {
     String fileName,
   ) async {
     try {
+      debugPrint('FB2 metadata extraction - trying WebView first');
+
+      // 1. 尝试使用 WebView 解析（支持更多特性）
+      try {
+        final tempFile = await _createTempFile(bytes, fileName);
+
+        try {
+          final metadata = await _webViewParser.parseBookMetadata(tempFile);
+
+          // 转换为 EnhancedBookMetadata
+          Uint8List? coverBytes;
+          if (metadata.coverImageBase64 != null &&
+              metadata.coverImageBase64!.isNotEmpty) {
+            try {
+              final parts = metadata.coverImageBase64!.split(',');
+              final base64String = parts.length > 1 ? parts[1] : parts[0];
+              coverBytes = base64.decode(base64String);
+            } catch (e) {
+              debugPrint('FB2 封面解析失败: $e');
+            }
+          }
+
+          final estimatedPages = (bytes.length / 1500).ceil().clamp(1, 9999);
+
+          return EnhancedBookMetadata(
+            title: metadata.title,
+            author: metadata.author,
+            description: metadata.description.isNotEmpty
+                ? metadata.description
+                : null,
+            language: metadata.language,
+            publisher: metadata.publisher,
+            publishDate: metadata.publishDate,
+            isbn: metadata.isbn,
+            coverImage: coverBytes,
+            estimatedPages: estimatedPages,
+            tags: metadata.subjects,
+            additionalInfo: {
+              'format': 'FB2',
+              'parsedByWebView': true,
+              'fileSize': bytes.length,
+            },
+          );
+        } finally {
+          // 清理临时文件
+          if (await tempFile.exists()) {
+            await tempFile.delete();
+          }
+        }
+      } catch (e) {
+        debugPrint('FB2 WebView解析失败，回退到XML解析: $e');
+      }
+
+      // 2. 回退到传统 XML 解析
+      return await _extractFb2MetadataXml(bytes, fileName);
+    } catch (e) {
+      debugPrint('FB2 metadata extraction failed: $e');
+      return _extractBasicMetadata(bytes, fileName);
+    }
+  }
+
+  /// 传统 FB2 XML 解析（WebView 解析失败时的回退方案）
+  Future<EnhancedBookMetadata> _extractFb2MetadataXml(
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    try {
       final xmlContent = utf8.decode(bytes);
 
       // Parse FB2 XML structure
@@ -332,6 +417,7 @@ class BookImportService {
       String? description;
       String? language;
       List<String>? tags;
+      Uint8List? coverImage;
 
       // Extract title
       final titleMatch = RegExp(
@@ -342,7 +428,7 @@ class BookImportService {
         title = _stripXmlTags(titleMatch.group(1) ?? '').trim();
       }
 
-      // Extract author
+      // Extract author (enhanced)
       final authorMatch = RegExp(
         r'<author[^>]*>.*?<first-name[^>]*>(.*?)</first-name>.*?<last-name[^>]*>(.*?)</last-name>.*?</author>',
         dotAll: true,
@@ -351,15 +437,28 @@ class BookImportService {
         final firstName = _stripXmlTags(authorMatch.group(1) ?? '').trim();
         final lastName = _stripXmlTags(authorMatch.group(2) ?? '').trim();
         author = '$firstName $lastName'.trim();
+      } else {
+        // 尝试简单作者匹配
+        final simpleAuthorMatch = RegExp(
+          r'<author[^>]*>(.*?)</author>',
+          dotAll: true,
+        ).firstMatch(xmlContent);
+        if (simpleAuthorMatch != null) {
+          author = _stripXmlTags(simpleAuthorMatch.group(1) ?? '').trim();
+        }
       }
 
-      // Extract description
+      // Extract description (enhanced)
       final descMatch = RegExp(
         r'<annotation[^>]*>(.*?)</annotation>',
         dotAll: true,
       ).firstMatch(xmlContent);
       if (descMatch != null) {
         description = _stripXmlTags(descMatch.group(1) ?? '').trim();
+        // 限制描述长度
+        if (description.length > 500) {
+          description = '${description.substring(0, 497)}...';
+        }
       }
 
       // Extract language
@@ -381,6 +480,9 @@ class BookImportService {
             .toList();
       }
 
+      // Try to extract cover image from FB2
+      coverImage = await _extractFb2Cover(xmlContent);
+
       final textContent = _stripXmlTags(xmlContent);
       final estimatedPages = (textContent.length / 1500).ceil().clamp(1, 9999);
 
@@ -389,12 +491,197 @@ class BookImportService {
         author: author,
         description: description,
         language: language,
+        coverImage: coverImage,
         estimatedPages: estimatedPages,
         tags: tags,
-        additionalInfo: {'format': 'FB2', 'characterCount': textContent.length},
+        additionalInfo: {
+          'format': 'FB2',
+          'characterCount': textContent.length,
+          'parsedByXml': true,
+        },
       );
     } catch (e) {
-      debugPrint('FB2 metadata extraction failed: $e');
+      debugPrint('FB2 XML metadata extraction failed: $e');
+      return _extractBasicMetadata(bytes, fileName);
+    }
+  }
+
+  /// 从 FB2 文件提取封面图片
+  Future<Uint8List?> _extractFb2Cover(String xmlContent) async {
+    try {
+      // FB2 格式中的封面通常在 <binary> 标签中
+      final binaryPattern = RegExp(
+        r'<binary[^>]*id\s*=\s*["\'
+        ']([^"\']*cover[^"\']*)["\'][^>]*>(.*?)</binary>',
+        dotAll: true,
+        caseSensitive: false,
+      );
+      final binaryMatch = binaryPattern.firstMatch(xmlContent);
+
+      if (binaryMatch != null) {
+        final base64Content = binaryMatch.group(2)?.trim() ?? '';
+        if (base64Content.isNotEmpty) {
+          try {
+            // 清理base64字符串（移除换行和空格）
+            final cleanBase64 = base64Content.replaceAll(RegExp(r'\s+'), '');
+            return base64.decode(cleanBase64);
+          } catch (e) {
+            debugPrint('FB2 封面base64解码失败: $e');
+          }
+        }
+      }
+
+      // 尝试查找其他可能的图片
+      final allBinaryMatches = RegExp(
+        r'<binary[^>]*>(.*?)</binary>',
+        dotAll: true,
+      ).allMatches(xmlContent);
+
+      for (final match in allBinaryMatches) {
+        final base64Content = match.group(1)?.trim() ?? '';
+        if (base64Content.isNotEmpty && base64Content.length > 100) {
+          try {
+            final cleanBase64 = base64Content.replaceAll(RegExp(r'\s+'), '');
+            final imageBytes = base64.decode(cleanBase64);
+            if (_isValidImageFormat(imageBytes)) {
+              return imageBytes;
+            }
+          } catch (e) {
+            continue; // 尝试下一个
+          }
+        }
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('FB2 封面提取失败: $e');
+      return null;
+    }
+  }
+
+  /// Extract MOBI/AZW3 metadata using WebView parsing
+  Future<EnhancedBookMetadata> _extractMobiMetadata(
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    try {
+      debugPrint('MOBI/AZW3 metadata extraction - using WebView parsing');
+
+      // 1. 创建临时文件
+      final tempFile = await _createTempFile(bytes, fileName);
+
+      try {
+        // 2. 使用 WebView 解析器
+        final metadata = await _webViewParser.parseBookMetadata(tempFile);
+
+        // 3. 转换为 EnhancedBookMetadata
+        Uint8List? coverBytes;
+        if (metadata.coverImageBase64 != null &&
+            metadata.coverImageBase64!.isNotEmpty) {
+          try {
+            // 解析base64封面数据
+            final parts = metadata.coverImageBase64!.split(',');
+            final base64String = parts.length > 1 ? parts[1] : parts[0];
+            coverBytes = base64.decode(base64String);
+          } catch (e) {
+            debugPrint('封面解析失败: $e');
+          }
+        }
+
+        // 4. 估算页数（MOBI格式基于内容长度）
+        final estimatedPages = (bytes.length / 3000).ceil().clamp(50, 1000);
+
+        return EnhancedBookMetadata(
+          title: metadata.title,
+          author: metadata.author,
+          description: metadata.description.isNotEmpty
+              ? metadata.description
+              : null,
+          language: metadata.language,
+          publisher: metadata.publisher,
+          publishDate: metadata.publishDate,
+          isbn: metadata.isbn,
+          coverImage: coverBytes,
+          estimatedPages: estimatedPages,
+          tags: metadata.subjects,
+          additionalInfo: {
+            'format': metadata.format,
+            'parsedByWebView': true,
+            'fileSize': bytes.length,
+          },
+        );
+      } finally {
+        // 清理临时文件
+        if (await tempFile.exists()) {
+          await tempFile.delete();
+        }
+      }
+    } catch (e) {
+      debugPrint('MOBI/AZW3 metadata extraction failed: $e');
+      // 回退到基础解析
+      return _extractBasicMobiMetadata(bytes, fileName);
+    }
+  }
+
+  /// 基础 MOBI 元数据提取（WebView 解析失败时的回退方案）
+  EnhancedBookMetadata _extractBasicMobiMetadata(
+    Uint8List bytes,
+    String fileName,
+  ) {
+    final title = fileName.replaceAll(RegExp(r'\.(mobi|azw|azw3)$'), '');
+    final estimatedPages = (bytes.length / 3000).ceil().clamp(50, 1000);
+
+    return EnhancedBookMetadata(
+      title: title,
+      author: 'Unknown',
+      estimatedPages: estimatedPages,
+      additionalInfo: {
+        'format': fileName.split('.').last.toUpperCase(),
+        'fileSize': bytes.length,
+        'note': 'Basic extraction - WebView parsing failed',
+      },
+    );
+  }
+
+  /// Extract Comic Book (CBZ/CBR) metadata
+  Future<EnhancedBookMetadata> _extractComicMetadata(
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    try {
+      // CBZ files are ZIP archives containing images
+      // CBR files are RAR archives containing images
+      final extension = fileName.split('.').last.toLowerCase();
+      final title = fileName.replaceAll(RegExp(r'\.(cbz|cbr)$'), '');
+
+      // For comic books, we can extract some basic info
+      String author = 'Unknown';
+
+      // Try to extract info from filename patterns
+      final seriesMatch = RegExp(r'^(.+?)\s*#?\d+').firstMatch(title);
+      if (seriesMatch != null) {
+        author = 'Series: ${seriesMatch.group(1)}';
+      }
+
+      // Estimate pages based on typical comic book length
+      final estimatedPages = extension == 'cbz'
+          ? 25
+          : 30; // Comics typically 20-40 pages
+
+      return EnhancedBookMetadata(
+        title: title,
+        author: author,
+        description: 'Comic book in ${extension.toUpperCase()} format',
+        estimatedPages: estimatedPages,
+        additionalInfo: {
+          'format': extension.toUpperCase(),
+          'mediaType': 'comic',
+          'isArchive': true,
+          'note': 'Comic book archive - contains image files',
+        },
+      );
+    } catch (e) {
+      debugPrint('Comic metadata extraction failed: $e');
       return _extractBasicMetadata(bytes, fileName);
     }
   }
@@ -457,7 +744,6 @@ class BookImportService {
       additionalInfo: {'format': extension, 'fileSize': fileSize},
     );
   }
-
 
   /// Save cover image to disk
   Future<String?> _saveCoverImage(
@@ -529,16 +815,16 @@ class BookImportService {
       }
 
       final bytes = await file.readAsBytes();
-      
+
       // 使用增强的TXT导入服务检测编码和分析章节
       final content = _enhancedTxtService.detectTextEncoding(bytes);
       final chapters = _enhancedTxtService.analyzeChapterStructure(content);
-      
+
       debugPrint('TXT章节分析完成，共提取到 ${chapters.length} 个章节');
       for (final chapter in chapters) {
         debugPrint('章节: ${chapter.title} (层级: ${chapter.level})');
       }
-      
+
       return chapters;
     } catch (e) {
       debugPrint('TXT章节解析失败: $e');
@@ -990,6 +1276,19 @@ class BookImportService {
       return true;
 
     return false;
+  }
+
+  /// 创建临时文件用于 WebView 解析
+  Future<File> _createTempFile(Uint8List bytes, String fileName) async {
+    final tempDir = await getTemporaryDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final tempFileName = '${timestamp}_$fileName';
+    final tempFile = File('${tempDir.path}/$tempFileName');
+
+    await tempFile.writeAsBytes(bytes);
+    debugPrint('创建临时文件: ${tempFile.path}');
+
+    return tempFile;
   }
 
   /// 增强的PDF封面提取

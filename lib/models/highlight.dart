@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'book_note.dart';
 
+/// 高亮注释模型 - BookNote的兼容层
+/// 为了保持向后兼容，提供Highlight类作为BookNote的包装
 class Highlight {
   final int? id;
   final int bookId;
@@ -8,13 +11,11 @@ class Highlight {
   final int startOffset;
   final int endOffset;
   final Color color;
-  final String? cfi; // CanonicalFragmentIdentifier for EPUB positioning
-  final String? chapter; // Chapter title or identifier
-  final String? noteText; // Optional note attached to highlight
-  final DateTime createDate;
-  final DateTime? updateDate;
+  final String? cfi;
+  final String chapter;
+  final DateTime? createTime;
 
-  Highlight({
+  const Highlight({
     this.id,
     required this.bookId,
     required this.pageNumber,
@@ -23,78 +24,48 @@ class Highlight {
     required this.endOffset,
     required this.color,
     this.cfi,
-    this.chapter,
-    this.noteText,
-    DateTime? createDate,
-    this.updateDate,
-  }) : createDate = createDate ?? DateTime.now();
+    required this.chapter,
+    this.createTime,
+  });
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'bookId': bookId,
-      'pageNumber': pageNumber,
-      'selectedText': selectedText,
-      'startOffset': startOffset,
-      'endOffset': endOffset,
-      'colorValue': color.toARGB32(),
-      'cfi': cfi,
-      'chapter': chapter,
-      'noteText': noteText,
-      'createDate': createDate.millisecondsSinceEpoch,
-      'updateDate': updateDate?.millisecondsSinceEpoch,
-    };
-  }
+  /// 从BookNote创建Highlight
+  factory Highlight.fromBookNote(BookNote note) {
+    if (note.type != 'highlight') {
+      throw ArgumentError('BookNote type must be "highlight"');
+    }
 
-  factory Highlight.fromMap(Map<String, dynamic> map) {
     return Highlight(
-      id: map['id'],
-      bookId: map['bookId'],
-      pageNumber: map['pageNumber'],
-      selectedText: map['selectedText'],
-      startOffset: map['startOffset'],
-      endOffset: map['endOffset'],
-      color: Color(map['colorValue']),
-      cfi: map['cfi'],
-      chapter: map['chapter'],
-      noteText: map['noteText'],
-      createDate: DateTime.fromMillisecondsSinceEpoch(map['createDate']),
-      updateDate: map['updateDate'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(map['updateDate'])
-          : null,
+      id: note.id,
+      bookId: note.bookId,
+      pageNumber: note.pageNumber ?? 0,
+      selectedText: note.content,
+      startOffset: note.startOffset ?? 0,
+      endOffset: note.endOffset ?? note.content.length,
+      color: note.colorValue,
+      cfi: note.cfi,
+      chapter: note.chapter,
+      createTime: note.createTime,
     );
   }
 
-  // 预定义的荧光笔颜色
-  static const List<Color> highlightColors = [
-    Color(0xFFFFEB3B), // 黄色
-    Color(0xFF4CAF50), // 绿色
-    Color(0xFF2196F3), // 蓝色
-    Color(0xFFF44336), // 红色
-    Color(0xFF9C27B0), // 紫色
-    Color(0xFFFF9800), // 橙色
-  ];
-
-  static String getColorName(Color color) {
-    switch (color.toARGB32()) {
-      case 0xFFFFEB3B:
-        return '黄色';
-      case 0xFF4CAF50:
-        return '绿色';
-      case 0xFF2196F3:
-        return '蓝色';
-      case 0xFFF44336:
-        return '红色';
-      case 0xFF9C27B0:
-        return '紫色';
-      case 0xFFFF9800:
-        return '橙色';
-      default:
-        return '自定义';
-    }
+  /// 转换为BookNote
+  BookNote toBookNote() {
+    return BookNote(
+      id: id,
+      bookId: bookId,
+      content: selectedText,
+      cfi: cfi ?? '',
+      chapter: chapter,
+      type: 'highlight',
+      color: color.value.toRadixString(16).substring(2).toUpperCase(),
+      pageNumber: pageNumber,
+      startOffset: startOffset,
+      endOffset: endOffset,
+      createTime: createTime,
+    );
   }
 
-  /// 创建带笔记的高亮副本
+  /// 创建副本
   Highlight copyWith({
     int? id,
     int? bookId,
@@ -105,9 +76,7 @@ class Highlight {
     Color? color,
     String? cfi,
     String? chapter,
-    String? noteText,
-    DateTime? createDate,
-    DateTime? updateDate,
+    DateTime? createTime,
   }) {
     return Highlight(
       id: id ?? this.id,
@@ -119,22 +88,31 @@ class Highlight {
       color: color ?? this.color,
       cfi: cfi ?? this.cfi,
       chapter: chapter ?? this.chapter,
-      noteText: noteText ?? this.noteText,
-      createDate: createDate ?? this.createDate,
-      updateDate: updateDate ?? this.updateDate,
+      createTime: createTime ?? this.createTime,
     );
   }
 
-  /// 转换为导出格式
-  Map<String, dynamic> toExportMap() {
-    return {
-      'text': selectedText,
-      'note': noteText,
-      'color': getColorName(color),
-      'chapter': chapter,
-      'page': pageNumber,
-      'createDate': createDate.toIso8601String(),
-      'updateDate': updateDate?.toIso8601String(),
-    };
+  /// 转换为Map（用于数据库）
+  Map<String, dynamic> toMap() {
+    return toBookNote().toMap();
   }
+
+  /// 从Map创建实例
+  factory Highlight.fromMap(Map<String, dynamic> map) {
+    final bookNote = BookNote.fromMap(map);
+    return Highlight.fromBookNote(bookNote);
+  }
+
+  @override
+  String toString() {
+    return 'Highlight{id: $id, bookId: $bookId, pageNumber: $pageNumber, selectedText: ${selectedText.length > 30 ? selectedText.substring(0, 30) + '...' : selectedText}}';
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Highlight && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 }

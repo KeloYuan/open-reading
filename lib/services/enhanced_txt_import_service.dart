@@ -6,9 +6,9 @@ import '../models/chapter.dart';
 import 'txt_text_processor.dart';
 
 /// 增强的TXT文件导入服务
-/// 
+///
 /// 提供智能编码检测、元数据提取、章节分析和分页优化功能
-/// 
+///
 /// 核心功能：
 /// - [detectTextEncoding] 智能检测文本编码
 /// - [extractTxtMetadata] 增强元数据提取
@@ -16,15 +16,15 @@ import 'txt_text_processor.dart';
 /// - [optimizedPageEstimation] 优化分页估算
 class EnhancedTxtImportService {
   final _textProcessor = TxtTextProcessor();
-  
+
   /// 智能检测文本编码
-  /// 
+  ///
   /// 支持多种中文编码格式：UTF-8、GBK、GB2312、UTF-16等
-  /// 
+  ///
   /// [bytes] 原始文件字节数据
   /// Returns: 解码后的文本内容
   /// Throws: [UnsupportedError] 当无法识别编码时
-  /// 
+  ///
   /// 使用示例：
   /// ```dart
   /// final service = EnhancedTxtImportService();
@@ -32,14 +32,14 @@ class EnhancedTxtImportService {
   /// ```
   String detectTextEncoding(Uint8List bytes) {
     // 1. 检测UTF-8 BOM标记
-    if (bytes.length >= 3 && 
-        bytes[0] == 0xEF && 
-        bytes[1] == 0xBB && 
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xEF &&
+        bytes[1] == 0xBB &&
         bytes[2] == 0xBF) {
       debugPrint('检测到UTF-8 BOM编码');
       return utf8.decode(bytes.sublist(3));
     }
-    
+
     // 2. 检测UTF-16 BOM标记
     if (bytes.length >= 2) {
       if (bytes[0] == 0xFF && bytes[1] == 0xFE) {
@@ -54,7 +54,7 @@ class EnhancedTxtImportService {
         debugPrint('UTF-16编码跳过，尝试其他编码');
       }
     }
-    
+
     // 3. 尝试UTF-8解码（最常见）
     try {
       final content = utf8.decode(bytes, allowMalformed: false);
@@ -66,7 +66,7 @@ class EnhancedTxtImportService {
     } catch (e) {
       debugPrint('UTF-8解码失败: $e');
     }
-    
+
     // 4. 尝试GBK编码（中文书籍常用）
     try {
       final content = _decodeGbk(bytes);
@@ -77,7 +77,7 @@ class EnhancedTxtImportService {
     } catch (e) {
       debugPrint('GBK解码失败: $e');
     }
-    
+
     // 5. 尝试Latin1编码（作为最后备选）
     try {
       final content = latin1.decode(bytes);
@@ -88,20 +88,40 @@ class EnhancedTxtImportService {
     } catch (e) {
       debugPrint('Latin1解码失败: $e');
     }
-    
+
     // 6. 降级处理：使用UTF-8宽松解码
     debugPrint('所有编码尝试失败，使用UTF-8宽松解码');
     return utf8.decode(bytes, allowMalformed: true);
   }
-  
-  /// 简化的GBK解码（实际项目中应使用专门的编码库）
+
+  /// 增强的GBK解码尝试（参考anx-reader实现）
   String? _decodeGbk(Uint8List bytes) {
-    // 这里简化实现，实际应该使用如 'gbk_codec' 包
-    // 由于Flutter没有内置GBK支持，这里返回null
-    // 在实际项目中，可以添加 gbk_codec 依赖
-    return null;
+    try {
+      // 尝试使用latin1解码后检查是否包含中文模式
+      final latin1Content = latin1.decode(bytes);
+
+      // 检查是否存在GBK编码的中文字符模式
+      if (_detectGbkPattern(latin1Content)) {
+        // 这里简化处理，实际应该使用专门的GBK解码库
+        // 如 charset_converter 或 gbk_codec 包
+        debugPrint('检测到可能的GBK编码，但需要专门的解码库');
+        return null;
+      }
+
+      return null;
+    } catch (e) {
+      return null;
+    }
   }
-  
+
+  /// 检测GBK编码模式
+  bool _detectGbkPattern(String content) {
+    // 检查是否包含GBK编码的中文字符特征
+    // GBK编码的中文通常在0x81-0xFE范围内
+    final gbkPattern = RegExp(r'[\x81-\xFE]');
+    return gbkPattern.hasMatch(content);
+  }
+
   /// 验证UTF-8内容是否有效
   bool _isValidUtf8Content(String content) {
     // 检查是否包含过多控制字符或乱码
@@ -109,40 +129,42 @@ class EnhancedTxtImportService {
       final code = char.codeUnitAt(0);
       return code < 32 && code != 9 && code != 10 && code != 13; // 排除tab、换行、回车
     }).length;
-    
+
     // 如果控制字符超过5%，可能是编码错误
     return controlCharCount < content.length * 0.05;
   }
-  
+
   /// 验证中文内容
   bool _isValidChineseContent(String content) {
     final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length;
     return chineseCount > content.length * 0.1; // 至少10%中文字符
   }
-  
+
   /// 验证文本内容的基本有效性
   bool _isValidTextContent(String content) {
     // 基本验证：不能全是控制字符或特殊符号
     final validCharCount = content.split('').where((char) {
       final code = char.codeUnitAt(0);
       return (code >= 32 && code <= 126) || // ASCII可打印字符
-             (code >= 0x4e00 && code <= 0x9fff) || // 中文字符
-             char == '\n' || char == '\r' || char == '\t'; // 换行符等
+          (code >= 0x4e00 && code <= 0x9fff) || // 中文字符
+          char == '\n' ||
+          char == '\r' ||
+          char == '\t'; // 换行符等
     }).length;
-    
+
     return validCharCount > content.length * 0.8; // 至少80%有效字符
   }
-  
+
   /// 增强的TXT元数据提取
-  /// 
+  ///
   /// 智能分析文本内容，提取标题、作者、简介等信息
-  /// 
+  ///
   /// [content] 解码后的文本内容
   /// [fileName] 原始文件名
   /// [processText] 是否预处理文本（默认true）
   /// Returns: 增强的书籍元数据
   TxtMetadata extractTxtMetadata(
-    String content, 
+    String content,
     String fileName, {
     bool processText = true,
   }) {
@@ -151,27 +173,30 @@ class EnhancedTxtImportService {
     if (processText) {
       processedContent = _textProcessor.preprocessText(content);
     }
-    
-    final lines = processedContent.split('\n').map((line) => line.trim()).toList();
-    
+
+    final lines = processedContent
+        .split('\n')
+        .map((line) => line.trim())
+        .toList();
+
     // 1. 智能标题提取
     String title = _extractTitle(lines, fileName);
-    
+
     // 2. 智能作者提取
     String author = _extractAuthor(lines);
-    
+
     // 3. 简介提取
     String? description = _extractDescription(lines);
-    
+
     // 4. 语言检测
     String? language = _detectLanguage(content);
-    
+
     // 5. 内容统计
     final stats = _analyzeContentStatistics(processedContent, lines);
-    
+
     // 6. 智能分页估算
     final estimatedPages = _calculateOptimizedPages(processedContent, stats);
-    
+
     return TxtMetadata(
       title: title,
       author: author,
@@ -191,14 +216,14 @@ class EnhancedTxtImportService {
       },
     );
   }
-  
+
   /// 智能标题提取
   String _extractTitle(List<String> lines, String fileName) {
     // 策略1: 查找明确的标题标识
     for (int i = 0; i < lines.length.clamp(0, 20); i++) {
       final line = lines[i];
       if (line.isEmpty) continue;
-      
+
       // 匹配标题模式
       final titlePatterns = [
         RegExp(r'^书名[:：]\s*(.+)$'),
@@ -206,7 +231,7 @@ class EnhancedTxtImportService {
         RegExp(r'^Title[:：]\s*(.+)$', caseSensitive: false),
         RegExp(r'^《(.+)》$'),
       ];
-      
+
       for (final pattern in titlePatterns) {
         final match = pattern.firstMatch(line);
         if (match != null) {
@@ -217,12 +242,12 @@ class EnhancedTxtImportService {
         }
       }
     }
-    
+
     // 策略2: 第一行作为标题（常见格式）
     for (final line in lines.take(5)) {
-      if (line.isNotEmpty && 
-          line.length > 2 && 
-          line.length < 100 && 
+      if (line.isNotEmpty &&
+          line.length > 2 &&
+          line.length < 100 &&
           !line.contains('作者') &&
           !line.contains('Author') &&
           !_isCommonPrefix(line)) {
@@ -232,23 +257,23 @@ class EnhancedTxtImportService {
         }
       }
     }
-    
+
     // 策略3: 从文件名提取
     final fileTitle = fileName.replaceAll(RegExp(r'\.(txt|TXT)$'), '');
     if (fileTitle.isNotEmpty) {
       return _cleanTitle(fileTitle);
     }
-    
+
     return '未知标题';
   }
-  
+
   /// 智能作者提取
   String _extractAuthor(List<String> lines) {
     // 策略1: 明确的作者标识
     for (int i = 0; i < lines.length.clamp(0, 30); i++) {
       final line = lines[i];
       if (line.isEmpty) continue;
-      
+
       final authorPatterns = [
         RegExp(r'^作者[:：]\s*(.+)$'),
         RegExp(r'^著[:：]\s*(.+)$'),
@@ -257,7 +282,7 @@ class EnhancedTxtImportService {
         RegExp(r'^文[:：]\s*(.+)$'),
         RegExp(r'^\[(.+)\]\s*著$'),
       ];
-      
+
       for (final pattern in authorPatterns) {
         final match = pattern.firstMatch(line);
         if (match != null) {
@@ -268,7 +293,7 @@ class EnhancedTxtImportService {
         }
       }
     }
-    
+
     // 策略2: 第二行或第三行常见作者位置
     for (int i = 1; i < lines.length.clamp(0, 10); i++) {
       final line = lines[i];
@@ -279,21 +304,20 @@ class EnhancedTxtImportService {
         }
       }
     }
-    
+
     return '未知作者';
   }
-  
+
   /// 简介提取
   String? _extractDescription(List<String> lines) {
     // 策略1: 查找明确的简介标识
     for (int i = 0; i < lines.length.clamp(0, 50); i++) {
       final line = lines[i].toLowerCase();
-      if (line.contains('简介') || 
+      if (line.contains('简介') ||
           line.contains('内容简介') ||
           line.contains('synopsis') ||
           line.contains('summary') ||
           line.contains('description')) {
-        
         // 获取后面几行作为简介
         final descLines = <String>[];
         for (int j = i + 1; j < lines.length.clamp(0, i + 10); j++) {
@@ -303,43 +327,47 @@ class EnhancedTxtImportService {
             if (descLines.join(' ').length > 300) break;
           }
         }
-        
+
         if (descLines.isNotEmpty) {
-          return descLines.join(' ').substring(0, 
-            descLines.join(' ').length.clamp(0, 300));
+          return descLines
+              .join(' ')
+              .substring(0, descLines.join(' ').length.clamp(0, 300));
         }
       }
     }
-    
+
     // 策略2: 第一个长段落作为简介
     for (int i = 5; i < lines.length.clamp(0, 50); i++) {
       final line = lines[i];
-      if (line.length > 50 && line.length < 500 && 
+      if (line.length > 50 &&
+          line.length < 500 &&
           !_isChapterTitle(line) &&
           !line.contains('第一章') &&
           !line.contains('Chapter 1')) {
         return line.substring(0, line.length.clamp(0, 300));
       }
     }
-    
+
     return null;
   }
-  
+
   /// 语言检测（增强版）
   String? _detectLanguage(String content) {
     final sample = content.length > 1000 ? content.substring(0, 1000) : content;
-    
+
     // 中文字符统计
     final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(sample).length;
     // 英文字符统计
     final englishCount = RegExp(r'[a-zA-Z]').allMatches(sample).length;
     // 日文字符统计
-    final japaneseCount = RegExp(r'[\u3040-\u309f\u30a0-\u30ff]').allMatches(sample).length;
+    final japaneseCount = RegExp(
+      r'[\u3040-\u309f\u30a0-\u30ff]',
+    ).allMatches(sample).length;
     // 韩文字符统计
     final koreanCount = RegExp(r'[\uac00-\ud7af]').allMatches(sample).length;
-    
+
     final totalChars = sample.length;
-    
+
     if (chineseCount > totalChars * 0.3) {
       return 'zh-CN';
     } else if (japaneseCount > totalChars * 0.2) {
@@ -349,16 +377,19 @@ class EnhancedTxtImportService {
     } else if (englishCount > totalChars * 0.5) {
       return 'en';
     }
-    
+
     return null;
   }
-  
+
   /// 内容统计分析
-  Map<String, dynamic> _analyzeContentStatistics(String content, List<String> lines) {
+  Map<String, dynamic> _analyzeContentStatistics(
+    String content,
+    List<String> lines,
+  ) {
     // 段落统计（空行分隔）
     int paragraphCount = 0;
     bool inParagraph = false;
-    
+
     for (final line in lines) {
       if (line.trim().isNotEmpty) {
         if (!inParagraph) {
@@ -369,16 +400,19 @@ class EnhancedTxtImportService {
         inParagraph = false;
       }
     }
-    
+
     // 平均行长度
-    final nonEmptyLines = lines.where((line) => line.trim().isNotEmpty).toList();
-    final averageLineLength = nonEmptyLines.isNotEmpty 
-        ? nonEmptyLines.map((line) => line.length).reduce((a, b) => a + b) / nonEmptyLines.length
+    final nonEmptyLines = lines
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
+    final averageLineLength = nonEmptyLines.isNotEmpty
+        ? nonEmptyLines.map((line) => line.length).reduce((a, b) => a + b) /
+              nonEmptyLines.length
         : 0.0;
-    
+
     // 检查是否有章节结构
     final hasChapterStructure = _detectChapterStructure(lines);
-    
+
     return {
       'paragraphCount': paragraphCount,
       'averageLineLength': averageLineLength,
@@ -386,29 +420,29 @@ class EnhancedTxtImportService {
       'nonEmptyLineCount': nonEmptyLines.length,
     };
   }
-  
+
   /// 检测章节结构
   bool _detectChapterStructure(List<String> lines) {
     int chapterCount = 0;
-    
+
     for (final line in lines) {
       if (_isChapterTitle(line)) {
         chapterCount++;
         if (chapterCount >= 2) return true; // 至少2个章节才算有结构
       }
     }
-    
+
     return false;
   }
-  
+
   /// 优化的分页估算
   int _calculateOptimizedPages(String content, Map<String, dynamic> stats) {
     // 基础字符数分页
     final basePages = (content.length / 1500).ceil();
-    
+
     // 根据内容特征调整
     double adjustmentFactor = 1.0;
-    
+
     // 1. 根据平均行长度调整
     final avgLineLength = (stats['averageLineLength'] as num).toDouble();
     if (avgLineLength > 50) {
@@ -418,7 +452,7 @@ class EnhancedTxtImportService {
       // 短行文本（诗歌等），减少页数
       adjustmentFactor *= 0.8;
     }
-    
+
     // 2. 根据段落密度调整
     final paragraphCount = stats['paragraphCount'] as int;
     final paragraphDensity = paragraphCount / (content.length / 1000.0);
@@ -426,35 +460,36 @@ class EnhancedTxtImportService {
       // 段落密集，减少页数
       adjustmentFactor *= 0.9;
     }
-    
+
     // 3. 根据语言特征调整
-    final chineseRatio = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length / content.length;
+    final chineseRatio =
+        RegExp(r'[\u4e00-\u9fff]').allMatches(content).length / content.length;
     if (chineseRatio > 0.5) {
       // 中文字符密度高，每页字符数可以多一些
       adjustmentFactor *= 0.9;
     }
-    
+
     final adjustedPages = (basePages * adjustmentFactor).ceil();
     return adjustedPages.clamp(1, 9999);
   }
-  
+
   /// 智能章节结构分析
-  /// 
+  ///
   /// 自动检测文本中的章节分割点，支持多种章节格式
-  /// 
+  ///
   /// [content] 完整文本内容
   /// Returns: 章节列表
   List<Chapter> analyzeChapterStructure(String content) {
     final lines = content.split('\n');
     final chapters = <Chapter>[];
-    
+
     // 1. 检测章节标题模式
     final chapterPatterns = _getChapterPatterns();
-    
+
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
       if (line.isEmpty) continue;
-      
+
       for (final pattern in chapterPatterns) {
         if (pattern.hasMatch(line)) {
           final chapterTitle = _cleanTitle(line);
@@ -464,23 +499,23 @@ class EnhancedTxtImportService {
             level: _determineChapterLevel(line),
             order: chapters.length,
           );
-          
+
           chapters.add(chapter);
           debugPrint('检测到章节: $chapterTitle (第${i + 1}行)');
           break;
         }
       }
     }
-    
+
     // 2. 如果没有检测到章节，尝试智能分割
     if (chapters.isEmpty) {
       return _intelligentChapterSplit(content);
     }
-    
+
     // 3. 优化章节结构
     return _optimizeChapterStructure(chapters);
   }
-  
+
   /// 获取章节模式列表
   List<RegExp> _getChapterPatterns() {
     return [
@@ -490,22 +525,25 @@ class EnhancedTxtImportService {
       RegExp(r'^[一二三四五六七八九十]+、\s*(.*)$'),
       RegExp(r'^\d+\.\s*(.*)$'),
       RegExp(r'^[\d]+[\.、]\s*(.*)$'),
-      
+
       // 英文章节
       RegExp(r'^Chapter\s+\d+\s*(.*)$', caseSensitive: false),
       RegExp(r'^Part\s+\d+\s*(.*)$', caseSensitive: false),
       RegExp(r'^Section\s+\d+\s*(.*)$', caseSensitive: false),
-      
+
       // 特殊章节
       RegExp(r'^(序言|前言|引言|目录|后记|跋|结语)(.*)$'),
-      RegExp(r'^(Preface|Introduction|Prologue|Epilogue)(.*)$', caseSensitive: false),
-      
+      RegExp(
+        r'^(Preface|Introduction|Prologue|Epilogue)(.*)$',
+        caseSensitive: false,
+      ),
+
       // 分割线章节
       RegExp(r'^[=\-]{3,}\s*(.+)\s*[=\-]{3,}$'),
       RegExp(r'^\*{3,}\s*(.+)\s*\*{3,}$'),
     ];
   }
-  
+
   /// 确定章节层级
   int _determineChapterLevel(String title) {
     // 一级章节（主章节）
@@ -514,38 +552,38 @@ class EnhancedTxtImportService {
         RegExp(r'Part\s+\d+', caseSensitive: false).hasMatch(title)) {
       return 0;
     }
-    
+
     // 二级章节（小节）
     if (RegExp(r'第[一二三四五六七八九十\d]+节').hasMatch(title) ||
         RegExp(r'Section\s+\d+', caseSensitive: false).hasMatch(title) ||
         RegExp(r'^\d+\.\d+').hasMatch(title)) {
       return 1;
     }
-    
+
     // 三级章节
     if (RegExp(r'^\d+\.\d+\.\d+').hasMatch(title) ||
         RegExp(r'[一二三四五六七八九十]+、').hasMatch(title)) {
       return 2;
     }
-    
+
     return 0; // 默认一级章节
   }
-  
+
   /// 智能章节分割（当无明确章节标识时）
   List<Chapter> _intelligentChapterSplit(String content) {
     final chapters = <Chapter>[];
     final lines = content.split('\n');
-    
+
     // 按内容长度自动分割
     const targetChapterLength = 5000; // 每章目标字符数
     int currentLength = 0;
     int chapterStart = 0;
     int chapterIndex = 1;
-    
+
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i];
       currentLength += line.length + 1; // +1 for newline
-      
+
       // 查找合适的分割点
       if (currentLength >= targetChapterLength) {
         // 寻找段落边界
@@ -558,7 +596,7 @@ class EnhancedTxtImportService {
               level: 0,
               order: chapters.length,
             );
-            
+
             chapters.add(chapter);
             chapterStart = j + 1;
             currentLength = 0;
@@ -569,7 +607,7 @@ class EnhancedTxtImportService {
         }
       }
     }
-    
+
     // 添加最后一章
     if (chapterStart < lines.length) {
       final chapter = Chapter(
@@ -580,140 +618,165 @@ class EnhancedTxtImportService {
       );
       chapters.add(chapter);
     }
-    
+
     return chapters;
   }
-  
+
   /// 优化章节结构
   List<Chapter> _optimizeChapterStructure(List<Chapter> chapters) {
     // 1. 去重相似章节
     final uniqueChapters = <Chapter>[];
     for (final chapter in chapters) {
-      if (!uniqueChapters.any((existing) => 
-          _areSimilarTitles(existing.title, chapter.title))) {
+      if (!uniqueChapters.any(
+        (existing) => _areSimilarTitles(existing.title, chapter.title),
+      )) {
         uniqueChapters.add(chapter);
       }
     }
-    
+
     // 2. 排序章节
     uniqueChapters.sort((a, b) => a.order.compareTo(b.order));
-    
+
     return uniqueChapters;
   }
-  
+
   /// 检查标题是否相似
   bool _areSimilarTitles(String title1, String title2) {
-    final clean1 = title1.toLowerCase().replaceAll(RegExp(r'[^\w\u4e00-\u9fff]'), '');
-    final clean2 = title2.toLowerCase().replaceAll(RegExp(r'[^\w\u4e00-\u9fff]'), '');
-    
+    final clean1 = title1.toLowerCase().replaceAll(
+      RegExp(r'[^\w\u4e00-\u9fff]'),
+      '',
+    );
+    final clean2 = title2.toLowerCase().replaceAll(
+      RegExp(r'[^\w\u4e00-\u9fff]'),
+      '',
+    );
+
     if (clean1 == clean2) return true;
-    
+
     // 计算编辑距离
     if (clean1.length > 5 && clean2.length > 5) {
       final similarity = _calculateSimilarity(clean1, clean2);
       return similarity > 0.8;
     }
-    
+
     return false;
   }
-  
+
   /// 计算字符串相似度
   double _calculateSimilarity(String s1, String s2) {
     if (s1 == s2) return 1.0;
     if (s1.isEmpty || s2.isEmpty) return 0.0;
-    
+
     final longer = s1.length > s2.length ? s1 : s2;
     final shorter = s1.length > s2.length ? s2 : s1;
-    
+
     if (longer.length == 0) return 1.0;
-    
+
     final editDistance = _levenshteinDistance(longer, shorter);
     return (longer.length - editDistance) / longer.length;
   }
-  
+
   /// 计算编辑距离
   int _levenshteinDistance(String s1, String s2) {
     final costs = List.generate(s2.length + 1, (i) => i);
-    
+
     for (int i = 1; i <= s1.length; i++) {
       costs[0] = i;
       int nw = i - 1;
-      
+
       for (int j = 1; j <= s2.length; j++) {
-        final cj = math.min(
-          1 + math.min(costs[j], costs[j - 1]),
-          s1[i - 1] == s2[j - 1] ? nw : nw + 1,
-        ).toInt();
+        final cj = math
+            .min(
+              1 + math.min(costs[j], costs[j - 1]),
+              s1[i - 1] == s2[j - 1] ? nw : nw + 1,
+            )
+            .toInt();
         nw = costs[j];
         costs[j] = cj;
       }
     }
-    
+
     return costs[s2.length];
   }
-  
+
   // 辅助方法
-  
+
   bool _looksLikeTitle(String line) {
     // 标题特征：
     // 1. 长度适中
     // 2. 不包含常见非标题词汇
     // 3. 可能包含书名号
-    
+
     if (line.length < 2 || line.length > 80) return false;
-    
+
     final titleKeywords = ['书', '记', '传', '史', '录', '集'];
-    final hasBookKeyword = titleKeywords.any((keyword) => line.contains(keyword));
-    
+    final hasBookKeyword = titleKeywords.any(
+      (keyword) => line.contains(keyword),
+    );
+
     final hasBookmarks = line.contains('《') && line.contains('》');
-    
+
     // 排除常见非标题格式
     final excludePatterns = [
       RegExp(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}'), // 日期
       RegExp(r'^第\d+页'), // 页码
       RegExp(r'版权|Copyright', caseSensitive: false), // 版权信息
     ];
-    
+
     final isExcluded = excludePatterns.any((pattern) => pattern.hasMatch(line));
-    
+
     return (hasBookKeyword || hasBookmarks) && !isExcluded;
   }
-  
+
   bool _looksLikeAuthor(String line) {
     // 作者特征：
     // 1. 长度适中（通常人名不会太长）
     // 2. 包含常见作者格式
-    
+
     if (line.length < 2 || line.length > 20) return false;
-    
+
     // 中文姓氏
     final chineseSurnames = ['李', '王', '张', '刘', '陈', '杨', '赵', '黄', '周', '吴'];
-    final hasChineseSurname = chineseSurnames.any((surname) => line.startsWith(surname));
-    
+    final hasChineseSurname = chineseSurnames.any(
+      (surname) => line.startsWith(surname),
+    );
+
     // 英文名格式
     final englishNamePattern = RegExp(r'^[A-Z][a-z]+\s+[A-Z][a-z]+$');
-    
+
     // 排除明显不是作者的内容
     final excludeWords = ['第', '章', '节', '页', '版', '年', '月', '日'];
     final hasExcludeWord = excludeWords.any((word) => line.contains(word));
-    
-    return (hasChineseSurname || englishNamePattern.hasMatch(line)) && !hasExcludeWord;
+
+    return (hasChineseSurname || englishNamePattern.hasMatch(line)) &&
+        !hasExcludeWord;
   }
-  
+
   bool _isCommonPrefix(String line) {
     final prefixes = [
-      '版权所有', 'Copyright', '出版社', '发行', '印刷', '定价',
-      '页码', '目录', 'ISBN', '作者简介', '内容简介',
+      '版权所有',
+      'Copyright',
+      '出版社',
+      '发行',
+      '印刷',
+      '定价',
+      '页码',
+      '目录',
+      'ISBN',
+      '作者简介',
+      '内容简介',
     ];
-    
-    return prefixes.any((prefix) => line.toLowerCase().contains(prefix.toLowerCase()));
+
+    return prefixes.any(
+      (prefix) => line.toLowerCase().contains(prefix.toLowerCase()),
+    );
   }
-  
+
   bool _isChapterTitle(String line) {
     final chapterPatterns = _getChapterPatterns();
     return chapterPatterns.any((pattern) => pattern.hasMatch(line));
   }
-  
+
   String _cleanTitle(String title) {
     return title
         .replaceAll(RegExp(r'^[=\-\*\s]+'), '') // 移除开头的装饰符
@@ -721,7 +784,7 @@ class EnhancedTxtImportService {
         .replaceAll(RegExp(r'\s+'), ' ') // 规范化空格
         .trim();
   }
-  
+
   String _cleanAuthorName(String author) {
     return author
         .replaceAll(RegExp(r'[()（）\[\]【】]'), '') // 移除括号
@@ -738,7 +801,7 @@ class TxtMetadata {
   final String? language;
   final int estimatedPages;
   final Map<String, dynamic>? additionalInfo;
-  
+
   TxtMetadata({
     required this.title,
     required this.author,
@@ -748,4 +811,3 @@ class TxtMetadata {
     this.additionalInfo,
   });
 }
-

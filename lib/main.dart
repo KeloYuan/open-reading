@@ -14,8 +14,9 @@ import 'pages/user_agreement_page.dart';
 import 'utils/app_themes.dart';
 import 'services/tts_service.dart';
 import 'services/share_service.dart';
+import 'services/data_manager.dart';
 
-void main() {
+void main() async {
   // 确保可以在 runApp 前安全调用 SystemChrome
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -63,6 +64,16 @@ void main() {
         systemNavigationBarContrastEnforced: false,
       ),
     );
+  }
+
+  // 🗄️ 初始化数据管理器
+  debugPrint('🚀 开始初始化应用数据管理系统');
+  try {
+    await DataManager().initialize();
+    debugPrint('✅ 数据管理系统初始化成功');
+  } catch (e) {
+    debugPrint('❌ 数据管理系统初始化失败: $e');
+    // 即使初始化失败也继续启动应用，在应用内会有错误处理
   }
 
   runApp(

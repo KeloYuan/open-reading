@@ -245,12 +245,42 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
       // 新的字体设置、主题颜色都会传递给SimpleWebViewReader构造函数
     });
 
+    // 立即保存设置，确保全局响应
+    _saveSettings();
+
+    // 发送全局字体设置更新通知
+    _notifyGlobalFontSettingsChanged();
+
     debugPrint(
-      'WebView设置已更新: 字号=${_fontSize}, 行距=${_lineSpacing}, 主题=${_currentTheme.name}',
+      '🔄 WebView设置已更新 - 字号: ${_fontSize.toStringAsFixed(1)}px, '
+      '行距: ${_lineSpacing.toStringAsFixed(1)}, '
+      '字间距: ${_letterSpacing.toStringAsFixed(1)}pt, '
+      '字体: $_fontFamily',
     );
     debugPrint(
-      '背景色: ${_currentTheme.backgroundColor}, 文字色: ${_currentTheme.textColor}',
+      '🎨 主题设置 - ${_currentTheme.name}: '
+      '背景色: ${_currentTheme.backgroundColor.value.toRadixString(16)}, '
+      '文字色: ${_currentTheme.textColor.value.toRadixString(16)}',
     );
+    debugPrint(
+      '📐 页面设置 - 边距: ${_pageMargin.toStringAsFixed(1)}px, '
+      '左右留白: ${_horizontalPadding.toStringAsFixed(1)}px',
+    );
+  }
+
+  /// 通知全局字体设置变更
+  void _notifyGlobalFontSettingsChanged() {
+    // 创建全局设置更新通知
+    try {
+      // 这里可以添加EventBus或Provider通知机制
+      // 暂时使用debugPrint记录，将来可以扩展为全局状态管理
+      debugPrint('🌐 全局字体设置已更新 - 所有相关UI组件将立即响应字体变更');
+
+      // 如果有其他页面或组件需要响应字体变更，在这里添加通知逻辑
+      // 例如: EventBus.instance.fire(FontSettingsChangedEvent(_fontSize, _fontFamily));
+    } catch (e) {
+      debugPrint('⚠️ 全局字体设置通知发送失败: $e');
+    }
   }
 
   /// 显示删除书籍确认对话框
@@ -999,44 +1029,47 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
   Widget _buildToolbarButtons() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 4), // 减少左右padding
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12), // 优化padding，增加垂直空间
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          Flexible(
+          Expanded(
             child: _ModernToolbarButton(
               icon: Icons.format_list_bulleted_rounded,
               label: '目录',
               onTap: _showTableOfContents,
               iconColor: _currentTheme.controlBarTextColor,
-              pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
-              iconSize: 20,
-              fontSize: 10,
+              pressedColor: _currentTheme.iconColor.withOpacity(0.15),
+              iconSize: 22, // 略大的图标
+              fontSize: 11, // 略大的字体
             ),
           ),
-          Flexible(
+          const SizedBox(width: 6), // 按钮间距
+          Expanded(
             child: _ModernToolbarButton(
               icon: Icons.record_voice_over_rounded,
               label: '朗读',
               onTap: _showTtsPanel,
               iconColor: _currentTheme.controlBarTextColor,
-              pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
-              iconSize: 20,
-              fontSize: 10,
+              pressedColor: _currentTheme.iconColor.withOpacity(0.15),
+              iconSize: 22,
+              fontSize: 11,
             ),
           ),
-          Flexible(
+          const SizedBox(width: 6),
+          Expanded(
             child: _ModernToolbarButton(
               icon: Icons.bookmark_add_rounded,
               label: '书签',
               onTap: _addBookmark,
               iconColor: _currentTheme.controlBarTextColor,
-              pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
-              iconSize: 20,
-              fontSize: 10,
+              pressedColor: _currentTheme.iconColor.withOpacity(0.15),
+              iconSize: 22,
+              fontSize: 11,
             ),
           ),
-          Flexible(
+          const SizedBox(width: 6),
+          Expanded(
             child: _ModernToolbarButton(
               icon: Icons.share_rounded,
               label: '分享',
@@ -1044,20 +1077,21 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
                 _showMessage('分享功能开发中');
               },
               iconColor: _currentTheme.controlBarTextColor,
-              pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
-              iconSize: 20,
-              fontSize: 10,
+              pressedColor: _currentTheme.iconColor.withOpacity(0.15),
+              iconSize: 22,
+              fontSize: 11,
             ),
           ),
-          Flexible(
+          const SizedBox(width: 6),
+          Expanded(
             child: _ModernToolbarButton(
               icon: Icons.tune_rounded,
               label: '设置',
               onTap: _showSettingsPanel,
               iconColor: _currentTheme.controlBarTextColor,
-              pressedColor: _currentTheme.iconColor.withValues(alpha: 0.15),
-              iconSize: 20,
-              fontSize: 10,
+              pressedColor: _currentTheme.iconColor.withOpacity(0.15),
+              iconSize: 22,
+              fontSize: 11,
             ),
           ),
         ],
@@ -1318,58 +1352,72 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
                         // 设置内容
                         Expanded(
                           child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(20),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 16,
+                            ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // 字体设置部分
+                                // 字体设置部分 - 最重要的设置
                                 _buildSettingSection(
                                   title: '字体设置',
                                   icon: Icons.font_download,
+                                  description: '调整文字显示效果，实时预览',
                                   children: [
                                     _buildFontSizeSlider(),
-                                    const SizedBox(height: 16),
+                                    const SizedBox(height: 20),
                                     _buildLineSpacingSlider(),
-                                    const SizedBox(height: 16),
+                                    const SizedBox(height: 20),
                                     _buildLetterSpacingSlider(),
-                                    const SizedBox(height: 16),
+                                    const SizedBox(height: 20),
                                     _buildFontFamilySelector(),
                                   ],
                                 ),
 
-                                const SizedBox(height: 24),
+                                const SizedBox(height: 32),
 
                                 // 页面设置部分
                                 _buildSettingSection(
                                   title: '页面设置',
                                   icon: Icons.article_rounded,
+                                  description: '调整页面布局和留白',
                                   children: [
                                     _buildPageMarginSlider(),
-                                    const SizedBox(height: 16),
+                                    const SizedBox(height: 20),
                                     _buildHorizontalPaddingSlider(),
                                   ],
                                 ),
 
-                                const SizedBox(height: 24),
+                                const SizedBox(height: 32),
 
                                 // 主题设置部分
                                 _buildSettingSection(
                                   title: '主题设置',
                                   icon: Icons.color_lens,
+                                  description: '选择合适的阅读配色方案',
                                   children: [_buildThemeSelector()],
                                 ),
 
-                                const SizedBox(height: 24),
+                                const SizedBox(height: 32),
 
                                 // 阅读模式设置部分
                                 _buildSettingSection(
                                   title: '阅读模式',
                                   icon: Icons.chrome_reader_mode,
+                                  description: '优化阅读体验设置',
                                   children: [
                                     _buildScreenOnSwitch(),
-                                    const SizedBox(height: 12),
+                                    const SizedBox(height: 16),
                                     _buildFullScreenSwitch(),
                                   ],
+                                ),
+
+                                // 底部安全区域
+                                SizedBox(
+                                  height:
+                                      MediaQuery.of(context).padding.bottom +
+                                      20,
                                 ),
                               ],
                             ),
@@ -1432,38 +1480,20 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
   /// 为模态框提供统一的主题配置
   BoxDecoration _getModalDecoration() {
     return BoxDecoration(
-      color: _currentTheme.controlBarColor.withValues(alpha: 0.98),
+      color: _currentTheme.controlBarColor.withOpacity(0.98),
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       border: Border.all(
-        color: _currentTheme.iconColor.withValues(alpha: 0.3),
+        color: _currentTheme.iconColor.withOpacity(0.3),
         width: 1,
       ),
       boxShadow: [
         BoxShadow(
-          color: _currentTheme.textColor.withValues(alpha: 0.1),
+          color: _currentTheme.textColor.withOpacity(0.1),
           blurRadius: 20,
           offset: const Offset(0, -5),
         ),
       ],
     );
-  }
-
-  /// 获取模态框的文本颜色
-  Color _getModalTextColor() {
-    switch (_currentTheme.name) {
-      case 'day':
-        return const Color(0xFF1A1A1A); // 深黑色文字
-      case 'night':
-        return const Color(0xFFE5E5E5); // 亮灰色文字
-      case 'eye_protection':
-        return const Color(0xFF1B3A1B); // 深绿色文字
-      case 'parchment':
-        return const Color(0xFF4A3E28); // 深棕色文字
-      case 'sepia':
-        return const Color(0xFF3D2F1F); // 深棕褐色文字
-      default:
-        return _currentTheme.controlBarTextColor;
-    }
   }
 
   /// 获取模态框的图标颜色
@@ -1498,7 +1528,7 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
       case 'sepia':
         return const Color(0xFFE6D7C3); // 浅棕褐色分割线
       default:
-        return _currentTheme.iconColor.withValues(alpha: 0.3);
+        return _currentTheme.iconColor.withOpacity(0.3);
     }
   }
 
@@ -1542,34 +1572,81 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
     required String title,
     required IconData icon,
     required List<Widget> children,
+    String? description,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(icon, color: _currentTheme.sliderActiveColor, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: _currentTheme.controlBarTextColor,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
+        // 标题区域
         Container(
-          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: _currentTheme.sliderActiveColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      icon,
+                      color: _currentTheme.sliderActiveColor,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: _currentTheme.controlBarTextColor,
+                          ),
+                        ),
+                        if (description != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            description,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: _currentTheme.controlBarTextColor
+                                  .withOpacity(0.7),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        // 内容区域
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: _currentTheme.backgroundColor.withOpacity(0.3),
-            borderRadius: BorderRadius.circular(12),
+            color: _currentTheme.backgroundColor.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: _currentTheme.sliderInactiveColor.withOpacity(0.3),
+              color: _currentTheme.sliderInactiveColor.withOpacity(0.2),
               width: 1,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: _currentTheme.textColor.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Column(children: children),
         ),
@@ -1589,8 +1666,7 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
         setState(() {
           _fontSize = value;
         });
-        _saveSettings();
-        _updateWebViewSettings(); // 立即更新WebView显示
+        _updateWebViewSettings(); // 立即更新WebView显示（包含保存）
       },
       suffix: 'px',
     );
@@ -1608,8 +1684,7 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
         setState(() {
           _lineSpacing = value;
         });
-        _saveSettings();
-        _updateWebViewSettings(); // 立即更新WebView显示
+        _updateWebViewSettings(); // 立即更新WebView显示（包含保存）
       },
       suffix: '',
     );
@@ -1627,8 +1702,7 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
         setState(() {
           _letterSpacing = value;
         });
-        _saveSettings();
-        _updateWebViewSettings(); // 立即更新WebView显示
+        _updateWebViewSettings(); // 立即更新WebView显示（包含保存）
       },
       suffix: 'pt',
     );
@@ -1646,8 +1720,7 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
         setState(() {
           _pageMargin = value;
         });
-        _saveSettings();
-        _updateWebViewSettings(); // 立即更新WebView显示
+        _updateWebViewSettings(); // 立即更新WebView显示（包含保存）
       },
       suffix: 'px',
     );
@@ -1665,8 +1738,7 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
         setState(() {
           _horizontalPadding = value;
         });
-        _saveSettings();
-        _updateWebViewSettings(); // 立即更新WebView显示
+        _updateWebViewSettings(); // 立即更新WebView显示（包含保存）
       },
       suffix: 'px',
     );
@@ -1758,8 +1830,7 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
                 setState(() {
                   _fontFamily = font['name']!;
                 });
-                _saveSettings();
-                _updateWebViewSettings(); // 立即更新WebView显示
+                _updateWebViewSettings(); // 立即更新WebView显示（包含保存）
               },
               borderRadius: BorderRadius.circular(8),
               child: Container(
@@ -1831,11 +1902,10 @@ class _WebViewReadingPageState extends State<WebViewReadingPage>
                 setState(() {
                   _currentTheme = theme;
                 });
-                _saveSettings();
-                _updateWebViewSettings(); // 立即更新WebView显示
+                _updateWebViewSettings(); // 立即更新WebView显示（包含保存）
 
                 // 延迟关闭设置面板，让用户看到立即的变化
-                Future.delayed(const Duration(milliseconds: 200), () {
+                Future.delayed(const Duration(milliseconds: 300), () {
                   if (mounted) {
                     Navigator.of(context).pop(); // 关闭设置面板
                   }

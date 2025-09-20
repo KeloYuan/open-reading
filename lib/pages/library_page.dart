@@ -4,10 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/book.dart';
 import '../services/book_dao.dart';
+import '../services/reading_router_service.dart';
 import 'import_book_page.dart';
-import 'reading_mode_selector.dart';
 import '../utils/responsive_helper.dart';
-import '../utils/page_transitions.dart';
 
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
@@ -340,21 +339,11 @@ class _LibraryPageState extends State<LibraryPage> {
             book: book,
             onTap: () async {
               final fullBook = await _bookDao.getBookById(book.id!);
-              if (fullBook != null && mounted) {
-                if (context.mounted) {
-                  // 使用优化的阅读页面过渡动画，减少卡顿
-                  await Navigator.of(context).pushReaderPage(
-                    ReadingModeSelector(
-                      book: fullBook,
-                      initialChapterIndex: 0,
-                      initialProgress:
-                          fullBook.currentPage /
-                          (fullBook.totalPages > 0 ? fullBook.totalPages : 1),
-                    ),
-                  );
-                }
+              if (fullBook != null && mounted && context.mounted) {
+                // 使用阅读路由服务打开书籍
+                await ReadingRouterService.openBook(context, fullBook);
+                _loadBooks();
               }
-              _loadBooks();
             },
             onLongPress: () => _showBookOptions(book),
           );
@@ -396,6 +385,43 @@ class _LibraryPageState extends State<LibraryPage> {
                         borderRadius: BorderRadius.circular(2.5),
                       ),
                     ),
+                  ),
+                ),
+                // 选择阅读模式选项
+                Container(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.auto_stories,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    title: Text(
+                      '选择阅读模式',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final fullBook = await _bookDao.getBookById(book.id!);
+                      if (fullBook != null && context.mounted) {
+                        await ReadingRouterService.openBook(
+                          context,
+                          fullBook,
+                          forceShowComparison: true,
+                        );
+                        _loadBooks();
+                      }
+                    },
                   ),
                 ),
                 Container(
