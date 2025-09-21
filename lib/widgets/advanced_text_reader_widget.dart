@@ -51,8 +51,8 @@ class PaginationConfig {
       'theme': theme,
       'scrollMode': scrollMode,
       'backgroundColor':
-          '#${backgroundColor.value.toRadixString(16).padLeft(8, '0')}',
-      'textColor': '#${textColor.value.toRadixString(16).padLeft(8, '0')}',
+          '#${backgroundColor.toARGB32().toRadixString(16).padLeft(8, '0')}',
+      'textColor': '#${textColor.toARGB32().toRadixString(16).padLeft(8, '0')}',
     };
   }
 

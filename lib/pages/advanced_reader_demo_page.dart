@@ -386,7 +386,7 @@ anx-reader的一个核心优势是能够完全保证文字的完整性，不会�
                 color: _currentTheme.controlBarColor,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 10,
                     offset: const Offset(0, -2),
                   ),
@@ -555,7 +555,7 @@ anx-reader的一个核心优势是能够完全保证文字的完整性，不会�
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -627,7 +627,7 @@ anx-reader的一个核心优势是能够完全保证文字的完整性，不会�
               value.toStringAsFixed(1),
               style: TextStyle(
                 fontSize: 14,
-                color: _currentTheme.controlBarTextColor.withOpacity(0.7),
+                color: _currentTheme.controlBarTextColor.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -689,7 +689,7 @@ anx-reader的一个核心优势是能够完全保证文字的完整性，不会�
                   border: Border.all(
                     color: isSelected
                         ? _currentTheme.sliderActiveColor
-                        : Colors.grey.withOpacity(0.3),
+                        : Colors.grey.withValues(alpha: 0.3),
                     width: isSelected ? 3 : 1,
                   ),
                 ),
@@ -719,7 +719,7 @@ anx-reader的一个核心优势是能够完全保证文字的完整性，不会�
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -818,7 +818,7 @@ anx-reader的一个核心优势是能够完全保证文字的完整性，不会�
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -871,7 +871,7 @@ anx-reader的一个核心优势是能够完全保证文字的完整性，不会�
             '$label: ',
             style: TextStyle(
               fontSize: 12,
-              color: _currentTheme.controlBarTextColor.withOpacity(0.7),
+              color: _currentTheme.controlBarTextColor.withValues(alpha: 0.7),
             ),
           ),
           Text(

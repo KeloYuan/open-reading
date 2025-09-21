@@ -4,6 +4,7 @@ class Bookmark {
   final int pageNumber;
   final String note;
   final DateTime createDate;
+  final String? cfi;
 
   Bookmark({
     this.id,
@@ -11,6 +12,7 @@ class Bookmark {
     required this.pageNumber,
     this.note = '',
     DateTime? createDate,
+    this.cfi,
   }) : createDate = createDate ?? DateTime.now();
 
   Map<String, dynamic> toMap() {
@@ -20,6 +22,7 @@ class Bookmark {
       'pageNumber': pageNumber,
       'note': note,
       'createDate': createDate.millisecondsSinceEpoch,
+      'cfi': cfi,
     };
   }
 
@@ -30,6 +33,7 @@ class Bookmark {
       pageNumber: map['pageNumber'],
       note: map['note'] ?? '',
       createDate: DateTime.fromMillisecondsSinceEpoch(map['createDate']),
+      cfi: map['cfi'],
     );
   }
 
@@ -39,6 +43,7 @@ class Bookmark {
     int? pageNumber,
     String? note,
     DateTime? createDate,
+    String? cfi,
   }) {
     return Bookmark(
       id: id ?? this.id,
@@ -46,6 +51,7 @@ class Bookmark {
       pageNumber: pageNumber ?? this.pageNumber,
       note: note ?? this.note,
       createDate: createDate ?? this.createDate,
+      cfi: cfi ?? this.cfi,
     );
   }
 }

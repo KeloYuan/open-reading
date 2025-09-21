@@ -99,9 +99,7 @@ class _CustomSelectableTextState extends State<CustomSelectableText> {
                 highlightText,
                 style: widget.style.copyWith(
                   backgroundColor: Colors.transparent,
-                  decoration: highlight.noteText?.isNotEmpty == true
-                      ? TextDecoration.underline
-                      : null,
+                  decoration: null, // 简化处理，不显示下划线
                   decorationColor: highlight.color,
                   decorationThickness: 2,
                 ),

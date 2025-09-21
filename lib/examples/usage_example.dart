@@ -282,10 +282,9 @@ class UsageExample extends StatelessWidget {
 /// Navigator.push(
 ///   context,
 ///   MaterialPageRoute(
-///     builder: (context) => WebViewReadingPage(
+///     builder: (context) => EnhancedWebViewReadingPage(
 ///       book: book,
-///       initialChapterIndex: 0,
-///       initialProgress: book.readingProgress,
+///       initialCfi: book.initialCfi,
 ///     ),
 ///   ),
 /// );

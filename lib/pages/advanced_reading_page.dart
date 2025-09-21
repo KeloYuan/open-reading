@@ -484,7 +484,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
               '正在加载高级阅读器...',
               style: TextStyle(
                 fontSize: 16,
-                color: _currentTheme.textColor.withOpacity(0.7),
+                color: _currentTheme.textColor.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -517,7 +517,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
                 _errorMessage,
                 style: TextStyle(
                   fontSize: 14,
-                  color: _currentTheme.textColor.withOpacity(0.7),
+                  color: _currentTheme.textColor.withValues(alpha: 0.7),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -574,7 +574,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
                 color: _currentTheme.controlBarColor,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 10,
                     offset: const Offset(0, -2),
                   ),
@@ -738,7 +738,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -823,7 +823,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
               value.toStringAsFixed(1),
               style: TextStyle(
                 fontSize: 14,
-                color: _currentTheme.controlBarTextColor.withOpacity(0.7),
+                color: _currentTheme.controlBarTextColor.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -891,7 +891,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
                   border: Border.all(
                     color: isSelected
                         ? _currentTheme.sliderActiveColor
-                        : Colors.grey.withOpacity(0.3),
+                        : Colors.grey.withValues(alpha: 0.3),
                     width: isSelected ? 3 : 1,
                   ),
                 ),
@@ -930,7 +930,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
             _updateReaderConfig();
             _saveSettings();
           },
-          activeColor: _currentTheme.sliderActiveColor,
+          activeThumbColor: _currentTheme.sliderActiveColor,
         ),
       ],
     );
@@ -948,7 +948,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -1048,7 +1048,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),

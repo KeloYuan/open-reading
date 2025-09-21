@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/book.dart';
-import '../pages/webview_reading_page.dart';
-import '../pages/webview_reading_page_optimized.dart';
+import '../pages/enhanced_webview_reading_page.dart';
 import '../pages/reading_page_enhanced.dart';
 
 /// 阅读器路由服务
@@ -51,13 +50,9 @@ class ReadingRouterService {
         page = ReadingPageEnhanced(book: book);
         break;
       case 'webview_optimized':
-        page = WebViewReadingPageOptimized(book: book);
-        break;
       case 'webview_standard':
-        page = WebViewReadingPage(book: book);
-        break;
       default:
-        page = WebViewReadingPageOptimized(book: book);
+        page = EnhancedWebViewReadingPage(book: book);
     }
 
     Navigator.push(context, MaterialPageRoute(builder: (context) => page));

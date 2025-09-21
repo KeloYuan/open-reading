@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/book.dart';
 import '../utils/page_transitions.dart';
-import 'webview_reading_page.dart';
+import 'enhanced_webview_reading_page.dart';
 
 /// WebView阅读引导页面
 /// 直接启动WebView阅读引擎
@@ -37,10 +37,9 @@ class _ReadingModeSelectorState extends State<ReadingModeSelector> {
     Navigator.pushReplacement(
       context,
       CustomPageTransitions.createSlideScaleRoute(
-        WebViewReadingPage(
+        EnhancedWebViewReadingPage(
           book: widget.book,
-          initialChapterIndex: widget.initialChapterIndex,
-          initialProgress: widget.initialProgress,
+          initialCfi: widget.initialProgress?.toString(),
         ),
         duration: const Duration(milliseconds: 400), // 稍微增加进入时间，更自然
         reverseDuration: const Duration(milliseconds: 300), // 退出时更快
@@ -73,7 +72,9 @@ class _ReadingModeSelectorState extends State<ReadingModeSelector> {
               widget.book.title,
               style: TextStyle(
                 fontSize: 14,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.7),
                 fontStyle: FontStyle.italic,
               ),
               textAlign: TextAlign.center,

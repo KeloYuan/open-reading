@@ -42,9 +42,7 @@ class ReadingThemeManager {
           color: readingTheme.controlBarTextColor.withValues(alpha: 0.8),
           fontSize: 14,
         ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: readingTheme.controlBarColor,
@@ -98,12 +96,10 @@ class ReadingThemeManager {
       foregroundColor: theme.controlBarTextColor,
       elevation: 0,
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ).copyWith(
       overlayColor: WidgetStateProperty.all(
-        theme.sliderActiveColor.withValues(alpha:0.1),
+        theme.sliderActiveColor.withValues(alpha: 0.1),
       ),
     );
   }
@@ -123,7 +119,7 @@ class ReadingThemeManager {
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
         decoration: isActive
             ? BoxDecoration(
-                color: theme.sliderActiveColor.withValues(alpha:0.2),
+                color: theme.sliderActiveColor.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               )
             : null,
@@ -132,14 +128,18 @@ class ReadingThemeManager {
           children: [
             Icon(
               icon,
-              color: isActive ? theme.sliderActiveColor : theme.controlBarTextColor,
+              color: isActive
+                  ? theme.sliderActiveColor
+                  : theme.controlBarTextColor,
               size: 20,
             ),
             const SizedBox(height: 4),
             Text(
               label,
               style: TextStyle(
-                color: isActive ? theme.sliderActiveColor : theme.controlBarTextColor,
+                color: isActive
+                    ? theme.sliderActiveColor
+                    : theme.controlBarTextColor,
                 fontSize: 10,
                 fontWeight: FontWeight.w500,
               ),
@@ -161,7 +161,7 @@ class ReadingThemeManager {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: theme.backgroundColor.withValues(alpha:0.5),
+        color: theme.backgroundColor.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
       ),
       child: ListTile(
@@ -177,16 +177,14 @@ class ReadingThemeManager {
             ? Text(
                 subtitle,
                 style: TextStyle(
-                  color: theme.controlBarTextColor.withValues(alpha:0.7),
+                  color: theme.controlBarTextColor.withValues(alpha: 0.7),
                   fontSize: 14,
                 ),
               )
             : null,
         trailing: trailing,
         onTap: onTap,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -206,7 +204,7 @@ class ReadingThemeManager {
         activeTrackColor: theme.sliderActiveColor,
         inactiveTrackColor: theme.sliderInactiveColor,
         thumbColor: theme.sliderActiveColor,
-        overlayColor: theme.sliderActiveColor.withValues(alpha:0.2),
+        overlayColor: theme.sliderActiveColor.withValues(alpha: 0.2),
         valueIndicatorColor: theme.sliderActiveColor,
         valueIndicatorTextStyle: TextStyle(
           color: theme.backgroundColor,
@@ -237,10 +235,10 @@ class ReadingThemeManager {
     return Switch(
       value: value,
       onChanged: onChanged,
-      activeColor: theme.sliderActiveColor,
-      activeTrackColor: theme.sliderActiveColor.withValues(alpha:0.3),
+      activeThumbColor: theme.sliderActiveColor,
+      activeTrackColor: theme.sliderActiveColor.withValues(alpha: 0.3),
       inactiveThumbColor: theme.sliderInactiveColor,
-      inactiveTrackColor: theme.sliderInactiveColor.withValues(alpha:0.3),
+      inactiveTrackColor: theme.sliderInactiveColor.withValues(alpha: 0.3),
     );
   }
 
@@ -256,7 +254,9 @@ class ReadingThemeManager {
       hintText: hintText,
       suffixIcon: suffixIcon,
       labelStyle: TextStyle(color: theme.controlBarTextColor),
-      hintStyle: TextStyle(color: theme.controlBarTextColor.withValues(alpha:0.5)),
+      hintStyle: TextStyle(
+        color: theme.controlBarTextColor.withValues(alpha: 0.5),
+      ),
       enabledBorder: OutlineInputBorder(
         borderSide: BorderSide(color: theme.sliderInactiveColor),
         borderRadius: BorderRadius.circular(8),
@@ -266,7 +266,7 @@ class ReadingThemeManager {
         borderRadius: BorderRadius.circular(8),
       ),
       filled: true,
-      fillColor: theme.backgroundColor.withValues(alpha:0.5),
+      fillColor: theme.backgroundColor.withValues(alpha: 0.5),
     );
   }
 
@@ -280,10 +280,7 @@ class ReadingThemeManager {
     return showDialog<T>(
       context: context,
       barrierDismissible: barrierDismissible,
-      builder: (context) => Theme(
-        data: createDialogTheme(theme),
-        child: child,
-      ),
+      builder: (context) => Theme(data: createDialogTheme(theme), child: child),
     );
   }
 
@@ -346,9 +343,14 @@ class ReadingThemeManager {
                     children: [
                       Expanded(
                         child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: theme.controlBarTextColor.withValues(alpha:0.3),
+                            color: theme.controlBarTextColor.withValues(
+                              alpha: 0.3,
+                            ),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -367,19 +369,19 @@ class ReadingThemeManager {
                         Container(
                           width: double.infinity,
                           height: 3,
-                          color: theme.textColor.withValues(alpha:0.8),
+                          color: theme.textColor.withValues(alpha: 0.8),
                           margin: const EdgeInsets.only(bottom: 2),
                         ),
                         Container(
                           width: 60,
                           height: 3,
-                          color: theme.textColor.withValues(alpha:0.6),
+                          color: theme.textColor.withValues(alpha: 0.6),
                           margin: const EdgeInsets.only(bottom: 2),
                         ),
                         Container(
                           width: 80,
                           height: 3,
-                          color: theme.textColor.withValues(alpha:0.4),
+                          color: theme.textColor.withValues(alpha: 0.4),
                         ),
                       ],
                     ),

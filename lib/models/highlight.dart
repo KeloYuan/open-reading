@@ -57,7 +57,7 @@ class Highlight {
       cfi: cfi ?? '',
       chapter: chapter,
       type: 'highlight',
-      color: color.value.toRadixString(16).substring(2).toUpperCase(),
+      color: color.toARGB32().toRadixString(16).substring(2).toUpperCase(),
       pageNumber: pageNumber,
       startOffset: startOffset,
       endOffset: endOffset,

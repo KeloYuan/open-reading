@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:epubx/epubx.dart';
@@ -557,20 +558,34 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     _splitIntoPagesWithLegadoAlgorithm();
   }
 
-  /// 使用legado分页算法进行分页
+  /// 使用legado分页算法进行分页 - 优化版本
   void _splitIntoPagesWithLegadoAlgorithm() {
     try {
       final screenSize = MediaQuery.of(context).size;
       final statusBarHeight = MediaQuery.of(context).padding.top;
-      const controlBarHeight = 150.0; // 预留控制栏高度
+      final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+
+      // 智能计算控制栏高度，根据屏幕尺寸动态调整
+      final controlBarHeight = _calculateOptimalControlBarHeight(screenSize, bottomSafeArea);
+
+      // 智能调整字体大小（如果用户没有手动设置过）
+      final adaptiveFontSize = _calculateAdaptiveFontSize(screenSize, _fontSize);
+
+      // 智能调整页边距
+      final adaptivePadding = _calculateAdaptivePadding(screenSize);
+
+      debugPrint('📐 布局优化 - 屏幕: ${screenSize.width.toInt()}x${screenSize.height.toInt()}');
+      debugPrint('📐 布局优化 - 控制栏高度: ${controlBarHeight.toInt()}px');
+      debugPrint('📐 布局优化 - 自适应字体: ${adaptiveFontSize.toStringAsFixed(1)}px');
+      debugPrint('📐 布局优化 - 自适应边距: ${adaptivePadding.toStringAsFixed(1)}px');
 
       // 计算分页参数
       _paginationParams = LegadoInspiredPaginator.calculatePreciseParams(
         screenSize: screenSize,
-        fontSize: _fontSize,
+        fontSize: adaptiveFontSize,
         lineHeight: _lineSpacing,
         letterSpacing: _letterSpacing,
-        padding: EdgeInsets.all(_pageMargin),
+        padding: EdgeInsets.all(adaptivePadding),
         statusBarHeight: statusBarHeight,
         controlBarHeight: controlBarHeight,
         isLandscape: screenSize.width > screenSize.height,
@@ -618,6 +633,101 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       // 回退到简单分页
       _fallbackSimplePagination();
     }
+  }
+
+  /// 智能计算控制栏高度，根据屏幕尺寸和设备特性动态调整
+  double _calculateOptimalControlBarHeight(Size screenSize, double bottomSafeArea) {
+    final diagonal = math.sqrt(screenSize.width * screenSize.width + screenSize.height * screenSize.height);
+
+    // 基础控制栏高度
+    double baseHeight;
+
+    if (diagonal > 1200) {
+      // 平板设备：更大的控制栏
+      baseHeight = 180.0;
+    } else if (diagonal > 900) {
+      // 大屏手机：中等控制栏
+      baseHeight = 160.0;
+    } else {
+      // 普通手机：紧凑控制栏
+      baseHeight = 140.0;
+    }
+
+    // 考虑底部安全区域
+    final safeAreaAdjustment = bottomSafeArea > 20 ? 20.0 : 0.0;
+
+    return baseHeight + safeAreaAdjustment;
+  }
+
+  /// 智能计算自适应字体大小，根据屏幕尺寸和DPI优化阅读体验
+  double _calculateAdaptiveFontSize(Size screenSize, double currentFontSize) {
+    // 如果用户手动调整过字体，不要覆盖用户的选择
+    // 这里使用一个简单的启发式：如果字体大小是默认值附近，则进行自适应
+    const defaultFontSize = 18.0;
+    if ((currentFontSize - defaultFontSize).abs() > 3.0) {
+      // 用户已显著调整字体大小，保持用户选择
+      return currentFontSize;
+    }
+
+    // 计算屏幕对角线（逻辑像素）
+    final diagonal = math.sqrt(screenSize.width * screenSize.width + screenSize.height * screenSize.height);
+
+    // 根据设备类型调整字体大小
+    double adaptiveFontSize;
+
+    if (diagonal > 1200) {
+      // 平板设备：稍大字体，提高可读性
+      adaptiveFontSize = 20.0;
+    } else if (diagonal > 900) {
+      // 大屏手机：标准字体
+      adaptiveFontSize = 18.0;
+    } else if (diagonal > 700) {
+      // 中屏手机：标准字体
+      adaptiveFontSize = 17.0;
+    } else {
+      // 小屏手机：稍小字体，增加内容密度
+      adaptiveFontSize = 16.0;
+    }
+
+    // 考虑屏幕宽度，调整字体大小
+    if (screenSize.width < 360) {
+      adaptiveFontSize -= 1.0; // 窄屏设备字体稍小
+    } else if (screenSize.width > 600) {
+      adaptiveFontSize += 1.0; // 宽屏设备字体稍大
+    }
+
+    // 限制字体大小范围
+    return adaptiveFontSize.clamp(14.0, 24.0);
+  }
+
+  /// 智能计算自适应页边距，平衡内容密度和阅读舒适度
+  double _calculateAdaptivePadding(Size screenSize) {
+    final screenWidth = screenSize.width;
+
+    // 根据屏幕宽度动态调整页边距
+    double adaptivePadding;
+
+    if (screenWidth > 800) {
+      // 平板或横屏：增大边距，避免行长过长影响阅读
+      adaptivePadding = math.min(32.0, screenWidth * 0.08);
+    } else if (screenWidth > 600) {
+      // 大屏手机：适中边距
+      adaptivePadding = 24.0;
+    } else if (screenWidth > 400) {
+      // 标准手机：标准边距
+      adaptivePadding = 20.0;
+    } else {
+      // 小屏手机：减小边距，最大化内容区域
+      adaptivePadding = 16.0;
+    }
+
+    // 考虑横屏模式：横屏时增加左右边距
+    if (screenSize.width > screenSize.height) {
+      adaptivePadding = math.max(adaptivePadding, screenWidth * 0.06);
+    }
+
+    // 限制边距范围
+    return adaptivePadding.clamp(12.0, 48.0);
   }
 
   /// 简单分页作为回退方案
@@ -4420,7 +4530,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
     return Positioned(
       right: 10,
-      bottom: _controlBarHeight - 20, // 在控制栏上方
+      bottom: _controlBarHideOffset + 20, // 在控制栏上方
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(

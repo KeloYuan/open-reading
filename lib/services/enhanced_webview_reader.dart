@@ -414,8 +414,8 @@ class _EnhancedWebViewReaderState extends State<EnhancedWebViewReader>
           lineHeight: ${widget.lineSpacing},
           letterSpacing: ${widget.letterSpacing}em,
           fontFamily: '${widget.fontFamily}',
-          backgroundColor: '#${widget.theme.backgroundColor.value.toRadixString(16).padLeft(8, '0').substring(2)}',
-          color: '#${widget.theme.textColor.value.toRadixString(16).padLeft(8, '0').substring(2)}',
+          backgroundColor: '#${widget.theme.backgroundColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
+          color: '#${widget.theme.textColor.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}',
           scrollMode: ${widget.scrollMode}
         });
       }

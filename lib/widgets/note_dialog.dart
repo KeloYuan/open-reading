@@ -27,7 +27,7 @@ class _NoteDialogState extends State<NoteDialog> {
   void initState() {
     super.initState();
     _noteController = TextEditingController(
-      text: widget.existingNote?.noteText ?? '',
+      text: widget.existingNote?.note ?? '',
     );
   }
 
@@ -40,15 +40,10 @@ class _NoteDialogState extends State<NoteDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         padding: const EdgeInsets.all(20),
-        constraints: const BoxConstraints(
-          maxWidth: 400,
-          maxHeight: 500,
-        ),
+        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 500),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,7 +68,7 @@ class _NoteDialogState extends State<NoteDialog> {
               ],
             ),
             const SizedBox(height: 16),
-            
+
             // 选中文本预览
             Container(
               width: double.infinity,
@@ -82,7 +77,9 @@ class _NoteDialogState extends State<NoteDialog> {
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outline.withValues(alpha: 0.3),
                 ),
               ),
               child: Column(
@@ -105,12 +102,9 @@ class _NoteDialogState extends State<NoteDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // 笔记输入框
-            Text(
-              '笔记内容:',
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
+            Text('笔记内容:', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
             Expanded(
               child: TextField(
@@ -133,7 +127,7 @@ class _NoteDialogState extends State<NoteDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // 按钮组
             Row(
               children: [
@@ -149,13 +143,15 @@ class _NoteDialogState extends State<NoteDialog> {
                   const Spacer(),
                 ],
                 TextButton(
-                  onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+                  onPressed: _isLoading
+                      ? null
+                      : () => Navigator.of(context).pop(),
                   child: const Text('取消'),
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
                   onPressed: _isLoading ? null : _saveNote,
-                  child: _isLoading 
+                  child: _isLoading
                       ? const SizedBox(
                           width: 16,
                           height: 16,
@@ -173,9 +169,9 @@ class _NoteDialogState extends State<NoteDialog> {
 
   void _saveNote() async {
     if (_noteController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入笔记内容')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请输入笔记内容')));
       return;
     }
 
@@ -186,16 +182,17 @@ class _NoteDialogState extends State<NoteDialog> {
         id: widget.existingNote?.id,
         bookId: widget.bookId,
         pageNumber: widget.pageNumber,
-        selectedText: widget.selectedText,
-        noteText: _noteController.text.trim(),
-        createDate: widget.existingNote?.createDate ?? DateTime.now(),
+        content: widget.selectedText,
+        note: _noteController.text.trim(),
+        chapter: '未知章节', // 默认章节
+        createTime: widget.existingNote?.createTime ?? DateTime.now(),
       );
 
       Navigator.of(context).pop(note);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('保存失败: $e')));
     } finally {
       setState(() => _isLoading = false);
     }

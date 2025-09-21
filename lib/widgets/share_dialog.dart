@@ -85,7 +85,7 @@ class _ShareDialogState extends State<ShareDialog>
     return Material(
       color: Colors.transparent,
       child: Container(
-        color: Colors.black.withOpacity(0.5),
+        color: Colors.black.withValues(alpha: 0.5),
         child: Center(
           child: ScaleTransition(
             scale: _scaleAnimation,
@@ -98,7 +98,7 @@ class _ShareDialogState extends State<ShareDialog>
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 30,
                       offset: const Offset(0, 15),
                     ),
@@ -108,9 +108,11 @@ class _ShareDialogState extends State<ShareDialog>
                   borderRadius: BorderRadius.circular(24),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor.withOpacity(0.9),
+                      color: Theme.of(context).cardColor.withValues(alpha: 0.9),
                       border: Border.all(
-                        color: Theme.of(context).dividerColor.withOpacity(0.2),
+                        color: Theme.of(
+                          context,
+                        ).dividerColor.withValues(alpha: 0.2),
                         width: 1,
                       ),
                     ),
@@ -140,7 +142,7 @@ class _ShareDialogState extends State<ShareDialog>
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: getAccentColor(context).withOpacity(0.1),
+              color: getAccentColor(context).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -167,7 +169,7 @@ class _ShareDialogState extends State<ShareDialog>
                   '《${widget.bookTitle}》',
                   style: TextStyle(
                     fontSize: 14,
-                    color: getTextColor(context).withOpacity(0.7),
+                    color: getTextColor(context).withValues(alpha: 0.7),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -223,13 +225,13 @@ class _ShareDialogState extends State<ShareDialog>
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: isEnabled
-                  ? getTextColor(context).withOpacity(0.05)
-                  : getTextColor(context).withOpacity(0.02),
+                  ? getTextColor(context).withValues(alpha: 0.05)
+                  : getTextColor(context).withValues(alpha: 0.02),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: isEnabled
-                    ? getTextColor(context).withOpacity(0.1)
-                    : getTextColor(context).withOpacity(0.05),
+                    ? getTextColor(context).withValues(alpha: 0.1)
+                    : getTextColor(context).withValues(alpha: 0.05),
                 width: 1,
               ),
             ),
@@ -240,8 +242,8 @@ class _ShareDialogState extends State<ShareDialog>
                   height: 48,
                   decoration: BoxDecoration(
                     color: isEnabled
-                        ? getAccentColor(context).withOpacity(0.1)
-                        : getTextColor(context).withOpacity(0.05),
+                        ? getAccentColor(context).withValues(alpha: 0.1)
+                        : getTextColor(context).withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
@@ -251,7 +253,7 @@ class _ShareDialogState extends State<ShareDialog>
                         fontSize: 20,
                         color: isEnabled
                             ? getAccentColor(context)
-                            : getTextColor(context).withOpacity(0.3),
+                            : getTextColor(context).withValues(alpha: 0.3),
                       ),
                     ),
                   ),
@@ -268,7 +270,7 @@ class _ShareDialogState extends State<ShareDialog>
                           fontWeight: FontWeight.w600,
                           color: isEnabled
                               ? getTextColor(context)
-                              : getTextColor(context).withOpacity(0.3),
+                              : getTextColor(context).withValues(alpha: 0.3),
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -277,8 +279,8 @@ class _ShareDialogState extends State<ShareDialog>
                         style: TextStyle(
                           fontSize: 13,
                           color: isEnabled
-                              ? getTextColor(context).withOpacity(0.7)
-                              : getTextColor(context).withOpacity(0.3),
+                              ? getTextColor(context).withValues(alpha: 0.7)
+                              : getTextColor(context).withValues(alpha: 0.3),
                         ),
                       ),
                     ],
@@ -287,7 +289,7 @@ class _ShareDialogState extends State<ShareDialog>
                 if (isEnabled)
                   Icon(
                     Icons.arrow_forward_ios_rounded,
-                    color: getTextColor(context).withOpacity(0.3),
+                    color: getTextColor(context).withValues(alpha: 0.3),
                     size: 16,
                   ),
               ],
@@ -307,7 +309,7 @@ class _ShareDialogState extends State<ShareDialog>
           TextButton(
             onPressed: _close,
             style: TextButton.styleFrom(
-              foregroundColor: getTextColor(context).withOpacity(0.7),
+              foregroundColor: getTextColor(context).withValues(alpha: 0.7),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
             child: const Text('取消'),

@@ -77,8 +77,17 @@ class _FlutterAdvancedReaderWidgetState
     super.dispose();
   }
 
-  /// 初始化分页
+  /// 初始化分页 - 增强版本
   Future<void> _initializePagination() async {
+    if (widget.text.isEmpty) {
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+        _errorMessage = '文本内容为空';
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _hasError = false;
@@ -87,6 +96,17 @@ class _FlutterAdvancedReaderWidgetState
     try {
       // 获取屏幕尺寸
       final size = MediaQuery.of(context).size;
+
+      // 验证参数有效性
+      if (size.width <= 0 || size.height <= 0) {
+        throw Exception('无效的屏幕尺寸: ${size.width}x${size.height}');
+      }
+
+      if (widget.textStyle.fontSize == null || widget.textStyle.fontSize! <= 0) {
+        throw Exception('无效的字体大小: ${widget.textStyle.fontSize}');
+      }
+
+      debugPrint('🔄 开始高级分页 - 文本长度: ${widget.text.length}, 屏幕: ${size.width.toInt()}x${size.height.toInt()}');
 
       // 执行分页
       final result = FlutterAdvancedPaginator.paginateText(
@@ -97,6 +117,17 @@ class _FlutterAdvancedReaderWidgetState
         preserveWordBoundaries: widget.preserveWordBoundaries,
       );
 
+      // 验证分页结果
+      if (result.pages.isEmpty) {
+        throw Exception('分页结果为空');
+      }
+
+      // 验证文本完整性
+      final totalChars = result.pages.join('').length;
+      if (totalChars != widget.text.length) {
+        debugPrint('⚠️ 分页完整性警告: 原文${widget.text.length}字符，分页后$totalChars字符');
+      }
+
       if (mounted) {
         setState(() {
           _paginationResult = result;
@@ -105,9 +136,10 @@ class _FlutterAdvancedReaderWidgetState
         });
 
         _notifyPageChanged();
+        debugPrint('✅ 高级分页完成: ${result.pages.length}页');
       }
     } catch (e) {
-      debugPrint('分页失败: $e');
+      debugPrint('❌ 高级分页失败: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -202,6 +234,30 @@ class _FlutterAdvancedReaderWidgetState
     goToPage(targetPage + 1);
   }
 
+  /// 获取总页数
+  int getTotalPages() {
+    return _paginationResult?.pages.length ?? 0;
+  }
+
+  /// 获取当前页码（1-based）
+  int getCurrentPage() {
+    return _currentPageIndex + 1;
+  }
+
+  /// 获取阅读进度（0.0-1.0）
+  double getProgress() {
+    if (_paginationResult == null || _paginationResult!.pages.isEmpty) return 0.0;
+    return (_currentPageIndex + 1) / _paginationResult!.pages.length;
+  }
+
+  /// 获取当前页面内容
+  String? getCurrentPageContent() {
+    if (_paginationResult == null || _currentPageIndex >= _paginationResult!.pages.length) {
+      return null;
+    }
+    return _paginationResult!.pages[_currentPageIndex];
+  }
+
   /// 搜索文本
   List<TextSearchResult> searchText(String query) {
     if (_paginationResult == null) return [];
@@ -262,7 +318,7 @@ class _FlutterAdvancedReaderWidgetState
             '正在分页处理...',
             style: widget.textStyle.copyWith(
               fontSize: 16,
-              color: widget.textStyle.color?.withOpacity(0.7),
+              color: widget.textStyle.color?.withValues(alpha: 0.7),
             ),
           ),
         ],
@@ -309,7 +365,7 @@ class _FlutterAdvancedReaderWidgetState
         '没有内容可显示',
         style: widget.textStyle.copyWith(
           fontSize: 16,
-          color: widget.textStyle.color?.withOpacity(0.5),
+          color: widget.textStyle.color?.withValues(alpha: 0.5),
         ),
       ),
     );
@@ -395,14 +451,14 @@ class _FlutterAdvancedReaderWidgetState
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: widget.textStyle.color?.withOpacity(0.1) ?? Colors.black12,
+            color: widget.textStyle.color?.withValues(alpha: 0.1) ?? Colors.black12,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
             '${_currentPageIndex + 1} / ${_paginationResult!.pages.length}',
             style: widget.textStyle.copyWith(
               fontSize: 12,
-              color: widget.textStyle.color?.withOpacity(0.6),
+              color: widget.textStyle.color?.withValues(alpha: 0.6),
             ),
           ),
         ),
@@ -568,5 +624,30 @@ class FlutterAdvancedReaderController {
   /// 获取当前阅读信息
   ReadingInfo? getCurrentReadingInfo() {
     return _state?.getCurrentReadingInfo();
+  }
+
+  /// 获取总页数
+  int getTotalPages() {
+    return _state?.getTotalPages() ?? 0;
+  }
+
+  /// 获取当前页码（1-based）
+  int getCurrentPage() {
+    return _state?.getCurrentPage() ?? 1;
+  }
+
+  /// 获取阅读进度（0.0-1.0）
+  double getProgress() {
+    return _state?.getProgress() ?? 0.0;
+  }
+
+  /// 获取当前页面内容
+  String? getCurrentPageContent() {
+    return _state?.getCurrentPageContent();
+  }
+
+  /// 刷新分页（当样式或设置变化时调用）
+  void refreshPagination() {
+    _state?._initializePagination();
   }
 }

@@ -64,9 +64,7 @@ class TextHighlightRenderer {
           style: baseStyle.copyWith(
             backgroundColor: highlight.color.withValues(alpha: 0.4),
             // 可选：添加下划线以增强视觉效果
-            decoration: highlight.noteText?.isNotEmpty == true
-                ? TextDecoration.underline
-                : null,
+            decoration: null, // 简化处理，不显示下划线
             decorationColor: highlight.color,
             decorationThickness: 2,
           ),
