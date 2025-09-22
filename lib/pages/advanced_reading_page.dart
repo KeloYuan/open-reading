@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/book.dart';
 import '../models/chapter.dart';
-import '../services/advanced_text_paginator.dart';
+import '../utils/system_ui_manager.dart';
 import '../widgets/advanced_text_reader_widget.dart';
 
 /// 高级阅读页面 - 基于anx-reader技术的精确分页阅读器
@@ -63,7 +63,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
   List<Chapter> _chapters = [];
   int _currentChapterIndex = 0;
   // List<Bookmark> _bookmarks = []; // 移除未使用的字段
-  List<SearchResult> _searchResults = [];
+  List<Map<String, dynamic>> _searchResults = [];
   int _currentSearchIndex = -1;
 
   // --- 统计数据 ---
@@ -73,6 +73,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
   @override
   void initState() {
     super.initState();
+    SystemUiManager.lockImmersive();
     _initializeAnimations();
     _loadSettings();
     _initializeReading();
@@ -85,6 +86,11 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
     _hideControlBarTimer?.cancel();
     _saveReadingProgress();
     _updateReadingStats();
+
+    // 解锁并恢复系统UI
+    SystemUiManager.unlockImmersive();
+    SystemUiManager.exitImmersive();
+
     super.dispose();
   }
 
@@ -120,9 +126,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
         _currentTheme = _getThemeByName(themeName);
       });
 
-      if (_keepScreenOn) {
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
-      }
+      // 保持屏幕唤醒状态由_setImmersiveMode()统一管理
     } catch (e) {
       debugPrint('加载设置失败: $e');
       _currentTheme = ReadingThemes.dayTheme;
@@ -148,6 +152,9 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
       setState(() {
         _isLoading = false;
       });
+
+      // 初始化完成后设置沉浸式模式
+      _setImmersiveMode();
     } catch (e) {
       debugPrint('初始化阅读失败: $e');
       setState(() {
@@ -282,6 +289,9 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
       _controlBarAnimationController.reverse();
       _hideControlBarTimer?.cancel();
     }
+
+    // 设置沉浸式模式
+    _setImmersiveMode();
   }
 
   void _hideControlBar() {
@@ -293,6 +303,9 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
     });
     _controlBarAnimationController.reverse();
     _hideControlBarTimer?.cancel();
+
+    // 设置沉浸式模式
+    _setImmersiveMode();
   }
 
   void _resetHideControlBarTimer() {
@@ -302,6 +315,28 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
         _hideControlBar();
       }
     });
+  }
+
+  /// 设置沉浸式模式
+  /// 控制栏隐藏时启用沉浸式模式，显示时恢复正常模式
+  void _setImmersiveMode() {
+    if (!mounted) return;
+
+    if (!_showControlBar) {
+      // 控制栏隐藏时，启用沉浸式模式
+      SystemUiManager.enterImmersive(sticky: true);
+    } else {
+      // 控制栏显示时，恢复手动模式
+      final isLightBackground =
+          _currentTheme.backgroundColor.computeLuminance() > 0.5;
+
+      SystemUiManager.exitImmersive(
+        navigationBarColor: _currentTheme.controlBarColor,
+        navIconBrightness: isLightBackground
+            ? Brightness.dark
+            : Brightness.light,
+      );
+    }
   }
 
   void _showMessage(String message) {
@@ -333,7 +368,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
       });
 
       if (results.isNotEmpty) {
-        await _goToPage(results[0].pageIndex + 1);
+        await _goToPage((results[0]['pageIndex'] ?? 0) + 1);
         _showMessage('找到 ${results.length} 个结果');
       } else {
         _showMessage('未找到匹配内容');
@@ -352,7 +387,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
     });
 
     final result = _searchResults[_currentSearchIndex];
-    await _goToPage(result.pageIndex + 1);
+    await _goToPage((result['pageIndex'] ?? 0) + 1);
   }
 
   Future<void> _goToPrevSearchResult() async {
@@ -365,7 +400,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
     });
 
     final result = _searchResults[_currentSearchIndex];
-    await _goToPage(result.pageIndex + 1);
+    await _goToPage((result['pageIndex'] ?? 0) + 1);
   }
 
   // --- 设置保存 ---

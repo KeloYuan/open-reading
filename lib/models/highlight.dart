@@ -115,4 +115,47 @@ class Highlight {
 
   @override
   int get hashCode => id.hashCode;
+
+  // ===== 缺失方法的补充实现 =====
+
+  /// 获取颜色名称
+  String getColorName() {
+    return BookNote.getColorName(
+      color.toARGB32().toRadixString(16).substring(2).toUpperCase(),
+    );
+  }
+
+  /// 静态方法：获取颜色名称（用于与服务类兼容）
+  static String getColorNameStatic(Color color) {
+    return BookNote.getColorName(
+      color.toARGB32().toRadixString(16).substring(2).toUpperCase(),
+    );
+  }
+
+  /// 获取笔记文本（兼容性属性）
+  String? get noteText => null; // Highlight没有笔记，返回null
+
+  /// 创建日期（兼容性属性）
+  DateTime? get createDate => createTime;
+
+  /// 更新日期（兼容性属性）
+  DateTime? get updateDate => createTime; // Highlight使用单一时间
+
+  /// 高亮颜色列表（静态属性）
+  static List<Color> get highlightColors => BookNote.noteColors
+      .map((colorHex) => Color(int.parse('0xFF$colorHex')))
+      .toList();
+
+  /// 转换为导出映射
+  Map<String, dynamic> toExportMap() {
+    return {
+      'content': selectedText,
+      'type': 'highlight',
+      'color': getColorName(),
+      'chapter': chapter,
+      'page': pageNumber,
+      'createTime': createTime?.toIso8601String(),
+      'updateTime': createTime?.toIso8601String(),
+    };
+  }
 }

@@ -6,14 +6,14 @@ import '../pages/enhanced_webview_reading_page.dart';
 import '../pages/reading_page_enhanced.dart';
 
 /// 阅读器路由服务
-/// 根据用户设置和书籍类型选择合适的阅读器
+/// 根据用户设置选择合适的阅读器：Native 或 WebView 标准版
 class ReadingRouterService {
   static const String _preferenceKey = 'defaultReadingEngine';
 
   /// 获取用户设置的默认阅读引擎
   static Future<String> getDefaultEngine() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_preferenceKey) ?? 'webview_optimized';
+    return prefs.getString(_preferenceKey) ?? 'webview_standard';
   }
 
   /// 设置默认阅读引擎
@@ -49,7 +49,6 @@ class ReadingRouterService {
       case 'native':
         page = ReadingPageEnhanced(book: book);
         break;
-      case 'webview_optimized':
       case 'webview_standard':
       default:
         page = EnhancedWebViewReadingPage(book: book);

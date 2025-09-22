@@ -40,27 +40,23 @@ void main() async {
   // 强制启用边到边沉浸式模式
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
-  // 设置系统UI样式 - 完全透明沉浸式
+  // 设置基础系统UI样式 - 透明背景，图标颜色由各页面动态设置
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      statusBarBrightness: Brightness.dark,
       systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarIconBrightness: Brightness.light,
       systemNavigationBarDividerColor: Colors.transparent,
       systemStatusBarContrastEnforced: false,
       systemNavigationBarContrastEnforced: false,
     ),
   );
 
-  // 强制设置沉浸式导航栏
+  // Android导航栏特殊处理 - 仅设置透明度，图标颜色由页面动态设置
   if (!kIsWeb && Platform.isAndroid) {
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         systemNavigationBarColor: Colors.transparent,
         systemNavigationBarDividerColor: Colors.transparent,
-        systemNavigationBarIconBrightness: Brightness.light,
         systemNavigationBarContrastEnforced: false,
       ),
     );
@@ -508,10 +504,6 @@ class _XxReadAppState extends State<XxReadApp> {
       appBarTheme: const AppBarTheme(
         elevation: 0,
         backgroundColor: Colors.transparent,
-        systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarIconBrightness: Brightness.dark,
-          statusBarBrightness: Brightness.light,
-        ),
       ),
     );
   }
@@ -538,10 +530,6 @@ class _XxReadAppState extends State<XxReadApp> {
       appBarTheme: const AppBarTheme(
         elevation: 0,
         backgroundColor: Colors.transparent,
-        systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarIconBrightness: Brightness.light,
-          statusBarBrightness: Brightness.dark,
-        ),
       ),
     );
   }

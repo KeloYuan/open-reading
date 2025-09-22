@@ -1,10 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
-import '../utils/glass_config.dart';
 import '../utils/app_themes.dart';
 import '../services/webdav/webdav_sync_service.dart';
 import '../widgets/webdav_config_dialog.dart';
@@ -31,7 +31,10 @@ class _SettingsPageState extends State<SettingsPage> {
   // 阅读设置
   bool _enablePageAnimation = true;
   bool _enableVolumeKeyTurn = true;
-  String _defaultReadingEngine = 'webview_optimized'; // 默认阅读引擎
+  String _defaultReadingEngine = 'webview_standard'; // 默认阅读引擎
+
+  // 书源设置
+  bool _enableBooksource = false;
 
   // WebDAV设置
   final WebDavSyncService _webdavService = WebDavSyncService();
@@ -40,6 +43,13 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _enableBatteryOptimization = true;
   bool _enableFullscreen = false;
   String _language = 'zh-CN';
+
+  // 开发者设置
+  bool _enableDeveloperMode = false;
+  bool _enableDebugLogging = false;
+  bool _enablePerformanceMonitor = false;
+  bool _enableMemoryStats = false;
+  bool _showFPS = false;
 
   @override
   void initState() {
@@ -57,6 +67,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
       // TTS设置
       _enableTTS = prefs.getBool('enableTTS') ?? true;
+      _enableBooksource = prefs.getBool('enable_booksource') ?? false;
       _ttsSpeed = prefs.getDouble('ttsSpeed') ?? 0.5;
       _ttsVolume = prefs.getDouble('ttsVolume') ?? 1.0;
       _ttsPitch = prefs.getDouble('ttsPitch') ?? 1.0;
@@ -65,13 +76,21 @@ class _SettingsPageState extends State<SettingsPage> {
       _enablePageAnimation = prefs.getBool('enablePageAnimation') ?? true;
       _enableVolumeKeyTurn = prefs.getBool('enableVolumeKeyTurn') ?? true;
       _defaultReadingEngine =
-          prefs.getString('defaultReadingEngine') ?? 'webview_optimized';
+          prefs.getString('defaultReadingEngine') ?? 'webview_standard';
 
       // 其他设置
       _enableBatteryOptimization =
           prefs.getBool('enableBatteryOptimization') ?? true;
       _enableFullscreen = prefs.getBool('enableFullscreen') ?? false;
       _language = prefs.getString('language') ?? 'zh-CN';
+
+      // 开发者设置
+      _enableDeveloperMode = prefs.getBool('enableDeveloperMode') ?? false;
+      _enableDebugLogging = prefs.getBool('enableDebugLogging') ?? false;
+      _enablePerformanceMonitor =
+          prefs.getBool('enablePerformanceMonitor') ?? false;
+      _enableMemoryStats = prefs.getBool('enableMemoryStats') ?? false;
+      _showFPS = prefs.getBool('showFPS') ?? false;
     });
 
     // 初始化WebDAV服务
@@ -87,6 +106,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
     // TTS设置
     await prefs.setBool('enableTTS', _enableTTS);
+    await prefs.setBool('enable_booksource', _enableBooksource);
     await prefs.setDouble('ttsSpeed', _ttsSpeed);
     await prefs.setDouble('ttsVolume', _ttsVolume);
     await prefs.setDouble('ttsPitch', _ttsPitch);
@@ -103,6 +123,13 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     await prefs.setBool('enableFullscreen', _enableFullscreen);
     await prefs.setString('language', _language);
+
+    // 开发者设置
+    await prefs.setBool('enableDeveloperMode', _enableDeveloperMode);
+    await prefs.setBool('enableDebugLogging', _enableDebugLogging);
+    await prefs.setBool('enablePerformanceMonitor', _enablePerformanceMonitor);
+    await prefs.setBool('enableMemoryStats', _enableMemoryStats);
+    await prefs.setBool('showFPS', _showFPS);
   }
 
   @override
@@ -123,16 +150,23 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        flexibleSpace: GlassEffectConfig.createProgressiveAppBar(
-          context: context,
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.outline.withValues(alpha: 0.2),
-                  width: 0.5,
+        surfaceTintColor: Colors.transparent, // 移除Material 3的色调
+        scrolledUnderElevation: 0, // 滚动时保持透明
+        flexibleSpace: ClipRRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  context,
+                ).colorScheme.surface.withValues(alpha: 0.8),
+                border: Border(
+                  bottom: BorderSide(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outline.withValues(alpha: 0.2),
+                    width: 0.5,
+                  ),
                 ),
               ),
             ),
@@ -252,6 +286,64 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 20),
               _buildSectionCard(
+                title: '书源功能',
+                icon: Icons.source,
+                children: [
+                  _buildSwitchSetting(
+                    title: '启用书源功能',
+                    subtitle: '开启在线书籍搜索和阅读功能',
+                    value: _enableBooksource,
+                    onChanged: (value) {
+                      setState(() => _enableBooksource = value);
+                      _saveSettings();
+                      // 通知主页面刷新导航栏
+                      _showRestartDialog();
+                    },
+                    icon: Icons.cloud_download,
+                  ),
+                  if (_enableBooksource) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: 16,
+                        right: 16,
+                        top: 8,
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.amber.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              color: Colors.amber.shade700,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '启用书源功能后，可在导航栏中看到"书源"选项，支持在线书籍搜索和阅读。',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.amber.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildSectionCard(
                 title: 'TTS朗读',
                 icon: Icons.record_voice_over,
                 children: [
@@ -354,6 +446,77 @@ class _SettingsPageState extends State<SettingsPage> {
                     onTap: _cleanCoverCache,
                     icon: Icons.cleaning_services,
                   ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildSectionCard(
+                title: '开发者设置',
+                icon: Icons.developer_mode,
+                children: [
+                  _buildSwitchSetting(
+                    title: '开发者模式',
+                    subtitle: '启用开发者功能和调试选项',
+                    value: _enableDeveloperMode,
+                    onChanged: (value) {
+                      setState(() => _enableDeveloperMode = value);
+                      _saveSettings();
+                    },
+                    icon: Icons.code,
+                  ),
+                  if (_enableDeveloperMode) ...[
+                    _buildSwitchSetting(
+                      title: '调试日志',
+                      subtitle: '记录详细的应用运行日志',
+                      value: _enableDebugLogging,
+                      onChanged: (value) {
+                        setState(() => _enableDebugLogging = value);
+                        _saveSettings();
+                      },
+                      icon: Icons.bug_report,
+                    ),
+                    _buildSwitchSetting(
+                      title: '性能监控',
+                      subtitle: '显示阅读引擎性能指标',
+                      value: _enablePerformanceMonitor,
+                      onChanged: (value) {
+                        setState(() => _enablePerformanceMonitor = value);
+                        _saveSettings();
+                      },
+                      icon: Icons.analytics,
+                    ),
+                    _buildSwitchSetting(
+                      title: '内存统计',
+                      subtitle: '显示内存使用情况',
+                      value: _enableMemoryStats,
+                      onChanged: (value) {
+                        setState(() => _enableMemoryStats = value);
+                        _saveSettings();
+                      },
+                      icon: Icons.memory,
+                    ),
+                    _buildSwitchSetting(
+                      title: '显示FPS',
+                      subtitle: '在屏幕上显示帧率信息',
+                      value: _showFPS,
+                      onChanged: (value) {
+                        setState(() => _showFPS = value);
+                        _saveSettings();
+                      },
+                      icon: Icons.monitor,
+                    ),
+                    _buildActionSetting(
+                      title: '清除所有缓存',
+                      subtitle: '清除字体度量和分页缓存',
+                      onTap: _clearAllCaches,
+                      icon: Icons.clear_all,
+                    ),
+                    _buildActionSetting(
+                      title: '重置引擎设置',
+                      subtitle: '恢复阅读引擎到默认设置',
+                      onTap: _resetEngineSettings,
+                      icon: Icons.restore,
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 20),
@@ -1815,12 +1978,10 @@ class _SettingsPageState extends State<SettingsPage> {
     switch (engine) {
       case 'native':
         return 'Flutter原生阅读器 (最快)';
-      case 'webview_optimized':
-        return 'WebView优化版 (推荐)';
       case 'webview_standard':
         return 'WebView标准版 (完整功能)';
       default:
-        return 'WebView优化版';
+        return 'WebView标准版 (完整功能)';
     }
   }
 
@@ -1829,12 +1990,10 @@ class _SettingsPageState extends State<SettingsPage> {
     switch (engine) {
       case 'native':
         return Icons.speed;
-      case 'webview_optimized':
-        return Icons.auto_fix_high;
       case 'webview_standard':
         return Icons.web;
       default:
-        return Icons.auto_fix_high;
+        return Icons.web;
     }
   }
 
@@ -1910,11 +2069,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     children: [
                       _buildEngineOption(
-                        engine: 'webview_optimized',
-                        title: 'WebView优化版',
-                        subtitle: '性能优化，推荐使用',
-                        description: '• 批量更新机制，减少卡顿\n• 保留完整功能\n• 适合日常阅读',
-                        icon: Icons.auto_fix_high,
+                        engine: 'webview_standard',
+                        title: 'WebView标准版',
+                        subtitle: '完整功能，推荐使用',
+                        description: '• 功能最完整\n• 支持所有格式\n• 稳定可靠\n• 最佳用户体验',
+                        icon: Icons.web,
                         color: Colors.blue,
                         isRecommended: true,
                         setModalState: setModalState,
@@ -1924,20 +2083,10 @@ class _SettingsPageState extends State<SettingsPage> {
                         engine: 'native',
                         title: 'Flutter原生阅读器',
                         subtitle: '极致性能，启动最快',
-                        description: '• 零WebView开销\n• 最佳性能表现\n• 主要支持TXT格式',
+                        description:
+                            '• 零WebView开销\n• 最佳性能表现\n• 主要支持TXT格式\n• 流畅的阅读体验',
                         icon: Icons.speed,
                         color: Colors.green,
-                        isRecommended: false,
-                        setModalState: setModalState,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildEngineOption(
-                        engine: 'webview_standard',
-                        title: 'WebView标准版',
-                        subtitle: '完整功能，稳定可靠',
-                        description: '• 功能最完整\n• 支持所有格式\n• 资源占用较高',
-                        icon: Icons.web,
-                        color: Colors.orange,
                         isRecommended: false,
                         setModalState: setModalState,
                       ),
@@ -2095,6 +2244,122 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showRestartDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.restart_alt, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('需要重启应用'),
+          ],
+        ),
+        content: const Text('书源功能的开启/关闭需要重启应用才能生效。\n\n是否现在重启应用？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('稍后'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // TODO: 实现应用重启功能
+              _showInfoSnackBar('请手动重启应用以应用设置');
+            },
+            child: const Text('重启'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showInfoSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.blue,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  /// 清除所有缓存
+  void _clearAllCaches() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.clear_all, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('清除缓存'),
+          ],
+        ),
+        content: const Text('这将清除所有分页缓存和字体度量数据，是否继续？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                final prefs = await SharedPreferences.getInstance();
+                // 清除分页相关缓存
+                await prefs.remove('cached_font_metrics');
+                await prefs.remove('cached_page_metrics');
+                _showInfoSnackBar('缓存已清除');
+              } catch (e) {
+                _showInfoSnackBar('清除缓存失败: $e');
+              }
+            },
+            child: const Text('清除'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 重置引擎设置
+  void _resetEngineSettings() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.restore, color: Colors.red),
+            SizedBox(width: 8),
+            Text('重置设置'),
+          ],
+        ),
+        content: const Text('这将重置阅读引擎到默认设置，是否继续？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              setState(() {
+                _defaultReadingEngine = 'webview_standard';
+                _enablePerformanceMonitor = false;
+                _enableDebugLogging = false;
+                _enableMemoryStats = false;
+                _showFPS = false;
+              });
+              await _saveSettings();
+              _showInfoSnackBar('引擎设置已重置');
+            },
+            child: const Text('重置'),
+          ),
+        ],
       ),
     );
   }

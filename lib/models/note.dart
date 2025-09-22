@@ -100,4 +100,31 @@ class Note {
 
   @override
   int get hashCode => id.hashCode;
+
+  // ===== 缺失方法和属性的补充实现 =====
+
+  /// 选中文本（兼容性属性）
+  String get selectedText => content;
+
+  /// 笔记文本（兼容性属性）
+  String get noteText => note;
+
+  /// 创建日期（兼容性属性）
+  DateTime? get createDate => createTime;
+
+  /// 更新日期（兼容性属性）
+  DateTime? get updateDate => createTime; // Note使用单一时间
+
+  /// 转换为导出映射
+  Map<String, dynamic> toExportMap() {
+    return {
+      'content': content,
+      'note': note,
+      'type': 'note',
+      'chapter': chapter,
+      'page': pageNumber,
+      'createTime': createTime?.toIso8601String(),
+      'updateTime': createTime?.toIso8601String(),
+    };
+  }
 }

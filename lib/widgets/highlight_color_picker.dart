@@ -166,7 +166,7 @@ class _HighlightColorPickerState extends State<HighlightColorPicker>
                       itemBuilder: (context, index) {
                         final color = Highlight.highlightColors[index];
                         final isSelected = _selectedColor == color;
-                        final colorName = Highlight.getColorName(color);
+                        final colorName = Highlight.getColorNameStatic(color);
 
                         return InkWell(
                           onTap: () => _handleColorSelection(color),

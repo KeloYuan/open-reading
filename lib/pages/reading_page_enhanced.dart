@@ -17,7 +17,7 @@ import '../services/book_dao.dart';
 import '../services/bookmark_dao.dart';
 import '../services/reading_stats_dao.dart';
 import '../services/book_import_service.dart';
-import '../services/legado_inspired_paginator.dart';
+import '../services/advanced_text_paginator.dart';
 import '../services/page_animation_manager.dart';
 import '../services/reading_theme_manager.dart';
 import '../widgets/custom_slider_components.dart';
@@ -26,6 +26,7 @@ import '../widgets/tts_panel_enhanced.dart';
 import '../widgets/share_dialog.dart';
 import '../widgets/enhanced_reading_settings_dialog.dart';
 import '../utils/responsive_helper.dart';
+import '../utils/system_ui_manager.dart';
 
 // 性能优化配置
 class PerformanceConfig {
@@ -56,7 +57,6 @@ class PageCacheManager {
 
   bool hasPage(int index) => _cache.containsKey(index);
 }
-
 
 class ReadingPageEnhanced extends StatefulWidget {
   final Book book;
@@ -126,8 +126,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   bool _keepScreenOn = false;
   String _fontFamily = 'System';
 
-  // --- Legado分页相关 ---
-  LegadoPaginationParams? _paginationParams;
+  // --- 高级分页相关 ---
+  PaginationParams? _paginationParams;
 
   // --- UI Text Prefix ---
   static const String _kLoadingPrefix = '📚';
@@ -160,7 +160,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       // 加载阅读主题
       final theme = await ReadingThemeManager.getCurrentTheme();
       // 加载翻页动画类型
-      final animationType = await PageAnimationManager.getCurrentAnimationType();
+      final animationType =
+          await PageAnimationManager.getCurrentAnimationType();
 
       if (mounted) {
         setState(() {
@@ -177,6 +178,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     // 在这里安全地访问InheritedWidget
+    SystemUiManager.lockImmersive();
     _setImmersiveMode();
   }
 
@@ -544,7 +546,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }
 
   void _splitIntoPages() {
-    debugPrint('🔄 开始legado式分页处理...');
+    debugPrint('🔄 开始高级分页处理...');
 
     if (_bookContent.isEmpty) {
       _pages = ['内容为空'];
@@ -554,33 +556,41 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
     _pages.clear();
 
-    // 使用legado分页算法
-    _splitIntoPagesWithLegadoAlgorithm();
+    // 使用高级分页算法
+    _splitIntoPagesWithAdvancedAlgorithm();
   }
 
-  /// 使用legado分页算法进行分页 - 优化版本
-  void _splitIntoPagesWithLegadoAlgorithm() {
+  /// 使用高级分页算法进行分页 - 优化版本
+  void _splitIntoPagesWithAdvancedAlgorithm() {
     try {
       final screenSize = MediaQuery.of(context).size;
       final statusBarHeight = MediaQuery.of(context).padding.top;
       final bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
       // 智能计算控制栏高度，根据屏幕尺寸动态调整
-      final controlBarHeight = _calculateOptimalControlBarHeight(screenSize, bottomSafeArea);
+      final controlBarHeight = _calculateOptimalControlBarHeight(
+        screenSize,
+        bottomSafeArea,
+      );
 
       // 智能调整字体大小（如果用户没有手动设置过）
-      final adaptiveFontSize = _calculateAdaptiveFontSize(screenSize, _fontSize);
+      final adaptiveFontSize = _calculateAdaptiveFontSize(
+        screenSize,
+        _fontSize,
+      );
 
       // 智能调整页边距
       final adaptivePadding = _calculateAdaptivePadding(screenSize);
 
-      debugPrint('📐 布局优化 - 屏幕: ${screenSize.width.toInt()}x${screenSize.height.toInt()}');
+      debugPrint(
+        '📐 布局优化 - 屏幕: ${screenSize.width.toInt()}x${screenSize.height.toInt()}',
+      );
       debugPrint('📐 布局优化 - 控制栏高度: ${controlBarHeight.toInt()}px');
       debugPrint('📐 布局优化 - 自适应字体: ${adaptiveFontSize.toStringAsFixed(1)}px');
       debugPrint('📐 布局优化 - 自适应边距: ${adaptivePadding.toStringAsFixed(1)}px');
 
       // 计算分页参数
-      _paginationParams = LegadoInspiredPaginator.calculatePreciseParams(
+      _paginationParams = AdvancedTextPaginator.calculatePreciseParams(
         screenSize: screenSize,
         fontSize: adaptiveFontSize,
         lineHeight: _lineSpacing,
@@ -593,8 +603,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       );
 
       if (_paginationParams != null) {
-        // 使用legado算法分页
-        final pages = LegadoInspiredPaginator.paginateText(
+        // 使用高级算法分页
+        final pages = AdvancedTextPaginator.paginateText(
           _bookContent,
           _paginationParams!,
         );
@@ -623,21 +633,27 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             });
           }
 
-          debugPrint('✅ Legado分页完成: ${_pages.length}页');
+          debugPrint('✅ 高级分页完成: ${_pages.length}页');
         }
       } else {
         throw Exception('分页参数计算失败');
       }
     } catch (e) {
-      debugPrint('❌ Legado分页失败: $e');
+      debugPrint('❌ 高级分页失败: $e');
       // 回退到简单分页
       _fallbackSimplePagination();
     }
   }
 
   /// 智能计算控制栏高度，根据屏幕尺寸和设备特性动态调整
-  double _calculateOptimalControlBarHeight(Size screenSize, double bottomSafeArea) {
-    final diagonal = math.sqrt(screenSize.width * screenSize.width + screenSize.height * screenSize.height);
+  double _calculateOptimalControlBarHeight(
+    Size screenSize,
+    double bottomSafeArea,
+  ) {
+    final diagonal = math.sqrt(
+      screenSize.width * screenSize.width +
+          screenSize.height * screenSize.height,
+    );
 
     // 基础控制栏高度
     double baseHeight;
@@ -670,7 +686,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     }
 
     // 计算屏幕对角线（逻辑像素）
-    final diagonal = math.sqrt(screenSize.width * screenSize.width + screenSize.height * screenSize.height);
+    final diagonal = math.sqrt(
+      screenSize.width * screenSize.width +
+          screenSize.height * screenSize.height,
+    );
 
     // 根据设备类型调整字体大小
     double adaptiveFontSize;
@@ -1349,14 +1368,13 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
         _currentTheme.backgroundColor.computeLuminance() > 0.5;
 
     if (!_showControls) {
-      SystemChrome.setEnabledSystemUIMode(
-        SystemUiMode.immersiveSticky,
-        overlays: [],
-      );
+      SystemUiManager.enterImmersive(sticky: true);
     } else {
-      SystemChrome.setEnabledSystemUIMode(
-        SystemUiMode.manual,
-        overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
+      SystemUiManager.exitImmersive(
+        navigationBarColor: _currentTheme.controlBarColor,
+        navIconBrightness: isLightBackground
+            ? Brightness.dark
+            : Brightness.light,
       );
 
       // 设置系统UI样式与控制栏颜色保持一致
@@ -1651,7 +1669,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     // 其他动画模式的处理可以在这里添加
     return pageWidget;
   }
-
 
   /// 切换控制栏显示状态
   void _toggleControlsVisibility() {
@@ -2123,12 +2140,6 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
             theme: _currentTheme,
           ),
           ReadingThemeManager.createToolbarButton(
-            icon: Icons.palette_rounded,
-            label: '主题',
-            onTap: _showThemePanel,
-            theme: _currentTheme,
-          ),
-          ReadingThemeManager.createToolbarButton(
             icon: Icons.tune_rounded,
             label: '设置',
             onTap: _showSettingsPanel,
@@ -2283,50 +2294,50 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
               ],
             ),
             child: EnhancedReadingSettingsDialog(
-            currentTheme: _currentTheme,
-            onThemeChanged: (theme) async {
-              setState(() {
-                _currentTheme = theme;
-              });
-              await ReadingThemeManager.setTheme(theme);
-              // 主题变更后重新分页以应用新的样式
-              _splitIntoPages();
-            },
-            fontSize: _fontSize,
-            onFontSizeChanged: (size) {
-              setState(() {
-                _fontSize = size;
-              });
-              _splitIntoPages(); // 字体大小改变需要重新分页
-        },
-        lineHeight: _lineSpacing,
-        onLineHeightChanged: (height) {
-          setState(() {
-            _lineSpacing = height;
-          });
-          _splitIntoPages(); // 行高改变需要重新分页
-        },
-        letterSpacing: _letterSpacing,
-        onLetterSpacingChanged: (spacing) {
-          setState(() {
-            _letterSpacing = spacing;
-          });
-          _splitIntoPages(); // 字符间距改变需要重新分页
-        },
-        fontFamily: _fontFamily,
-        onFontFamilyChanged: (family) {
-          setState(() {
-            _fontFamily = family;
-          });
-          _splitIntoPages(); // 字体类型改变需要重新分页
-        },
-        currentAnimationType: _currentAnimationType,
-        onAnimationTypeChanged: (type) async {
-          setState(() {
-            _currentAnimationType = type;
-          });
-          await PageAnimationManager.setAnimationType(type);
-        },
+              currentTheme: _currentTheme,
+              onThemeChanged: (theme) async {
+                setState(() {
+                  _currentTheme = theme;
+                });
+                await ReadingThemeManager.setTheme(theme);
+                // 主题变更后重新分页以应用新的样式
+                _splitIntoPages();
+              },
+              fontSize: _fontSize,
+              onFontSizeChanged: (size) {
+                setState(() {
+                  _fontSize = size;
+                });
+                _splitIntoPages(); // 字体大小改变需要重新分页
+              },
+              lineHeight: _lineSpacing,
+              onLineHeightChanged: (height) {
+                setState(() {
+                  _lineSpacing = height;
+                });
+                _splitIntoPages(); // 行高改变需要重新分页
+              },
+              letterSpacing: _letterSpacing,
+              onLetterSpacingChanged: (spacing) {
+                setState(() {
+                  _letterSpacing = spacing;
+                });
+                _splitIntoPages(); // 字符间距改变需要重新分页
+              },
+              fontFamily: _fontFamily,
+              onFontFamilyChanged: (family) {
+                setState(() {
+                  _fontFamily = family;
+                });
+                _splitIntoPages(); // 字体类型改变需要重新分页
+              },
+              currentAnimationType: _currentAnimationType,
+              onAnimationTypeChanged: (type) async {
+                setState(() {
+                  _currentAnimationType = type;
+                });
+                await PageAnimationManager.setAnimationType(type);
+              },
             ),
           );
         },
@@ -4028,11 +4039,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
     _pageController.dispose();
     _pageCacheManager.clear();
 
-    // 恢复系统UI
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
-    );
+    // 解锁并恢复系统UI
+    SystemUiManager.unlockImmersive();
+    SystemUiManager.exitImmersive();
 
     // 保存阅读统计
     if (_sessionStartTime != null) {

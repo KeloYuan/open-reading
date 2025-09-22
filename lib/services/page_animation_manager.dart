@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 翻页动画类型 (基于legado PageAnim)
+/// 翻页动画类型
 enum PageAnimationType {
   /// 覆盖翻页动画
   cover(0, '覆盖翻页', '页面覆盖滑动效果'),
@@ -134,10 +134,7 @@ class PageAnimationManager {
         begin: isForward ? const Offset(1.0, 0.0) : const Offset(-1.0, 0.0),
         end: Offset.zero,
       ).animate(curvedAnimation),
-      child: FadeTransition(
-        opacity: curvedAnimation,
-        child: child,
-      ),
+      child: FadeTransition(opacity: curvedAnimation, child: child),
     );
   }
 
@@ -238,9 +235,7 @@ class PageAnimationManager {
               width: effectiveLeftZone,
               child: GestureDetector(
                 onTap: onPreviousPage,
-                child: Container(
-                  color: Colors.transparent,
-                ),
+                child: Container(color: Colors.transparent),
               ),
             ),
 
@@ -252,9 +247,7 @@ class PageAnimationManager {
               width: effectiveRightZone,
               child: GestureDetector(
                 onTap: onNextPage,
-                child: Container(
-                  color: Colors.transparent,
-                ),
+                child: Container(color: Colors.transparent),
               ),
             ),
 
@@ -266,9 +259,7 @@ class PageAnimationManager {
               bottom: 0,
               child: GestureDetector(
                 onTap: onToggleControls,
-                child: Container(
-                  color: Colors.transparent,
-                ),
+                child: Container(color: Colors.transparent),
               ),
             ),
           ],

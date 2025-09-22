@@ -42,127 +42,123 @@ class _LibraryPageState extends State<LibraryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: isDarkMode
-            ? Brightness.light
-            : Brightness.dark,
-        statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      ),
-      child: Scaffold(
-        extendBodyBehindAppBar: true,
-        appBar: AppBar(
-          title: Text(
-            '书库',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: Text(
+          '书库',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.onSurface,
           ),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          surfaceTintColor: Colors.transparent, // 添加这个属性移除Material 3的色调
-          scrolledUnderElevation: 0, // 滚动时也保持透明
-          flexibleSpace: ClipRRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.surface.withValues(alpha: 0.8),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent, // 移除Material 3的色调
+        scrolledUnderElevation: 0, // 滚动时保持透明
+        flexibleSpace: ClipRRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  context,
+                ).colorScheme.surface.withValues(alpha: 0.8),
+                border: Border(
+                  bottom: BorderSide(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outline.withValues(alpha: 0.2),
+                    width: 0.5,
+                  ),
                 ),
               ),
             ),
           ),
         ),
-        body: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              stops: const [0.0, 0.3, 0.6, 1.0],
-              colors: [
-                Theme.of(
-                  context,
-                ).colorScheme.secondaryContainer.withValues(alpha: 0.12),
-                Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
-                Theme.of(
-                  context,
-                ).colorScheme.primaryContainer.withValues(alpha: 0.08),
-                Theme.of(
-                  context,
-                ).colorScheme.tertiaryContainer.withValues(alpha: 0.10),
-              ],
-            ),
-          ),
-          child: Stack(
-            children: [
-              // 主内容
-              _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _books.isEmpty
-                  ? _buildEmptyLibrary()
-                  : RefreshIndicator(
-                      onRefresh: _loadBooks,
-                      strokeWidth: 2.5, // 减细刷新指示器线条
-                      displacement: 60, // 增加下拉距离
-                      color: Theme.of(context).colorScheme.primary, // 主题色
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.surface.withValues(alpha: 0.9), // 半透明背景
-                      child: _buildBooksGrid(),
-                    ),
-              // 移除顶部自定义 Positioned 毛玻璃，改用 AppBar 的 flexibleSpace
+      ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            stops: const [0.0, 0.3, 0.6, 1.0],
+            colors: [
+              Theme.of(
+                context,
+              ).colorScheme.secondaryContainer.withValues(alpha: 0.12),
+              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
+              Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withValues(alpha: 0.08),
+              Theme.of(
+                context,
+              ).colorScheme.tertiaryContainer.withValues(alpha: 0.10),
             ],
           ),
         ),
-        // 悬浮添加书籍按钮
-        floatingActionButton: Container(
-          margin: const EdgeInsets.only(bottom: 80), // 向上移动80px
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Theme.of(
+        child: Stack(
+          children: [
+            // 主内容
+            _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _books.isEmpty
+                ? _buildEmptyLibrary()
+                : RefreshIndicator(
+                    onRefresh: _loadBooks,
+                    strokeWidth: 2.5, // 减细刷新指示器线条
+                    displacement: 60, // 增加下拉距离
+                    color: Theme.of(context).colorScheme.primary, // 主题色
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.surface.withValues(alpha: 0.9), // 半透明背景
+                    child: _buildBooksGrid(),
+                  ),
+            // 移除顶部自定义 Positioned 毛玻璃，改用 AppBar 的 flexibleSpace
+          ],
+        ),
+      ),
+      // 悬浮添加书籍按钮
+      floatingActionButton: Container(
+        margin: const EdgeInsets.only(bottom: 80), // 向上移动80px
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+              spreadRadius: 0,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: FloatingActionButton(
+              onPressed: () async {
+                final result = await Navigator.push(
                   context,
-                ).colorScheme.primary.withValues(alpha: 0.3),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-                spreadRadius: 0,
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: FloatingActionButton(
-                onPressed: () async {
-                  final result = await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ImportBookPage(),
-                    ),
-                  );
-                  // 导入完成后刷新书籍列表
-                  if (result == true || mounted) {
-                    _loadBooks();
-                  }
-                },
-                backgroundColor: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.9),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                heroTag: "add_book_fab", // 添加唯一标识避免冲突
-                child: const Icon(Icons.add, size: 28),
-              ),
+                  MaterialPageRoute(
+                    builder: (context) => const ImportBookPage(),
+                  ),
+                );
+                // 导入完成后刷新书籍列表
+                if (result == true || mounted) {
+                  _loadBooks();
+                }
+              },
+              backgroundColor: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.9),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              heroTag: "add_book_fab", // 添加唯一标识避免冲突
+              child: const Icon(Icons.add, size: 28),
             ),
           ),
         ),

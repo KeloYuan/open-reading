@@ -52,12 +52,14 @@ class NoteExportService {
         for (final highlight in entry.value) {
           buffer.writeln('> ${highlight.selectedText}');
           buffer.writeln();
-          buffer.writeln('**颜色**: ${Highlight.getColorName(highlight.color)}');
+          buffer.writeln('**颜色**: ${highlight.getColorName()}');
           if (highlight.noteText?.isNotEmpty == true) {
             buffer.writeln('**笔记**: ${highlight.noteText}');
           }
           buffer.writeln('**页码**: ${highlight.pageNumber}');
-          buffer.writeln('**时间**: ${_formatDate(highlight.createDate)}');
+          buffer.writeln(
+            '**时间**: ${highlight.createDate != null ? _formatDate(highlight.createDate!) : "未知"}',
+          );
           buffer.writeln();
           buffer.writeln('---');
           buffer.writeln();
@@ -89,7 +91,9 @@ class NoteExportService {
           }
           buffer.writeln('**笔记内容**: ${note.noteText}');
           buffer.writeln();
-          buffer.writeln('**时间**: ${_formatDate(note.createDate)}');
+          buffer.writeln(
+            '**时间**: ${note.createDate != null ? _formatDate(note.createDate!) : "未知"}',
+          );
           if (note.updateDate != null) {
             buffer.writeln('**更新时间**: ${_formatDate(note.updateDate!)}');
           }
@@ -123,7 +127,7 @@ class NoteExportService {
               'selectedText': n.selectedText,
               'noteText': n.noteText,
               'pageNumber': n.pageNumber,
-              'createDate': n.createDate.toIso8601String(),
+              'createDate': n.createDate?.toIso8601String(),
               'updateDate': n.updateDate?.toIso8601String(),
             },
           )
@@ -152,8 +156,8 @@ class NoteExportService {
         highlight.pageNumber.toString(),
         _escapeCsvField(highlight.selectedText),
         _escapeCsvField(highlight.noteText ?? ''),
-        Highlight.getColorName(highlight.color),
-        _formatDate(highlight.createDate),
+        highlight.getColorName(),
+        highlight.createDate != null ? _formatDate(highlight.createDate!) : '',
         highlight.updateDate != null ? _formatDate(highlight.updateDate!) : '',
       ];
       buffer.writeln(row.join(','));
@@ -168,7 +172,7 @@ class NoteExportService {
         _escapeCsvField(note.selectedText),
         _escapeCsvField(note.noteText),
         '',
-        _formatDate(note.createDate),
+        note.createDate != null ? _formatDate(note.createDate!) : '',
         note.updateDate != null ? _formatDate(note.updateDate!) : '',
       ];
       buffer.writeln(row.join(','));
@@ -267,7 +271,7 @@ class NoteExportService {
       // 颜色分布
       final colorStats = <String, int>{};
       for (final highlight in highlights) {
-        final colorName = Highlight.getColorName(highlight.color);
+        final colorName = highlight.getColorName();
         colorStats[colorName] = (colorStats[colorName] ?? 0) + 1;
       }
 
@@ -299,18 +303,18 @@ class NoteExportService {
     for (final highlight in highlights) {
       allItems.add({
         'type': 'highlight',
-        'date': highlight.createDate,
+        'date': highlight.createDate?.toIso8601String(),
         'content': highlight.selectedText,
         'note': highlight.noteText,
         'page': highlight.pageNumber,
-        'color': Highlight.getColorName(highlight.color),
+        'color': highlight.getColorName(),
       });
     }
 
     for (final note in notes) {
       allItems.add({
         'type': 'note',
-        'date': note.createDate,
+        'date': note.createDate?.toIso8601String(),
         'content': note.selectedText,
         'note': note.noteText,
         'page': note.pageNumber,

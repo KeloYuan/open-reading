@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
+import 'package:archive/archive.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
+import '../utils/system_ui_manager.dart';
 
 import '../models/book.dart';
 import '../models/bookmark.dart';
@@ -63,6 +63,10 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
   bool _hasError = false;
   String _errorMessage = '';
 
+  // --- 书籍内容 ---
+  String _bookContent = '';
+  List<Map<String, dynamic>> _bookChapters = [];
+
   // --- UI状态 ---
   bool _showControls = false;
   bool _isInitializing = true;
@@ -111,6 +115,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    SystemUiManager.lockImmersive();
     _setImmersiveMode();
   }
 
@@ -161,6 +166,11 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
       await _loadAnnotations();
       await _setupWebView();
 
+      // 书籍内容解析完成后，更新WebView显示
+      if (_webViewController != null) {
+        await _updateWebViewContent();
+      }
+
       setState(() {
         _isLoading = false;
         _isInitializing = false;
@@ -184,6 +194,100 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
     if (!await file.exists()) {
       throw Exception('书籍文件不存在: ${widget.book.filePath}');
     }
+
+    try {
+      debugPrint('开始解析EPUB文件: ${widget.book.filePath}');
+
+      if (widget.book.filePath.toLowerCase().endsWith('.epub')) {
+        await _parseEpubFile(file);
+      } else if (widget.book.filePath.toLowerCase().endsWith('.txt')) {
+        await _parseTxtFile(file);
+      } else {
+        _bookContent = '<h1>不支持的文件格式</h1><p>当前只支持 EPUB 和 TXT 格式</p>';
+      }
+
+      debugPrint('书籍内容解析完成，长度: ${_bookContent.length}');
+    } catch (e) {
+      debugPrint('解析书籍内容失败: $e');
+      _bookContent = '<h1>解析失败</h1><p>错误信息: $e</p>';
+    }
+  }
+
+  /// 解析 EPUB 文件
+  Future<void> _parseEpubFile(File file) async {
+    final bytes = await file.readAsBytes();
+    final archive = ZipDecoder().decodeBytes(bytes);
+
+    Map<String, String> htmlFiles = {};
+
+    // 提取所有 HTML/XHTML 文件
+    for (final file in archive) {
+      if (file.name.endsWith('.html') || file.name.endsWith('.xhtml')) {
+        htmlFiles[file.name] = utf8.decode(file.content as List<int>);
+      }
+    }
+
+    if (htmlFiles.isEmpty) {
+      _bookContent = '<h1>${widget.book.title}</h1><p>未找到可阅读的内容</p>';
+      return;
+    }
+
+    // 简单合并所有 HTML 内容
+    final buffer = StringBuffer();
+    buffer.write(
+      '<div style="max-width: 800px; margin: 0 auto; padding: 20px;">',
+    );
+    buffer.write(
+      '<h1 style="text-align: center; margin-bottom: 30px;">${widget.book.title}</h1>',
+    );
+
+    for (final htmlContent in htmlFiles.values) {
+      // 提取 body 内容
+      final bodyMatch = RegExp(
+        r'<body[^>]*>(.*?)</body>',
+        dotAll: true,
+      ).firstMatch(htmlContent);
+      if (bodyMatch != null) {
+        String bodyContent = bodyMatch.group(1) ?? '';
+        // 清理一些可能的问题标签
+        bodyContent = bodyContent.replaceAll(RegExp(r'<link[^>]*>'), '');
+        bodyContent = bodyContent.replaceAll(
+          RegExp(r'<style[^>]*>.*?</style>', dotAll: true),
+          '',
+        );
+        buffer.write('<div class="chapter">$bodyContent</div>');
+      } else {
+        // 如果没有找到 body，直接使用整个内容
+        buffer.write('<div class="chapter">$htmlContent</div>');
+      }
+    }
+
+    buffer.write('</div>');
+    _bookContent = buffer.toString();
+  }
+
+  /// 解析 TXT 文件
+  Future<void> _parseTxtFile(File file) async {
+    final content = await file.readAsString(encoding: utf8);
+    _bookContent =
+        '''
+      <div style="max-width: 800px; margin: 0 auto; padding: 20px;">
+        <h1 style="text-align: center; margin-bottom: 30px;">${widget.book.title}</h1>
+        <div style="white-space: pre-wrap; line-height: 1.8;">
+          ${_escapeHtml(content)}
+        </div>
+      </div>
+    ''';
+  }
+
+  /// HTML 转义
+  String _escapeHtml(String text) {
+    return text
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#x27;');
   }
 
   /// 加载注释数据
@@ -230,36 +334,17 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
 
   /// 设置沉浸式模式
   void _setImmersiveMode() {
-    final isLightBackground =
-        _currentTheme.backgroundColor.computeLuminance() > 0.5;
-
     if (!_showControls) {
-      SystemChrome.setEnabledSystemUIMode(
-        SystemUiMode.immersiveSticky,
-        overlays: [],
-      );
+      SystemUiManager.enterImmersive(sticky: true);
     } else {
-      SystemChrome.setEnabledSystemUIMode(
-        SystemUiMode.manual,
-        overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
-      );
-
       final isDarkMode = Theme.of(context).brightness == Brightness.dark;
       final Color navigationBarColor = isDarkMode
           ? Color.lerp(_currentTheme.backgroundColor, Colors.grey[800]!, 0.3)!
           : Color.lerp(_currentTheme.backgroundColor, Colors.grey[100]!, 0.4)!;
 
-      SystemChrome.setSystemUIOverlayStyle(
-        SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: isLightBackground
-              ? Brightness.dark
-              : Brightness.light,
-          systemNavigationBarColor: navigationBarColor,
-          systemNavigationBarIconBrightness: isDarkMode
-              ? Brightness.light
-              : Brightness.dark,
-        ),
+      SystemUiManager.exitImmersive(
+        navigationBarColor: navigationBarColor,
+        navIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
       );
     }
   }
@@ -298,6 +383,11 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
     _webViewController = controller;
     await _setupJavaScriptHandlers(controller);
     await _loadBookInWebView(controller);
+
+    // 如果书籍内容已经解析完成，立即更新显示
+    if (_bookContent.isNotEmpty) {
+      await _updateWebViewContent();
+    }
   }
 
   /// 设置JavaScript处理器
@@ -350,11 +440,29 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
     // 加载完成事件
     controller.addJavaScriptHandler(
       handlerName: 'onLoadEnd',
-      callback: (args) {
+      callback: (args) async {
+        debugPrint('WebView content loaded successfully');
         setState(() {
           _isLoading = false;
         });
+
+        // WebView加载完成后，如果书籍内容已解析，立即更新显示
+        if (_bookContent.isNotEmpty) {
+          await _updateWebViewContent();
+        }
+
         _renderAnnotations();
+      },
+    );
+
+    // 页面变化事件
+    controller.addJavaScriptHandler(
+      handlerName: 'onPageChange',
+      callback: (args) {
+        final data = args[0] as Map<String, dynamic>;
+        final direction = data['direction'] as String;
+        debugPrint('Page change: $direction');
+        // 这里可以处理翻页逻辑
       },
     );
   }
@@ -374,14 +482,61 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
     );
   }
 
+  /// 更新WebView内容
+  Future<void> _updateWebViewContent() async {
+    if (_webViewController != null && _bookContent.isNotEmpty) {
+      debugPrint('更新WebView内容，长度: ${_bookContent.length}');
+
+      // 转义JavaScript字符串中的特殊字符
+      final escapedContent = _bookContent
+          .replaceAll('\\', '\\\\')
+          .replaceAll('`', '\\`')
+          .replaceAll('\$', '\\\$');
+
+      await _webViewController!.evaluateJavascript(
+        source:
+            '''
+          try {
+            console.log('Updating content...');
+            const contentDiv = document.getElementById('content');
+            if (contentDiv) {
+              contentDiv.innerHTML = `$escapedContent`;
+              
+              // 应用样式
+              contentDiv.style.color = '${_getColorHex(_currentTheme.textColor)}';
+              contentDiv.style.fontSize = '${_fontSize}px';
+              contentDiv.style.lineHeight = '${_lineSpacing}';
+              contentDiv.style.letterSpacing = '${_letterSpacing}px';
+              
+              // 为所有章节内容添加样式
+              const chapters = contentDiv.querySelectorAll('.chapter');
+              chapters.forEach(chapter => {
+                  chapter.style.marginBottom = '30px';
+                  chapter.style.paddingBottom = '20px';
+                  chapter.style.borderBottom = '1px solid rgba(128, 128, 128, 0.2)';
+              });
+              
+              // 为段落添加间距
+              const paragraphs = contentDiv.querySelectorAll('p');
+              paragraphs.forEach(p => {
+                  p.style.marginBottom = '16px';
+                  p.style.lineHeight = '${_lineSpacing}';
+              });
+              
+              console.log('Content updated successfully');
+            } else {
+              console.error('Content div not found');
+            }
+          } catch (error) {
+            console.error('Error updating content:', error);
+          }
+        ''',
+      );
+    }
+  }
+
   /// 构建阅读器HTML
   Future<String> _buildReaderHtml(String bookPath) async {
-    // 获取foliate-js资源路径
-    final assetsPath = path.join(
-      (await getApplicationDocumentsDirectory()).parent.path,
-      'Frameworks/App.framework/flutter_assets/assets/foliate-js',
-    );
-
     return '''
 <!DOCTYPE html>
 <html>
@@ -404,11 +559,15 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
         .reader-container {
             height: 100vh;
             position: relative;
+            overflow-y: auto;
+            padding: 0;
         }
         
-        foliate-view {
+        .content {
             width: 100%;
             height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
         }
         
         /* 自定义选择样式 */
@@ -436,40 +595,100 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
     </style>
 </head>
 <body>
-    <div class="reader-container">
-        <foliate-view id="viewer"></foliate-view>
+    <div class="reader-container" id="reader-container">
+        <div class="content" id="content">
+            <div style="text-align: center; padding: 50px 20px;">
+                <h2>正在初始化阅读器...</h2>
+                <p>请稍候</p>
+            </div>
+        </div>
     </div>
     
-    <script type="module">
-        import { View } from '$assetsPath/dist/bundle.js';
-        
-        customElements.define('foliate-view', View);
-        
-        const viewer = document.getElementById('viewer');
-        let book;
+    <script>
+        // 简化的WebView阅读器，不依赖外部库
         
         // 加载书籍
         async function loadBook() {
             try {
-                const response = await fetch('$bookPath');
-                const buffer = await response.arrayBuffer();
-                const { EPUB } = await import('$assetsPath/dist/bundle.js');
-                book = await EPUB.readBook(buffer);
-                await viewer.open(book);
+                // 显示真正的书籍内容
+                const bookContent = \`${_bookContent.isNotEmpty ? _bookContent : '''
+                    <div style="padding: 20px; max-width: 800px; margin: 0 auto; text-align: center;">
+                        <h1 style="color: ${_getColorHex(_currentTheme.textColor)}; margin-bottom: 30px;">
+                            ${widget.book.title}
+                        </h1>
+                        <div style="color: ${_getColorHex(_currentTheme.textColor)}; line-height: ${_lineSpacing}; font-size: ${_fontSize}px;">
+                            <p>📚 正在解析书籍内容...</p>
+                            <p style="margin-top: 20px; opacity: 0.7;">请稍等片刻</p>
+                        </div>
+                    </div>
+                '''}\`;
                 
-                // 初始化位置
-                const initialCfi = '${widget.initialCfi ?? ''}';
-                if (initialCfi) {
-                    await viewer.goTo(initialCfi);
+                document.getElementById('content').innerHTML = bookContent;
+                
+                // 应用主题样式到内容
+                const contentDiv = document.getElementById('content');
+                if (contentDiv) {
+                    contentDiv.style.color = '${_getColorHex(_currentTheme.textColor)}';
+                    contentDiv.style.fontSize = '${_fontSize}px';
+                    contentDiv.style.lineHeight = '${_lineSpacing}';
+                    contentDiv.style.letterSpacing = '${_letterSpacing}px';
+                    
+                    // 为所有章节内容添加样式
+                    const chapters = contentDiv.querySelectorAll('.chapter');
+                    chapters.forEach(chapter => {
+                        chapter.style.marginBottom = '30px';
+                        chapter.style.paddingBottom = '20px';
+                        chapter.style.borderBottom = '1px solid rgba(128, 128, 128, 0.2)';
+                    });
+                    
+                    // 为段落添加间距
+                    const paragraphs = contentDiv.querySelectorAll('p');
+                    paragraphs.forEach(p => {
+                        p.style.marginBottom = '16px';
+                        p.style.lineHeight = '${_lineSpacing}';
+                    });
                 }
                 
-                setupEventListeners();
-                
+                // 通知Flutter加载完成
                 if (window.flutter_inappwebview) {
                     window.flutter_inappwebview.callHandler('onLoadEnd');
+                    // 模拟进度信息
+                    window.flutter_inappwebview.callHandler('onRelocated', {
+                        cfi: 'test-cfi',
+                        percentage: 0.1,
+                        chapterTitle: '${widget.book.title}',
+                        currentPage: 1,
+                        totalPages: 1
+                    });
                 }
+                
+                // 设置点击事件
+                document.addEventListener('click', function(e) {
+                    const rect = e.target.getBoundingClientRect();
+                    const centerX = window.innerWidth / 2;
+                    const clickX = e.clientX;
+                    
+                    if (Math.abs(clickX - centerX) < 100) {
+                        // 点击屏幕中央，显示/隐藏控制栏
+                        if (window.flutter_inappwebview) {
+                            window.flutter_inappwebview.callHandler('onClick', {
+                                x: e.clientX,
+                                y: e.clientY
+                            });
+                        }
+                    }
+                });
+                
             } catch (error) {
                 console.error('Failed to load book:', error);
+                document.getElementById('content').innerHTML = \`
+                    <div style="padding: 20px; color: red; text-align: center;">
+                        <h2>加载失败</h2>
+                        <p>错误信息: \${error.message}</p>
+                        <p>书籍路径: ${widget.book.filePath}</p>
+                        <p>请尝试切换到Flutter原生阅读器</p>
+                    </div>
+                \`;
             }
         }
         
@@ -522,27 +741,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
             }
         }
         
-        // 全局函数供Flutter调用
-        window.addAnnotation = function(annotation) {
-            viewer.addAnnotation(annotation);
-        };
-        
-        window.removeAnnotation = function(cfi) {
-            viewer.removeAnnotation(cfi);
-        };
-        
-        window.goToCfi = function(cfi) {
-            viewer.goTo(cfi);
-        };
-        
-        window.nextPage = function() {
-            viewer.next();
-        };
-        
-        window.prevPage = function() {
-            viewer.prev();
-        };
-        
+        // 简化的全局函数供Flutter调用
         window.clearSelection = function() {
             if (window.getSelection) {
                 window.getSelection().removeAllRanges();
@@ -558,8 +757,51 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
             document.body.style.color = style.textColor;
         };
         
-        // 启动
+        // 页面翻页功能（模拟）
+        window.nextPage = function() {
+            console.log('Next page called');
+            if (window.flutter_inappwebview) {
+                window.flutter_inappwebview.callHandler('onPageChange', { direction: 'next' });
+            }
+        };
+        
+        window.prevPage = function() {
+            console.log('Prev page called');
+            if (window.flutter_inappwebview) {
+                window.flutter_inappwebview.callHandler('onPageChange', { direction: 'prev' });
+            }
+        };
+        
+        // 启动应用 - 多重保险
+        console.log('Starting WebView book reader...');
+        
+        // 立即启动
         loadBook();
+        
+        // DOM加载完成后启动
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                console.log('DOM ready - restarting if needed');
+                setTimeout(() => {
+                    const content = document.getElementById('content');
+                    if (content && content.innerHTML.includes('正在初始化')) {
+                        loadBook();
+                    }
+                }, 100);
+            });
+        }
+        
+        // 页面完全加载后的备用启动
+        window.addEventListener('load', function() {
+            console.log('Window fully loaded - final check');
+            setTimeout(() => {
+                const content = document.getElementById('content');
+                if (content && content.innerHTML.includes('正在初始化')) {
+                    console.log('Content still initializing, restarting...');
+                    loadBook();
+                }
+            }, 500);
+        });
     </script>
 </body>
 </html>
@@ -1575,11 +1817,9 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
 
     _saveReadingProgress();
 
-    // 恢复系统UI
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
-    );
+    // 解锁并恢复系统UI
+    SystemUiManager.unlockImmersive();
+    SystemUiManager.exitImmersive();
 
     super.dispose();
   }

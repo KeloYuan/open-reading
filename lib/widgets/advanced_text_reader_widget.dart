@@ -177,7 +177,8 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
   /// 初始化WebView
   Future<void> _initializeWebView() async {
     try {
-      _htmlUri = await AdvancedTextPaginator.getHtmlUri();
+      // TODO: 实现HTML URI获取逻辑
+      _htmlUri = 'about:blank';
       if (mounted) {
         setState(() {
           _isLoading = true;
@@ -392,7 +393,7 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
   }
 
   /// 搜索文本
-  Future<List<SearchResult>> searchText(String query) async {
+  Future<List<Map<String, dynamic>>> searchText(String query) async {
     if (_webViewController == null || query.isEmpty) return [];
 
     try {
@@ -404,7 +405,7 @@ class _AdvancedTextReaderWidgetState extends State<AdvancedTextReaderWidget> {
         final List<dynamic> resultList = result!.value as List<dynamic>;
         return resultList
             .where((item) => item is Map<String, dynamic>)
-            .map((item) => SearchResult.fromMap(item as Map<String, dynamic>))
+            .map((item) => item as Map<String, dynamic>)
             .toList();
       }
     } catch (e) {
@@ -579,7 +580,7 @@ class AdvancedTextReaderController {
   }
 
   /// 搜索文本
-  Future<List<SearchResult>> searchText(String query) async {
+  Future<List<Map<String, dynamic>>> searchText(String query) async {
     return await _state?.searchText(query) ?? [];
   }
 

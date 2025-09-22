@@ -12,7 +12,7 @@ class DatabaseService {
   static Database? _database;
   static const String _dbName = 'xxread_v2.db';
   static const int _dbVersion =
-      7; // <-- Version incremented for unified book_notes table
+      8; // <-- Version incremented for book_sources table
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -198,6 +198,11 @@ class DatabaseService {
       await db.execute('DROP TABLE IF EXISTS highlights');
       await db.execute('DROP TABLE IF EXISTS notes');
     }
+
+    // Version 8: Add book_sources table for advanced book source system
+    if (oldVersion < 8) {
+      await _createBookSourcesTable(db);
+    }
   }
 
   Future<void> _createTables(Database db) async {
@@ -257,6 +262,55 @@ class DatabaseService {
         FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
       )
     ''');
+
+    // Create book_sources table for advanced book source system
+    await _createBookSourcesTable(db);
+  }
+
+  /// 创建书源表
+  Future<void> _createBookSourcesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE book_sources (
+        id TEXT PRIMARY KEY,
+        book_source_name TEXT NOT NULL,
+        book_source_group TEXT NOT NULL DEFAULT '',
+        book_source_comment TEXT NOT NULL DEFAULT '',
+        book_source_type INTEGER NOT NULL DEFAULT 0,
+        book_source_url TEXT NOT NULL,
+        book_source_version INTEGER NOT NULL DEFAULT 1,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        enabled_explore INTEGER NOT NULL DEFAULT 1,
+        last_update_time INTEGER NOT NULL,
+        weight INTEGER NOT NULL DEFAULT 0,
+        rule_search TEXT,
+        rule_explore TEXT,
+        rule_book_info TEXT,
+        rule_toc TEXT,
+        rule_content TEXT,
+        variable_map TEXT,
+        http_config TEXT,
+        header TEXT,
+        login_url TEXT,
+        login_ui TEXT,
+        respond_time INTEGER NOT NULL DEFAULT 180000,
+        created_time INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
+        updated_time INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
+      )
+    ''');
+
+    // Create indexes for better performance
+    await db.execute(
+      'CREATE INDEX idx_book_source_name ON book_sources (book_source_name)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_book_source_group ON book_sources (book_source_group)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_book_source_enabled ON book_sources (enabled)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_book_source_type ON book_sources (book_source_type)',
+    );
   }
 
   /// 将整数颜色值转换为十六进制字符串（不含#前缀）
