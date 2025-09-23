@@ -366,9 +366,12 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
             bottom: 0,
             child: SizedBox(
               height:
-                  68 + 25 + (MediaQuery.of(
-                    context,
-                  ).padding.bottom).clamp(0.0, 50.0), // 大幅减少高度：实际导航栏68px + 边距25px + 安全区域
+                  68 +
+                  25 +
+                  (MediaQuery.of(context).padding.bottom).clamp(
+                    0.0,
+                    50.0,
+                  ), // 大幅减少高度：实际导航栏68px + 边距25px + 安全区域
               child: Center(
                 child: Container(
                   margin: EdgeInsets.only(
@@ -471,8 +474,8 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
     if (page is HomeContentEnhanced) {
       wrappedPage = const _HomeContentWrapper();
     } else if (page is SettingsPage) {
-      // 设置页面现在有自己的Scaffold和AppBar结构，直接使用
-      wrappedPage = page;
+      // 设置页面使用特殊包装器，确保状态栏正确处理
+      wrappedPage = _SettingsPageWrapper(child: page);
     } else {
       // 其他页面使用通用包装
       wrappedPage = _GenericPageWrapper(child: page);
@@ -1630,6 +1633,65 @@ class _StatCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// 设置页面专用包装器 - 确保状态栏正确处理
+class _SettingsPageWrapper extends StatefulWidget {
+  final Widget child;
+
+  const _SettingsPageWrapper({required this.child});
+
+  @override
+  State<_SettingsPageWrapper> createState() => _SettingsPageWrapperState();
+}
+
+class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 确保设置页在PageView中也能正确设置状态栏
+    _applySettingsPageSystemUI();
+  }
+
+  void _applySettingsPageSystemUI() {
+    // 强制启用边到边模式
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+
+    // 获取当前主题状态
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    // 应用基于主题的沉浸式样式 - 减少延迟
+    Future.microtask(() {
+      SystemChrome.setSystemUIOverlayStyle(
+        SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: isDarkMode
+              ? Brightness.light
+              : Brightness.dark,
+          statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarIconBrightness: isDarkMode
+              ? Brightness.light
+              : Brightness.dark,
+          systemNavigationBarDividerColor: Colors.transparent,
+          systemStatusBarContrastEnforced: false,
+          systemNavigationBarContrastEnforced: false,
+        ),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 在每次构建后重新应用状态栏设置
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _applySettingsPageSystemUI();
+      }
+    });
+
+    return widget.child;
   }
 }
 

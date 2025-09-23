@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
 import '../utils/app_themes.dart';
-import '../utils/glass_config.dart';
 import '../services/webdav/webdav_sync_service.dart';
 import '../widgets/webdav_config_dialog.dart';
 
@@ -56,51 +55,13 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     _loadSettings();
-    _setupPageImmersiveMode();
+    // 状态栏设置现在由_SettingsPageWrapper处理
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _setupThemeBasedImmersiveMode();
-  }
-
-  // 页面级沉浸式设置（与首页一致）
-  void _setupPageImmersiveMode() {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness: Brightness.dark,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      ),
-    );
-  }
-
-  // 基于主题的沉浸式设置（深浅色自适应）
-  void _setupThemeBasedImmersiveMode() {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    SystemChrome.setSystemUIOverlayStyle(
-      SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: isDarkMode
-            ? Brightness.light
-            : Brightness.dark,
-        statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness: isDarkMode
-            ? Brightness.light
-            : Brightness.dark,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      ),
-    );
+    // 状态栏设置现在由_SettingsPageWrapper处理，这里保持简洁
   }
 
   Future<void> _loadSettings() async {
@@ -583,7 +544,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
 
-          // 自绘毛玻璃顶栏（与首页一致）
+          // 毛玻璃顶栏（与首页完全一致的实现）
           Positioned(
             top: 0,
             left: 0,
@@ -591,31 +552,26 @@ class _SettingsPageState extends State<SettingsPage> {
             child: ClipRRect(
               child: BackdropFilter(
                 filter: ImageFilter.blur(
-                  sigmaX: GlassEffectConfig.appBarBlur,
-                  sigmaY: GlassEffectConfig.appBarBlur,
+                  sigmaX: 5.0, // 降低模糊强度，减少滑动时的渲染问题
+                  sigmaY: 5.0,
                 ),
                 child: Container(
-                  height: MediaQuery.of(context).padding.top + 60,
+                  height:
+                      MediaQuery.of(context).padding.top +
+                      60, // 状态栏高度 + AppBar高度
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface.withValues(
-                      alpha: GlassEffectConfig.appBarOpacity,
+                      alpha: 0.95, // 增加透明度，减少背景变化
                     ),
-                    border: Border(
-                      bottom: BorderSide(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.outline.withValues(alpha: 0.2),
-                        width: 0.5,
-                      ),
-                    ),
+                    // 移除边框，避免视觉干扰
                   ),
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(
                       16,
-                      MediaQuery.of(context).padding.top + 8,
+                      MediaQuery.of(context).padding.top + 8, // 减少AppBar内间距
                       16,
-                      8,
-                    ),
+                      8, // 减少底部间距
+                    ), // 沉浸式：状态栏高度 + 8px间距
                     child: Row(
                       children: [
                         Expanded(
@@ -623,29 +579,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             '设置',
                             style: TextStyle(
                               fontSize: 24,
-                              fontWeight: FontWeight.w700, // 增加字重
+                              fontWeight: FontWeight.w600,
                               color: Theme.of(context).colorScheme.onSurface,
-                              shadows: [
-                                // 精细调整文字阴影，确保在毛玻璃背景下清晰可见
-                                Shadow(
-                                  color:
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.black.withValues(alpha: 0.8)
-                                      : Colors.white.withValues(alpha: 0.9),
-                                  offset: const Offset(0, 1),
-                                  blurRadius: 2,
-                                ),
-                                Shadow(
-                                  color:
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.black.withValues(alpha: 0.4)
-                                      : Colors.white.withValues(alpha: 0.6),
-                                  offset: const Offset(0, 2),
-                                  blurRadius: 4,
-                                ),
-                              ],
                             ),
                           ),
                         ),
