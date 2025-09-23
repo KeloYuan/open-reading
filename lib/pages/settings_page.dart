@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
 import '../utils/app_themes.dart';
+import '../utils/glass_config.dart';
 import '../services/webdav/webdav_sync_service.dart';
 import '../widgets/webdav_config_dialog.dart';
 
@@ -55,6 +56,51 @@ class _SettingsPageState extends State<SettingsPage> {
   void initState() {
     super.initState();
     _loadSettings();
+    _setupPageImmersiveMode();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _setupThemeBasedImmersiveMode();
+  }
+
+  // 页面级沉浸式设置（与首页一致）
+  void _setupPageImmersiveMode() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemStatusBarContrastEnforced: false,
+        systemNavigationBarContrastEnforced: false,
+      ),
+    );
+  }
+
+  // 基于主题的沉浸式设置（深浅色自适应）
+  void _setupThemeBasedImmersiveMode() {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: isDarkMode
+            ? Brightness.light
+            : Brightness.dark,
+        statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: isDarkMode
+            ? Brightness.light
+            : Brightness.dark,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemStatusBarContrastEnforced: false,
+        systemNavigationBarContrastEnforced: false,
+      ),
+    );
   }
 
   Future<void> _loadSettings() async {
@@ -138,423 +184,479 @@ class _SettingsPageState extends State<SettingsPage> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      extendBody: true,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text(
-          '设置',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w600,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        surfaceTintColor: Colors.transparent, // 移除Material 3的色调
-        scrolledUnderElevation: 0, // 滚动时保持透明
-        flexibleSpace: ClipRRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surface.withValues(alpha: 0.8),
-                border: Border(
-                  bottom: BorderSide(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.outline.withValues(alpha: 0.2),
-                    width: 0.5,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+        toolbarHeight: 0, // 关闭系统AppBar，使用自绘毛玻璃顶栏
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: const [0.0, 0.3, 0.7, 1.0],
-            colors: [
-              Theme.of(
-                context,
-              ).colorScheme.primaryContainer.withValues(alpha: 0.12),
-              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
-              Theme.of(
-                context,
-              ).colorScheme.secondaryContainer.withValues(alpha: 0.08),
-              Theme.of(
-                context,
-              ).colorScheme.tertiaryContainer.withValues(alpha: 0.15),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-            children: [
-              _buildSectionCard(
-                title: '外观设置',
-                icon: Icons.palette_outlined,
-                children: [
-                  _buildThemeToggle(themeNotifier, isDarkMode),
-                  _buildAppThemeSelector(themeNotifier),
-                  _buildCustomAccentColorSelector(themeNotifier),
-                  _buildGlobalAccentColorSelector(themeNotifier),
-                  _buildAnimationToggle(),
+      body: Stack(
+        children: [
+          // 背景与内容
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: const [0.0, 0.3, 0.7, 1.0],
+                colors: [
+                  Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer.withValues(alpha: 0.12),
+                  Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
+                  Theme.of(
+                    context,
+                  ).colorScheme.secondaryContainer.withValues(alpha: 0.08),
+                  Theme.of(
+                    context,
+                  ).colorScheme.tertiaryContainer.withValues(alpha: 0.15),
                 ],
               ),
-              const SizedBox(height: 20),
-              _buildSectionCard(
-                title: '阅读提示',
-                icon: Icons.info_outline,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primaryContainer.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
+            ),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                MediaQuery.of(context).padding.top + 80, // 顶栏高度：状态栏 + 60
+                16,
+                16,
+              ),
+              children: [
+                _buildSectionCard(
+                  title: '外观设置',
+                  icon: Icons.palette_outlined,
+                  children: [
+                    _buildThemeToggle(themeNotifier, isDarkMode),
+                    _buildAppThemeSelector(themeNotifier),
+                    _buildCustomAccentColorSelector(themeNotifier),
+                    _buildGlobalAccentColorSelector(themeNotifier),
+                    _buildAnimationToggle(),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildSectionCard(
+                  title: '阅读提示',
+                  icon: Icons.info_outline,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
                         color: Theme.of(
                           context,
-                        ).colorScheme.primary.withValues(alpha: 0.3),
-                        width: 1,
+                        ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.font_download_rounded,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 32,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            '字体设置已移至阅读界面',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '打开任意书籍，点击屏幕中央，在底部控制栏中点击"设置"按钮，即可调整字体大小、行间距、字符间距、页面边距等阅读设置。',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.7),
+                              fontSize: 14,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.font_download_rounded,
-                          color: Theme.of(context).colorScheme.primary,
-                          size: 32,
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildSectionCard(
+                  title: '阅读设置',
+                  icon: Icons.book_outlined,
+                  children: [
+                    _buildReadingEngineSelector(),
+                    _buildSwitchSetting(
+                      title: '音量键翻页',
+                      subtitle: '使用音量键控制翻页',
+                      value: _enableVolumeKeyTurn,
+                      onChanged: (value) =>
+                          setState(() => _enableVolumeKeyTurn = value),
+                      icon: Icons.volume_up,
+                    ),
+                    _buildSwitchSetting(
+                      title: '全屏阅读',
+                      subtitle: '隐藏状态栏和导航栏',
+                      value: _enableFullscreen,
+                      onChanged: (value) =>
+                          setState(() => _enableFullscreen = value),
+                      icon: Icons.fullscreen,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildSectionCard(
+                  title: '书源功能',
+                  icon: Icons.source,
+                  children: [
+                    _buildSwitchSetting(
+                      title: '启用书源功能',
+                      subtitle: '开启在线书籍搜索和阅读功能',
+                      value: _enableBooksource,
+                      onChanged: (value) {
+                        setState(() => _enableBooksource = value);
+                        _saveSettings();
+                        // 通知主页面刷新导航栏
+                        _showRestartDialog();
+                      },
+                      icon: Icons.cloud_download,
+                    ),
+                    if (_enableBooksource) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          left: 16,
+                          right: 16,
+                          top: 8,
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          '字体设置已移至阅读界面',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurface,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.amber.withValues(alpha: 0.3),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.info_outline,
+                                color: Colors.amber.shade700,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '启用书源功能后，可在导航栏中看到"书源"选项，支持在线书籍搜索和阅读。',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.amber.shade700,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '打开任意书籍，点击屏幕中央，在底部控制栏中点击"设置"按钮，即可调整字体大小、行间距、字符间距、页面边距等阅读设置。',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withValues(alpha: 0.7),
-                            fontSize: 14,
-                            height: 1.5,
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildSectionCard(
+                  title: 'TTS朗读',
+                  icon: Icons.record_voice_over,
+                  children: [
+                    _buildSwitchSetting(
+                      title: '启用朗读功能',
+                      subtitle: '开启文本转语音朗读',
+                      value: _enableTTS,
+                      onChanged: (value) => setState(() => _enableTTS = value),
+                      icon: Icons.play_circle_outline,
+                    ),
+                    if (_enableTTS) ...[
+                      _buildSliderSetting(
+                        title: '朗读速度',
+                        subtitle: '调整朗读的快慢',
+                        value: _ttsSpeed,
+                        min: 0.1,
+                        max: 2.0,
+                        divisions: 19,
+                        onChanged: (value) => setState(() => _ttsSpeed = value),
+                        icon: Icons.speed,
+                        formatter: (value) => '${(value * 100).round()}%',
+                      ),
+                      _buildSliderSetting(
+                        title: '朗读音量',
+                        subtitle: '调整朗读音量大小',
+                        value: _ttsVolume,
+                        min: 0.0,
+                        max: 1.0,
+                        divisions: 10,
+                        onChanged: (value) =>
+                            setState(() => _ttsVolume = value),
+                        icon: Icons.volume_up,
+                        formatter: (value) => '${(value * 100).round()}%',
+                      ),
+                      _buildSliderSetting(
+                        title: '音调高低',
+                        subtitle: '调整朗读音调',
+                        value: _ttsPitch,
+                        min: 0.5,
+                        max: 2.0,
+                        divisions: 15,
+                        onChanged: (value) => setState(() => _ttsPitch = value),
+                        icon: Icons.graphic_eq,
+                        formatter: (value) => '${(value * 100).round()}%',
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildSectionCard(
+                  title: '云端同步',
+                  icon: Icons.cloud_sync,
+                  children: [
+                    _buildActionSetting(
+                      title: 'WebDAV配置',
+                      subtitle: _webdavService.isConfigured
+                          ? '已配置 - ${_webdavService.serverUrl}'
+                          : '点击配置WebDAV服务器',
+                      onTap: _showWebDavConfig,
+                      icon: Icons.cloud,
+                      trailing: _webdavService.isConfigured
+                          ? Icon(
+                              Icons.check_circle,
+                              color: Colors.green,
+                              size: 20,
+                            )
+                          : null,
+                    ),
+                    if (_webdavService.isConfigured)
+                      _buildActionSetting(
+                        title: '立即同步',
+                        subtitle: '手动同步阅读数据',
+                        onTap: _syncNow,
+                        icon: Icons.sync,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildSectionCard(
+                  title: '书籍管理',
+                  icon: Icons.library_books,
+                  children: [
+                    _buildSwitchSetting(
+                      title: '自动提取封面',
+                      subtitle: '导入时自动提取书籍封面',
+                      value: true, // 默认开启
+                      onChanged: (value) {
+                        // TODO: 实现封面提取开关逻辑
+                      },
+                      icon: Icons.image,
+                    ),
+                    _buildActionSetting(
+                      title: '重新提取封面',
+                      subtitle: '为现有书籍重新提取封面',
+                      onTap: _refreshAllCovers,
+                      icon: Icons.refresh,
+                    ),
+                    _buildActionSetting(
+                      title: '清理封面缓存',
+                      subtitle: '清理无效的封面文件',
+                      onTap: _cleanCoverCache,
+                      icon: Icons.cleaning_services,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildSectionCard(
+                  title: '开发者设置',
+                  icon: Icons.developer_mode,
+                  children: [
+                    _buildSwitchSetting(
+                      title: '开发者模式',
+                      subtitle: '启用开发者功能和调试选项',
+                      value: _enableDeveloperMode,
+                      onChanged: (value) {
+                        setState(() => _enableDeveloperMode = value);
+                        _saveSettings();
+                      },
+                      icon: Icons.code,
+                    ),
+                    if (_enableDeveloperMode) ...[
+                      _buildSwitchSetting(
+                        title: '调试日志',
+                        subtitle: '记录详细的应用运行日志',
+                        value: _enableDebugLogging,
+                        onChanged: (value) {
+                          setState(() => _enableDebugLogging = value);
+                          _saveSettings();
+                        },
+                        icon: Icons.bug_report,
+                      ),
+                      _buildSwitchSetting(
+                        title: '性能监控',
+                        subtitle: '显示阅读引擎性能指标',
+                        value: _enablePerformanceMonitor,
+                        onChanged: (value) {
+                          setState(() => _enablePerformanceMonitor = value);
+                          _saveSettings();
+                        },
+                        icon: Icons.analytics,
+                      ),
+                      _buildSwitchSetting(
+                        title: '内存统计',
+                        subtitle: '显示内存使用情况',
+                        value: _enableMemoryStats,
+                        onChanged: (value) {
+                          setState(() => _enableMemoryStats = value);
+                          _saveSettings();
+                        },
+                        icon: Icons.memory,
+                      ),
+                      _buildSwitchSetting(
+                        title: '显示FPS',
+                        subtitle: '在屏幕上显示帧率信息',
+                        value: _showFPS,
+                        onChanged: (value) {
+                          setState(() => _showFPS = value);
+                          _saveSettings();
+                        },
+                        icon: Icons.monitor,
+                      ),
+                      _buildActionSetting(
+                        title: '清除所有缓存',
+                        subtitle: '清除字体度量和分页缓存',
+                        onTap: _clearAllCaches,
+                        icon: Icons.clear_all,
+                      ),
+                      _buildActionSetting(
+                        title: '重置引擎设置',
+                        subtitle: '恢复阅读引擎到默认设置',
+                        onTap: _resetEngineSettings,
+                        icon: Icons.restore,
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildSectionCard(
+                  title: '系统设置',
+                  icon: Icons.settings_outlined,
+                  children: [
+                    _buildSwitchSetting(
+                      title: '保持屏幕常亮',
+                      subtitle: '阅读时防止屏幕自动关闭',
+                      value: _keepScreenOn,
+                      onChanged: (value) =>
+                          setState(() => _keepScreenOn = value),
+                      icon: Icons.stay_current_portrait,
+                    ),
+                    _buildSwitchSetting(
+                      title: '自动保存',
+                      subtitle: '自动保存阅读进度',
+                      value: _enableAutoSave,
+                      onChanged: (value) =>
+                          setState(() => _enableAutoSave = value),
+                      icon: Icons.save_outlined,
+                    ),
+                    _buildSwitchSetting(
+                      title: '电池优化',
+                      subtitle: '启用省电模式',
+                      value: _enableBatteryOptimization,
+                      onChanged: (value) =>
+                          setState(() => _enableBatteryOptimization = value),
+                      icon: Icons.battery_saver,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildAboutCard(),
+                const SizedBox(height: 100),
+              ],
+            ),
+          ),
+
+          // 自绘毛玻璃顶栏（与首页一致）
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: ClipRRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: GlassEffectConfig.appBarBlur,
+                  sigmaY: GlassEffectConfig.appBarBlur,
+                ),
+                child: Container(
+                  height: MediaQuery.of(context).padding.top + 60,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface.withValues(
+                      alpha: GlassEffectConfig.appBarOpacity,
+                    ),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outline.withValues(alpha: 0.2),
+                        width: 0.5,
+                      ),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      MediaQuery.of(context).padding.top + 8,
+                      16,
+                      8,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '设置',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700, // 增加字重
+                              color: Theme.of(context).colorScheme.onSurface,
+                              shadows: [
+                                // 精细调整文字阴影，确保在毛玻璃背景下清晰可见
+                                Shadow(
+                                  color:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.black.withValues(alpha: 0.8)
+                                      : Colors.white.withValues(alpha: 0.9),
+                                  offset: const Offset(0, 1),
+                                  blurRadius: 2,
+                                ),
+                                Shadow(
+                                  color:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.black.withValues(alpha: 0.4)
+                                      : Colors.white.withValues(alpha: 0.6),
+                                  offset: const Offset(0, 2),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
-              const SizedBox(height: 20),
-              _buildSectionCard(
-                title: '阅读设置',
-                icon: Icons.book_outlined,
-                children: [
-                  _buildReadingEngineSelector(),
-                  _buildSwitchSetting(
-                    title: '音量键翻页',
-                    subtitle: '使用音量键控制翻页',
-                    value: _enableVolumeKeyTurn,
-                    onChanged: (value) =>
-                        setState(() => _enableVolumeKeyTurn = value),
-                    icon: Icons.volume_up,
-                  ),
-                  _buildSwitchSetting(
-                    title: '全屏阅读',
-                    subtitle: '隐藏状态栏和导航栏',
-                    value: _enableFullscreen,
-                    onChanged: (value) =>
-                        setState(() => _enableFullscreen = value),
-                    icon: Icons.fullscreen,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _buildSectionCard(
-                title: '书源功能',
-                icon: Icons.source,
-                children: [
-                  _buildSwitchSetting(
-                    title: '启用书源功能',
-                    subtitle: '开启在线书籍搜索和阅读功能',
-                    value: _enableBooksource,
-                    onChanged: (value) {
-                      setState(() => _enableBooksource = value);
-                      _saveSettings();
-                      // 通知主页面刷新导航栏
-                      _showRestartDialog();
-                    },
-                    icon: Icons.cloud_download,
-                  ),
-                  if (_enableBooksource) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(
-                        left: 16,
-                        right: 16,
-                        top: 8,
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: Colors.amber.withValues(alpha: 0.3),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              color: Colors.amber.shade700,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '启用书源功能后，可在导航栏中看到"书源"选项，支持在线书籍搜索和阅读。',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.amber.shade700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 20),
-              _buildSectionCard(
-                title: 'TTS朗读',
-                icon: Icons.record_voice_over,
-                children: [
-                  _buildSwitchSetting(
-                    title: '启用朗读功能',
-                    subtitle: '开启文本转语音朗读',
-                    value: _enableTTS,
-                    onChanged: (value) => setState(() => _enableTTS = value),
-                    icon: Icons.play_circle_outline,
-                  ),
-                  if (_enableTTS) ...[
-                    _buildSliderSetting(
-                      title: '朗读速度',
-                      subtitle: '调整朗读的快慢',
-                      value: _ttsSpeed,
-                      min: 0.1,
-                      max: 2.0,
-                      divisions: 19,
-                      onChanged: (value) => setState(() => _ttsSpeed = value),
-                      icon: Icons.speed,
-                      formatter: (value) => '${(value * 100).round()}%',
-                    ),
-                    _buildSliderSetting(
-                      title: '朗读音量',
-                      subtitle: '调整朗读音量大小',
-                      value: _ttsVolume,
-                      min: 0.0,
-                      max: 1.0,
-                      divisions: 10,
-                      onChanged: (value) => setState(() => _ttsVolume = value),
-                      icon: Icons.volume_up,
-                      formatter: (value) => '${(value * 100).round()}%',
-                    ),
-                    _buildSliderSetting(
-                      title: '音调高低',
-                      subtitle: '调整朗读音调',
-                      value: _ttsPitch,
-                      min: 0.5,
-                      max: 2.0,
-                      divisions: 15,
-                      onChanged: (value) => setState(() => _ttsPitch = value),
-                      icon: Icons.graphic_eq,
-                      formatter: (value) => '${(value * 100).round()}%',
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 20),
-              _buildSectionCard(
-                title: '云端同步',
-                icon: Icons.cloud_sync,
-                children: [
-                  _buildActionSetting(
-                    title: 'WebDAV配置',
-                    subtitle: _webdavService.isConfigured
-                        ? '已配置 - ${_webdavService.serverUrl}'
-                        : '点击配置WebDAV服务器',
-                    onTap: _showWebDavConfig,
-                    icon: Icons.cloud,
-                    trailing: _webdavService.isConfigured
-                        ? Icon(
-                            Icons.check_circle,
-                            color: Colors.green,
-                            size: 20,
-                          )
-                        : null,
-                  ),
-                  if (_webdavService.isConfigured)
-                    _buildActionSetting(
-                      title: '立即同步',
-                      subtitle: '手动同步阅读数据',
-                      onTap: _syncNow,
-                      icon: Icons.sync,
-                    ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _buildSectionCard(
-                title: '书籍管理',
-                icon: Icons.library_books,
-                children: [
-                  _buildSwitchSetting(
-                    title: '自动提取封面',
-                    subtitle: '导入时自动提取书籍封面',
-                    value: true, // 默认开启
-                    onChanged: (value) {
-                      // TODO: 实现封面提取开关逻辑
-                    },
-                    icon: Icons.image,
-                  ),
-                  _buildActionSetting(
-                    title: '重新提取封面',
-                    subtitle: '为现有书籍重新提取封面',
-                    onTap: _refreshAllCovers,
-                    icon: Icons.refresh,
-                  ),
-                  _buildActionSetting(
-                    title: '清理封面缓存',
-                    subtitle: '清理无效的封面文件',
-                    onTap: _cleanCoverCache,
-                    icon: Icons.cleaning_services,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _buildSectionCard(
-                title: '开发者设置',
-                icon: Icons.developer_mode,
-                children: [
-                  _buildSwitchSetting(
-                    title: '开发者模式',
-                    subtitle: '启用开发者功能和调试选项',
-                    value: _enableDeveloperMode,
-                    onChanged: (value) {
-                      setState(() => _enableDeveloperMode = value);
-                      _saveSettings();
-                    },
-                    icon: Icons.code,
-                  ),
-                  if (_enableDeveloperMode) ...[
-                    _buildSwitchSetting(
-                      title: '调试日志',
-                      subtitle: '记录详细的应用运行日志',
-                      value: _enableDebugLogging,
-                      onChanged: (value) {
-                        setState(() => _enableDebugLogging = value);
-                        _saveSettings();
-                      },
-                      icon: Icons.bug_report,
-                    ),
-                    _buildSwitchSetting(
-                      title: '性能监控',
-                      subtitle: '显示阅读引擎性能指标',
-                      value: _enablePerformanceMonitor,
-                      onChanged: (value) {
-                        setState(() => _enablePerformanceMonitor = value);
-                        _saveSettings();
-                      },
-                      icon: Icons.analytics,
-                    ),
-                    _buildSwitchSetting(
-                      title: '内存统计',
-                      subtitle: '显示内存使用情况',
-                      value: _enableMemoryStats,
-                      onChanged: (value) {
-                        setState(() => _enableMemoryStats = value);
-                        _saveSettings();
-                      },
-                      icon: Icons.memory,
-                    ),
-                    _buildSwitchSetting(
-                      title: '显示FPS',
-                      subtitle: '在屏幕上显示帧率信息',
-                      value: _showFPS,
-                      onChanged: (value) {
-                        setState(() => _showFPS = value);
-                        _saveSettings();
-                      },
-                      icon: Icons.monitor,
-                    ),
-                    _buildActionSetting(
-                      title: '清除所有缓存',
-                      subtitle: '清除字体度量和分页缓存',
-                      onTap: _clearAllCaches,
-                      icon: Icons.clear_all,
-                    ),
-                    _buildActionSetting(
-                      title: '重置引擎设置',
-                      subtitle: '恢复阅读引擎到默认设置',
-                      onTap: _resetEngineSettings,
-                      icon: Icons.restore,
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 20),
-              _buildSectionCard(
-                title: '系统设置',
-                icon: Icons.settings_outlined,
-                children: [
-                  _buildSwitchSetting(
-                    title: '保持屏幕常亮',
-                    subtitle: '阅读时防止屏幕自动关闭',
-                    value: _keepScreenOn,
-                    onChanged: (value) => setState(() => _keepScreenOn = value),
-                    icon: Icons.stay_current_portrait,
-                  ),
-                  _buildSwitchSetting(
-                    title: '自动保存',
-                    subtitle: '自动保存阅读进度',
-                    value: _enableAutoSave,
-                    onChanged: (value) =>
-                        setState(() => _enableAutoSave = value),
-                    icon: Icons.save_outlined,
-                  ),
-                  _buildSwitchSetting(
-                    title: '电池优化',
-                    subtitle: '启用省电模式',
-                    value: _enableBatteryOptimization,
-                    onChanged: (value) =>
-                        setState(() => _enableBatteryOptimization = value),
-                    icon: Icons.battery_saver,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _buildAboutCard(),
-              const SizedBox(height: 100),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

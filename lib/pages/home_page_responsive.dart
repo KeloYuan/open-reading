@@ -364,15 +364,20 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
             left: 0,
             right: 0,
             bottom: 0,
-            child: Container(
+            child: SizedBox(
               height:
-                  120 + MediaQuery.of(context).padding.bottom, // 动态高度适配底部安全区域
-              color: Colors.transparent, // 完全透明，让内容透过
+                  68 + 25 + (MediaQuery.of(
+                    context,
+                  ).padding.bottom).clamp(0.0, 50.0), // 大幅减少高度：实际导航栏68px + 边距25px + 安全区域
               child: Center(
                 child: Container(
                   margin: EdgeInsets.only(
-                    bottom: MediaQuery.of(context).padding.bottom + 25,
-                  ), // 动态适配底部安全区域
+                    bottom:
+                        (MediaQuery.of(
+                          context,
+                        ).padding.bottom).clamp(0.0, 50.0) +
+                        25,
+                  ), // 动态适配底部安全区域，限制最大值
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(60), // 增大圆角半径，更Q弹
                     child: BackdropFilter(
@@ -1514,7 +1519,7 @@ class _GenericPageWrapper extends StatelessWidget {
           0,
           0,
           0,
-          MediaQuery.of(context).padding.bottom + 60, // 底部：导航栏+60px
+          0, // 移除底部padding，避免遮挡
         ),
         child: child,
       ),

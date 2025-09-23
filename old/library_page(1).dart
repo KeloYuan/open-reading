@@ -7,7 +7,6 @@ import '../services/book_dao.dart';
 import '../services/reading_router_service.dart';
 import 'import_book_page.dart';
 import '../utils/responsive_helper.dart';
-// import '../utils/glass_config.dart';
 
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
@@ -25,50 +24,6 @@ class _LibraryPageState extends State<LibraryPage> {
   void initState() {
     super.initState();
     _loadBooks();
-    _setupPageImmersiveMode();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _setupThemeBasedImmersiveMode();
-  }
-
-  // 与首页一致的沉浸式处理，确保安卓手势提示线“干净”
-  void _setupPageImmersiveMode() {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness: Brightness.dark,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      ),
-    );
-  }
-
-  void _setupThemeBasedImmersiveMode() {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    SystemChrome.setSystemUIOverlayStyle(
-      SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: isDarkMode
-            ? Brightness.light
-            : Brightness.dark,
-        statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness: isDarkMode
-            ? Brightness.light
-            : Brightness.dark,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      ),
-    );
   }
 
   Future<void> _loadBooks() async {
@@ -88,7 +43,6 @@ class _LibraryPageState extends State<LibraryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBody: true, // 让内容延伸到导航区，配合手势小白条
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: Text(
@@ -101,8 +55,8 @@ class _LibraryPageState extends State<LibraryPage> {
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent, // 移除Material 3的色调
+        scrolledUnderElevation: 0, // 滚动时保持透明
         flexibleSpace: ClipRRect(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
@@ -153,27 +107,21 @@ class _LibraryPageState extends State<LibraryPage> {
                 ? _buildEmptyLibrary()
                 : RefreshIndicator(
                     onRefresh: _loadBooks,
-                    strokeWidth: 2.5,
-                    displacement: 60,
-                    color: Theme.of(context).colorScheme.primary,
+                    strokeWidth: 2.5, // 减细刷新指示器线条
+                    displacement: 60, // 增加下拉距离
+                    color: Theme.of(context).colorScheme.primary, // 主题色
                     backgroundColor: Theme.of(
                       context,
-                    ).colorScheme.surface.withValues(alpha: 0.9),
+                    ).colorScheme.surface.withValues(alpha: 0.9), // 半透明背景
                     child: _buildBooksGrid(),
                   ),
-            // 顶部自定义 Positioned 已移除，沿用 AppBar 的 flexibleSpace
+            // 移除顶部自定义 Positioned 毛玻璃，改用 AppBar 的 flexibleSpace
           ],
         ),
       ),
       // 悬浮添加书籍按钮
       floatingActionButton: Container(
-        margin: EdgeInsets.only(
-          bottom:
-              68 +
-              25 +
-              (MediaQuery.of(context).padding.bottom).clamp(0.0, 50.0) +
-              15, // 精确避开悬浮导航栏，减少边距
-        ),
+        margin: const EdgeInsets.only(bottom: 80), // 向上移动80px
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
@@ -222,7 +170,12 @@ class _LibraryPageState extends State<LibraryPage> {
     final topInset = MediaQuery.of(context).padding.top;
     return Center(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(40, topInset + 60 + 40, 40, 40),
+        padding: EdgeInsets.fromLTRB(
+          40,
+          topInset + kToolbarHeight + 40,
+          40,
+          40,
+        ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
           // 毛玻璃效果 - 空书架提示卡片
@@ -365,13 +318,9 @@ class _LibraryPageState extends State<LibraryPage> {
       child: GridView.builder(
         padding: EdgeInsets.fromLTRB(
           16,
-          topInset + 60 + 16,
+          topInset + kToolbarHeight + 16,
           16,
-          // 精确计算悬浮导航栏占用空间：导航栏68px + 边距25px + 底部安全区域(限制最大值) + 10px缓冲
-          68 +
-              25 +
-              (MediaQuery.of(context).padding.bottom).clamp(0.0, 50.0) +
-              10,
+          MediaQuery.of(context).padding.bottom + 20,
         ),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: crossAxisCount,
