@@ -1,8 +1,7 @@
 ---
-alwaysApply: true
 description: 用户偏好和开发原则规则
+alwaysApply: false
 ---
-
 # 用户偏好和开发原则规则
 
 ## 🚫 严格禁止的行为

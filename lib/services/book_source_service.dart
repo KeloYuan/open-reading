@@ -29,10 +29,17 @@ class BookSourceService {
   /// 获取所有书源
   Future<List<BookSource>> getAllSources() async {
     try {
-      if (_shouldRefreshCache()) {
-        _cachedSources = await BookSourceDao.getAll();
-        _lastCacheUpdate = DateTime.now().millisecondsSinceEpoch;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final cacheExpired = (now - _lastCacheUpdate) > _cacheExpiry;
+
+      _cachedSources ??= await BookSourceDao.getAll();
+
+      if (_cachedEnabledSources == null || cacheExpired) {
+        _cachedEnabledSources = await BookSourceDao.getEnabled();
       }
+
+      _lastCacheUpdate = now;
+
       return _cachedSources ?? [];
     } catch (e) {
       debugPrint('获取书源失败: $e');
@@ -43,10 +50,14 @@ class BookSourceService {
   /// 获取启用的书源
   Future<List<BookSource>> getEnabledSources() async {
     try {
-      if (_shouldRefreshCache()) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final cacheExpired = (now - _lastCacheUpdate) > _cacheExpiry;
+
+      if (_cachedEnabledSources == null || cacheExpired) {
         _cachedEnabledSources = await BookSourceDao.getEnabled();
-        _lastCacheUpdate = DateTime.now().millisecondsSinceEpoch;
+        _lastCacheUpdate = now;
       }
+
       return _cachedEnabledSources ?? [];
     } catch (e) {
       debugPrint('获取启用书源失败: $e');

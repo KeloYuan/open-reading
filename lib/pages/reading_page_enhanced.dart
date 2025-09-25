@@ -3984,7 +3984,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
     try {
       // 异步保存，避免阻塞UI
-      _bookDao.updateBook(widget.book.copyWith(currentPage: _currentPageIndex));
+      await _bookDao.updateBookProgress(widget.book.id!, _currentPageIndex);
     } catch (e) {
       // 静默处理错误
       debugPrint('保存阅读进度失败: $e');

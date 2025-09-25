@@ -292,32 +292,21 @@ class AdvancedTextPaginator {
     // 只保留5%的余量避免文字被截断
     final rawCharsPerLine =
         viewMetrics.visibleWidth / fontMetrics.averageCharWidth;
-    final charsPerLine = (rawCharsPerLine * 0.95).floor();
+    final charsPerLine = (rawCharsPerLine * 0.92).floor();
 
     // 计算每页行数 - 优化空间利用率到90%
     // 只保留5%的余量确保最后一行不会被遮挡
     final rawLinesPerPage =
         viewMetrics.visibleHeight / spacingMetrics.actualLineHeight;
-    final linesPerPage = (rawLinesPerPage * 0.95).floor();
+    final linesPerPage = (rawLinesPerPage * 0.92).floor();
 
     // 计算每页字符数
-    final charsPerPage = charsPerLine * linesPerPage;
-
-    debugPrint('📐 页面度量计算 (90%空间利用率):');
-    debugPrint(
-      '  - 原始每行字符数: ${rawCharsPerLine.toStringAsFixed(1)} → 优化值: $charsPerLine (95%)',
-    );
-    debugPrint(
-      '  - 原始每页行数: ${rawLinesPerPage.toStringAsFixed(1)} → 优化值: $linesPerPage (95%)',
-    );
-    debugPrint(
-      '  - 每页总字符数: $charsPerPage (空间利用率: ${(0.95 * 0.95 * 100).toStringAsFixed(1)}%)',
-    );
+    final charsPerPage = math.max(30, charsPerLine * linesPerPage);
 
     final result = PageMetrics(
       charsPerLine: math.max(10, charsPerLine), // 最少10个字符
       linesPerPage: math.max(3, linesPerPage), // 最少3行
-      charsPerPage: math.max(30, charsPerPage), // 最少30个字符
+      charsPerPage: charsPerPage, // 最少30个字符
     );
 
     // 缓存结果
@@ -338,7 +327,7 @@ class AdvancedTextPaginator {
     const int maxPages = 100000; // 防止无限循环
 
     // 计算每页最大字符数，使用90%空间利用率策略
-    final maxCharsPerPage = (params.pageMetrics.charsPerPage * 0.95).floor();
+    final maxCharsPerPage = (params.pageMetrics.charsPerPage * 0.93).floor();
 
     while (currentIndex < text.length && pageCount < maxPages) {
       pageCount++;

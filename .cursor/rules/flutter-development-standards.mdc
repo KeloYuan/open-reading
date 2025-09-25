@@ -1,8 +1,7 @@
 ---
-alwaysApply: true
 description: Flutter项目开发标准和代码质量保证规则
+alwaysApply: false
 ---
-
 # Flutter项目开发标准和代码质量保证规则
 
 ## 📋 项目理解要求

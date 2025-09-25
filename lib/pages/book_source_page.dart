@@ -351,19 +351,21 @@ class _BookSourcePageState extends State<BookSourcePage>
   }
 
   Widget _buildSourceCard(BookSource source) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final onSurface = colorScheme.onSurface;
+    final surface = colorScheme.surface;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+        color: surface.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-        ),
+        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.15)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -376,64 +378,109 @@ class _BookSourcePageState extends State<BookSourcePage>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
                     source.typeIcon,
+                    size: 22,
                     color: source.enabled
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.outline,
+                        ? colorScheme.primary
+                        : colorScheme.outline,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      source.bookSourceName,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: source.enabled
-                            ? Theme.of(context).colorScheme.onSurface
-                            : Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.5),
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          source.bookSourceName,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: source.enabled
+                                    ? onSurface
+                                    : onSurface.withValues(alpha: 0.45),
+                              ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            _buildInfoChip(source.typeName, source.typeIcon),
+                            if (source.bookSourceGroup.isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              _buildInfoChip(
+                                source.bookSourceGroup,
+                                Icons.folder_outlined,
+                              ),
+                            ],
+                            const Spacer(),
+                            if (source.hasSearch)
+                              _buildFeatureChip(
+                                '搜索',
+                                Icons.search,
+                                colorScheme.primary,
+                              ),
+                            if (source.hasExplore) ...[
+                              const SizedBox(width: 4),
+                              _buildFeatureChip(
+                                '发现',
+                                Icons.explore,
+                                Colors.green,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                   Switch(
                     value: source.enabled,
                     onChanged: (value) => _toggleSourceEnabled(source, value),
+                    activeColor: colorScheme.primary,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              if (source.bookSourceComment.isNotEmpty)
+              if (source.bookSourceComment.isNotEmpty) ...[
+                const SizedBox(height: 10),
                 Text(
                   source.bookSourceComment,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.7),
+                    color: onSurface.withValues(alpha: 0.65),
+                    height: 1.4,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-              const SizedBox(height: 8),
+              ],
+              const SizedBox(height: 12),
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildInfoChip(source.typeName, source.typeIcon),
-                  if (source.bookSourceGroup.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    _buildInfoChip(
-                      source.bookSourceGroup,
-                      Icons.folder_outlined,
+                  Text(
+                    source.bookSourceUrl,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: onSurface.withValues(alpha: 0.45),
                     ),
-                  ],
-                  const Spacer(),
-                  if (source.hasSearch)
-                    _buildFeatureChip('搜索', Icons.search, Colors.blue),
-                  if (source.hasExplore) ...[
-                    const SizedBox(width: 4),
-                    _buildFeatureChip('发现', Icons.explore, Colors.green),
-                  ],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: () => _testSource(source),
+                        icon: const Icon(Icons.speed),
+                        tooltip: '测试连接',
+                      ),
+                      IconButton(
+                        onPressed: () => _showSourceDetail(source),
+                        icon: const Icon(Icons.info_outline),
+                        tooltip: '详情',
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ],
@@ -541,6 +588,10 @@ class _BookSourcePageState extends State<BookSourcePage>
     } catch (e) {
       _showErrorSnackBar('操作失败: $e');
     }
+  }
+
+  void _testSource(BookSource source) {
+    _showInfoSnackBar('书源测试功能开发中...');
   }
 
   void _showSourceDetail(BookSource source) {

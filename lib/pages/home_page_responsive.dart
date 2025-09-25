@@ -763,32 +763,58 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
     final double screenWidth = mediaQuery.size.width;
     final double refreshEdgeOffset = mediaQuery.padding.top + appBarHeight;
 
-    double topContentInset = 16;
-    double spacingAfterWelcome = 24;
-    double sectionSpacing = 28;
+    const double topContentInset = 16;
+    const double baseSpacingAfterWelcome = 24;
+    const double baseSectionSpacing = 28;
+
+    double summaryTargetSpacing = baseSpacingAfterWelcome;
+    double weeklyTargetSpacing = baseSectionSpacing;
+    double recentTargetSpacing = baseSectionSpacing;
 
     if (isCupertino) {
       if (screenWidth >= 428) {
-        topContentInset = 6;
-        spacingAfterWelcome = 16;
-        sectionSpacing = 22;
+        summaryTargetSpacing = 12;
+        weeklyTargetSpacing = 14;
+        recentTargetSpacing = 14;
       } else if (screenWidth >= 414) {
-        topContentInset = 10;
-        spacingAfterWelcome = 18;
-        sectionSpacing = 24;
+        summaryTargetSpacing = 16;
+        weeklyTargetSpacing = 18;
+        recentTargetSpacing = 18;
       } else if (screenWidth >= 390) {
-        topContentInset = 12;
-        spacingAfterWelcome = 20;
-        sectionSpacing = 26;
+        summaryTargetSpacing = 18;
+        weeklyTargetSpacing = 20;
+        recentTargetSpacing = 20;
       } else {
-        topContentInset = 10;
-        spacingAfterWelcome = 18;
-        sectionSpacing = 24;
+        summaryTargetSpacing = 20;
+        weeklyTargetSpacing = 22;
+        recentTargetSpacing = 20;
       }
     }
 
+    summaryTargetSpacing = summaryTargetSpacing
+        .clamp(12, baseSpacingAfterWelcome)
+        .toDouble();
+    weeklyTargetSpacing = weeklyTargetSpacing
+        .clamp(12, baseSectionSpacing)
+        .toDouble();
+    recentTargetSpacing = recentTargetSpacing
+        .clamp(12, baseSectionSpacing)
+        .toDouble();
+
+    final double summaryLift = isCupertino
+        ? baseSpacingAfterWelcome - summaryTargetSpacing
+        : 0;
+    final double weeklyLift = isCupertino
+        ? baseSectionSpacing - weeklyTargetSpacing
+        : 0;
+    final double recentLift = isCupertino
+        ? baseSectionSpacing - recentTargetSpacing
+        : 0;
+
     final double contentTopPadding =
         mediaQuery.padding.top + appBarHeight + topContentInset;
+    const double spacingAfterWelcome = baseSpacingAfterWelcome;
+    const double sectionSpacing = baseSectionSpacing;
     final double contentBottomPadding = mediaQuery.padding.bottom + 60;
     return Container(
       decoration: BoxDecoration(
@@ -835,11 +861,23 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                     children: [
                       _buildWelcomeCard(),
                       SizedBox(height: spacingAfterWelcome),
-                      _buildSummaryCards(),
+                      Transform.translate(
+                        offset: Offset(0, -summaryLift),
+                        transformHitTests: false,
+                        child: _buildSummaryCards(),
+                      ),
                       SizedBox(height: sectionSpacing),
-                      _buildWeeklyChartCard(),
+                      Transform.translate(
+                        offset: Offset(0, -weeklyLift),
+                        transformHitTests: false,
+                        child: _buildWeeklyChartCard(),
+                      ),
                       SizedBox(height: sectionSpacing),
-                      _buildRecentActivity(),
+                      Transform.translate(
+                        offset: Offset(0, -recentLift),
+                        transformHitTests: false,
+                        child: _buildRecentActivity(),
+                      ),
                     ],
                   ),
                 ),

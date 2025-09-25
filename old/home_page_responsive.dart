@@ -2154,7 +2154,7 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '自定义强调色',
+                        '自定义主题强调色',
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           fontWeight: FontWeight.w500,
                         ),
@@ -2341,7 +2341,7 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                   child: Row(
                     children: [
                       Text(
-                        '自定义强调色',
+                        '自定义主题强调色',
                         style: Theme.of(context).textTheme.headlineSmall
                             ?.copyWith(fontWeight: FontWeight.bold),
                       ),

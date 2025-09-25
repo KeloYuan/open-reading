@@ -11,8 +11,7 @@ class DatabaseService {
 
   static Database? _database;
   static const String _dbName = 'xxread_v2.db';
-  static const int _dbVersion =
-      8; // <-- Version incremented for book_sources table
+  static const int _dbVersion = 8;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
