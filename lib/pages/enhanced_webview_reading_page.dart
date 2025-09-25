@@ -7,8 +7,11 @@ import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/system_ui_manager.dart';
+import '../services/reading_engine_coordinator.dart';
 
 import '../models/book.dart';
 import '../models/bookmark.dart';
@@ -22,10 +25,14 @@ import '../services/note_dao.dart';
 import '../services/reading_stats_dao.dart';
 import '../services/reading_theme_manager.dart';
 import '../services/page_animation_manager.dart';
-import '../widgets/tts_panel_enhanced.dart';
+import '../widgets/reading_page/enhanced_tts_panel.dart';
 import '../widgets/toc_widget.dart';
 import '../widgets/share_dialog.dart';
 import '../widgets/enhanced_reading_settings_dialog.dart';
+import '../widgets/reading_page/page_turning_zones.dart';
+import '../widgets/reading_page/enhanced_webview_controller.dart';
+import '../services/reading_progress_service.dart';
+import '../services/app_lifecycle_manager.dart';
 
 /// 增强版WebView阅读页面
 /// 集成anx-reader的文字选中、划线、笔记功能
@@ -49,6 +56,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
     with TickerProviderStateMixin {
   // --- 核心控制器 ---
   InAppWebViewController? _webViewController;
+  late EnhancedWebViewController _enhancedController;
   late AnimationController _controlBarAnimationController;
   late AnimationController _fadeAnimationController;
   Timer? _hideControlsTimer;
@@ -65,16 +73,19 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
 
   // --- 书籍内容 ---
   String _bookContent = '';
-  List<Map<String, dynamic>> _bookChapters = [];
 
   // --- UI状态 ---
   bool _showControls = false;
-  bool _isInitializing = true;
+  final bool _showPageTurningZones = false;
 
   // --- 文字选中相关 ---
   OverlayEntry? _textSelectionMenu;
   String _selectedText = '';
   String _selectedCfi = '';
+
+  // --- 翻页设置 ---
+  int _pageTurningMode = 0; // 默认使用模式0
+  bool _enablePageTurningGestures = true;
 
   // --- 数据访问层 ---
   final BookDao _bookDao = BookDao();
@@ -83,11 +94,20 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
   final NoteDao _noteDao = NoteDao();
   final ReadingStatsDao _statsDao = ReadingStatsDao();
 
+  // --- 服务层 ---
+  final ReadingProgressService _progressService = ReadingProgressService();
+  final AppLifecycleManager _lifecycleManager = AppLifecycleManager();
+
   // --- 数据缓存 ---
   final List<Bookmark> _bookmarks = [];
   final List<Highlight> _highlights = [];
   final List<Note> _notes = [];
   final List<Chapter> _chapters = [];
+
+  // --- 文件路径管理 ---
+  String? _resolvedFilePath;
+
+  String get _bookFilePath => _resolvedFilePath ?? widget.book.filePath;
 
   // --- 阅读设置 ---
   ReadingTheme _currentTheme = ReadingThemes.dayTheme;
@@ -99,17 +119,75 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
 
   // --- 统计数据 ---
   DateTime? _sessionStartTime;
+  final ReadingEngineCoordinator _engineCoordinator =
+      ReadingEngineCoordinator();
 
   @override
   void initState() {
     super.initState();
+    _initializeControllers();
     _initializeAnimations();
     _loadUserSettings();
+    _initializeServices();
     _sessionStartTime = DateTime.now();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeReading();
     });
+  }
+
+  Future<void> _initializeServices() async {
+    await _progressService.initialize();
+    await _lifecycleManager.initialize();
+  }
+
+  void _initializeControllers() {
+    _enhancedController = EnhancedWebViewController(
+      book: widget.book,
+      onCfiChanged: (cfi) {
+        setState(() {
+          _currentCfi = cfi;
+        });
+        _saveReadingProgressToService(cfi: cfi);
+      },
+      onProgressChanged: (progress) {
+        setState(() {
+          _currentProgress = progress;
+        });
+        _saveReadingProgressToService(progress: progress);
+      },
+      onPageChanged: (page) {
+        setState(() {
+          _currentPageNumber = page;
+        });
+        _saveReadingProgressToService(currentPage: page);
+      },
+      onChapterChanged: (title) {
+        setState(() {
+          _chapterTitle = title;
+        });
+        _saveReadingProgressToService(chapterTitle: title);
+      },
+      onBookmarkChanged: (exists) {
+        // 处理书签状态变化
+      },
+      onTextSelected: (text, cfi, position) {
+        _handleTextSelection(text, cfi, position);
+      },
+      onLoadComplete: () {
+        setState(() {
+          _isLoading = false;
+        });
+        _enhancedController.loadBook(initialCfi: widget.initialCfi);
+      },
+      onError: (error) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = error;
+          _isLoading = false;
+        });
+      },
+    );
   }
 
   @override
@@ -147,6 +225,9 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
           _lineSpacing = prefs.getDouble('lineSpacing') ?? 1.8;
           _letterSpacing = prefs.getDouble('letterSpacing') ?? 0.2;
           _fontFamily = prefs.getString('fontFamily') ?? 'System';
+          _pageTurningMode = prefs.getInt('pageTurningMode') ?? 0;
+          _enablePageTurningGestures =
+              prefs.getBool('enablePageTurningGestures') ?? true;
         });
       }
     } catch (e) {
@@ -173,7 +254,6 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
 
       setState(() {
         _isLoading = false;
-        _isInitializing = false;
       });
 
       // 短暂显示控制栏提示用户
@@ -183,24 +263,31 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
       setState(() {
         _isLoading = false;
         _hasError = true;
-        _errorMessage = '加载书籍失败: $e';
+        _errorMessage = _buildFriendlyErrorMessage(e);
       });
     }
   }
 
   /// 验证书籍内容
   Future<void> _loadBookContent() async {
-    final file = File(widget.book.filePath);
-    if (!await file.exists()) {
-      throw Exception('书籍文件不存在: ${widget.book.filePath}');
+    var currentPath = _bookFilePath;
+    final availablePath = await _ensureBookFileAvailable(currentPath);
+
+    if (availablePath == null) {
+      throw Exception('书籍文件不存在: $currentPath');
     }
 
-    try {
-      debugPrint('开始解析EPUB文件: ${widget.book.filePath}');
+    currentPath = availablePath;
+    _resolvedFilePath = currentPath;
 
-      if (widget.book.filePath.toLowerCase().endsWith('.epub')) {
+    final file = File(currentPath);
+
+    try {
+      debugPrint('开始解析EPUB文件: $currentPath');
+
+      if (currentPath.toLowerCase().endsWith('.epub')) {
         await _parseEpubFile(file);
-      } else if (widget.book.filePath.toLowerCase().endsWith('.txt')) {
+      } else if (currentPath.toLowerCase().endsWith('.txt')) {
         await _parseTxtFile(file);
       } else {
         _bookContent = '<h1>不支持的文件格式</h1><p>当前只支持 EPUB 和 TXT 格式</p>';
@@ -211,6 +298,80 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
       debugPrint('解析书籍内容失败: $e');
       _bookContent = '<h1>解析失败</h1><p>错误信息: $e</p>';
     }
+  }
+
+  Future<String?> _ensureBookFileAvailable(String originalPath) async {
+    final originalFile = File(originalPath);
+    if (await originalFile.exists()) {
+      return originalPath;
+    }
+
+    final relocatedPath = await _tryRelocateFile(originalPath);
+    if (relocatedPath != null) {
+      return relocatedPath;
+    }
+
+    return null;
+  }
+
+  Future<String?> _tryRelocateFile(String oldPath) async {
+    try {
+      final fileName = oldPath.split('/').last;
+      debugPrint('🔍 尝试重新定位书籍文件: $fileName');
+
+      final documentsDir = await getApplicationDocumentsDirectory();
+      final booksDir = Directory(path.join(documentsDir.path, 'books'));
+
+      if (!await booksDir.exists()) {
+        debugPrint('📂 当前books目录不存在，无法重新定位');
+        return null;
+      }
+
+      final newPath = path.join(booksDir.path, fileName);
+      final newFile = File(newPath);
+
+      if (await newFile.exists()) {
+        debugPrint('✅ 书籍文件已重新定位到: $newPath');
+
+        if (widget.book.id != null) {
+          try {
+            await _bookDao.updateBookFilePath(widget.book.id!, newPath);
+            debugPrint('✅ 已更新数据库中的文件路径');
+          } catch (e) {
+            debugPrint('❌ 更新数据库文件路径失败: $e');
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            _resolvedFilePath = newPath;
+          });
+        } else {
+          _resolvedFilePath = newPath;
+        }
+
+        return newPath;
+      }
+
+      debugPrint('❌ 在新的books目录中未找到文件: $fileName');
+      return null;
+    } catch (e) {
+      debugPrint('❌ 尝试重新定位书籍文件时出错: $e');
+      return null;
+    }
+  }
+
+  String _buildFriendlyErrorMessage(Object error) {
+    final message = error.toString();
+    if (message.contains('书籍文件不存在')) {
+      return '无法找到书籍文件，可能已被移动或删除。\n\n已尝试在“xxread/books”目录中重新定位，如果仍然失败，请在“文件”App中确认文件是否存在或重新导入该书籍。';
+    }
+
+    if (message.contains('无法重新定位') || message.contains('无法重新定位书籍文件')) {
+      return '无法重新定位书籍文件。\n\n建议您在“文件”App中确认书籍仍然存在于“xxread/books”目录，或重新导入该书籍后再试。';
+    }
+
+    return '加载书籍失败：$message\n\n您可以尝试重新打开书籍或重新导入后再试。';
   }
 
   /// 解析 EPUB 文件
@@ -301,6 +462,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
         _noteDao.getNotesByBook(widget.book.id!),
       ]);
 
+      _bookmarks.clear();
       _bookmarks.clear();
       _bookmarks.addAll(futures[0] as List<Bookmark>);
 
@@ -469,7 +631,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
 
   /// 在WebView中加载书籍
   Future<void> _loadBookInWebView(InAppWebViewController controller) async {
-    final bookPath = widget.book.filePath;
+    final bookPath = _bookFilePath;
     final bookUri = Uri.file(bookPath);
 
     // 构建包含折叠式阅读器的HTML
@@ -501,13 +663,13 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
             const contentDiv = document.getElementById('content');
             if (contentDiv) {
               contentDiv.innerHTML = `$escapedContent`;
-              
+
               // 应用样式
               contentDiv.style.color = '${_getColorHex(_currentTheme.textColor)}';
               contentDiv.style.fontSize = '${_fontSize}px';
               contentDiv.style.lineHeight = '${_lineSpacing}';
               contentDiv.style.letterSpacing = '${_letterSpacing}px';
-              
+
               // 为所有章节内容添加样式
               const chapters = contentDiv.querySelectorAll('.chapter');
               chapters.forEach(chapter => {
@@ -515,14 +677,14 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
                   chapter.style.paddingBottom = '20px';
                   chapter.style.borderBottom = '1px solid rgba(128, 128, 128, 0.2)';
               });
-              
+
               // 为段落添加间距
               const paragraphs = contentDiv.querySelectorAll('p');
               paragraphs.forEach(p => {
                   p.style.marginBottom = '16px';
                   p.style.lineHeight = '${_lineSpacing}';
               });
-              
+
               console.log('Content updated successfully');
             } else {
               console.error('Content div not found');
@@ -685,7 +847,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
                     <div style="padding: 20px; color: red; text-align: center;">
                         <h2>加载失败</h2>
                         <p>错误信息: \${error.message}</p>
-                        <p>书籍路径: ${widget.book.filePath}</p>
+                    <p>书籍路径: ${_bookFilePath}</p>
                         <p>请尝试切换到Flutter原生阅读器</p>
                     </div>
                 \`;
@@ -1227,22 +1389,44 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
         annotations.forEach(annotation => {
           window.addAnnotation(annotation);
         });
-      ''',
+      '''
+                .trim(),
       );
     }
   }
 
-  /// 保存阅读进度
-  Future<void> _saveReadingProgress() async {
-    if (_isInitializing || !mounted || widget.book.id == null) return;
+  /// 保存阅读进度到服务
+  Future<void> _saveReadingProgressToService({
+    String? cfi,
+    int? currentPage,
+    int? totalPages,
+    double? progress,
+    String? chapterTitle,
+    bool immediate = false,
+    bool critical = false,
+  }) async {
+    if (widget.book.id == null) return;
 
     try {
-      await _bookDao.updateBook(
-        widget.book.copyWith(currentPage: _currentPageNumber),
+      await _progressService.updateProgress(
+        bookId: widget.book.filePath,
+        bookDatabaseId: widget.book.id!,
+        cfi: cfi ?? _currentCfi,
+        currentPage: currentPage ?? _currentPageNumber,
+        totalPages: totalPages ?? _totalPages,
+        progress: progress ?? _currentProgress,
+        chapterTitle: chapterTitle ?? _chapterTitle,
+        immediate: immediate,
+        critical: critical,
       );
     } catch (e) {
       debugPrint('保存阅读进度失败: $e');
     }
+  }
+
+  /// 保存阅读进度（兼容性方法）
+  Future<void> _saveReadingProgress() async {
+    await _saveReadingProgressToService(immediate: true);
   }
 
   /// 显示消息
@@ -1324,22 +1508,49 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
       );
     }
 
-    return InAppWebView(
-      initialSettings: InAppWebViewSettings(
-        supportZoom: false,
-        transparentBackground: true,
-        javaScriptEnabled: true,
-        domStorageEnabled: true,
-        allowFileAccessFromFileURLs: true,
-        allowUniversalAccessFromFileURLs: true,
-      ),
-      onWebViewCreated: _onWebViewCreated,
-      onLoadStop: (controller, url) {
-        debugPrint('WebView加载完成: $url');
-      },
-      onConsoleMessage: (controller, consoleMessage) {
-        debugPrint('WebView控制台: ${consoleMessage.message}');
-      },
+    return Stack(
+      children: [
+        // WebView翻页手势检测器
+        PageTurningGestureDetector(
+          currentMode: _pageTurningMode,
+          enableGestures: _enablePageTurningGestures,
+          onPrevPage: () {
+            _enhancedController.prevPage();
+            _hideControlsWithDelay();
+          },
+          onNextPage: () {
+            _enhancedController.nextPage();
+            _hideControlsWithDelay();
+          },
+          onShowMenu: _toggleControls,
+          child: InAppWebView(
+            initialSettings: InAppWebViewSettings(
+              supportZoom: false,
+              transparentBackground: true,
+              javaScriptEnabled: true,
+              domStorageEnabled: true,
+              allowFileAccessFromFileURLs: true,
+              allowUniversalAccessFromFileURLs: true,
+            ),
+            onWebViewCreated: _onWebViewCreated,
+            onLoadStop: (controller, url) {
+              debugPrint('WebView加载完成: $url');
+              // 初始化增强控制器
+              _enhancedController.initialize(controller);
+            },
+            onConsoleMessage: (controller, consoleMessage) {
+              debugPrint('WebView控制台: ${consoleMessage.message}');
+            },
+          ),
+        ),
+
+        // 翻页区域可视化（调试用）
+        if (_showPageTurningZones)
+          PageTurningZoneVisualizer(
+            currentMode: _pageTurningMode,
+            showZones: _showPageTurningZones,
+          ),
+      ],
     );
   }
 
@@ -1635,8 +1846,35 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => TtsPanelEnhanced(
-        textToRead: _selectedText.isNotEmpty ? _selectedText : '当前页面内容',
+      isScrollControlled: true,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: EnhancedTtsPanel(
+          getCurrentText: () async {
+            return await _enhancedController.getCurrentChapterText();
+          },
+          getNextText: () async {
+            await _enhancedController.nextPage();
+            return await _enhancedController.getCurrentChapterText();
+          },
+          getPrevText: () async {
+            await _enhancedController.prevPage();
+            return await _enhancedController.getCurrentChapterText();
+          },
+          onClose: () {
+            Navigator.pop(context);
+          },
+        ),
       ),
     );
   }
@@ -1800,22 +2038,66 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
     );
   }
 
+  /// 处理文本选择
+  void _handleTextSelection(String text, String cfi, Offset position) {
+    setState(() {
+      _selectedText = text;
+      _selectedCfi = cfi;
+    });
+
+    // 这里可以显示文本选择菜单
+    _showTextSelectionMenu(position.dx, position.dy);
+  }
+
+  /// 保存翻页设置
+  Future<void> _savePageTurningSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('pageTurningMode', _pageTurningMode);
+      await prefs.setBool(
+        'enablePageTurningGestures',
+        _enablePageTurningGestures,
+      );
+    } catch (e) {
+      debugPrint('保存翻页设置失败: $e');
+    }
+  }
+
+  /// 延时隐藏控制栏
+  void _hideControlsWithDelay() {
+    _hideControlsTimer?.cancel();
+    _hideControlsTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted && _showControls) {
+        setState(() {
+          _showControls = false;
+        });
+        _controlBarAnimationController.reverse();
+      }
+    });
+  }
+
   @override
   void dispose() {
     _controlBarAnimationController.dispose();
     _fadeAnimationController.dispose();
     _hideControlsTimer?.cancel();
     _hideTextSelectionMenu();
+    _enhancedController.dispose();
 
     // 保存阅读统计
     if (_sessionStartTime != null) {
       final duration = DateTime.now().difference(_sessionStartTime!);
       if (duration.inSeconds > 10) {
         _statsDao.insertReadingTime(DateTime.now(), duration.inSeconds);
+        _engineCoordinator.recordEngineUsage(
+          ReadingEngineType.webView,
+          duration,
+        );
       }
     }
 
-    _saveReadingProgress();
+    // 立即保存当前进度
+    _saveReadingProgressToService(immediate: true, critical: true);
 
     // 解锁并恢复系统UI
     SystemUiManager.unlockImmersive();

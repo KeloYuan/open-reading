@@ -1,39 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../models/book.dart';
 import '../pages/enhanced_webview_reading_page.dart';
 import '../pages/reading_page_enhanced.dart';
+import '../services/reading_engine_coordinator.dart';
 
 /// 阅读器路由服务
-/// 根据用户设置选择合适的阅读器：Native 或 WebView 标准版
+///
+/// 通过 [ReadingEngineCoordinator] 选择并打开合适的阅读引擎页面。
 class ReadingRouterService {
-  static const String _preferenceKey = 'defaultReadingEngine';
-
-  /// 获取用户设置的默认阅读引擎
-  static Future<String> getDefaultEngine() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_preferenceKey) ?? 'webview_standard';
-  }
-
-  /// 设置默认阅读引擎
-  static Future<void> setDefaultEngine(String engine) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_preferenceKey, engine);
-  }
-
-  /// 根据用户设置导航到适当的阅读器
-  static Future<void> openBook(BuildContext context, Book book) async {
-    final engine = await getDefaultEngine();
-    await _navigateToEngine(context, book, engine);
-  }
-
-  /// 直接使用指定引擎打开书籍
-  static Future<void> openBookWithEngine(
+  /// 根据协调器策略打开书籍。
+  ///
+  /// [preferEngine] 可用于强制使用指定引擎，若为空则遵循策略选择。
+  static Future<void> openBook(
     BuildContext context,
-    Book book,
-    String engine,
-  ) async {
+    Book book, {
+    ReadingEngineType? preferEngine,
+  }) async {
+    final coordinator = ReadingEngineCoordinator();
+    await coordinator.ensureInitialized();
+
+    final engine = preferEngine ?? await coordinator.selectOptimalEngine(book);
     await _navigateToEngine(context, book, engine);
   }
 
@@ -41,15 +27,15 @@ class ReadingRouterService {
   static Future<void> _navigateToEngine(
     BuildContext context,
     Book book,
-    String engine,
+    ReadingEngineType engine,
   ) async {
     Widget page;
 
     switch (engine) {
-      case 'native':
+      case ReadingEngineType.advanced:
         page = ReadingPageEnhanced(book: book);
         break;
-      case 'webview_standard':
+      case ReadingEngineType.webView:
       default:
         page = EnhancedWebViewReadingPage(book: book);
     }

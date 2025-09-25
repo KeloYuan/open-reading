@@ -698,6 +698,94 @@
 
 ### 架构设计特殊注意事项
 
+#### 响应式主页架构系统（重要架构发现）
+
+**关键发现**: iOS设备实际使用的是`home_page_responsive.dart`中的`_HomeContentWrapper`组件，而不是直接使用`HomeContentEnhanced`组件。这是一个关键的架构理解，影响所有iOS布局调试和修改。
+
+##### 核心架构组件
+
+**1. 响应式导航系统**
+- **桌面端/平板**: 使用`NavigationRail`侧边导航栏
+- **手机端**: 使用底部药丸导航栏（`_BounceNavigationItem`）
+- 导航类型通过`ResponsiveHelper.getNavigationType(context)`动态确定
+
+**2. 页面包装器系统**
+```dart
+// 不同页面使用不同的包装器
+if (page is HomeContentEnhanced) {
+  wrappedPage = const _HomeContentWrapper();           // 首页专用
+} else if (page is SettingsPage) {
+  wrappedPage = _SettingsPageWrapper(child: page);     // 设置页专用
+} else {
+  wrappedPage = _GenericPageWrapper(child: page);      // 通用包装
+}
+```
+
+**3. iOS特定间距优化系统**
+```dart
+// iOS设备根据屏幕尺寸动态调整Transform偏移量
+Widget _buildOptimizedSummaryCards() {
+  final screenWidth = MediaQuery.of(context).size.width;
+  double offset;
+
+  if (screenWidth >= 428) {          // iPhone Pro Max: -50.0
+  } else if (screenWidth >= 414) {   // iPhone Plus: -40.0
+  } else if (screenWidth >= 390) {   // iPhone Pro: -25.0
+  } else {                          // iPhone SE/Mini: -15.0
+  }
+
+  return Transform.translate(offset: Offset(0, offset), child: _buildSummaryCards());
+}
+```
+
+##### 沉浸式UI系统
+
+**1. 系统UI控制**
+- `SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge)` - 强制边到边模式
+- 透明状态栏和导航栏
+- 基于主题的状态栏图标亮度自动调整
+
+**2. 毛玻璃效果统一配置**
+- AppBar毛玻璃: `GlassEffectConfig.appBarBlur` / `appBarOpacity`
+- 药丸导航: `GlassEffectConfig.navigationBarBlur` / `navigationBarOpacity`
+- 所有毛玻璃效果通过中央配置管理
+
+##### 性能优化策略
+
+**1. PageView优化**
+```dart
+PageView(
+  controller: _pageController,
+  physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+  pageSnapping: true,  // 启用页面捕捉
+  children: _navigationItems.map((item) {
+    return RepaintBoundary(child: _buildPageWrapper(item.page));
+  }).toList(),
+);
+```
+
+**2. 状态保持机制**
+- `_KeepAlivePage` + `AutomaticKeepAliveClientMixin` 保持页面状态
+- `RepaintBoundary` 优化重绘性能
+- `Future.microtask()` 避免build过程中调用setState
+
+##### 关键开发注意事项
+
+**iOS布局调试规则**:
+1. 所有iOS首页布局问题都应该在`_HomeContentWrapper`中修改
+2. `home_content_enhanced.dart`的修改不会影响iOS手机端
+3. Transform偏移量需要根据具体设备尺寸精细调整
+
+**平台差异处理**:
+```dart
+// Android使用标准间距，iOS使用Transform偏移
+if (!kIsWeb && !Platform.isIOS)
+  const SizedBox(height: 28),
+(!kIsWeb && Platform.isIOS)
+  ? _buildOptimizedSummaryCards()
+  : _buildSummaryCards(),
+```
+
 #### 响应式设置页面架构
 **重要发现**: `home_page_responsive.dart` 中使用了双设置页面架构：
 - **桌面端**: 使用完整的 `SettingsPage` 组件

@@ -27,6 +27,7 @@ import '../widgets/share_dialog.dart';
 import '../widgets/enhanced_reading_settings_dialog.dart';
 import '../utils/responsive_helper.dart';
 import '../utils/system_ui_manager.dart';
+import '../services/reading_engine_coordinator.dart';
 
 // 性能优化配置
 class PerformanceConfig {
@@ -105,6 +106,8 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   bool _showControls = false; // 默认隐藏工具栏
   Timer? _hideControlsTimer;
   DateTime? _sessionStartTime;
+  final ReadingEngineCoordinator _engineCoordinator =
+      ReadingEngineCoordinator();
 
   // --- Bookmark State ---
   List<Bookmark> _bookmarks = [];
@@ -4048,6 +4051,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
       final duration = DateTime.now().difference(_sessionStartTime!);
       if (duration.inSeconds > 10) {
         _statsDao.insertReadingTime(DateTime.now(), duration.inSeconds);
+        _engineCoordinator.recordEngineUsage(
+          ReadingEngineType.advanced,
+          duration,
+        );
       }
     }
 

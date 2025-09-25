@@ -14,6 +14,9 @@ class ReadingEngineCoordinator {
   factory ReadingEngineCoordinator() => _instance;
   ReadingEngineCoordinator._internal();
 
+  bool _isInitialized = false;
+  Future<void>? _initializationFuture;
+
   /// 当前使用的引擎类型
   ReadingEngineType _currentEngine = ReadingEngineType.webView;
 
@@ -27,14 +30,28 @@ class ReadingEngineCoordinator {
   ReadingPreferences? _preferences;
 
   /// 初始化协调器
-  Future<void> initialize() async {
+  Future<void> initialize() => ensureInitialized();
+
+  Future<void> ensureInitialized() {
+    _initializationFuture ??= _doInitialize();
+    return _initializationFuture!;
+  }
+
+  Future<void> _doInitialize() async {
+    if (_isInitialized) {
+      return;
+    }
+
     await _loadPreferences();
     _initializePerformanceMetrics();
+    _isInitialized = true;
     debugPrint('📖 ReadingEngineCoordinator 初始化完成');
   }
 
   /// 选择最适合的阅读引擎
   Future<ReadingEngineType> selectOptimalEngine(Book book) async {
+    await ensureInitialized();
+
     switch (_strategy) {
       case EngineSelectionStrategy.automatic:
         return await _selectAutomaticEngine(book);
@@ -87,6 +104,8 @@ class ReadingEngineCoordinator {
 
   /// 切换阅读引擎
   Future<bool> switchEngine(ReadingEngineType newEngine) async {
+    await ensureInitialized();
+
     if (_currentEngine == newEngine) return true;
 
     try {
@@ -119,6 +138,10 @@ class ReadingEngineCoordinator {
 
   /// 获取引擎性能对比报告
   Map<String, dynamic> getPerformanceReport() {
+    if (!_isInitialized) {
+      return {};
+    }
+
     final report = <String, dynamic>{};
 
     for (final entry in _performanceMetrics.entries) {
@@ -313,6 +336,10 @@ class ReadingEngineCoordinator {
 
   /// 记录引擎使用情况
   void recordEngineUsage(ReadingEngineType engine, Duration usageTime) {
+    if (!_isInitialized) {
+      return;
+    }
+
     _updatePerformanceMetric(
       engine,
       'usageTime',
@@ -397,6 +424,7 @@ class PerformanceMetrics {
   double get renderingPerformance => _calculateAverage('renderingPerformance');
   double get userSatisfaction => _calculateAverage('userSatisfaction');
   double get errorRate => _calculateAverage('errorCount');
+  double get averageUsageTime => _calculateAverage('usageTime');
   int get switchCount => _metrics['switchCount']?.length ?? 0;
 
   void updateMetric(String metricName, double value) {

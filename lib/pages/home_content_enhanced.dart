@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:ui';
+import 'dart:io';
 import '../services/book_dao.dart';
 import '../services/reading_stats_dao.dart';
 import '../utils/glass_config.dart';
@@ -135,39 +137,25 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                     ),
                     children: [
                       _buildWelcomeCard(),
+                      // iOS端使用Transform.translate抵消系统默认间距，Android端添加间距
+                      if (!kIsWeb && !Platform.isIOS)
+                        const SizedBox(height: 28),
+                      _buildOptimizedSummaryCards(),
+                      // iOS端使用Transform.translate抵消系统默认间距，Android端添加间距
+                      if (!kIsWeb && !Platform.isIOS)
+                        const SizedBox(height: 32),
+                      _buildOptimizedWeeklyChartCard(),
+                      // iOS端使用Transform.translate抵消系统默认间距，Android端添加间距
+                      if (!kIsWeb && !Platform.isIOS)
+                        const SizedBox(height: 32),
+                      _buildOptimizedRecentActivity(),
                       SizedBox(
                         height: ResponsiveHelper.getValue(
                           context,
-                          mobile: 20.0,
-                          tablet: 24.0,
-                          desktop: 28.0,
-                        ),
-                      ),
-                      _buildSummaryCards(),
-                      SizedBox(
-                        height: ResponsiveHelper.getValue(
-                          context,
-                          mobile: 24.0,
-                          tablet: 28.0,
-                          desktop: 32.0,
-                        ),
-                      ),
-                      _buildWeeklyChartCard(),
-                      SizedBox(
-                        height: ResponsiveHelper.getValue(
-                          context,
-                          mobile: 24.0,
-                          tablet: 28.0,
-                          desktop: 32.0,
-                        ),
-                      ),
-                      _buildRecentActivity(),
-                      SizedBox(
-                        height: ResponsiveHelper.getValue(
-                          context,
-                          mobile: 40.0,
-                          tablet: 48.0,
-                          desktop: 56.0,
+                          mobile: 48.0,
+                          largeMobile: 56.0,
+                          tablet: 64.0,
+                          desktop: 72.0,
                         ),
                       ), // 底部留白
                     ],
@@ -332,25 +320,25 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
     // 获取iOS设备优化的响应式间距
     final screenWidth = MediaQuery.of(context).size.width;
 
-    // 动态调整间距 - 考虑iOS设备尺寸差异
+    // 动态调整间距 - 考虑iOS设备尺寸差异，为iPhone 16 Pro优化
     double cardSpacing, rowSpacing;
 
     if (screenWidth >= 428) {
       // iPhone 14 Pro Max, 15 Pro Max, 16 Pro Max等大屏设备
-      cardSpacing = 16.0;
-      rowSpacing = 20.0;
+      cardSpacing = 18.0;
+      rowSpacing = 24.0;
     } else if (screenWidth >= 414) {
       // iPhone 14 Plus, 15 Plus等Plus设备
-      cardSpacing = 14.0;
-      rowSpacing = 18.0;
+      cardSpacing = 16.0;
+      rowSpacing = 22.0;
     } else if (screenWidth >= 390) {
-      // iPhone 14 Pro, 15 Pro, 16 Pro等标准Pro设备
+      // iPhone 14 Pro, 15 Pro, 16 Pro等标准Pro设备 - 增加间距
+      cardSpacing = 16.0;
+      rowSpacing = 20.0;
+    } else {
+      // iPhone SE, Mini等小屏设备 - 也适当增加间距
       cardSpacing = 12.0;
       rowSpacing = 16.0;
-    } else {
-      // iPhone SE, Mini等小屏设备
-      cardSpacing = 10.0;
-      rowSpacing = 14.0;
     }
 
     return Column(
@@ -414,25 +402,25 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
     // 获取iOS设备优化的GridView间距和纵横比
     final screenWidth = MediaQuery.of(context).size.width;
 
-    // 根据iOS设备屏幕尺寸优化间距和纵横比
+    // 根据iOS设备屏幕尺寸优化间距和纵横比 - 为iPhone 16 Pro优化
     double gridSpacing, aspectRatio;
 
     if (screenWidth >= 428) {
       // iPhone Pro Max等大屏设备
-      gridSpacing = 20.0;
+      gridSpacing = 22.0;
       aspectRatio = 1.5;
     } else if (screenWidth >= 414) {
       // iPhone Plus等设备
-      gridSpacing = 18.0;
+      gridSpacing = 20.0;
       aspectRatio = 1.4;
     } else if (screenWidth >= 390) {
-      // iPhone Pro等设备
-      gridSpacing = 16.0;
-      aspectRatio = 1.3;
+      // iPhone Pro等设备 - 增加间距，调整纵横比
+      gridSpacing = 18.0;
+      aspectRatio = 1.35;
     } else {
-      // iPhone SE, Mini等小屏设备
-      gridSpacing = 14.0;
-      aspectRatio = 1.2;
+      // iPhone SE, Mini等小屏设备 - 也适当增加间距
+      gridSpacing = 16.0;
+      aspectRatio = 1.25;
     }
 
     return GridView.count(
@@ -802,6 +790,96 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
       space: 4.0,
       child: Text(text, style: style),
     );
+  }
+
+  // iOS设备优化的统计卡片
+  Widget _buildOptimizedSummaryCards() {
+    if (!kIsWeb && Platform.isIOS) {
+      final screenWidth = MediaQuery.of(context).size.width;
+      double offset;
+
+      if (screenWidth >= 428) {
+        // iPhone 14 Pro Max, 15 Pro Max, 16 Pro Max等大屏设备
+        offset = -50.0;
+      } else if (screenWidth >= 414) {
+        // iPhone 14 Plus, 15 Plus等Plus设备
+        offset = -40.0;
+      } else if (screenWidth >= 390) {
+        // iPhone 14 Pro, 15 Pro, 16 Pro等标准Pro设备 - 减小偏移量
+        offset = -25.0;
+      } else {
+        // iPhone SE, Mini等小屏设备 - 最小偏移量
+        offset = -15.0;
+      }
+
+      return Transform.translate(
+        offset: Offset(0, offset),
+        transformHitTests: false,
+        child: _buildSummaryCards(),
+      );
+    } else {
+      return _buildSummaryCards();
+    }
+  }
+
+  // iOS设备优化的图表卡片
+  Widget _buildOptimizedWeeklyChartCard() {
+    if (!kIsWeb && Platform.isIOS) {
+      final screenWidth = MediaQuery.of(context).size.width;
+      double offset;
+
+      if (screenWidth >= 428) {
+        // iPhone 14 Pro Max, 15 Pro Max, 16 Pro Max等大屏设备
+        offset = -65.0;
+      } else if (screenWidth >= 414) {
+        // iPhone 14 Plus, 15 Plus等Plus设备
+        offset = -55.0;
+      } else if (screenWidth >= 390) {
+        // iPhone 14 Pro, 15 Pro, 16 Pro等标准Pro设备 - 减小偏移量
+        offset = -35.0;
+      } else {
+        // iPhone SE, Mini等小屏设备 - 最小偏移量
+        offset = -25.0;
+      }
+
+      return Transform.translate(
+        offset: Offset(0, offset),
+        transformHitTests: false,
+        child: _buildWeeklyChartCard(),
+      );
+    } else {
+      return _buildWeeklyChartCard();
+    }
+  }
+
+  // iOS设备优化的活动卡片
+  Widget _buildOptimizedRecentActivity() {
+    if (!kIsWeb && Platform.isIOS) {
+      final screenWidth = MediaQuery.of(context).size.width;
+      double offset;
+
+      if (screenWidth >= 428) {
+        // iPhone 14 Pro Max, 15 Pro Max, 16 Pro Max等大屏设备
+        offset = -30.0;
+      } else if (screenWidth >= 414) {
+        // iPhone 14 Plus, 15 Plus等Plus设备
+        offset = -25.0;
+      } else if (screenWidth >= 390) {
+        // iPhone 14 Pro, 15 Pro, 16 Pro等标准Pro设备 - 减小偏移量
+        offset = -15.0;
+      } else {
+        // iPhone SE, Mini等小屏设备 - 最小偏移量
+        offset = -10.0;
+      }
+
+      return Transform.translate(
+        offset: Offset(0, offset),
+        transformHitTests: false,
+        child: _buildRecentActivity(),
+      );
+    } else {
+      return _buildRecentActivity();
+    }
   }
 }
 

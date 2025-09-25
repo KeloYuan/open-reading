@@ -341,12 +341,14 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
           PageView(
             controller: _pageController,
             onPageChanged: (index) {
-              // 使用Future.microtask避免在build过程中调用setState
-              Future.microtask(() {
-                if (mounted) {
-                  setState(() => _selectedIndex = index);
-                }
-              });
+              // 使用更稳定的方式避免在build过程中调用setState
+              if (mounted && _selectedIndex != index) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    setState(() => _selectedIndex = index);
+                  }
+                });
+              }
             },
             children: _navigationItems.map((item) {
               // 使用RepaintBoundary和AutomaticKeepAliveClientMixin优化重绘和内存管理
@@ -439,8 +441,14 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                                 // 优化导航响应性能
                                 if (_selectedIndex == index) return; // 避免重复点击
 
-                                // 立即更新选中状态，提升响应速度
-                                setState(() => _selectedIndex = index);
+                                // 使用addPostFrameCallback避免在build过程中调用setState
+                                WidgetsBinding.instance.addPostFrameCallback((
+                                  _,
+                                ) {
+                                  if (mounted) {
+                                    setState(() => _selectedIndex = index);
+                                  }
+                                });
 
                                 // 使用更流畅的动画参数
                                 _pageController.animateToPage(
@@ -749,6 +757,39 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final bool isCupertino = !kIsWeb && Platform.isIOS;
+    final double appBarHeight = 60;
+    final double screenWidth = mediaQuery.size.width;
+    final double refreshEdgeOffset = mediaQuery.padding.top + appBarHeight;
+
+    double topContentInset = 16;
+    double spacingAfterWelcome = 24;
+    double sectionSpacing = 28;
+
+    if (isCupertino) {
+      if (screenWidth >= 428) {
+        topContentInset = 6;
+        spacingAfterWelcome = 16;
+        sectionSpacing = 22;
+      } else if (screenWidth >= 414) {
+        topContentInset = 10;
+        spacingAfterWelcome = 18;
+        sectionSpacing = 24;
+      } else if (screenWidth >= 390) {
+        topContentInset = 12;
+        spacingAfterWelcome = 20;
+        sectionSpacing = 26;
+      } else {
+        topContentInset = 10;
+        spacingAfterWelcome = 18;
+        sectionSpacing = 24;
+      }
+    }
+
+    final double contentTopPadding =
+        mediaQuery.padding.top + appBarHeight + topContentInset;
+    final double contentBottomPadding = mediaQuery.padding.bottom + 60;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -783,47 +824,22 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   backgroundColor: Theme.of(
                     context,
                   ).colorScheme.surface.withValues(alpha: 0.9), // 半透明背景
-                  edgeOffset:
-                      MediaQuery.of(context).padding.top +
-                      60, // 下拉刷新UI往下移，与ListView的padding和AppBar高度保持一致
+                  edgeOffset: refreshEdgeOffset,
                   child: ListView(
                     padding: EdgeInsets.fromLTRB(
                       16,
-                      MediaQuery.of(context).padding.top +
-                          80, // 增加顶部padding：状态栏+80px，让整体下移避免下拉冲突
+                      contentTopPadding,
                       16,
-                      MediaQuery.of(context).padding.bottom +
-                          60, // 增加底部padding：导航栏+40px，解决底部溢出
+                      contentBottomPadding,
                     ),
                     children: [
                       _buildWelcomeCard(),
-                      // Android端添加间距，iOS端使用Transform.translate抵消系统默认间距
-                      if (!kIsWeb && !Platform.isIOS)
-                        const SizedBox(height: 16),
-                      (!kIsWeb && Platform.isIOS)
-                          ? Transform.translate(
-                              offset: const Offset(0, -50),
-                              child: _buildSummaryCards(),
-                            )
-                          : _buildSummaryCards(),
-                      // Android端添加间距，iOS端使用Transform.translate抵消系统默认间距
-                      if (!kIsWeb && !Platform.isIOS)
-                        const SizedBox(height: 16),
-                      (!kIsWeb && Platform.isIOS)
-                          ? Transform.translate(
-                              offset: const Offset(0, -65),
-                              child: _buildWeeklyChartCard(),
-                            )
-                          : _buildWeeklyChartCard(),
-                      // Android端添加间距，iOS端使用Transform.translate抵消系统默认间距
-                      if (!kIsWeb && !Platform.isIOS)
-                        const SizedBox(height: 16),
-                      (!kIsWeb && Platform.isIOS)
-                          ? Transform.translate(
-                              offset: const Offset(0, -30),
-                              child: _buildRecentActivity(),
-                            )
-                          : _buildRecentActivity(),
+                      SizedBox(height: spacingAfterWelcome),
+                      _buildSummaryCards(),
+                      SizedBox(height: sectionSpacing),
+                      _buildWeeklyChartCard(),
+                      SizedBox(height: sectionSpacing),
+                      _buildRecentActivity(),
                     ],
                   ),
                 ),
@@ -1486,6 +1502,8 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
       child: Text(text, style: style),
     );
   }
+
+  // iOS设备优化的统计卡片 - 根据不同设备尺寸动态调整偏移量
 }
 
 // 通用页面包装器 - 为其他页面提供一致的布局
@@ -1708,8 +1726,7 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
               ),
               child: Container(
                 height:
-                    MediaQuery.of(context).padding.top +
-                    60, // 状态栏高度 + AppBar高度
+                    MediaQuery.of(context).padding.top + 60, // 状态栏高度 + AppBar高度
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface.withValues(
                     alpha: GlassEffectConfig.appBarOpacity,

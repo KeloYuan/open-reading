@@ -15,6 +15,7 @@ import 'utils/app_themes.dart';
 import 'services/tts_service.dart';
 import 'services/share_service.dart';
 import 'services/data_manager.dart';
+import 'services/reading_engine_coordinator.dart';
 
 void main() async {
   // 确保可以在 runApp 前安全调用 SystemChrome
@@ -70,6 +71,14 @@ void main() async {
   } catch (e) {
     debugPrint('❌ 数据管理系统初始化失败: $e');
     // 即使初始化失败也继续启动应用，在应用内会有错误处理
+  }
+
+  // 初始化阅读引擎协调器
+  try {
+    await ReadingEngineCoordinator().ensureInitialized();
+    debugPrint('✅ 阅读引擎协调器已初始化');
+  } catch (e) {
+    debugPrint('❌ 阅读引擎协调器初始化失败: $e');
   }
 
   runApp(

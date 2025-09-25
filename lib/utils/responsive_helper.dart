@@ -2,20 +2,32 @@ import 'package:flutter/material.dart';
 
 class ResponsiveHelper {
   // 屏幕尺寸断点
+  static const double largeMobileBreakpoint = 414.0; // iPhone Plus/Pro Max等大屏手机
   static const double tabletBreakpoint = 768.0;
   static const double desktopBreakpoint = 1200.0;
   
-  // 判断是否为手机
+  // 判断是否为普通手机
+  static bool isSmallMobile(BuildContext context) {
+    return MediaQuery.of(context).size.width < largeMobileBreakpoint;
+  }
+
+  // 判断是否为大屏手机
+  static bool isLargeMobile(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    return width >= largeMobileBreakpoint && width < tabletBreakpoint;
+  }
+
+  // 判断是否为手机（包括大屏手机）
   static bool isMobile(BuildContext context) {
     return MediaQuery.of(context).size.width < tabletBreakpoint;
   }
-  
+
   // 判断是否为平板
   static bool isTablet(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     return width >= tabletBreakpoint && width < desktopBreakpoint;
   }
-  
+
   // 判断是否为桌面
   static bool isDesktop(BuildContext context) {
     return MediaQuery.of(context).size.width >= desktopBreakpoint;
@@ -33,6 +45,8 @@ class ResponsiveHelper {
       return ScreenType.desktop;
     } else if (width >= tabletBreakpoint) {
       return ScreenType.tablet;
+    } else if (width >= largeMobileBreakpoint) {
+      return ScreenType.largeMobile;
     } else {
       return ScreenType.mobile;
     }
@@ -42,14 +56,17 @@ class ResponsiveHelper {
   static T getValue<T>(
     BuildContext context, {
     required T mobile,
+    T? largeMobile,
     T? tablet,
     T? desktop,
   }) {
     switch (getScreenType(context)) {
       case ScreenType.desktop:
-        return desktop ?? tablet ?? mobile;
+        return desktop ?? tablet ?? largeMobile ?? mobile;
       case ScreenType.tablet:
-        return tablet ?? mobile;
+        return tablet ?? largeMobile ?? mobile;
+      case ScreenType.largeMobile:
+        return largeMobile ?? mobile;
       case ScreenType.mobile:
         return mobile;
     }
@@ -60,6 +77,7 @@ class ResponsiveHelper {
     return getValue(
       context,
       mobile: 16.0,
+      largeMobile: 20.0,
       tablet: 32.0,
       desktop: 64.0,
     );
@@ -136,6 +154,7 @@ class ResponsiveHelper {
 
 enum ScreenType {
   mobile,
+  largeMobile,
   tablet,
   desktop,
 }
