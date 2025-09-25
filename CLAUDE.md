@@ -651,6 +651,7 @@
 - ✅ 完善FlutterAdvancedReaderWidget组件，添加完整API
 - ✅ 实现智能响应式布局，自适应不同设备屏幕尺寸
 - ✅ 添加分页完整性验证，防止文字丢失问题
+- ✅ 修复设置页面毛玻璃效果显示异常问题，统一UI效果配置
 
 ### 原生阅读器开发要点
 
@@ -883,6 +884,35 @@ When implementing text pagination that needs to account for UI elements:
 - **Problem**: Multiple animation systems conflicting (AnimationController vs implicit animations)
 - **Solution**: Choose one approach consistently - prefer implicit animations (AnimatedPositioned, AnimatedOpacity) for simpler implementations
 - **Avoid**: Mixing SingleTickerProviderStateMixin with implicit animations unless absolutely necessary
+
+#### Glass Effect (毛玻璃效果) Issues
+When implementing glass effect (frosted glass) UI elements across different pages:
+- **Problem**: Settings page glass effect inconsistent with home/library pages, causing visual anomalies with status bar
+- **Root Cause**:
+  - Inconsistent blur and opacity parameters (settings: blur=5.0, opacity=0.95 vs standard: blur=15.0, opacity=0.3)
+  - Conflicting glass effect implementations (page-level vs wrapper-level)
+  - Missing unified configuration system
+- **Solution**:
+  - Centralize glass effect parameters in `GlassEffectConfig`
+  - Use unified wrapper architecture for consistent UI across pages
+  - Remove duplicate glass effect implementations from individual pages
+- **Implementation Pattern**:
+  ```dart
+  // Use unified configuration instead of hardcoded values
+  BackdropFilter(
+    filter: ImageFilter.blur(
+      sigmaX: GlassEffectConfig.appBarBlur, // 15.0
+      sigmaY: GlassEffectConfig.appBarBlur,
+    ),
+    child: Container(
+      color: Theme.of(context).colorScheme.surface.withValues(
+        alpha: GlassEffectConfig.appBarOpacity, // 0.3
+      ),
+    ),
+  )
+  ```
+- **Architecture**: Settings page uses `_SettingsPageWrapper` to provide unified glass effect, maintaining consistency with `_HomeContentWrapper`
+- **Fixed**: 2025-09-25 - Settings page glass effect now matches home/library pages perfectly
 
 ### Theme System
 - Supports light/dark mode with Material 3 design

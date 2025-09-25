@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -152,37 +151,34 @@ class _SettingsPageState extends State<SettingsPage> {
         elevation: 0,
         toolbarHeight: 0, // 关闭系统AppBar，使用自绘毛玻璃顶栏
       ),
-      body: Stack(
-        children: [
-          // 背景与内容
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                stops: const [0.0, 0.3, 0.7, 1.0],
-                colors: [
-                  Theme.of(
-                    context,
-                  ).colorScheme.primaryContainer.withValues(alpha: 0.12),
-                  Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
-                  Theme.of(
-                    context,
-                  ).colorScheme.secondaryContainer.withValues(alpha: 0.08),
-                  Theme.of(
-                    context,
-                  ).colorScheme.tertiaryContainer.withValues(alpha: 0.15),
-                ],
-              ),
-            ),
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                MediaQuery.of(context).padding.top + 80, // 顶栏高度：状态栏 + 60
-                16,
-                16,
-              ),
-              children: [
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            stops: const [0.0, 0.3, 0.7, 1.0],
+            colors: [
+              Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withValues(alpha: 0.12),
+              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
+              Theme.of(
+                context,
+              ).colorScheme.secondaryContainer.withValues(alpha: 0.08),
+              Theme.of(
+                context,
+              ).colorScheme.tertiaryContainer.withValues(alpha: 0.15),
+            ],
+          ),
+        ),
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            MediaQuery.of(context).padding.top + 80, // 顶栏高度：状态栏 + 60
+            16,
+            16,
+          ),
+          children: [
                 _buildSectionCard(
                   title: '外观设置',
                   icon: Icons.palette_outlined,
@@ -539,59 +535,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 20),
                 _buildAboutCard(),
-                const SizedBox(height: 100),
-              ],
-            ),
-          ),
-
-          // 毛玻璃顶栏（与首页完全一致的实现）
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: ClipRRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(
-                  sigmaX: 5.0, // 降低模糊强度，减少滑动时的渲染问题
-                  sigmaY: 5.0,
-                ),
-                child: Container(
-                  height:
-                      MediaQuery.of(context).padding.top +
-                      60, // 状态栏高度 + AppBar高度
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface.withValues(
-                      alpha: 0.95, // 增加透明度，减少背景变化
-                    ),
-                    // 移除边框，避免视觉干扰
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      16,
-                      MediaQuery.of(context).padding.top + 8, // 减少AppBar内间距
-                      16,
-                      8, // 减少底部间距
-                    ), // 沉浸式：状态栏高度 + 8px间距
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '设置',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+            const SizedBox(height: 100),
+          ],
+        ),
       ),
     );
   }

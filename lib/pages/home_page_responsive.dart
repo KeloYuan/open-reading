@@ -1691,7 +1691,66 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
       }
     });
 
-    return widget.child;
+    return Stack(
+      children: [
+        // 设置页面内容
+        widget.child,
+        // 毛玻璃AppBar - 与首页保持一致
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: ClipRRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(
+                sigmaX: GlassEffectConfig.appBarBlur,
+                sigmaY: GlassEffectConfig.appBarBlur,
+              ),
+              child: Container(
+                height:
+                    MediaQuery.of(context).padding.top +
+                    60, // 状态栏高度 + AppBar高度
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface.withValues(
+                    alpha: GlassEffectConfig.appBarOpacity,
+                  ),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.outline.withValues(alpha: 0.2),
+                      width: 0.5,
+                    ),
+                  ),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    MediaQuery.of(context).padding.top + 8, // 减少AppBar内间距
+                    16,
+                    8, // 减少底部间距
+                  ), // 沉浸式：状态栏高度 + 8px间距
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '设置',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
