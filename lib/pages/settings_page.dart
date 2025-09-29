@@ -598,8 +598,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     Text(
                       title,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                   ],
                 ),
@@ -655,16 +655,16 @@ class _SettingsPageState extends State<SettingsPage> {
                       Text(
                         '应用主题',
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
+                              fontWeight: FontWeight.w500,
+                            ),
                       ),
                       Text(
                         '当前: ${themeNotifier.currentAppTheme.displayName}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
                       ),
                     ],
                   ),
@@ -752,11 +752,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          childAspectRatio: 1.2,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                        ),
+                      crossAxisCount: 2,
+                      childAspectRatio: 1.2,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                    ),
                     itemCount: AppThemes.allThemes.length,
                     itemBuilder: (context, index) {
                       final theme = AppThemes.allThemes[index];
@@ -775,8 +775,10 @@ class _SettingsPageState extends State<SettingsPage> {
                             border: Border.all(
                               color: isSelected
                                   ? theme.lightColorScheme.primary
-                                  : Theme.of(context).colorScheme.outline
-                                        .withValues(alpha: 0.2),
+                                  : Theme.of(context)
+                                      .colorScheme
+                                      .outline
+                                      .withValues(alpha: 0.2),
                               width: isSelected ? 3 : 1,
                             ),
                             gradient: LinearGradient(
@@ -906,16 +908,16 @@ class _SettingsPageState extends State<SettingsPage> {
                       Text(
                         title,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
+                              fontWeight: FontWeight.w500,
+                            ),
                       ),
                       Text(
                         subtitle,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
                       ),
                     ],
                   ),
@@ -980,8 +982,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   Text(
                     '关于应用',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                 ],
               ),
@@ -1021,27 +1023,27 @@ class _SettingsPageState extends State<SettingsPage> {
                     Text(
                       '小元读书',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'v1.0.0',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.6),
+                          ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       '一款简洁高效的电子书阅读应用，支持多种格式和个性化设置，助您畅享阅读时光。',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.8),
-                      ),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.8),
+                          ),
                     ),
                   ],
                 ),
@@ -1086,8 +1088,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       Text(
                         '自定义主题强调色',
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
+                              fontWeight: FontWeight.w500,
+                            ),
                       ),
                       Text(
                         (themeNotifier.currentAppTheme.name == 'custom' &&
@@ -1095,10 +1097,10 @@ class _SettingsPageState extends State<SettingsPage> {
                             ? '已选择自定义颜色'
                             : '点击选择强调色',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
                       ),
                     ],
                   ),
@@ -1207,18 +1209,18 @@ class _SettingsPageState extends State<SettingsPage> {
                     child: GridView.builder(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 6,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 1,
-                          ),
+                        crossAxisCount: 6,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: 1,
+                      ),
                       itemCount: AppThemes.accentColors.length,
                       itemBuilder: (context, index) {
                         final color = AppThemes.accentColors[index];
                         final isSelected =
                             themeNotifier.currentAppTheme.name == 'custom' &&
-                            themeNotifier.customAccentColor?.toARGB32() ==
-                                color.toARGB32();
+                                themeNotifier.customAccentColor?.toARGB32() ==
+                                    color.toARGB32();
                         debugPrint(
                           '🎨 颜色 ${color.toString()} 选中状态: $isSelected',
                         );
@@ -1334,8 +1336,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       Text(
                         '全局强调色',
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
+                              fontWeight: FontWeight.w500,
+                            ),
                       ),
                       Text(
                         themeNotifier.globalAccentColor != null
@@ -1344,10 +1346,10 @@ class _SettingsPageState extends State<SettingsPage> {
                               )
                             : '跟随系统',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
                       ),
                     ],
                   ),
@@ -1462,12 +1464,16 @@ class _SettingsPageState extends State<SettingsPage> {
                         children: [
                           Text(
                             title,
-                            style: Theme.of(context).textTheme.bodyLarge
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyLarge
                                 ?.copyWith(fontWeight: FontWeight.w500),
                           ),
                           Text(
                             formatter?.call(value) ?? value.toStringAsFixed(1),
-                            style: Theme.of(context).textTheme.bodyMedium
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
                                 ?.copyWith(
                                   color: Theme.of(context).colorScheme.primary,
                                   fontWeight: FontWeight.w600,
@@ -1479,10 +1485,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       Text(
                         subtitle,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
                       ),
                     ],
                   ),
@@ -1553,16 +1559,16 @@ class _SettingsPageState extends State<SettingsPage> {
                       Text(
                         title,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
+                              fontWeight: FontWeight.w500,
+                            ),
                       ),
                       Text(
                         subtitle,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
                       ),
                     ],
                   ),
@@ -1681,8 +1687,10 @@ class _SettingsPageState extends State<SettingsPage> {
                               Icons.auto_mode,
                               color: themeNotifier.globalAccentColor == null
                                   ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context).colorScheme.onSurface
-                                        .withValues(alpha: 0.6),
+                                  : Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.6),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -1693,8 +1701,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                     '跟随系统',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w600,
-                                      color:
-                                          themeNotifier.globalAccentColor ==
+                                      color: themeNotifier.globalAccentColor ==
                                               null
                                           ? Theme.of(
                                               context,
@@ -1749,17 +1756,17 @@ class _SettingsPageState extends State<SettingsPage> {
                     child: GridView.builder(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 4,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 1.2,
-                          ),
+                        crossAxisCount: 4,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: 1.2,
+                      ),
                       itemCount: AppThemes.accentColors.length,
                       itemBuilder: (context, index) {
                         final color = AppThemes.accentColors[index];
                         final isSelected =
                             themeNotifier.globalAccentColor?.toARGB32() ==
-                            color.toARGB32();
+                                color.toARGB32();
                         final colorName = AppThemes.getAccentColorName(color);
 
                         return GestureDetector(
@@ -1806,7 +1813,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                 colorName,
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: Theme.of(context).colorScheme.onSurface
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
                                       .withValues(alpha: 0.8),
                                 ),
                                 textAlign: TextAlign.center,
@@ -1878,16 +1887,18 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       );
 
-      if (confirmed == true) {
+      if (confirmed == true && mounted) {
         // TODO: 实现重新提取封面的逻辑
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('封面提取功能正在开发中...')));
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('操作失败: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('操作失败: $e')));
+      }
     }
   }
 
@@ -1939,16 +1950,16 @@ class _SettingsPageState extends State<SettingsPage> {
                       Text(
                         '默认阅读引擎',
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
+                              fontWeight: FontWeight.w500,
+                            ),
                       ),
                       Text(
                         _getReadingEngineName(_preferredEngine),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        ),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
                       ),
                     ],
                   ),
@@ -1974,8 +1985,9 @@ class _SettingsPageState extends State<SettingsPage> {
       case ReadingEngineType.advanced:
         return 'Flutter原生阅读器 (最快)';
       case ReadingEngineType.webView:
-      default:
         return 'WebView标准版 (完整功能)';
+      case ReadingEngineType.immersive:
+        return '沉浸式阅读器 (符合需求规范)';
     }
   }
 
@@ -1985,8 +1997,9 @@ class _SettingsPageState extends State<SettingsPage> {
       case ReadingEngineType.advanced:
         return Icons.speed;
       case ReadingEngineType.webView:
-      default:
         return Icons.web;
+      case ReadingEngineType.immersive:
+        return Icons.visibility;
     }
   }
 

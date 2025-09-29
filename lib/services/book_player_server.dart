@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf/shelf_io.dart' as io;
@@ -23,7 +24,7 @@ class BookPlayerServer {
   Future<void> start() async {
     // 防止重复启动
     if (_server != null) {
-      print('BookPlayerServer: 服务器已在运行，端口: $_port');
+      debugPrint('BookPlayerServer: 服务器已在运行，端口: $_port');
       return;
     }
 
@@ -45,9 +46,9 @@ class BookPlayerServer {
 
       // 保存成功的端口
       await prefs.setInt('last_server_port', _port);
-      print('BookPlayerServer: 服务器启动成功 http://127.0.0.1:$_port');
+      debugPrint('BookPlayerServer: 服务器启动成功 http://127.0.0.1:$_port');
     } catch (e) {
-      print('BookPlayerServer: 服务器启动失败: $e');
+      debugPrint('BookPlayerServer: 服务器启动失败: $e');
       rethrow;
     }
   }
@@ -60,13 +61,13 @@ class BookPlayerServer {
     if (_server != null) {
       await _server!.close(force: true);
       _server = null;
-      print('BookPlayerServer: 服务器已停止');
+      debugPrint('BookPlayerServer: 服务器已停止');
     }
   }
 
   /// 重启服务器
   Future<void> restart() async {
-    print('BookPlayerServer: 正在重启服务器...');
+    debugPrint('BookPlayerServer: 正在重启服务器...');
     await stop();
     await Future.delayed(const Duration(milliseconds: 500)); // 等待端口释放
     await start();
@@ -93,7 +94,7 @@ class BookPlayerServer {
   /// 处理HTTP请求（基于anx-reader简化版本）
   Future<shelf.Response> _handleRequests(shelf.Request request) async {
     final uriPath = request.requestedUri.path;
-    print('BookPlayerServer: 请求路径 $uriPath');
+    debugPrint('BookPlayerServer: 请求路径 $uriPath');
 
     try {
       // 处理临时文件请求
@@ -120,7 +121,7 @@ class BookPlayerServer {
         },
       );
     } catch (e) {
-      print('BookPlayerServer 错误: $e');
+      debugPrint('BookPlayerServer 错误: $e');
       return shelf.Response.internalServerError(
         body: '服务器内部错误: $e',
         headers: {
@@ -158,11 +159,11 @@ class BookPlayerServer {
     final fullBookPath = bookPath.startsWith('/') ? bookPath : '/$bookPath';
     final file = File(fullBookPath);
 
-    print('BookPlayerServer: 请求路径: ${request.url.path}');
-    print('BookPlayerServer: 解析后的文件路径: $fullBookPath');
+    debugPrint('BookPlayerServer: 请求路径: ${request.url.path}');
+    debugPrint('BookPlayerServer: 解析后的文件路径: $fullBookPath');
 
     if (!file.existsSync()) {
-      print('BookPlayerServer: 文件不存在: $fullBookPath');
+      debugPrint('BookPlayerServer: 文件不存在: $fullBookPath');
       return shelf.Response.notFound('书籍文件未找到: $fullBookPath');
     }
 
@@ -179,7 +180,7 @@ class BookPlayerServer {
       'Access-Control-Allow-Headers': 'Content-Type',
     };
 
-    print('BookPlayerServer: 成功找到文件，返回内容');
+    debugPrint('BookPlayerServer: 成功找到文件，返回内容');
     return shelf.Response.ok(file.openRead(), headers: headers);
   }
 
@@ -204,7 +205,7 @@ class BookPlayerServer {
         },
       );
     } catch (e) {
-      print('加载foliate-js资源失败: $uriPath, 错误: $e');
+      debugPrint('加载foliate-js资源失败: $uriPath, 错误: $e');
       return shelf.Response.notFound('资源未找到: $uriPath');
     }
   }
@@ -331,11 +332,11 @@ class BookPlayerServer {
 
       final finalUrl = '$indexHtmlPath?$query';
 
-      print('生成的WebView URL: $finalUrl');
-      print('书籍路径: $bookPath');
+      debugPrint('生成的WebView URL: $finalUrl');
+      debugPrint('书籍路径: $bookPath');
       return finalUrl;
     } catch (e) {
-      print('生成URL失败: $e');
+      debugPrint('生成URL失败: $e');
       rethrow;
     }
   }
@@ -401,8 +402,8 @@ class BookPlayerServer {
         sideMargin = sideMargin.clamp(12, 30);
       }
 
-      print(
-        '响应式配置: 屏幕=${screenWidth}x${screenHeight}, 字体=${baseFontSize.toStringAsFixed(2)}, 边距=T:$topMargin B:$bottomMargin S:$sideMargin',
+      debugPrint(
+        '响应式配置: 屏幕=${screenWidth}x$screenHeight, 字体=${baseFontSize.toStringAsFixed(2)}, 边距=T:$topMargin B:$bottomMargin S:$sideMargin',
       );
     } else {
       // 没有屏幕尺寸信息时使用默认配置

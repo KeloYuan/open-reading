@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as provider;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 // import 'package:google_fonts/google_fonts.dart';
@@ -82,13 +83,15 @@ void main() async {
   }
 
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => ThemeNotifier()),
-        ChangeNotifierProvider(create: (_) => TtsService()),
-        ChangeNotifierProvider(create: (_) => ShareService()),
-      ],
-      child: const XxReadApp(),
+    ProviderScope(
+      child: provider.MultiProvider(
+        providers: [
+          provider.ChangeNotifierProvider(create: (_) => ThemeNotifier()),
+          provider.ChangeNotifierProvider(create: (_) => TtsService()),
+          provider.ChangeNotifierProvider(create: (_) => ShareService()),
+        ],
+        child: const XxReadApp(),
+      ),
     ),
   );
 }
@@ -353,7 +356,7 @@ class _XxReadAppState extends State<XxReadApp> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeNotifier>(
+    return provider.Consumer<ThemeNotifier>(
       builder: (context, themeNotifier, child) {
         // 获取当前实际的主题模式
         final effectiveThemeMode = _getEffectiveThemeMode(

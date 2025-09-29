@@ -430,8 +430,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
   /// 解析 TXT 文件
   Future<void> _parseTxtFile(File file) async {
     final content = await file.readAsString(encoding: utf8);
-    _bookContent =
-        '''
+    _bookContent = '''
       <div style="max-width: 800px; margin: 0 auto; padding: 20px;">
         <h1 style="text-align: center; margin-bottom: 30px;">${widget.book.title}</h1>
         <div style="white-space: pre-wrap; line-height: 1.8;">
@@ -656,8 +655,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
           .replaceAll('\$', '\\\$');
 
       await _webViewController!.evaluateJavascript(
-        source:
-            '''
+        source: '''
           try {
             console.log('Updating content...');
             const contentDiv = document.getElementById('content');
@@ -667,7 +665,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
               // 应用样式
               contentDiv.style.color = '${_getColorHex(_currentTheme.textColor)}';
               contentDiv.style.fontSize = '${_fontSize}px';
-              contentDiv.style.lineHeight = '${_lineSpacing}';
+              contentDiv.style.lineHeight = '$_lineSpacing';
               contentDiv.style.letterSpacing = '${_letterSpacing}px';
 
               // 为所有章节内容添加样式
@@ -682,7 +680,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
               const paragraphs = contentDiv.querySelectorAll('p');
               paragraphs.forEach(p => {
                   p.style.marginBottom = '16px';
-                  p.style.lineHeight = '${_lineSpacing}';
+                  p.style.lineHeight = '$_lineSpacing';
               });
 
               console.log('Content updated successfully');
@@ -714,7 +712,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
             color: ${_getColorHex(_currentTheme.textColor)};
             font-family: ${_fontFamily == 'System' ? 'system-ui' : _fontFamily};
             font-size: ${_fontSize}px;
-            line-height: ${_lineSpacing};
+            line-height: $_lineSpacing;
             letter-spacing: ${_letterSpacing}px;
         }
         
@@ -773,17 +771,17 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
         async function loadBook() {
             try {
                 // 显示真正的书籍内容
-                const bookContent = \`${_bookContent.isNotEmpty ? _bookContent : '''
+                const bookContent = `${_bookContent.isNotEmpty ? _bookContent : '''
                     <div style="padding: 20px; max-width: 800px; margin: 0 auto; text-align: center;">
                         <h1 style="color: ${_getColorHex(_currentTheme.textColor)}; margin-bottom: 30px;">
                             ${widget.book.title}
                         </h1>
-                        <div style="color: ${_getColorHex(_currentTheme.textColor)}; line-height: ${_lineSpacing}; font-size: ${_fontSize}px;">
+                        <div style="color: ${_getColorHex(_currentTheme.textColor)}; line-height: $_lineSpacing; font-size: ${_fontSize}px;">
                             <p>📚 正在解析书籍内容...</p>
                             <p style="margin-top: 20px; opacity: 0.7;">请稍等片刻</p>
                         </div>
                     </div>
-                '''}\`;
+                '''};
                 
                 document.getElementById('content').innerHTML = bookContent;
                 
@@ -792,7 +790,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
                 if (contentDiv) {
                     contentDiv.style.color = '${_getColorHex(_currentTheme.textColor)}';
                     contentDiv.style.fontSize = '${_fontSize}px';
-                    contentDiv.style.lineHeight = '${_lineSpacing}';
+                    contentDiv.style.lineHeight = '$_lineSpacing';
                     contentDiv.style.letterSpacing = '${_letterSpacing}px';
                     
                     // 为所有章节内容添加样式
@@ -807,7 +805,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
                     const paragraphs = contentDiv.querySelectorAll('p');
                     paragraphs.forEach(p => {
                         p.style.marginBottom = '16px';
-                        p.style.lineHeight = '${_lineSpacing}';
+                        p.style.lineHeight = '$_lineSpacing';
                     });
                 }
                 
@@ -843,14 +841,14 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
                 
             } catch (error) {
                 console.error('Failed to load book:', error);
-                document.getElementById('content').innerHTML = \`
+                document.getElementById('content').innerHTML = `
                     <div style="padding: 20px; color: red; text-align: center;">
                         <h2>加载失败</h2>
                         <p>错误信息: \${error.message}</p>
                     <p>书籍路径: ${_bookFilePath}</p>
                         <p>请尝试切换到Flutter原生阅读器</p>
                     </div>
-                \`;
+                `;
             }
         }
         
@@ -1221,8 +1219,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
 
       // 在WebView中添加高亮
       await _webViewController?.evaluateJavascript(
-        source:
-            '''
+        source: '''
         window.addAnnotation({
           id: $id,
           type: 'highlight',
@@ -1383,14 +1380,13 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
     if (annotations.isNotEmpty) {
       final annotationsJson = jsonEncode(annotations);
       await _webViewController!.evaluateJavascript(
-        source:
-            '''
+        source: '''
         const annotations = $annotationsJson;
         annotations.forEach(annotation => {
           window.addAnnotation(annotation);
         });
       '''
-                .trim(),
+            .trim(),
       );
     }
   }
@@ -1596,7 +1592,8 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
                     _currentTheme.backgroundColor,
                     isLightBackground ? Colors.white : Colors.black,
                     0.15,
-                  )!.withValues(alpha: 0.85),
+                  )!
+                      .withValues(alpha: 0.85),
                   borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(20),
                     bottomRight: Radius.circular(20),
@@ -1898,8 +1895,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
         _bookmarks.remove(existingBookmark);
 
         await _webViewController?.evaluateJavascript(
-          source:
-              '''
+          source: '''
           window.removeAnnotation('$_currentCfi');
         ''',
         );
@@ -1919,8 +1915,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
         _bookmarks.add(savedBookmark);
 
         await _webViewController?.evaluateJavascript(
-          source:
-              '''
+          source: '''
           window.addAnnotation({
             id: $id,
             type: 'bookmark',
@@ -2006,8 +2001,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
     if (_webViewController == null) return;
 
     await _webViewController!.evaluateJavascript(
-      source:
-          '''
+      source: '''
       window.applyStyle({
         fontSize: $_fontSize,
         lineHeight: $_lineSpacing,
@@ -2031,8 +2025,7 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
     if (_webViewController == null) return;
 
     await _webViewController!.evaluateJavascript(
-      source:
-          '''
+      source: '''
       window.goToCfi('$cfi');
     ''',
     );
@@ -2047,20 +2040,6 @@ class _EnhancedWebViewReadingPageState extends State<EnhancedWebViewReadingPage>
 
     // 这里可以显示文本选择菜单
     _showTextSelectionMenu(position.dx, position.dy);
-  }
-
-  /// 保存翻页设置
-  Future<void> _savePageTurningSettings() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('pageTurningMode', _pageTurningMode);
-      await prefs.setBool(
-        'enablePageTurningGestures',
-        _enablePageTurningGestures,
-      );
-    } catch (e) {
-      debugPrint('保存翻页设置失败: $e');
-    }
   }
 
   /// 延时隐藏控制栏

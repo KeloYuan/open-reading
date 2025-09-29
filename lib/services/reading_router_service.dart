@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/book.dart';
 import '../pages/enhanced_webview_reading_page.dart';
 import '../pages/reading_page_enhanced.dart';
+import '../pages/reader_page.dart';
 import '../services/reading_engine_coordinator.dart';
 
 /// 阅读器路由服务
@@ -36,8 +37,16 @@ class ReadingRouterService {
         page = ReadingPageEnhanced(book: book);
         break;
       case ReadingEngineType.webView:
-      default:
         page = EnhancedWebViewReadingPage(book: book);
+        break;
+      case ReadingEngineType.immersive:
+      default:
+        // 使用新的沉浸式阅读器
+        page = ReaderPage(
+          bookContent: book.cachedContent ?? '',
+          bookTitle: book.title,
+          initialPageIndex: 0,
+        );
     }
 
     Navigator.push(context, MaterialPageRoute(builder: (context) => page));

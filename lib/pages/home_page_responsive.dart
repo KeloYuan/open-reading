@@ -140,14 +140,12 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: isDarkMode
-            ? Brightness.light
-            : Brightness.dark,
+        statusBarIconBrightness:
+            isDarkMode ? Brightness.light : Brightness.dark,
         statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
         systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness: isDarkMode
-            ? Brightness.light
-            : Brightness.dark,
+        systemNavigationBarIconBrightness:
+            isDarkMode ? Brightness.light : Brightness.dark,
         systemNavigationBarDividerColor: Colors.transparent,
         systemStatusBarContrastEnforced: false,
         systemNavigationBarContrastEnforced: false,
@@ -350,14 +348,14 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                 });
               }
             },
-            children: _navigationItems.map((item) {
-              // 使用RepaintBoundary和AutomaticKeepAliveClientMixin优化重绘和内存管理
-              return RepaintBoundary(child: _buildPageWrapper(item.page));
-            }).toList(),
             // 优化滚动物理效果，减少过度滚动
             physics: const BouncingScrollPhysics(
               parent: AlwaysScrollableScrollPhysics(),
             ),
+            children: _navigationItems.map((item) {
+              // 使用RepaintBoundary和AutomaticKeepAliveClientMixin优化重绘和内存管理
+              return RepaintBoundary(child: _buildPageWrapper(item.page));
+            }).toList(),
             // 禁用页面捕捉以减少卡顿
             pageSnapping: true,
           ),
@@ -367,8 +365,7 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
             right: 0,
             bottom: 0,
             child: SizedBox(
-              height:
-                  68 +
+              height: 68 +
                   25 +
                   (MediaQuery.of(context).padding.bottom).clamp(
                     0.0,
@@ -377,10 +374,10 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
               child: Center(
                 child: Container(
                   margin: EdgeInsets.only(
-                    bottom:
-                        (MediaQuery.of(
+                    bottom: (MediaQuery.of(
                           context,
-                        ).padding.bottom).clamp(0.0, 50.0) +
+                        ).padding.bottom)
+                            .clamp(0.0, 50.0) +
                         25,
                   ), // 动态适配底部安全区域，限制最大值
                   child: ClipRRect(
@@ -396,7 +393,9 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                           horizontal: 20, // 进一步减少到20px，让背景更紧凑
                         ),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surface
                               .withValues(
                                 alpha: GlassEffectConfig.navigationBarOpacity,
                               ),
@@ -681,9 +680,8 @@ class _BounceNavigationItemState extends State<_BounceNavigationItem>
                     curve: Curves.easeOutCirc, // 保持一致的缓动曲线
                     style: TextStyle(
                       fontSize: widget.isSelected ? 12.5 : 12,
-                      fontWeight: widget.isSelected
-                          ? FontWeight.w600
-                          : FontWeight.w500,
+                      fontWeight:
+                          widget.isSelected ? FontWeight.w600 : FontWeight.w500,
                       color: widget.isSelected
                           ? Theme.of(context).colorScheme.primary
                           : Theme.of(
@@ -791,25 +789,19 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
       }
     }
 
-    summaryTargetSpacing = summaryTargetSpacing
-        .clamp(12, baseSpacingAfterWelcome)
-        .toDouble();
-    weeklyTargetSpacing = weeklyTargetSpacing
-        .clamp(12, baseSectionSpacing)
-        .toDouble();
-    recentTargetSpacing = recentTargetSpacing
-        .clamp(12, baseSectionSpacing)
-        .toDouble();
+    summaryTargetSpacing =
+        summaryTargetSpacing.clamp(12, baseSpacingAfterWelcome).toDouble();
+    weeklyTargetSpacing =
+        weeklyTargetSpacing.clamp(12, baseSectionSpacing).toDouble();
+    recentTargetSpacing =
+        recentTargetSpacing.clamp(12, baseSectionSpacing).toDouble();
 
-    final double summaryLift = isCupertino
-        ? baseSpacingAfterWelcome - summaryTargetSpacing
-        : 0;
-    final double weeklyLift = isCupertino
-        ? baseSectionSpacing - weeklyTargetSpacing
-        : 0;
-    final double recentLift = isCupertino
-        ? baseSectionSpacing - recentTargetSpacing
-        : 0;
+    final double summaryLift =
+        isCupertino ? baseSpacingAfterWelcome - summaryTargetSpacing : 0;
+    final double weeklyLift =
+        isCupertino ? baseSectionSpacing - weeklyTargetSpacing : 0;
+    final double recentLift =
+        isCupertino ? baseSectionSpacing - recentTargetSpacing : 0;
 
     final double contentTopPadding =
         mediaQuery.padding.top + appBarHeight + topContentInset;
@@ -893,13 +885,12 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   sigmaY: GlassEffectConfig.appBarBlur,
                 ),
                 child: Container(
-                  height:
-                      MediaQuery.of(context).padding.top +
+                  height: MediaQuery.of(context).padding.top +
                       60, // 状态栏高度 + AppBar高度
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface.withValues(
-                      alpha: GlassEffectConfig.appBarOpacity,
-                    ),
+                          alpha: GlassEffectConfig.appBarOpacity,
+                        ),
                     border: Border(
                       bottom: BorderSide(
                         color: Theme.of(
@@ -991,7 +982,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                         children: [
                           Text(
                             '今日阅读时光',
-                            style: Theme.of(context).textTheme.titleLarge
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
                                 ?.copyWith(fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 4),
@@ -999,9 +992,13 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                             todayMinutes > 0
                                 ? '已阅读 $todayMinutes 分钟，继续保持！'
                                 : '开始今天的阅读之旅吧',
-                            style: Theme.of(context).textTheme.bodyMedium
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
                                 ?.copyWith(
-                                  color: Theme.of(context).colorScheme.onSurface
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
                                       .withValues(alpha: 0.7),
                                 ),
                           ),
@@ -1020,7 +1017,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                           Theme.of(
                             context,
                           ).colorScheme.primaryContainer.withValues(alpha: 0.4),
-                          Theme.of(context).colorScheme.secondaryContainer
+                          Theme.of(context)
+                              .colorScheme
+                              .secondaryContainer
                               .withValues(alpha: 0.3),
                         ],
                       ),
@@ -1045,7 +1044,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                         const SizedBox(width: 8),
                         Text(
                           '累计阅读 ${(totalMinutes / 60).toStringAsFixed(1)} 小时',
-                          style: Theme.of(context).textTheme.bodySmall
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
                               ?.copyWith(fontWeight: FontWeight.w500),
                         ),
                       ],
@@ -1221,8 +1222,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
       return Container();
     }
 
-    final maxY =
-        (_weeklyData
+    final maxY = (_weeklyData
                 .map((d) => d['duration'] as int)
                 .reduce((a, b) => a > b ? a : b) /
             60) +
@@ -1267,8 +1267,8 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   Text(
                     '本周阅读趋势',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                 ],
               ),
@@ -1413,8 +1413,8 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   Text(
                     '阅读成就',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                 ],
               ),
@@ -1486,10 +1486,10 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                 Text(
                   description,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
                 ),
               ],
             ),
@@ -1497,9 +1497,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
           Text(
             value,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
           ),
         ],
       ),
@@ -1643,11 +1643,11 @@ class _StatCard extends StatelessWidget {
                     Text(
                       title,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.8),
-                        fontSize: 12,
-                      ),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.8),
+                            fontSize: 12,
+                          ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1662,7 +1662,9 @@ class _StatCard extends StatelessWidget {
                         children: [
                           Text(
                             value,
-                            style: Theme.of(context).textTheme.headlineSmall
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
                                 ?.copyWith(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 18,
@@ -1671,12 +1673,14 @@ class _StatCard extends StatelessWidget {
                           const SizedBox(width: 3),
                           Text(
                             unit,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(context).colorScheme.onSurface
-                                      .withValues(alpha: 0.6),
-                                  fontSize: 10,
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.6),
+                                      fontSize: 10,
+                                    ),
                           ),
                         ],
                       ),
@@ -1722,14 +1726,12 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
       SystemChrome.setSystemUIOverlayStyle(
         SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
-          statusBarIconBrightness: isDarkMode
-              ? Brightness.light
-              : Brightness.dark,
+          statusBarIconBrightness:
+              isDarkMode ? Brightness.light : Brightness.dark,
           statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
           systemNavigationBarColor: Colors.transparent,
-          systemNavigationBarIconBrightness: isDarkMode
-              ? Brightness.light
-              : Brightness.dark,
+          systemNavigationBarIconBrightness:
+              isDarkMode ? Brightness.light : Brightness.dark,
           systemNavigationBarDividerColor: Colors.transparent,
           systemStatusBarContrastEnforced: false,
           systemNavigationBarContrastEnforced: false,
@@ -1767,8 +1769,8 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                     MediaQuery.of(context).padding.top + 60, // 状态栏高度 + AppBar高度
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface.withValues(
-                    alpha: GlassEffectConfig.appBarOpacity,
-                  ),
+                        alpha: GlassEffectConfig.appBarOpacity,
+                      ),
                   border: Border(
                     bottom: BorderSide(
                       color: Theme.of(

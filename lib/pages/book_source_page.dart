@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'dart:ui';
 
 import '../models/book_source.dart';
 import '../services/book_source_service.dart';
@@ -8,7 +6,7 @@ import '../services/book_source_service.dart';
 /// 书源管理页面
 /// 提供书源搜索、管理、导入导出功能
 class BookSourcePage extends StatefulWidget {
-  const BookSourcePage({Key? key}) : super(key: key);
+  const BookSourcePage({super.key});
 
   @override
   State<BookSourcePage> createState() => _BookSourcePageState();
@@ -169,18 +167,18 @@ class _BookSourcePageState extends State<BookSourcePage>
                 Text(
                   '书源管理',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                 ),
                 if (_stats.isNotEmpty)
                   Text(
                     '总共 ${_stats['total'] ?? 0} 个书源，已启用 ${_stats['enabled'] ?? 0} 个',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
                   ),
               ],
             ),
@@ -329,10 +327,10 @@ class _BookSourcePageState extends State<BookSourcePage>
             Text(
               _allSources.isEmpty ? '点击右下角按钮添加书源' : '请调整筛选条件',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
             ),
           ],
         ),
@@ -394,13 +392,13 @@ class _BookSourcePageState extends State<BookSourcePage>
                       children: [
                         Text(
                           source.bookSourceName,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: source.enabled
-                                    ? onSurface
-                                    : onSurface.withValues(alpha: 0.45),
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: source.enabled
+                                        ? onSurface
+                                        : onSurface.withValues(alpha: 0.45),
+                                  ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -448,9 +446,9 @@ class _BookSourcePageState extends State<BookSourcePage>
                 Text(
                   source.bookSourceComment,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: onSurface.withValues(alpha: 0.65),
-                    height: 1.4,
-                  ),
+                        color: onSurface.withValues(alpha: 0.65),
+                        height: 1.4,
+                      ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -462,8 +460,8 @@ class _BookSourcePageState extends State<BookSourcePage>
                   Text(
                     source.bookSourceUrl,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: onSurface.withValues(alpha: 0.45),
-                    ),
+                          color: onSurface.withValues(alpha: 0.45),
+                        ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -505,9 +503,9 @@ class _BookSourcePageState extends State<BookSourcePage>
           Text(
             label,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.w500,
-            ),
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w500,
+                ),
           ),
         ],
       ),

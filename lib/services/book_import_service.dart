@@ -174,9 +174,8 @@ class BookImportService {
       final title = epubBook.Title?.isNotEmpty == true
           ? epubBook.Title!
           : fileName.replaceAll(RegExp(r'\.(epub)$'), '');
-      final author = epubBook.Author?.isNotEmpty == true
-          ? epubBook.Author!
-          : 'Unknown';
+      final author =
+          epubBook.Author?.isNotEmpty == true ? epubBook.Author! : 'Unknown';
 
       // Try to extract description from available fields
       String? description;
@@ -184,9 +183,8 @@ class BookImportService {
       final allContent = await _getAllEpubContent(epubBook);
       if (allContent.isNotEmpty && allContent.length > 200) {
         // Take first 500 characters as description
-        description = allContent
-            .substring(0, allContent.length.clamp(0, 500))
-            .trim();
+        description =
+            allContent.substring(0, allContent.length.clamp(0, 500)).trim();
         if (description.length >= 500) {
           description = '${description.substring(0, 497)}...';
         }
@@ -369,9 +367,8 @@ class BookImportService {
           return EnhancedBookMetadata(
             title: metadata.title,
             author: metadata.author,
-            description: metadata.description.isNotEmpty
-                ? metadata.description
-                : null,
+            description:
+                metadata.description.isNotEmpty ? metadata.description : null,
             language: metadata.language,
             publisher: metadata.publisher,
             publishDate: metadata.publishDate,
@@ -511,8 +508,7 @@ class BookImportService {
     try {
       // FB2 格式中的封面通常在 <binary> 标签中
       final binaryPattern = RegExp(
-        r'<binary[^>]*id\s*=\s*["\'
-        ']([^"\']*cover[^"\']*)["\'][^>]*>(.*?)</binary>',
+        r'<binary[^>]*id\s*=\s*["\x27]([^"\x27]*cover[^"\x27]*)["\x27][^>]*>(.*?)</binary>',
         dotAll: true,
         caseSensitive: false,
       );
@@ -533,7 +529,7 @@ class BookImportService {
 
       // 尝试查找其他可能的图片
       final allBinaryMatches = RegExp(
-        r'<binary[^>]*>(.*?)</binary>',
+        r"<binary[^>]*>(.*?)</binary>",
         dotAll: true,
       ).allMatches(xmlContent);
 
@@ -594,9 +590,8 @@ class BookImportService {
         return EnhancedBookMetadata(
           title: metadata.title,
           author: metadata.author,
-          description: metadata.description.isNotEmpty
-              ? metadata.description
-              : null,
+          description:
+              metadata.description.isNotEmpty ? metadata.description : null,
           language: metadata.language,
           publisher: metadata.publisher,
           publishDate: metadata.publishDate,
@@ -664,9 +659,8 @@ class BookImportService {
       }
 
       // Estimate pages based on typical comic book length
-      final estimatedPages = extension == 'cbz'
-          ? 25
-          : 30; // Comics typically 20-40 pages
+      final estimatedPages =
+          extension == 'cbz' ? 25 : 30; // Comics typically 20-40 pages
 
       return EnhancedBookMetadata(
         title: title,
@@ -1246,22 +1240,25 @@ class BookImportService {
     final header = bytes.take(10).toList();
 
     // JPEG: FF D8 FF
-    if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF)
+    if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) {
       return true;
+    }
 
     // PNG: 89 50 4E 47 0D 0A 1A 0A
     if (header[0] == 0x89 &&
         header[1] == 0x50 &&
         header[2] == 0x4E &&
-        header[3] == 0x47)
+        header[3] == 0x47) {
       return true;
+    }
 
     // GIF: 47 49 46 38
     if (header[0] == 0x47 &&
         header[1] == 0x49 &&
         header[2] == 0x46 &&
-        header[3] == 0x38)
+        header[3] == 0x38) {
       return true;
+    }
 
     // WebP: 52 49 46 46 ... 57 45 42 50
     if (header[0] == 0x52 &&
@@ -1272,8 +1269,9 @@ class BookImportService {
         bytes[8] == 0x57 &&
         bytes[9] == 0x45 &&
         bytes[10] == 0x42 &&
-        bytes[11] == 0x50)
+        bytes[11] == 0x50) {
       return true;
+    }
 
     return false;
   }

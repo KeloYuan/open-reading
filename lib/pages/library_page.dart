@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/book.dart';
 import '../services/book_dao.dart';
-import '../services/reading_router_service.dart';
+import '../widgets/reading_engine_selector.dart';
 import 'import_book_page.dart';
 import '../utils/responsive_helper.dart';
 // import '../utils/glass_config.dart';
@@ -56,14 +56,12 @@ class _LibraryPageState extends State<LibraryPage> {
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: isDarkMode
-            ? Brightness.light
-            : Brightness.dark,
+        statusBarIconBrightness:
+            isDarkMode ? Brightness.light : Brightness.dark,
         statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
         systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness: isDarkMode
-            ? Brightness.light
-            : Brightness.dark,
+        systemNavigationBarIconBrightness:
+            isDarkMode ? Brightness.light : Brightness.dark,
         systemNavigationBarDividerColor: Colors.transparent,
         systemStatusBarContrastEnforced: false,
         systemNavigationBarContrastEnforced: false,
@@ -150,17 +148,17 @@ class _LibraryPageState extends State<LibraryPage> {
             _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _books.isEmpty
-                ? _buildEmptyLibrary()
-                : RefreshIndicator(
-                    onRefresh: _loadBooks,
-                    strokeWidth: 2.5,
-                    displacement: 60,
-                    color: Theme.of(context).colorScheme.primary,
-                    backgroundColor: Theme.of(
-                      context,
-                    ).colorScheme.surface.withValues(alpha: 0.9),
-                    child: _buildBooksGrid(),
-                  ),
+                    ? _buildEmptyLibrary()
+                    : RefreshIndicator(
+                        onRefresh: _loadBooks,
+                        strokeWidth: 2.5,
+                        displacement: 60,
+                        color: Theme.of(context).colorScheme.primary,
+                        backgroundColor: Theme.of(
+                          context,
+                        ).colorScheme.surface.withValues(alpha: 0.9),
+                        child: _buildBooksGrid(),
+                      ),
             // 顶部自定义 Positioned 已移除，沿用 AppBar 的 flexibleSpace
           ],
         ),
@@ -168,8 +166,7 @@ class _LibraryPageState extends State<LibraryPage> {
       // 悬浮添加书籍按钮
       floatingActionButton: Container(
         margin: EdgeInsets.only(
-          bottom:
-              68 +
+          bottom: 68 +
               25 +
               (MediaQuery.of(context).padding.bottom).clamp(0.0, 50.0) +
               15, // 精确避开悬浮导航栏，减少边距
@@ -265,19 +262,19 @@ class _LibraryPageState extends State<LibraryPage> {
                   Text(
                     '开启阅读之旅',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     '你的书架还是空的\n点击右上角的 "+" 按钮\n添加你的第一本书吧',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.7),
-                      height: 1.5,
-                    ),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.7),
+                          height: 1.5,
+                        ),
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton.icon(
@@ -387,8 +384,8 @@ class _LibraryPageState extends State<LibraryPage> {
             onTap: () async {
               final fullBook = await _bookDao.getBookById(book.id!);
               if (fullBook != null && mounted && context.mounted) {
-                // 使用阅读路由服务打开书籍
-                await ReadingRouterService.openBook(context, fullBook);
+                // 显示阅读引擎选择器，让用户选择阅读模式
+                showReadingEngineSelector(context, fullBook);
                 _loadBooks();
               }
             },
@@ -461,7 +458,8 @@ class _LibraryPageState extends State<LibraryPage> {
                       Navigator.pop(context);
                       final fullBook = await _bookDao.getBookById(book.id!);
                       if (fullBook != null && context.mounted) {
-                        await ReadingRouterService.openBook(context, fullBook);
+                        // 显示阅读引擎选择器，让用户选择阅读模式
+                        showReadingEngineSelector(context, fullBook);
                         _loadBooks();
                       }
                     },
@@ -697,10 +695,10 @@ class _BookCoverItem extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        height: 1.2,
-                        fontSize: 13,
-                      ),
+                            fontWeight: FontWeight.w600,
+                            height: 1.2,
+                            fontSize: 13,
+                          ),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -712,11 +710,11 @@ class _BookCoverItem extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.6),
-                        fontSize: 11,
-                      ),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.6),
+                            fontSize: 11,
+                          ),
                     ),
                   ),
                 ],
@@ -732,7 +730,7 @@ class _BookCoverItem extends StatelessWidget {
     if (book.coverImagePath != null &&
         File(book.coverImagePath!).existsSync()) {
       // 有封面图片时，直接显示真实的书籍封面
-      return Container(
+      return SizedBox(
         width: double.infinity,
         height: double.infinity,
         child: Image.file(

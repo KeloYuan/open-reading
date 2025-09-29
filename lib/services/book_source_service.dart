@@ -288,15 +288,13 @@ class BookSourceService {
   /// 从URL导入书源
   Future<ImportResult> importFromUrl(String url) async {
     try {
-      final response = await http
-          .get(
-            Uri.parse(url),
-            headers: {
-              'User-Agent': 'XXRead/1.0',
-              'Accept': 'application/json, text/plain',
-            },
-          )
-          .timeout(const Duration(seconds: 30));
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'User-Agent': 'XXRead/1.0',
+          'Accept': 'application/json, text/plain',
+        },
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final jsonString = utf8.decode(response.bodyBytes);
@@ -362,12 +360,10 @@ class BookSourceService {
 
       final stopwatch = Stopwatch()..start();
 
-      final response = await http
-          .get(
-            Uri.parse(source.bookSourceUrl),
-            headers: {'User-Agent': 'XXRead/1.0', ...source.header},
-          )
-          .timeout(Duration(milliseconds: source.respondTime));
+      final response = await http.get(
+        Uri.parse(source.bookSourceUrl),
+        headers: {'User-Agent': 'XXRead/1.0', ...source.header},
+      ).timeout(Duration(milliseconds: source.respondTime));
 
       stopwatch.stop();
 
@@ -464,12 +460,6 @@ class BookSourceService {
     }
 
     return ValidationResult(isValid: errors.isEmpty, errors: errors);
-  }
-
-  /// 检查是否需要刷新缓存
-  bool _shouldRefreshCache() {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    return _cachedSources == null || (now - _lastCacheUpdate) > _cacheExpiry;
   }
 
   /// 清除缓存

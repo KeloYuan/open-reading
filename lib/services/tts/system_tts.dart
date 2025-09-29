@@ -27,6 +27,13 @@ class SystemTts extends BaseTts {
   late Function getNextTextFunction;
   late Function getPrevTextFunction;
 
+  // 句子高亮相关
+  Function(int?)? _onSentenceHighlightChanged;
+  int _currentSentenceIndex = -1;
+  List<String> _currentSentences = [];
+  Timer? _highlightTimer;
+  int _highlightPosition = 0;
+
   @override
   final ValueNotifier<TtsStateEnum> ttsStateNotifier =
       ValueNotifier<TtsStateEnum>(TtsStateEnum.stopped);
@@ -74,6 +81,83 @@ class SystemTts extends BaseTts {
   @override
   String? get currentVoiceText => _currentVoiceText;
 
+  /// 设置句子高亮回调
+  void setSentenceHighlightCallback(Function(int?) callback) {
+    _onSentenceHighlightChanged = callback;
+  }
+
+  /// 分割文本为句子
+  List<String> _splitIntoSentences(String text) {
+    final sentences = <String>[];
+    final regex = RegExp(r'[^。！？.!?]+[。！？.!?\s]*');
+    final matches = regex.allMatches(text);
+
+    for (final match in matches) {
+      sentences.add(match.group(0)!);
+    }
+
+    return sentences.isEmpty ? [text] : sentences;
+  }
+
+  /// 更新高亮句子索引
+  void _updateHighlightedSentence(int index) {
+    if (_currentSentenceIndex != index) {
+      _currentSentenceIndex = index;
+      _onSentenceHighlightChanged?.call(index >= 0 ? index : null);
+    }
+  }
+
+  /// 重置高亮句子
+  void _resetHighlightedSentence() {
+    _currentSentenceIndex = -1;
+    _highlightPosition = 0;
+    _stopHighlightTimer();
+    _onSentenceHighlightChanged?.call(null);
+  }
+
+  /// 开始高亮计时器
+  void _startHighlightTimer() {
+    _stopHighlightTimer();
+    _highlightPosition = 0;
+    _currentSentenceIndex = -1;
+
+    if (_currentSentences.isEmpty) return;
+
+    // 估算每个字符的阅读时间（基于语速）
+    final charPerSecond = (rate * 200).clamp(50.0, 300.0); // 估算值
+    final updateIntervalMs = (1000 / charPerSecond).round().clamp(100, 500);
+
+    _highlightTimer =
+        Timer.periodic(Duration(milliseconds: updateIntervalMs), (timer) {
+      if (ttsStateNotifier.value != TtsStateEnum.playing) {
+        _stopHighlightTimer();
+        return;
+      }
+
+      _highlightPosition += (charPerSecond * updateIntervalMs / 1000).round();
+
+      // 计算当前应该高亮的句子
+      int currentIndex = -1;
+      int totalChars = 0;
+
+      for (int i = 0; i < _currentSentences.length; i++) {
+        totalChars += _currentSentences[i].length;
+        if (_highlightPosition <= totalChars) {
+          currentIndex = i;
+          break;
+        }
+      }
+
+      _updateHighlightedSentence(currentIndex);
+    });
+  }
+
+  /// 停止高亮计时器
+  void _stopHighlightTimer() {
+    _highlightTimer?.cancel();
+    _highlightTimer = null;
+  }
+
   @override
   Future<void> init(
     Function getCurrentText,
@@ -93,6 +177,8 @@ class SystemTts extends BaseTts {
 
     flutterTts.setStartHandler(() async {
       updateTtsState(TtsStateEnum.playing);
+      _startHighlightTimer(); // 开始句子高亮
+
       if (!isAndroid) {
         return;
       }
@@ -143,6 +229,12 @@ class SystemTts extends BaseTts {
       _currentVoiceText = content;
     }
     _currentVoiceText ??= await getHereFunction();
+
+    // 分割当前文本为句子，用于高亮显示
+    if (_currentVoiceText?.isNotEmpty ?? false) {
+      _currentSentences = _splitIntoSentences(_currentVoiceText!);
+    }
+
     await flutterTts.setVolume(volume);
     await flutterTts.setSpeechRate(rate);
     await flutterTts.setPitch(pitch);
@@ -160,6 +252,7 @@ class SystemTts extends BaseTts {
     updateTtsState(TtsStateEnum.stopped);
     final result = await flutterTts.stop();
     _currentVoiceText = null;
+    _resetHighlightedSentence();
     return result;
   }
 
@@ -168,6 +261,7 @@ class SystemTts extends BaseTts {
     final result = await flutterTts.stop();
     if (result == 1) {
       updateTtsState(TtsStateEnum.paused);
+      _stopHighlightTimer(); // 暂停时停止高亮计时器
     }
   }
 
@@ -175,9 +269,10 @@ class SystemTts extends BaseTts {
   Future<void> resume() async {
     if (isAndroid) {
       speak(content: _prevVoiceText);
-      return;
+    } else {
+      speak(content: _currentVoiceText);
     }
-    speak(content: _currentVoiceText);
+    // resume会在speak中通过setStartHandler重新启动高亮计时器
   }
 
   @override

@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -174,10 +173,8 @@ class EnhancedTxtImportService {
       processedContent = _textProcessor.preprocessText(content);
     }
 
-    final lines = processedContent
-        .split('\n')
-        .map((line) => line.trim())
-        .toList();
+    final lines =
+        processedContent.split('\n').map((line) => line.trim()).toList();
 
     // 1. 智能标题提取
     String title = _extractTitle(lines, fileName);
@@ -402,12 +399,11 @@ class EnhancedTxtImportService {
     }
 
     // 平均行长度
-    final nonEmptyLines = lines
-        .where((line) => line.trim().isNotEmpty)
-        .toList();
+    final nonEmptyLines =
+        lines.where((line) => line.trim().isNotEmpty).toList();
     final averageLineLength = nonEmptyLines.isNotEmpty
         ? nonEmptyLines.map((line) => line.length).reduce((a, b) => a + b) /
-              nonEmptyLines.length
+            nonEmptyLines.length
         : 0.0;
 
     // 检查是否有章节结构
@@ -643,13 +639,13 @@ class EnhancedTxtImportService {
   /// 检查标题是否相似
   bool _areSimilarTitles(String title1, String title2) {
     final clean1 = title1.toLowerCase().replaceAll(
-      RegExp(r'[^\w\u4e00-\u9fff]'),
-      '',
-    );
+          RegExp(r'[^\w\u4e00-\u9fff]'),
+          '',
+        );
     final clean2 = title2.toLowerCase().replaceAll(
-      RegExp(r'[^\w\u4e00-\u9fff]'),
-      '',
-    );
+          RegExp(r'[^\w\u4e00-\u9fff]'),
+          '',
+        );
 
     if (clean1 == clean2) return true;
 

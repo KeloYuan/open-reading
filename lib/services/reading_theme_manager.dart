@@ -235,10 +235,18 @@ class ReadingThemeManager {
     return Switch(
       value: value,
       onChanged: onChanged,
-      activeThumbColor: theme.sliderActiveColor,
-      activeTrackColor: theme.sliderActiveColor.withValues(alpha: 0.3),
-      inactiveThumbColor: theme.sliderInactiveColor,
-      inactiveTrackColor: theme.sliderInactiveColor.withValues(alpha: 0.3),
+      thumbColor: WidgetStateProperty.resolveWith<Color?>((states) {
+        if (states.contains(WidgetState.selected)) {
+          return theme.sliderActiveColor;
+        }
+        return theme.sliderInactiveColor;
+      }),
+      trackColor: WidgetStateProperty.resolveWith<Color?>((states) {
+        if (states.contains(WidgetState.selected)) {
+          return theme.sliderActiveColor.withValues(alpha: 0.3);
+        }
+        return theme.sliderInactiveColor.withValues(alpha: 0.3);
+      }),
     );
   }
 

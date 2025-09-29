@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/book.dart';
@@ -257,16 +256,16 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
   // --- 阅读配置 ---
 
   PaginationConfig get _paginationConfig => PaginationConfig(
-    fontSize: _fontSize,
-    lineHeight: _lineSpacing,
-    letterSpacing: _letterSpacing,
-    pagePadding: 20.0,
-    paragraphSpacing: '0.8em',
-    textIndent: '2em',
-    scrollMode: _isScrollMode,
-    backgroundColor: _currentTheme.backgroundColor,
-    textColor: _currentTheme.textColor,
-  );
+        fontSize: _fontSize,
+        lineHeight: _lineSpacing,
+        letterSpacing: _letterSpacing,
+        pagePadding: 20.0,
+        paragraphSpacing: '0.8em',
+        textIndent: '2em',
+        scrollMode: _isScrollMode,
+        backgroundColor: _currentTheme.backgroundColor,
+        textColor: _currentTheme.textColor,
+      );
 
   // --- 翻页控制 ---
   // _nextPage 和 _prevPage 方法已移除，未被使用
@@ -332,9 +331,8 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
 
       SystemUiManager.exitImmersive(
         navigationBarColor: _currentTheme.controlBarColor,
-        navIconBrightness: isLightBackground
-            ? Brightness.dark
-            : Brightness.light,
+        navIconBrightness:
+            isLightBackground ? Brightness.dark : Brightness.light,
       );
     }
   }
@@ -394,8 +392,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
     if (_searchResults.isEmpty) return;
 
     setState(() {
-      _currentSearchIndex =
-          (_currentSearchIndex - 1 + _searchResults.length) %
+      _currentSearchIndex = (_currentSearchIndex - 1 + _searchResults.length) %
           _searchResults.length;
     });
 
@@ -965,7 +962,7 @@ class _AdvancedReadingPageState extends State<AdvancedReadingPage>
             _updateReaderConfig();
             _saveSettings();
           },
-          activeThumbColor: _currentTheme.sliderActiveColor,
+          thumbColor: WidgetStateProperty.all(_currentTheme.sliderActiveColor),
         ),
       ],
     );

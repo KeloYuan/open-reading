@@ -105,7 +105,7 @@ class Highlight {
 
   @override
   String toString() {
-    return 'Highlight{id: $id, bookId: $bookId, pageNumber: $pageNumber, selectedText: ${selectedText.length > 30 ? selectedText.substring(0, 30) + '...' : selectedText}}';
+    return 'Highlight{id: $id, bookId: $bookId, pageNumber: $pageNumber, selectedText: ${selectedText.length > 30 ? '${selectedText.substring(0, 30)}...' : selectedText}}';
   }
 
   @override

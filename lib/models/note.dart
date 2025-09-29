@@ -90,7 +90,7 @@ class Note {
 
   @override
   String toString() {
-    return 'Note{id: $id, bookId: $bookId, pageNumber: $pageNumber, content: ${content.length > 30 ? content.substring(0, 30) + '...' : content}, note: ${note.length > 30 ? note.substring(0, 30) + '...' : note}}';
+    return 'Note{id: $id, bookId: $bookId, pageNumber: $pageNumber, content: ${content.length > 30 ? '${content.substring(0, 30)}...' : content}, note: ${note.length > 30 ? '${note.substring(0, 30)}...' : note}}';
   }
 
   @override

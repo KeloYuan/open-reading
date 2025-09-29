@@ -99,6 +99,11 @@ class ReadingEngineCoordinator {
           backgroundColor: backgroundColor,
           onPageChanged: onPageChanged,
         );
+
+      case ReadingEngineType.immersive:
+        // immersive类型返回null，由调用方处理
+        // 这里应该返回ReaderPage，但由于参数不匹配，暂时返回null
+        return Container(); // 临时占位，后续需要调整接口
     }
   }
 
@@ -376,6 +381,7 @@ class ReadingEngineCoordinator {
 enum ReadingEngineType {
   webView, // WebView引擎（基于anx-reader）
   advanced, // 高级引擎（自定义实现）
+  immersive, // 沉浸式阅读器（符合需求规范）
 }
 
 /// 引擎选择策略

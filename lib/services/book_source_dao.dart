@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/book_source.dart';
 import 'database_service.dart';
@@ -72,7 +73,7 @@ class BookSourceDao {
       );
       return 1;
     } catch (e) {
-      print('插入书源失败: $e');
+      debugPrint('插入书源失败: $e');
       return 0;
     }
   }
@@ -97,7 +98,7 @@ class BookSourceDao {
       final results = await batch.commit();
       return results.length;
     } catch (e) {
-      print('批量插入书源失败: $e');
+      debugPrint('批量插入书源失败: $e');
       return 0;
     }
   }
@@ -116,7 +117,7 @@ class BookSourceDao {
         whereArgs: [bookSource.id],
       );
     } catch (e) {
-      print('更新书源失败: $e');
+      debugPrint('更新书源失败: $e');
       return 0;
     }
   }
@@ -128,7 +129,7 @@ class BookSourceDao {
     try {
       return await db.delete(tableName, where: 'id = ?', whereArgs: [id]);
     } catch (e) {
-      print('删除书源失败: $e');
+      debugPrint('删除书源失败: $e');
       return 0;
     }
   }
@@ -147,7 +148,7 @@ class BookSourceDao {
         whereArgs: ids,
       );
     } catch (e) {
-      print('批量删除书源失败: $e');
+      debugPrint('批量删除书源失败: $e');
       return 0;
     }
   }
@@ -168,7 +169,7 @@ class BookSourceDao {
       }
       return null;
     } catch (e) {
-      print('获取书源失败: $e');
+      debugPrint('获取书源失败: $e');
       return null;
     }
   }
@@ -185,7 +186,7 @@ class BookSourceDao {
 
       return maps.map((map) => _dbMapToBookSource(map)).toList();
     } catch (e) {
-      print('获取所有书源失败: $e');
+      debugPrint('获取所有书源失败: $e');
       return [];
     }
   }
@@ -203,7 +204,7 @@ class BookSourceDao {
 
       return maps.map((map) => _dbMapToBookSource(map)).toList();
     } catch (e) {
-      print('获取启用书源失败: $e');
+      debugPrint('获取启用书源失败: $e');
       return [];
     }
   }
@@ -222,7 +223,7 @@ class BookSourceDao {
 
       return maps.map((map) => _dbMapToBookSource(map)).toList();
     } catch (e) {
-      print('按分组获取书源失败: $e');
+      debugPrint('按分组获取书源失败: $e');
       return [];
     }
   }
@@ -241,7 +242,7 @@ class BookSourceDao {
 
       return maps.map((map) => _dbMapToBookSource(map)).toList();
     } catch (e) {
-      print('按类型获取书源失败: $e');
+      debugPrint('按类型获取书源失败: $e');
       return [];
     }
   }
@@ -264,7 +265,7 @@ class BookSourceDao {
 
       return maps.map((map) => _dbMapToBookSource(map)).toList();
     } catch (e) {
-      print('搜索书源失败: $e');
+      debugPrint('搜索书源失败: $e');
       return [];
     }
   }
@@ -284,7 +285,7 @@ class BookSourceDao {
 
       return maps.map((map) => map['book_source_group'] as String).toList();
     } catch (e) {
-      print('获取书源分组失败: $e');
+      debugPrint('获取书源分组失败: $e');
       return [];
     }
   }
@@ -324,7 +325,7 @@ class BookSourceDao {
         'audio': typeStats[2] ?? 0,
       };
     } catch (e) {
-      print('获取书源统计失败: $e');
+      debugPrint('获取书源统计失败: $e');
       return {};
     }
   }
@@ -344,7 +345,7 @@ class BookSourceDao {
         whereArgs: [id],
       );
     } catch (e) {
-      print('更新书源启用状态失败: $e');
+      debugPrint('更新书源启用状态失败: $e');
       return 0;
     }
   }
@@ -364,7 +365,7 @@ class BookSourceDao {
         whereArgs: [id],
       );
     } catch (e) {
-      print('更新书源发现启用状态失败: $e');
+      debugPrint('更新书源发现启用状态失败: $e');
       return 0;
     }
   }
@@ -384,7 +385,7 @@ class BookSourceDao {
         whereArgs: [id],
       );
     } catch (e) {
-      print('更新书源权重失败: $e');
+      debugPrint('更新书源权重失败: $e');
       return 0;
     }
   }
@@ -396,7 +397,7 @@ class BookSourceDao {
     try {
       return await db.delete(tableName);
     } catch (e) {
-      print('清空书源失败: $e');
+      debugPrint('清空书源失败: $e');
       return 0;
     }
   }
@@ -415,7 +416,7 @@ class BookSourceDao {
               final bookSource = BookSource.fromJson(item);
               bookSources.add(bookSource);
             } catch (e) {
-              print('解析书源失败: $e');
+              debugPrint('解析书源失败: $e');
             }
           }
         }
@@ -425,13 +426,13 @@ class BookSourceDao {
           final bookSource = BookSource.fromJson(jsonData);
           bookSources.add(bookSource);
         } catch (e) {
-          print('解析书源失败: $e');
+          debugPrint('解析书源失败: $e');
         }
       }
 
       return await insertBatch(bookSources);
     } catch (e) {
-      print('导入书源失败: $e');
+      debugPrint('导入书源失败: $e');
       return 0;
     }
   }
@@ -458,7 +459,7 @@ class BookSourceDao {
       final jsonList = bookSources.map((source) => source.toJson()).toList();
       return jsonEncode(jsonList);
     } catch (e) {
-      print('导出书源失败: $e');
+      debugPrint('导出书源失败: $e');
       return '[]';
     }
   }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// 统一的书籍注释模型
 /// 整合高亮和笔记功能，参考 anx-reader 设计
-/// 
+///
 /// 支持功能：
 /// - 高亮文本标记（多种颜色和类型）
 /// - 文字笔记附加到高亮
@@ -12,40 +12,40 @@ import 'package:flutter/material.dart';
 class BookNote {
   /// 唯一标识符
   final int? id;
-  
+
   /// 关联的书籍ID
   final int bookId;
-  
+
   /// 选中的文本内容
   final String content;
-  
+
   /// CFI定位信息（用于EPUB精确定位）
   final String cfi;
-  
+
   /// 章节标题或标识符
   final String chapter;
-  
+
   /// 注释类型：'highlight'（高亮）、'underline'（下划线）、'note'（纯笔记）
   final String type;
-  
+
   /// 高亮颜色（十六进制字符串，不含#前缀）
   final String color;
-  
+
   /// 用户添加的笔记内容
   final String? readerNote;
-  
+
   /// 页码（用于快速定位）
   final int? pageNumber;
-  
+
   /// 文本开始偏移量
   final int? startOffset;
-  
+
   /// 文本结束偏移量
   final int? endOffset;
-  
+
   /// 创建时间
   final DateTime? createTime;
-  
+
   /// 更新时间
   final DateTime updateTime;
 
@@ -103,8 +103,8 @@ class BookNote {
       pageNumber: map['page_number'],
       startOffset: map['start_offset'],
       endOffset: map['end_offset'],
-      createTime: map['create_time'] != null 
-          ? DateTime.parse(map['create_time']) 
+      createTime: map['create_time'] != null
+          ? DateTime.parse(map['create_time'])
           : null,
       updateTime: DateTime.parse(map['update_time']),
     );
@@ -270,38 +270,36 @@ class BookNote {
     final buffer = StringBuffer();
     buffer.writeln('📖 《$bookTitle》- $author');
     buffer.writeln();
-    
+
     if (content.isNotEmpty) {
       buffer.writeln('"$content"');
       buffer.writeln();
     }
-    
+
     if (hasNote) {
       buffer.writeln('💭 笔记：$readerNote');
       buffer.writeln();
     }
-    
+
     buffer.writeln('📍 $chapter');
     if (pageNumber != null) {
       buffer.writeln('📄 第$pageNumber页');
     }
     buffer.writeln();
     buffer.writeln('#读书笔记 #${getTypeName(type)}');
-    
+
     return buffer.toString();
   }
 
   @override
   String toString() {
-    return 'BookNote{id: $id, bookId: $bookId, type: $type, color: $color, content: ${content.length > 50 ? content.substring(0, 50) + '...' : content}, hasNote: $hasNote}';
+    return 'BookNote{id: $id, bookId: $bookId, type: $type, color: $color, content: ${content.length > 50 ? '${content.substring(0, 50)}...' : content}, hasNote: $hasNote}';
   }
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is BookNote &&
-          runtimeType == other.runtimeType &&
-          id == other.id;
+      other is BookNote && runtimeType == other.runtimeType && id == other.id;
 
   @override
   int get hashCode => id.hashCode;

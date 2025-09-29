@@ -131,7 +131,7 @@ class AdvancedTextPaginator {
     debugPrint('📏 视图度量优化:');
     debugPrint('  - 屏幕尺寸: ${viewWidth}x$viewHeight');
     debugPrint(
-      '  - 边距优化: 左${paddingLeft} 上${paddingTop} 右${paddingRight} 下${paddingBottom}',
+      '  - 边距优化: 左$paddingLeft 上$paddingTop 右$paddingRight 下$paddingBottom',
     );
     debugPrint(
       '  - 文字区域: ${visibleWidth}x$visibleHeight (${spaceUtilization.toStringAsFixed(1)}%)',
@@ -223,9 +223,8 @@ class AdvancedTextPaginator {
       charCount++;
     }
 
-    final averageCharWidth = charCount > 0
-        ? totalWidth / charCount
-        : fontSize * 0.8;
+    final averageCharWidth =
+        charCount > 0 ? totalWidth / charCount : fontSize * 0.8;
 
     // 测量文本高度 - 使用混合字符确保准确性
     textPaint.text = TextSpan(text: '中国AgjQ测试', style: textStyle);
@@ -355,11 +354,9 @@ class AdvancedTextPaginator {
         final char = text[suggestedEndIndex];
         // 如果是字母数字，稍微向前调整到单词边界
         if (RegExp(r'[a-zA-Z0-9]').hasMatch(char)) {
-          for (
-            int i = suggestedEndIndex;
-            i >= currentIndex && i >= suggestedEndIndex - 10;
-            i--
-          ) {
+          for (int i = suggestedEndIndex;
+              i >= currentIndex && i >= suggestedEndIndex - 10;
+              i--) {
             if (!RegExp(r'[a-zA-Z0-9]').hasMatch(text[i])) {
               actualEndIndex = i + 1;
               break;

@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:epubx/epubx.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:flutter/foundation.dart';

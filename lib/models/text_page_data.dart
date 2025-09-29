@@ -307,7 +307,7 @@ class TextLineData {
 
   @override
   String toString() {
-    return 'TextLineData{line: $lineIndex, chars: ${columns.length}, text: "${textContent.length > 20 ? textContent.substring(0, 20) + "..." : textContent}"}';
+    return 'TextLineData{line: $lineIndex, chars: ${columns.length}, text: "${textContent.length > 20 ? '${textContent.substring(0, 20)}...' : textContent}"}';
   }
 
   @override
@@ -384,8 +384,7 @@ class TextColumnData {
 
   /// 是否为标点符号
   bool get isPunctuation {
-    const punctuations =
-        '。！？，；：""'
+    const punctuations = '。！？，；：""'
         '（）《》【】[]{}…—';
     return punctuations.contains(char) ||
         char.contains(RegExp(r'[.!?,:;"(){}\[\]<>]'));
@@ -464,7 +463,7 @@ class TextColumnData {
       },
       'isSelected': isSelected,
       'isHighlighted': isHighlighted,
-      'highlightColor': highlightColor?.value,
+      'highlightColor': highlightColor?.toARGB32(),
       'baseline': baseline,
       'fontMetrics': fontMetrics.toMap(),
     };
