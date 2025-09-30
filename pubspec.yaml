@@ -86,7 +86,7 @@ dependencies:
   flutter_riverpod: ^2.5.1
   sqflite_common_ffi: ^2.3.0
   path_provider: ^2.1.5
-  intl: 0.19.0
+  intl: ^0.20.2
   
   # 高优先级新功能
   flutter_tts: ^4.2.2  # TTS 朗读功能

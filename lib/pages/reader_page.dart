@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/reader_providers.dart';
@@ -1194,7 +1195,9 @@ class _SlidePaginationViewState extends State<_SlidePaginationView> {
   Widget _buildPageContent(BuildContext context, String pageContent) {
     // 计算可用高度，确保内容不超出视口
     final screenHeight = MediaQuery.of(context).size.height;
-    final availableHeight = screenHeight - widget.settings.padding.top - widget.settings.padding.bottom;
+    final availableHeight = screenHeight -
+        widget.settings.padding.top -
+        widget.settings.padding.bottom;
 
     return RepaintBoundary(
       child: ClipRect(
@@ -1993,7 +1996,8 @@ class _ReaderToolbar extends ConsumerWidget {
                           ),
                           IconButton(
                             icon: Icon(Icons.close,
-                                color: settings.textStyle.color?.withOpacity(0.6)),
+                                color:
+                                    settings.textStyle.color?.withOpacity(0.6)),
                             onPressed: () => Navigator.pop(context),
                           ),
                         ],
@@ -2079,7 +2083,8 @@ class _ReaderToolbar extends ConsumerWidget {
                         min: 0.0,
                         max: 4.0,
                         divisions: 8,
-                        displayValue: '${settings.firstLineIndent.toStringAsFixed(1)}字符',
+                        displayValue:
+                            '${settings.firstLineIndent.toStringAsFixed(1)}字符',
                         onChanged: (value) {
                           HapticFeedback.selectionClick();
                           ref
@@ -2113,15 +2118,28 @@ class _ReaderToolbar extends ConsumerWidget {
                         child: TextButton.icon(
                           onPressed: () {
                             HapticFeedback.lightImpact();
-                            ref.read(readerSettingsProvider.notifier).updateFontSize(18.0);
-                            ref.read(readerSettingsProvider.notifier).updateLineHeight(1.8);
-                            ref.read(readerSettingsProvider.notifier).updateLetterSpacing(0.2);
-                            ref.read(readerSettingsProvider.notifier).updateParagraphSpacing(8.0);
-                            ref.read(readerSettingsProvider.notifier).updateFirstLineIndent(2.0);
-                            ref.read(readerSettingsProvider.notifier).updateHorizontalMargin(20.0);
+                            ref
+                                .read(readerSettingsProvider.notifier)
+                                .updateFontSize(18.0);
+                            ref
+                                .read(readerSettingsProvider.notifier)
+                                .updateLineHeight(1.8);
+                            ref
+                                .read(readerSettingsProvider.notifier)
+                                .updateLetterSpacing(0.2);
+                            ref
+                                .read(readerSettingsProvider.notifier)
+                                .updateParagraphSpacing(8.0);
+                            ref
+                                .read(readerSettingsProvider.notifier)
+                                .updateFirstLineIndent(2.0);
+                            ref
+                                .read(readerSettingsProvider.notifier)
+                                .updateHorizontalMargin(20.0);
                           },
                           icon: Icon(Icons.refresh,
-                              color: settings.textStyle.color?.withOpacity(0.7)),
+                              color:
+                                  settings.textStyle.color?.withOpacity(0.7)),
                           label: Text(
                             '恢复默认',
                             style: settings.textStyle.copyWith(fontSize: 15),
@@ -2201,7 +2219,6 @@ class _ReaderToolbar extends ConsumerWidget {
       ],
     );
   }
-
 
   void _showMoreMenu(
       BuildContext context, WidgetRef ref, ReaderSettings settings) {

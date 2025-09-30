@@ -1198,18 +1198,6 @@ class BookImportService {
     return false;
   }
 
-  /// 创建临时文件用于 WebView 解析
-  Future<File> _createTempFile(Uint8List bytes, String fileName) async {
-    final tempDir = await getTemporaryDirectory();
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final tempFileName = '${timestamp}_$fileName';
-    final tempFile = File('${tempDir.path}/$tempFileName');
-
-    await tempFile.writeAsBytes(bytes);
-    debugPrint('创建临时文件: ${tempFile.path}');
-
-    return tempFile;
-  }
 
   /// 增强的PDF封面提取
   Future<Uint8List?> _extractPdfCover(Uint8List bytes) async {

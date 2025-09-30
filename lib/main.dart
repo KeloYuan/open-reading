@@ -101,9 +101,8 @@ void _updateSystemUIOverlay(bool isDarkMode) {
       statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
       statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
       systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarIconBrightness: isDarkMode
-          ? Brightness.light
-          : Brightness.dark,
+      systemNavigationBarIconBrightness:
+          isDarkMode ? Brightness.light : Brightness.dark,
       systemNavigationBarDividerColor: Colors.transparent,
       systemStatusBarContrastEnforced: false,
       systemNavigationBarContrastEnforced: false,
@@ -443,8 +442,8 @@ class _XxReadAppState extends State<XxReadApp> {
               Text(
                 '小元读书',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                      fontWeight: FontWeight.bold,
+                    ),
               ),
               const SizedBox(height: 40),
               CircularProgressIndicator(
