@@ -146,7 +146,7 @@ class IOSAdaptiveLayout extends StatelessWidget {
         height: spacing,
         margin: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
-          color: _getDebugColor(index).withValues(alpha: 0.3),
+          color: _getDebugColor(index).withOpacity(0.3),
           border: Border.all(color: _getDebugColor(index), width: 1),
         ),
         child: Center(
@@ -192,7 +192,7 @@ class IOSAdaptiveLayout extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.8),
+          color: Colors.black.withOpacity(0.8),
           borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(8)),
         ),
         child: Column(

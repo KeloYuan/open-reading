@@ -41,7 +41,7 @@ class NoteExportService {
       // 按章节分组
       final highlightsByChapter = <String, List<Highlight>>{};
       for (final highlight in highlights) {
-        final chapter = highlight.chapter ?? '未知章节';
+        final chapter = highlight.chapter;
         highlightsByChapter.putIfAbsent(chapter, () => []).add(highlight);
       }
 
@@ -152,7 +152,7 @@ class NoteExportService {
     for (final highlight in highlights) {
       final row = [
         '高亮',
-        highlight.chapter ?? '',
+        highlight.chapter,
         highlight.pageNumber.toString(),
         _escapeCsvField(highlight.selectedText),
         _escapeCsvField(highlight.noteText ?? ''),
@@ -283,7 +283,7 @@ class NoteExportService {
       // 章节分布
       final chapterStats = <String, int>{};
       for (final highlight in highlights) {
-        final chapter = highlight.chapter ?? '未知章节';
+        final chapter = highlight.chapter;
         chapterStats[chapter] = (chapterStats[chapter] ?? 0) + 1;
       }
 

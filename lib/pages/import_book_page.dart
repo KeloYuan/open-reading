@@ -76,7 +76,7 @@ class _ImportBookPageState extends State<ImportBookPage> {
                         decoration: BoxDecoration(
                           color: Theme.of(
                             context,
-                          ).colorScheme.primary.withValues(alpha: 0.12),
+                          ).colorScheme.primary.withOpacity(0.12),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Icon(
@@ -100,7 +100,7 @@ class _ImportBookPageState extends State<ImportBookPage> {
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: Theme.of(
                                 context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.7),
+                              ).colorScheme.onSurface.withOpacity(0.7),
                             ),
                       ),
                       const SizedBox(height: 32),

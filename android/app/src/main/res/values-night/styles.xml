@@ -14,12 +14,20 @@
          This Theme is only used starting with V2 of Flutter's Android embedding. -->
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
-        <!-- 设置导航栏透明 -->
-        <item name="android:navigationBarColor">@android:color/transparent</item>
-        <!-- 允许内容延伸到导航栏区域 -->
-        <item name="android:windowTranslucentNavigation">true</item>
-        <!-- 确保状态栏也是沉浸式的 -->
+
+        <!-- 状态栏设置：透明+沉浸式 -->
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowTranslucentStatus">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+
+        <!-- 导航栏设置：透明+沉浸式（隐藏手势提示线） -->
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowTranslucentNavigation">false</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+
+        <!-- 全屏布局：内容延伸到系统栏区域 -->
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowFullscreen">false</item>
     </style>
 </resources>

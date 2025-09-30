@@ -39,10 +39,8 @@ void main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
-  // 强制启用边到边沉浸式模式
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-
-  // 设置基础系统UI样式 - 透明背景，图标颜色由各页面动态设置
+  // 设置基础系统UI样式 - 透明背景
+  // 注意：不在这里设置SystemUiMode，让各页面根据需要自行控制
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -52,17 +50,6 @@ void main() async {
       systemNavigationBarContrastEnforced: false,
     ),
   );
-
-  // Android导航栏特殊处理 - 仅设置透明度，图标颜色由页面动态设置
-  if (!kIsWeb && Platform.isAndroid) {
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemNavigationBarContrastEnforced: false,
-      ),
-    );
-  }
 
   // 🗄️ 初始化数据管理器
   debugPrint('🚀 开始初始化应用数据管理系统');
@@ -103,14 +90,12 @@ void debugLog(String message) {
   }
 }
 
-// 动态更新系统栏样式的函数 - 强制沉浸式
+// 动态更新系统栏样式的函数 - 只设置样式，不改变UI模式
 void _updateSystemUIOverlay(bool isDarkMode) {
   // 确保在UI线程中执行
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    // 首先重新启用边到边模式
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-
-    // 设置统一的系统UI样式
+    // 只设置系统UI样式，不调用setEnabledSystemUIMode
+    // 让各页面（如ReaderPage）根据需要自行控制SystemUiMode
     final systemStyle = SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
@@ -126,22 +111,6 @@ void _updateSystemUIOverlay(bool isDarkMode) {
 
     // 立即应用样式
     SystemChrome.setSystemUIOverlayStyle(systemStyle);
-
-    // Android特殊处理 - 确保导航栏设置生效
-    if (!kIsWeb && Platform.isAndroid) {
-      Future.delayed(const Duration(milliseconds: 50), () {
-        SystemChrome.setSystemUIOverlayStyle(
-          SystemUiOverlayStyle(
-            systemNavigationBarColor: Colors.transparent,
-            systemNavigationBarDividerColor: Colors.transparent,
-            systemNavigationBarIconBrightness: isDarkMode
-                ? Brightness.light
-                : Brightness.dark,
-            systemNavigationBarContrastEnforced: false,
-          ),
-        );
-      });
-    }
   });
 }
 
@@ -260,9 +229,9 @@ class ThemeNotifier extends ChangeNotifier {
     // 异步保存设置
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('appTheme', 'custom');
-    await prefs.setInt('customAccentColor', color.toARGB32());
+    await prefs.setInt('customAccentColor', color.value);
     await prefs.remove('globalAccentColor'); // 清除全局强调色设置
-    debugPrint('🎨 自定义颜色已保存: ${color.toARGB32()}');
+    debugPrint('🎨 自定义颜色已保存: ${color.value}');
   }
 
   // 设置全局强调色（与应用主题分离）
@@ -279,7 +248,7 @@ class ThemeNotifier extends ChangeNotifier {
     // 异步保存设置
     SharedPreferences prefs = await SharedPreferences.getInstance();
     if (color != null) {
-      await prefs.setInt('globalAccentColor', color.toARGB32());
+      await prefs.setInt('globalAccentColor', color.value);
     } else {
       await prefs.remove('globalAccentColor');
     }
@@ -442,8 +411,8 @@ class _XxReadAppState extends State<XxReadApp> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.05),
+              Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              Theme.of(context).colorScheme.secondary.withOpacity(0.05),
               Theme.of(context).colorScheme.surface,
             ],
           ),

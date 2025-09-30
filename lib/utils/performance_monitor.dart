@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -14,34 +13,34 @@ class PerformanceMonitor {
 
   /// 性能数据记录
   final List<PerformanceSnapshot> _snapshots = [];
-  
+
   /// 监控定时器
   Timer? _monitoringTimer;
-  
+
   /// 内存警告阈值（MB）
   static const double memoryWarningThreshold = 150.0;
   static const double memoryCriticalThreshold = 200.0;
-  
+
   /// 帧率警告阈值
   static const double fpsWarningThreshold = 50.0;
   static const double fpsCriticalThreshold = 30.0;
-  
+
   /// 是否正在监控
   bool _isMonitoring = false;
-  
+
   /// 性能回调
   Function(PerformanceLevel level, String message)? onPerformanceAlert;
-  
+
   /// 内存清理回调
   VoidCallback? onMemoryCleanupNeeded;
 
   /// 开始性能监控
   void startMonitoring({Duration interval = const Duration(seconds: 5)}) {
     if (_isMonitoring) return;
-    
+
     _isMonitoring = true;
     _monitoringTimer = Timer.periodic(interval, (_) => _captureSnapshot());
-    
+
     debugPrint('🔍 性能监控已启动，监控间隔: ${interval.inSeconds}秒');
   }
 
@@ -50,20 +49,20 @@ class PerformanceMonitor {
     _isMonitoring = false;
     _monitoringTimer?.cancel();
     _monitoringTimer = null;
-    
+
     debugPrint('🔍 性能监控已停止');
   }
 
   /// 捕获性能快照
   Future<PerformanceSnapshot> _captureSnapshot() async {
     final timestamp = DateTime.now();
-    
+
     // 获取内存使用情况
     final memoryInfo = await _getMemoryInfo();
-    
+
     // 获取CPU使用情况（简化版本）
     final cpuUsage = await _getCpuUsage();
-    
+
     // 创建快照
     final snapshot = PerformanceSnapshot(
       timestamp: timestamp,
@@ -72,18 +71,18 @@ class PerformanceMonitor {
       cpuUsage: cpuUsage,
       frameRate: _getCurrentFrameRate(),
     );
-    
+
     // 添加到记录
     _snapshots.add(snapshot);
-    
+
     // 保持最近100个快照
     if (_snapshots.length > 100) {
       _snapshots.removeAt(0);
     }
-    
+
     // 检查性能警告
     _checkPerformanceAlerts(snapshot);
-    
+
     return snapshot;
   }
 
@@ -92,7 +91,8 @@ class PerformanceMonitor {
     try {
       if (Platform.isAndroid) {
         // Android平台内存信息
-        final result = await SystemChannels.platform.invokeMethod('getMemoryInfo');
+        final result =
+            await SystemChannels.platform.invokeMethod('getMemoryInfo');
         if (result != null) {
           return MemoryInfo(
             usedMemoryMB: (result['usedMemory'] ?? 0) / 1024 / 1024,
@@ -102,7 +102,8 @@ class PerformanceMonitor {
         }
       } else if (Platform.isIOS) {
         // iOS平台内存信息
-        final result = await SystemChannels.platform.invokeMethod('getMemoryInfo');
+        final result =
+            await SystemChannels.platform.invokeMethod('getMemoryInfo');
         if (result != null) {
           return MemoryInfo(
             usedMemoryMB: (result['usedMemory'] ?? 0) / 1024 / 1024,
@@ -111,7 +112,7 @@ class PerformanceMonitor {
           );
         }
       }
-      
+
       // 回退到估算值
       return MemoryInfo(
         usedMemoryMB: 80.0, // 估算值
@@ -132,7 +133,8 @@ class PerformanceMonitor {
   Future<double> _getCpuUsage() async {
     try {
       if (Platform.isAndroid || Platform.isIOS) {
-        final result = await SystemChannels.platform.invokeMethod('getCpuUsage');
+        final result =
+            await SystemChannels.platform.invokeMethod('getCpuUsage');
         return (result ?? 0.0).toDouble();
       }
       return 0.0;
@@ -186,7 +188,7 @@ class PerformanceMonitor {
     if (alerts.isNotEmpty) {
       final message = alerts.join(', ');
       onPerformanceAlert?.call(alertLevel, message);
-      
+
       // 如果是严重问题，触发内存清理
       if (alertLevel == PerformanceLevel.critical) {
         onMemoryCleanupNeeded?.call();
@@ -197,22 +199,23 @@ class PerformanceMonitor {
   /// 执行内存优化
   Future<void> optimizeMemory() async {
     debugPrint('🧹 开始内存优化...');
-    
+
     try {
       // 1. 垃圾回收
       await _triggerGarbageCollection();
-      
+
       // 2. 清理图片缓存
       await _clearImageCaches();
-      
+
       // 3. 清理文本缓存
       await _clearTextCaches();
-      
+
       // 4. 等待一段时间后重新检查
       await Future.delayed(const Duration(seconds: 2));
       final afterOptimization = await _captureSnapshot();
-      
-      debugPrint('✅ 内存优化完成，当前使用: ${afterOptimization.memoryUsageMB.toStringAsFixed(1)}MB');
+
+      debugPrint(
+          '✅ 内存优化完成，当前使用: ${afterOptimization.memoryUsageMB.toStringAsFixed(1)}MB');
     } catch (e) {
       debugPrint('❌ 内存优化失败: $e');
     }
@@ -257,19 +260,26 @@ class PerformanceMonitor {
     }
 
     final recent = _snapshots.take(20).toList(); // 最近20个快照
-    
+
     return PerformanceReport(
       totalSnapshots: _snapshots.length,
       timeRange: Duration(
-        milliseconds: _snapshots.last.timestamp.millisecondsSinceEpoch - 
-                     _snapshots.first.timestamp.millisecondsSinceEpoch,
+        milliseconds: _snapshots.last.timestamp.millisecondsSinceEpoch -
+            _snapshots.first.timestamp.millisecondsSinceEpoch,
       ),
-      averageMemoryUsage: recent.map((s) => s.memoryUsageMB).reduce((a, b) => a + b) / recent.length,
-      peakMemoryUsage: recent.map((s) => s.memoryUsageMB).reduce((a, b) => a > b ? a : b),
-      averageFrameRate: recent.map((s) => s.frameRate).reduce((a, b) => a + b) / recent.length,
-      lowestFrameRate: recent.map((s) => s.frameRate).reduce((a, b) => a < b ? a : b),
-      averageCpuUsage: recent.map((s) => s.cpuUsage).reduce((a, b) => a + b) / recent.length,
-      peakCpuUsage: recent.map((s) => s.cpuUsage).reduce((a, b) => a > b ? a : b),
+      averageMemoryUsage:
+          recent.map((s) => s.memoryUsageMB).reduce((a, b) => a + b) /
+              recent.length,
+      peakMemoryUsage:
+          recent.map((s) => s.memoryUsageMB).reduce((a, b) => a > b ? a : b),
+      averageFrameRate: recent.map((s) => s.frameRate).reduce((a, b) => a + b) /
+          recent.length,
+      lowestFrameRate:
+          recent.map((s) => s.frameRate).reduce((a, b) => a < b ? a : b),
+      averageCpuUsage:
+          recent.map((s) => s.cpuUsage).reduce((a, b) => a + b) / recent.length,
+      peakCpuUsage:
+          recent.map((s) => s.cpuUsage).reduce((a, b) => a > b ? a : b),
       performanceLevel: _calculateOverallPerformance(),
       recommendations: _generateRecommendations(),
     );
@@ -278,21 +288,22 @@ class PerformanceMonitor {
   /// 计算整体性能水平
   PerformanceLevel _calculateOverallPerformance() {
     if (_snapshots.isEmpty) return PerformanceLevel.good;
-    
-    final recent = _snapshots.skip(math.max(0, _snapshots.length - 10)).toList();
+
+    final recent =
+        _snapshots.skip(math.max(0, _snapshots.length - 10)).toList();
     int criticalCount = 0;
     int warningCount = 0;
-    
+
     for (final snapshot in recent) {
-      if (snapshot.memoryUsageMB > memoryCriticalThreshold || 
+      if (snapshot.memoryUsageMB > memoryCriticalThreshold ||
           snapshot.frameRate < fpsCriticalThreshold) {
         criticalCount++;
-      } else if (snapshot.memoryUsageMB > memoryWarningThreshold || 
-                 snapshot.frameRate < fpsWarningThreshold) {
+      } else if (snapshot.memoryUsageMB > memoryWarningThreshold ||
+          snapshot.frameRate < fpsWarningThreshold) {
         warningCount++;
       }
     }
-    
+
     if (criticalCount > recent.length * 0.3) {
       return PerformanceLevel.critical;
     } else if (warningCount > recent.length * 0.5) {
@@ -305,34 +316,39 @@ class PerformanceMonitor {
   /// 生成优化建议
   List<String> _generateRecommendations() {
     final recommendations = <String>[];
-    final recent = _snapshots.skip(math.max(0, _snapshots.length - 10)).toList();
-    
+    final recent =
+        _snapshots.skip(math.max(0, _snapshots.length - 10)).toList();
+
     if (recent.isEmpty) return recommendations;
-    
-    final avgMemory = recent.map((s) => s.memoryUsageMB).reduce((a, b) => a + b) / recent.length;
-    final avgFrameRate = recent.map((s) => s.frameRate).reduce((a, b) => a + b) / recent.length;
-    final avgCpuUsage = recent.map((s) => s.cpuUsage).reduce((a, b) => a + b) / recent.length;
-    
+
+    final avgMemory =
+        recent.map((s) => s.memoryUsageMB).reduce((a, b) => a + b) /
+            recent.length;
+    final avgFrameRate =
+        recent.map((s) => s.frameRate).reduce((a, b) => a + b) / recent.length;
+    final avgCpuUsage =
+        recent.map((s) => s.cpuUsage).reduce((a, b) => a + b) / recent.length;
+
     if (avgMemory > memoryWarningThreshold) {
       recommendations.add('建议定期清理内存缓存');
       recommendations.add('考虑减少同时打开的书籍数量');
     }
-    
+
     if (avgFrameRate < fpsWarningThreshold) {
       recommendations.add('建议降低文本渲染复杂度');
       recommendations.add('考虑使用性能更好的阅读引擎');
     }
-    
+
     if (avgCpuUsage > 50.0) {
       recommendations.add('建议关闭不必要的后台处理');
       recommendations.add('考虑优化分页算法');
     }
-    
+
     return recommendations;
   }
 
   /// 获取最新快照
-  PerformanceSnapshot? get latestSnapshot => 
+  PerformanceSnapshot? get latestSnapshot =>
       _snapshots.isNotEmpty ? _snapshots.last : null;
 
   /// 获取所有快照
@@ -371,7 +387,7 @@ class PerformanceSnapshot {
   @override
   String toString() {
     return 'PerformanceSnapshot{memory: ${memoryUsageMB.toStringAsFixed(1)}MB, '
-           'cpu: ${cpuUsage.toStringAsFixed(1)}%, fps: ${frameRate.toStringAsFixed(1)}}';
+        'cpu: ${cpuUsage.toStringAsFixed(1)}%, fps: ${frameRate.toStringAsFixed(1)}}';
   }
 }
 
@@ -387,7 +403,7 @@ class MemoryInfo {
     required this.totalMemoryMB,
   });
 
-  double get usagePercentage => 
+  double get usagePercentage =>
       totalMemoryMB > 0 ? (usedMemoryMB / totalMemoryMB) * 100 : 0;
 }
 
@@ -450,8 +466,8 @@ class PerformanceReport {
 
 /// 性能水平
 enum PerformanceLevel {
-  good,     // 良好
-  warning,  // 警告  
+  good, // 良好
+  warning, // 警告
   critical, // 严重
 }
 

@@ -59,7 +59,7 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
       color: _getToolbarBackgroundColor(settings),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.1),
+          color: Colors.black.withOpacity(0.1),
           blurRadius: 8,
           offset: widget.position == ToolbarPosition.top
               ? const Offset(0, 2)
@@ -78,6 +78,16 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
         return const Color(0xFF2A2A2A);
       case ReadingTheme.eyeCare:
         return const Color(0xFFF0F2E8);
+      case ReadingTheme.warmPaper:
+        return const Color(0xFFFFF8DC);
+      case ReadingTheme.coolGray:
+        return const Color(0xFFE8E8E8);
+      case ReadingTheme.sepia:
+        return const Color(0xFFF5E6D3);
+      case ReadingTheme.pureBlack:
+        return const Color(0xFF000000);
+      case ReadingTheme.blueLight:
+        return const Color(0xFFE8F4F8);
     }
   }
 
@@ -173,8 +183,8 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
         color: _getToolbarBackgroundColor(settings),
         border: Border(
           bottom: BorderSide(
-            color: settings.textStyle.color?.withValues(alpha: 0.1) ??
-                Colors.grey.withValues(alpha: 0.1),
+            color: settings.textStyle.color?.withOpacity(0.1) ??
+                Colors.grey.withOpacity(0.1),
             width: 1,
           ),
         ),
@@ -209,7 +219,7 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: settings.textStyle.color?.withValues(alpha: 0.1),
+          color: settings.textStyle.color?.withOpacity(0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
@@ -218,7 +228,7 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
             Icon(
               _getThemeIcon(settings.theme),
               size: 20,
-              color: settings.textStyle.color?.withValues(alpha: 0.8),
+              color: settings.textStyle.color?.withOpacity(0.8),
             ),
             const SizedBox(height: 4),
             Text(
@@ -248,7 +258,7 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: settings.textStyle.color?.withValues(alpha: 0.1),
+            color: settings.textStyle.color?.withOpacity(0.1),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(
@@ -282,14 +292,14 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: _showAdvancedSettings
-              ? settings.textStyle.color?.withValues(alpha: 0.2)
-              : settings.textStyle.color?.withValues(alpha: 0.1),
+              ? settings.textStyle.color?.withOpacity(0.2)
+              : settings.textStyle.color?.withOpacity(0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(
           _showAdvancedSettings ? Icons.tune : Icons.settings,
           size: 20,
-          color: settings.textStyle.color?.withValues(alpha: 0.8),
+          color: settings.textStyle.color?.withOpacity(0.8),
         ),
       ),
     );
@@ -314,14 +324,14 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: ttsState.isPlaying
-                      ? settings.textStyle.color?.withValues(alpha: 0.2)
-                      : settings.textStyle.color?.withValues(alpha: 0.1),
+                      ? settings.textStyle.color?.withOpacity(0.2)
+                      : settings.textStyle.color?.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   ttsState.isPlaying ? Icons.pause : Icons.play_arrow,
                   size: 20,
-                  color: settings.textStyle.color?.withValues(alpha: 0.8),
+                  color: settings.textStyle.color?.withOpacity(0.8),
                 ),
               );
             },
@@ -410,8 +420,8 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? settings.textStyle.color?.withValues(alpha: 0.2)
-                        : settings.textStyle.color?.withValues(alpha: 0.1),
+                        ? settings.textStyle.color?.withOpacity(0.2)
+                        : settings.textStyle.color?.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -442,13 +452,13 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: settings.textStyle.color?.withValues(alpha: 0.1),
+          color: settings.textStyle.color?.withOpacity(0.1),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Icon(
           icon,
           size: 20,
-          color: settings.textStyle.color?.withValues(alpha: 0.8),
+          color: settings.textStyle.color?.withOpacity(0.8),
         ),
       ),
     );
@@ -472,6 +482,21 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
         nextTheme = ReadingTheme.eyeCare;
         break;
       case ReadingTheme.eyeCare:
+        nextTheme = ReadingTheme.warmPaper;
+        break;
+      case ReadingTheme.warmPaper:
+        nextTheme = ReadingTheme.coolGray;
+        break;
+      case ReadingTheme.coolGray:
+        nextTheme = ReadingTheme.sepia;
+        break;
+      case ReadingTheme.sepia:
+        nextTheme = ReadingTheme.pureBlack;
+        break;
+      case ReadingTheme.pureBlack:
+        nextTheme = ReadingTheme.blueLight;
+        break;
+      case ReadingTheme.blueLight:
         nextTheme = ReadingTheme.day;
         break;
     }
@@ -530,6 +555,16 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
         return Icons.nights_stay;
       case ReadingTheme.eyeCare:
         return Icons.eco;
+      case ReadingTheme.warmPaper:
+        return Icons.wb_incandescent;
+      case ReadingTheme.coolGray:
+        return Icons.ac_unit;
+      case ReadingTheme.sepia:
+        return Icons.auto_stories;
+      case ReadingTheme.pureBlack:
+        return Icons.brightness_2;
+      case ReadingTheme.blueLight:
+        return Icons.water_drop;
     }
   }
 
@@ -542,6 +577,16 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
         return '夜间';
       case ReadingTheme.eyeCare:
         return '护眼';
+      case ReadingTheme.warmPaper:
+        return '暖黄';
+      case ReadingTheme.coolGray:
+        return '冷灰';
+      case ReadingTheme.sepia:
+        return '棕褐';
+      case ReadingTheme.pureBlack:
+        return '纯黑';
+      case ReadingTheme.blueLight:
+        return '蓝光';
     }
   }
 

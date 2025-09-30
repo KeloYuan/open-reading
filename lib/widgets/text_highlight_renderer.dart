@@ -62,7 +62,7 @@ class TextHighlightRenderer {
         TextSpan(
           text: highlightText,
           style: baseStyle.copyWith(
-            backgroundColor: highlight.color.withValues(alpha: 0.4),
+            backgroundColor: highlight.color.withOpacity(0.4),
             // 可选：添加下划线以增强视觉效果
             decoration: null, // 简化处理，不显示下划线
             decorationColor: highlight.color,

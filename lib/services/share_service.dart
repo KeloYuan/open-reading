@@ -20,7 +20,7 @@ class ShareService extends ChangeNotifier {
         totalPages: totalPages,
       );
 
-      await Share.share(formattedContent, subject: '📖 来自《$bookTitle》的精彩内容');
+      await Share.share(formattedContent);
 
       debugPrint('分享页面内容成功');
     } catch (e) {
@@ -41,7 +41,7 @@ class ShareService extends ChangeNotifier {
         author: author,
       );
 
-      await Share.share(formattedContent, subject: '📝 来自《$bookTitle》的摘录');
+      await Share.share(formattedContent);
 
       debugPrint('分享选中文本成功');
     } catch (e) {
@@ -68,7 +68,7 @@ class ShareService extends ChangeNotifier {
         readingTime: readingTime,
       );
 
-      await Share.share(formattedContent, subject: '📊 我的阅读进度 - 《$bookTitle》');
+      await Share.share(formattedContent);
 
       debugPrint('分享阅读进度成功');
     } catch (e) {
@@ -91,7 +91,7 @@ class ShareService extends ChangeNotifier {
         rating: rating,
       );
 
-      await Share.share(formattedContent, subject: '📚 好书推荐 - 《$bookTitle》');
+      await Share.share(formattedContent);
 
       debugPrint('分享书籍推荐成功');
     } catch (e) {
@@ -114,7 +114,7 @@ class ShareService extends ChangeNotifier {
         createTime: createTime,
       );
 
-      await Share.share(formattedContent, subject: '📝 读书笔记 - 《$bookTitle》');
+      await Share.share(formattedContent);
 
       debugPrint('分享笔记成功');
     } catch (e) {
@@ -137,7 +137,7 @@ class ShareService extends ChangeNotifier {
         favoriteGenre: favoriteGenre,
       );
 
-      await Share.share(formattedContent, subject: '📈 我的阅读统计');
+      await Share.share(formattedContent);
 
       debugPrint('分享阅读统计成功');
     } catch (e) {

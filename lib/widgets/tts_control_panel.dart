@@ -77,7 +77,7 @@ class _TtsControlPanelState extends State<TtsControlPanel>
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withOpacity(0.1),
                     blurRadius: 20,
                     offset: const Offset(0, 8),
                   ),
@@ -87,11 +87,11 @@ class _TtsControlPanelState extends State<TtsControlPanel>
                 borderRadius: BorderRadius.circular(24),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor.withValues(alpha: 0.9),
+                    color: Theme.of(context).cardColor.withOpacity(0.9),
                     border: Border.all(
                       color: Theme.of(
                         context,
-                      ).dividerColor.withValues(alpha: 0.2),
+                      ).dividerColor.withOpacity(0.2),
                       width: 1,
                     ),
                   ),
@@ -120,7 +120,7 @@ class _TtsControlPanelState extends State<TtsControlPanel>
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: getAccentColor(context).withValues(alpha: 0.1),
+              color: getAccentColor(context).withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -149,7 +149,7 @@ class _TtsControlPanelState extends State<TtsControlPanel>
                       : '准备就绪',
                   style: TextStyle(
                     fontSize: 14,
-                    color: getTextColor(context).withValues(alpha: 0.7),
+                    color: getTextColor(context).withOpacity(0.7),
                   ),
                 ),
               ],
@@ -159,7 +159,7 @@ class _TtsControlPanelState extends State<TtsControlPanel>
             onPressed: _close,
             icon: Icon(
               Icons.close_rounded,
-              color: getTextColor(context).withValues(alpha: 0.7),
+              color: getTextColor(context).withOpacity(0.7),
             ),
           ),
         ],
@@ -228,7 +228,7 @@ class _TtsControlPanelState extends State<TtsControlPanel>
             borderRadius: BorderRadius.circular(32),
             boxShadow: [
               BoxShadow(
-                color: getAccentColor(context).withValues(alpha: 0.3),
+                color: getAccentColor(context).withOpacity(0.3),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -244,7 +244,7 @@ class _TtsControlPanelState extends State<TtsControlPanel>
           label,
           style: TextStyle(
             fontSize: 12,
-            color: getTextColor(context).withValues(alpha: 0.8),
+            color: getTextColor(context).withOpacity(0.8),
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -266,8 +266,8 @@ class _TtsControlPanelState extends State<TtsControlPanel>
           height: 48,
           decoration: BoxDecoration(
             color: isEnabled
-                ? getTextColor(context).withValues(alpha: 0.1)
-                : getTextColor(context).withValues(alpha: 0.05),
+                ? getTextColor(context).withOpacity(0.1)
+                : getTextColor(context).withOpacity(0.05),
             borderRadius: BorderRadius.circular(24),
           ),
           child: IconButton(
@@ -275,8 +275,8 @@ class _TtsControlPanelState extends State<TtsControlPanel>
             icon: Icon(
               icon,
               color: isEnabled
-                  ? getTextColor(context).withValues(alpha: 0.8)
-                  : getTextColor(context).withValues(alpha: 0.3),
+                  ? getTextColor(context).withOpacity(0.8)
+                  : getTextColor(context).withOpacity(0.3),
               size: 24,
             ),
           ),
@@ -287,8 +287,8 @@ class _TtsControlPanelState extends State<TtsControlPanel>
           style: TextStyle(
             fontSize: 12,
             color: isEnabled
-                ? getTextColor(context).withValues(alpha: 0.8)
-                : getTextColor(context).withValues(alpha: 0.3),
+                ? getTextColor(context).withOpacity(0.8)
+                : getTextColor(context).withOpacity(0.3),
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -346,7 +346,7 @@ class _TtsControlPanelState extends State<TtsControlPanel>
           title,
           style: TextStyle(
             fontSize: 14,
-            color: getTextColor(context).withValues(alpha: 0.8),
+            color: getTextColor(context).withOpacity(0.8),
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -357,9 +357,9 @@ class _TtsControlPanelState extends State<TtsControlPanel>
               activeTrackColor: getAccentColor(context),
               inactiveTrackColor: getAccentColor(
                 context,
-              ).withValues(alpha: 0.2),
+              ).withOpacity(0.2),
               thumbColor: getAccentColor(context),
-              overlayColor: getAccentColor(context).withValues(alpha: 0.2),
+              overlayColor: getAccentColor(context).withOpacity(0.2),
               trackHeight: 4,
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
             ),
@@ -377,7 +377,7 @@ class _TtsControlPanelState extends State<TtsControlPanel>
             value.toStringAsFixed(1),
             style: TextStyle(
               fontSize: 12,
-              color: getTextColor(context).withValues(alpha: 0.6),
+              color: getTextColor(context).withOpacity(0.6),
             ),
             textAlign: TextAlign.end,
           ),
@@ -402,7 +402,7 @@ class _TtsControlPanelState extends State<TtsControlPanel>
               '播放进度',
               style: TextStyle(
                 fontSize: 14,
-                color: getTextColor(context).withValues(alpha: 0.8),
+                color: getTextColor(context).withOpacity(0.8),
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -411,7 +411,7 @@ class _TtsControlPanelState extends State<TtsControlPanel>
         const SizedBox(height: 8),
         LinearProgressIndicator(
           value: ttsService.playbackProgress,
-          backgroundColor: getAccentColor(context).withValues(alpha: 0.2),
+          backgroundColor: getAccentColor(context).withOpacity(0.2),
           valueColor: AlwaysStoppedAnimation<Color>(getAccentColor(context)),
         ),
       ],

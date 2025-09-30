@@ -11,7 +11,6 @@ import 'dart:convert';
 import '../models/book.dart';
 import '../models/chapter.dart';
 import 'enhanced_txt_import_service.dart';
-import 'webview_book_parser.dart';
 
 class EnhancedBookMetadata {
   final String title;
@@ -44,7 +43,6 @@ class EnhancedBookMetadata {
 class BookImportService {
   final _bookDao = BookDao();
   final _enhancedTxtService = EnhancedTxtImportService();
-  final _webViewParser = WebViewBookParser();
 
   Future<Book?> importBook() async {
     try {
@@ -340,59 +338,9 @@ class BookImportService {
     String fileName,
   ) async {
     try {
-      debugPrint('FB2 metadata extraction - trying WebView first');
+      debugPrint('FB2 metadata extraction - using basic XML parsing');
 
-      // 1. 尝试使用 WebView 解析（支持更多特性）
-      try {
-        final tempFile = await _createTempFile(bytes, fileName);
-
-        try {
-          final metadata = await _webViewParser.parseBookMetadata(tempFile);
-
-          // 转换为 EnhancedBookMetadata
-          Uint8List? coverBytes;
-          if (metadata.coverImageBase64 != null &&
-              metadata.coverImageBase64!.isNotEmpty) {
-            try {
-              final parts = metadata.coverImageBase64!.split(',');
-              final base64String = parts.length > 1 ? parts[1] : parts[0];
-              coverBytes = base64.decode(base64String);
-            } catch (e) {
-              debugPrint('FB2 封面解析失败: $e');
-            }
-          }
-
-          final estimatedPages = (bytes.length / 1500).ceil().clamp(1, 9999);
-
-          return EnhancedBookMetadata(
-            title: metadata.title,
-            author: metadata.author,
-            description:
-                metadata.description.isNotEmpty ? metadata.description : null,
-            language: metadata.language,
-            publisher: metadata.publisher,
-            publishDate: metadata.publishDate,
-            isbn: metadata.isbn,
-            coverImage: coverBytes,
-            estimatedPages: estimatedPages,
-            tags: metadata.subjects,
-            additionalInfo: {
-              'format': 'FB2',
-              'parsedByWebView': true,
-              'fileSize': bytes.length,
-            },
-          );
-        } finally {
-          // 清理临时文件
-          if (await tempFile.exists()) {
-            await tempFile.delete();
-          }
-        }
-      } catch (e) {
-        debugPrint('FB2 WebView解析失败，回退到XML解析: $e');
-      }
-
-      // 2. 回退到传统 XML 解析
+      // 直接使用 XML 解析
       return await _extractFb2MetadataXml(bytes, fileName);
     } catch (e) {
       debugPrint('FB2 metadata extraction failed: $e');
@@ -563,54 +511,28 @@ class BookImportService {
     try {
       debugPrint('MOBI/AZW3 metadata extraction - using WebView parsing');
 
-      // 1. 创建临时文件
-      final tempFile = await _createTempFile(bytes, fileName);
+      // MOBI/AZW3 基础解析（不依赖 WebView）
+      debugPrint('Using basic parsing for MOBI/AZW3');
 
-      try {
-        // 2. 使用 WebView 解析器
-        final metadata = await _webViewParser.parseBookMetadata(tempFile);
+      // 估算页数（MOBI格式基于内容长度）
+      final estimatedPages = (bytes.length / 3000).ceil().clamp(50, 1000);
 
-        // 3. 转换为 EnhancedBookMetadata
-        Uint8List? coverBytes;
-        if (metadata.coverImageBase64 != null &&
-            metadata.coverImageBase64!.isNotEmpty) {
-          try {
-            // 解析base64封面数据
-            final parts = metadata.coverImageBase64!.split(',');
-            final base64String = parts.length > 1 ? parts[1] : parts[0];
-            coverBytes = base64.decode(base64String);
-          } catch (e) {
-            debugPrint('封面解析失败: $e');
-          }
-        }
-
-        // 4. 估算页数（MOBI格式基于内容长度）
-        final estimatedPages = (bytes.length / 3000).ceil().clamp(50, 1000);
-
-        return EnhancedBookMetadata(
-          title: metadata.title,
-          author: metadata.author,
-          description:
-              metadata.description.isNotEmpty ? metadata.description : null,
-          language: metadata.language,
-          publisher: metadata.publisher,
-          publishDate: metadata.publishDate,
-          isbn: metadata.isbn,
-          coverImage: coverBytes,
-          estimatedPages: estimatedPages,
-          tags: metadata.subjects,
-          additionalInfo: {
-            'format': metadata.format,
-            'parsedByWebView': true,
-            'fileSize': bytes.length,
-          },
-        );
-      } finally {
-        // 清理临时文件
-        if (await tempFile.exists()) {
-          await tempFile.delete();
-        }
-      }
+      return EnhancedBookMetadata(
+        title: fileName.replaceAll(RegExp(r'\.(mobi|azw|azw3)$'), ''),
+        author: '未知作者',
+        description: null,
+        language: null,
+        publisher: null,
+        publishDate: null,
+        isbn: null,
+        coverImage: null,
+        estimatedPages: estimatedPages,
+        tags: null,
+        additionalInfo: {
+          'format': 'MOBI/AZW',
+          'fileSize': bytes.length,
+        },
+      );
     } catch (e) {
       debugPrint('MOBI/AZW3 metadata extraction failed: $e');
       // 回退到基础解析

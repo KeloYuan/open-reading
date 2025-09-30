@@ -375,13 +375,13 @@ class _HighlightNotePanelState extends State<HighlightNotePanel>
           Icon(
             icon,
             size: 48,
-            color: _getModalIconColor().withValues(alpha: 0.5),
+            color: _getModalIconColor().withOpacity(0.5),
           ),
           const SizedBox(height: 16),
           Text(
             message,
             style: TextStyle(
-              color: _getModalTextColor().withValues(alpha: 0.6),
+              color: _getModalTextColor().withOpacity(0.6),
               fontSize: 16,
             ),
           ),
@@ -441,10 +441,10 @@ class _HighlightNotePanelState extends State<HighlightNotePanel>
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: note.colorValue.withValues(alpha: 0.1),
+                  color: note.colorValue.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: note.colorValue.withValues(alpha: 0.3),
+                    color: note.colorValue.withOpacity(0.3),
                     width: 1,
                   ),
                 ),
@@ -555,7 +555,7 @@ class _HighlightNotePanelState extends State<HighlightNotePanel>
                   icon: Icon(
                     Icons.delete,
                     size: 16,
-                    color: Colors.red.withValues(alpha: 0.7),
+                    color: Colors.red.withOpacity(0.7),
                   ),
                   constraints: const BoxConstraints(
                     minWidth: 32,
@@ -759,8 +759,8 @@ class _HighlightNotePanelState extends State<HighlightNotePanel>
   // 主题颜色辅助方法
   Color _getModalDecoration() {
     return Theme.of(context).brightness == Brightness.dark
-        ? Colors.grey[900]!.withValues(alpha: 0.95)
-        : Colors.white.withValues(alpha: 0.95);
+        ? Colors.grey[900]!.withOpacity(0.95)
+        : Colors.white.withOpacity(0.95);
   }
 
   Color _getModalBackgroundColor() {

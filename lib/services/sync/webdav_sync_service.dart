@@ -6,9 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../book_dao.dart';
-import '../bookmark_dao.dart';
 import '../../models/book.dart';
-import '../../models/bookmark.dart';
 
 /// WebDAV同步状态
 enum SyncStatus {
@@ -46,7 +44,6 @@ class WebDavSyncService {
 
   // DAO实例
   final BookDao _bookDao = BookDao();
-  final BookmarkDao _bookmarkDao = BookmarkDao();
 
   // 网络监听
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
@@ -412,8 +409,8 @@ class WebDavSyncService {
       final response = await _dio.get('xxread/books/books.json');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.data);
-        final remoteBooks = (data['books'] as List)
-            .cast<Map<String, dynamic>>();
+        final remoteBooks =
+            (data['books'] as List).cast<Map<String, dynamic>>();
 
         // 合并本地和远程数据
         await _mergeBooks(remoteBooks);
@@ -428,7 +425,7 @@ class WebDavSyncService {
     try {
       final response = await _dio.get('xxread/bookmarks/bookmarks.json');
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.data);
+        jsonDecode(response.data);
         debugPrint('下载书签数据（占位）');
       }
     } catch (e) {
@@ -441,7 +438,7 @@ class WebDavSyncService {
     try {
       final response = await _dio.get('xxread/progress/progress.json');
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.data);
+        jsonDecode(response.data);
         debugPrint('下载进度数据（占位）');
       }
     } catch (e) {
@@ -466,16 +463,6 @@ class WebDavSyncService {
         await _bookDao.updateBook(mergedBook);
       }
     }
-  }
-
-  /// 合并书签数据（暂时忽略）
-  Future<void> _mergeBookmarks(List<dynamic> remoteBookmarks) async {
-    debugPrint('书签同步暂未实现，共 ${remoteBookmarks.length} 条');
-  }
-
-  /// 合并进度数据（暂时忽略）
-  Future<void> _mergeProgress(Map<String, dynamic> progressItem) async {
-    debugPrint('进度同步暂未实现: ${progressItem['bookId']}');
   }
 
   /// 合并书籍数据

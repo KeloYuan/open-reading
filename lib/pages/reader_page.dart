@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vector_math/vector_math_64.dart' as vm;
 import '../providers/reader_providers.dart';
 import '../widgets/enhanced_text_selection_toolbar.dart';
 import '../models/book_note.dart';
@@ -89,7 +88,7 @@ class _HighlightedText extends StatelessWidget {
         text: sentence,
         style: style.copyWith(
           backgroundColor:
-              isHighlighted ? highlightColor.withValues(alpha: 0.3) : null,
+              isHighlighted ? highlightColor.withOpacity(0.3) : null,
         ),
       ));
     }
@@ -350,26 +349,32 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
   /// 进入沉浸式模式（隐藏状态栏和导航栏）
   void _enterImmersiveMode() {
-    // 设置为沉浸式模式，完全隐藏系统UI
+    // 设置为沉浸式粘性模式，完全隐藏系统UI（Android全屏）
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.immersiveSticky,
       overlays: [],
     );
 
-    // 同时设置系统UI样式为透明
+    // 强制设置系统UI样式为完全透明和隐藏
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
+        // 状态栏设置
         statusBarColor: Colors.transparent,
-        systemNavigationBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+
+        // 导航栏设置（Android）
+        systemNavigationBarColor: Colors.transparent,
         systemNavigationBarIconBrightness: Brightness.light,
         systemNavigationBarDividerColor: Colors.transparent,
+
+        // 禁用系统对比度增强（Android 10+）
         systemStatusBarContrastEnforced: false,
         systemNavigationBarContrastEnforced: false,
       ),
     );
 
-    debugPrint('📱 进入沉浸式模式 - 隐藏状态栏和导航栏');
+    debugPrint('📱 进入沉浸式模式 - Android全屏隐藏状态栏和导航栏');
   }
 
   /// 退出沉浸式模式（恢复状态栏和导航栏）
@@ -416,25 +421,32 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
   /// 隐藏系统 UI（状态栏和导航栏）- 工具栏隐藏时使用
   void _hideSystemUI() {
+    // 使用immersiveSticky模式确保Android完全全屏
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.immersiveSticky,
       overlays: [],
     );
 
-    // 确保系统UI完全透明
+    // 强制设置系统UI完全透明和隐藏
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
+        // 状态栏完全透明
         statusBarColor: Colors.transparent,
-        systemNavigationBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+
+        // 导航栏完全透明（包括手势提示线）
+        systemNavigationBarColor: Colors.transparent,
         systemNavigationBarIconBrightness: Brightness.light,
         systemNavigationBarDividerColor: Colors.transparent,
+
+        // 禁用Android系统对比度增强（防止自动显示UI）
         systemStatusBarContrastEnforced: false,
         systemNavigationBarContrastEnforced: false,
       ),
     );
 
-    debugPrint('📱 隐藏系统UI - 完全沉浸');
+    debugPrint('📱 隐藏系统UI - Android完全沉浸式全屏');
   }
 
   /// 处理文本选择
@@ -471,6 +483,13 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   Widget build(BuildContext context) {
     final settings = ref.watch(readerSettingsProvider);
     final toolbarState = ref.watch(toolbarProvider);
+
+    // 确保在每次build时都强制进入沉浸式模式（如果工具栏未显示）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !toolbarState.isVisible) {
+        _hideSystemUI();
+      }
+    });
 
     return Scaffold(
       backgroundColor: settings.backgroundColor,
@@ -560,7 +579,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
           child: FadeTransition(
             opacity: _toolbarOpacityAnimation,
             child: Container(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withOpacity(0.3),
               child: GestureDetector(
                 onTap: _hideToolbar,
                 behavior: HitTestBehavior.translucent,
@@ -610,17 +629,18 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   SystemUiOverlayStyle _getSystemUiOverlayStyle(ReadingTheme theme) {
     switch (theme) {
       case ReadingTheme.day:
+      case ReadingTheme.eyeCare:
+      case ReadingTheme.warmPaper:
+      case ReadingTheme.coolGray:
+      case ReadingTheme.sepia:
+      case ReadingTheme.blueLight:
         return SystemUiOverlayStyle.dark.copyWith(
           statusBarColor: Colors.transparent,
           systemNavigationBarColor: Colors.transparent,
         );
       case ReadingTheme.night:
+      case ReadingTheme.pureBlack:
         return SystemUiOverlayStyle.light.copyWith(
-          statusBarColor: Colors.transparent,
-          systemNavigationBarColor: Colors.transparent,
-        );
-      case ReadingTheme.eyeCare:
-        return SystemUiOverlayStyle.dark.copyWith(
           statusBarColor: Colors.transparent,
           systemNavigationBarColor: Colors.transparent,
         );
@@ -716,12 +736,12 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
 
   Widget _buildTopStatusBar(ReaderSettings settings) {
     return Positioned(
-      top: 20, // 增加到20px距离顶部，避免圆角屏幕遮挡
-      left: 0,
-      right: 0,
+      top: 12, // 往上贴近顶部，避开文字区域
+      left: 40, // 水平方向往中间靠拢
+      right: 40,
       child: Container(
         height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -737,7 +757,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withValues(alpha: 0.1),
+        color: settings.textStyle.color?.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -745,7 +765,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
         style: settings.textStyle.copyWith(
           fontSize: 12,
           fontWeight: FontWeight.w500,
-          color: settings.textStyle.color?.withValues(alpha: 0.8),
+          color: settings.textStyle.color?.withOpacity(0.8),
         ),
       ),
     );
@@ -755,7 +775,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withValues(alpha: 0.1),
+        color: settings.textStyle.color?.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -772,7 +792,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
             style: settings.textStyle.copyWith(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: settings.textStyle.color?.withValues(alpha: 0.8),
+              color: settings.textStyle.color?.withOpacity(0.8),
             ),
           ),
         ],
@@ -788,11 +808,11 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     final progress = paginationState.progress;
 
     return Positioned(
-      bottom: 20,
-      left: 0,
-      right: 0,
+      bottom: 12, // 往下贴近底部，避开文字区域
+      left: 40, // 水平方向往中间靠拢
+      right: 40,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -808,7 +828,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withValues(alpha: 0.1),
+        color: settings.textStyle.color?.withOpacity(0.1),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Text(
@@ -816,7 +836,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
         style: settings.textStyle.copyWith(
           fontSize: 12,
           fontWeight: FontWeight.w500,
-          color: settings.textStyle.color?.withValues(alpha: 0.7),
+          color: settings.textStyle.color?.withOpacity(0.7),
         ),
       ),
     );
@@ -828,7 +848,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withValues(alpha: 0.1),
+        color: settings.textStyle.color?.withOpacity(0.1),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Row(
@@ -839,13 +859,13 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
             height: 3,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(1.5),
-              color: settings.textStyle.color?.withValues(alpha: 0.2),
+              color: settings.textStyle.color?.withOpacity(0.2),
             ),
             child: LinearProgressIndicator(
               value: progress,
               backgroundColor: Colors.transparent,
               valueColor: AlwaysStoppedAnimation<Color>(
-                settings.textStyle.color?.withValues(alpha: 0.6) ?? Colors.grey,
+                settings.textStyle.color?.withOpacity(0.6) ?? Colors.grey,
               ),
             ),
           ),
@@ -855,7 +875,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
             style: settings.textStyle.copyWith(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: settings.textStyle.color?.withValues(alpha: 0.7),
+              color: settings.textStyle.color?.withOpacity(0.7),
             ),
           ),
         ],
@@ -879,7 +899,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     } else if (_batteryLevel <= 40) {
       return Colors.orange;
     } else {
-      return baseColor.withValues(alpha: 0.8);
+      return baseColor.withOpacity(0.8);
     }
   }
 }
@@ -1028,7 +1048,7 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
             Icon(
               Icons.error_outline,
               size: 64,
-              color: Colors.red.withValues(alpha: 0.7),
+              color: Colors.red.withOpacity(0.7),
             ),
             const SizedBox(height: 24),
             Text(
@@ -1063,8 +1083,7 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
                   horizontal: 24,
                   vertical: 12,
                 ),
-                backgroundColor:
-                    settings.textStyle.color?.withValues(alpha: 0.1),
+                backgroundColor: settings.textStyle.color?.withOpacity(0.1),
                 foregroundColor: settings.textStyle.color,
               ),
             ),
@@ -1075,8 +1094,7 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
               icon: const Icon(Icons.arrow_back),
               label: const Text('返回'),
               style: TextButton.styleFrom(
-                foregroundColor:
-                    settings.textStyle.color?.withValues(alpha: 0.7),
+                foregroundColor: settings.textStyle.color?.withOpacity(0.7),
               ),
             ),
           ],
@@ -1091,7 +1109,7 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
         '没有内容可显示',
         style: settings.textStyle.copyWith(
           fontSize: 16,
-          color: settings.textStyle.color?.withValues(alpha: 0.5),
+          color: settings.textStyle.color?.withOpacity(0.5),
         ),
       ),
     );
@@ -1516,7 +1534,7 @@ class _SimulationPaginationViewState extends State<_SimulationPaginationView>
                 transform: Matrix4.identity()
                   ..setEntry(3, 2, 0.002) // 透视效果
                   ..rotateY(rotationY)
-                  ..scaleByVector3(vm.Vector3.all(_scaleAnimation.value)),
+                  ..scale(_scaleAnimation.value),
                 child: _buildPageContent(_currentPage),
               );
             },
@@ -1538,8 +1556,8 @@ class _SimulationPaginationViewState extends State<_SimulationPaginationView>
           color: widget.settings.backgroundColor,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(
-                alpha: isBackground ? 0.05 : _shadowAnimation.value,
+              color: Colors.black.withOpacity(
+                isBackground ? 0.05 : _shadowAnimation.value,
               ),
               blurRadius: 20,
               offset: const Offset(0, 4),
@@ -1616,7 +1634,7 @@ class _ReaderToolbar extends ConsumerWidget {
       color: _getToolbarBackgroundColor(settings),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.1),
+          color: Colors.black.withOpacity(0.1),
           blurRadius: 8,
           offset: position == _ToolbarPosition.top
               ? const Offset(0, 2)
@@ -1634,6 +1652,16 @@ class _ReaderToolbar extends ConsumerWidget {
         return const Color(0xFF2A2A2A);
       case ReadingTheme.eyeCare:
         return const Color(0xFFF0F2E8);
+      case ReadingTheme.warmPaper:
+        return const Color(0xFFFFF8DC);
+      case ReadingTheme.coolGray:
+        return const Color(0xFFE8E8E8);
+      case ReadingTheme.sepia:
+        return const Color(0xFFF5E6D3);
+      case ReadingTheme.pureBlack:
+        return const Color(0xFF000000);
+      case ReadingTheme.blueLight:
+        return const Color(0xFFE8F4F8);
     }
   }
 
@@ -1710,6 +1738,346 @@ class _ReaderToolbar extends ConsumerWidget {
     );
   }
 
+  /// 处理分享功能
+  void _handleShare(BuildContext context, WidgetRef ref) {
+    final paginationState = ref.read(readerPaginationProvider);
+    final currentPageContent = paginationState.currentPageContent ?? '';
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('分享当前页面内容 (${currentPageContent.length}字)')),
+    );
+  }
+
+  /// 显示主题选择器
+  void _showThemeSelector(
+      BuildContext context, WidgetRef ref, ReaderSettings settings) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        decoration: BoxDecoration(
+          color: _getToolbarBackgroundColor(settings),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 拖动指示器
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: settings.textStyle.color?.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // 标题
+                Text(
+                  '阅读主题',
+                  style: settings.textStyle.copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // 主题网格
+                GridView.count(
+                  crossAxisCount: 3,
+                  shrinkWrap: true,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  childAspectRatio: 1.2,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: ReadingTheme.values.map((theme) {
+                    final isSelected = settings.theme == theme;
+                    return _buildThemeCard(theme, isSelected, ref, settings);
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 构建主题卡片
+  Widget _buildThemeCard(
+    ReadingTheme theme,
+    bool isSelected,
+    WidgetRef ref,
+    ReaderSettings currentSettings,
+  ) {
+    // 创建临时设置以获取主题颜色
+    final themeSettings = currentSettings.copyWith(theme: theme);
+
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        ref.read(readerSettingsProvider.notifier).switchTheme(theme);
+        Navigator.pop(ref.context);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: themeSettings.backgroundColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected
+                ? currentSettings.textStyle.color?.withOpacity(0.5) ??
+                    Colors.grey
+                : Colors.transparent,
+            width: 2.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            // 主题预览
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    _getThemeIcon(theme),
+                    size: 28,
+                    color: themeSettings.textStyle.color,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    themeSettings.themeName,
+                    style: themeSettings.textStyle.copyWith(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // 选中标识
+            if (isSelected)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: currentSettings.textStyle.color?.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.check,
+                    size: 16,
+                    color: currentSettings.textStyle.color,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 显示排版设置面板
+  void _showTypographyPanel(
+      BuildContext context, WidgetRef ref, ReaderSettings settings) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        decoration: BoxDecoration(
+          color: _getToolbarBackgroundColor(settings),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 拖动指示器
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: settings.textStyle.color?.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // 标题
+                Text(
+                  '排版设置',
+                  style: settings.textStyle.copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // 字体大小
+                _buildTypographyRow(
+                  label: '字体大小',
+                  value: settings.fontSize.toInt().toString(),
+                  onDecrease: () {
+                    HapticFeedback.selectionClick();
+                    final newSize = (settings.fontSize - 1).clamp(14.0, 28.0);
+                    ref
+                        .read(readerSettingsProvider.notifier)
+                        .updateFontSize(newSize);
+                  },
+                  onIncrease: () {
+                    HapticFeedback.selectionClick();
+                    final newSize = (settings.fontSize + 1).clamp(14.0, 28.0);
+                    ref
+                        .read(readerSettingsProvider.notifier)
+                        .updateFontSize(newSize);
+                  },
+                  settings: settings,
+                ),
+                const SizedBox(height: 20),
+                // 行距
+                _buildTypographyRow(
+                  label: '行距',
+                  value: settings.lineHeight.toStringAsFixed(1),
+                  onDecrease: () {
+                    HapticFeedback.selectionClick();
+                    final newHeight =
+                        (settings.lineHeight - 0.1).clamp(1.2, 2.5);
+                    ref
+                        .read(readerSettingsProvider.notifier)
+                        .updateLineHeight(newHeight);
+                  },
+                  onIncrease: () {
+                    HapticFeedback.selectionClick();
+                    final newHeight =
+                        (settings.lineHeight + 0.1).clamp(1.2, 2.5);
+                    ref
+                        .read(readerSettingsProvider.notifier)
+                        .updateLineHeight(newHeight);
+                  },
+                  settings: settings,
+                ),
+                const SizedBox(height: 20),
+                // 字间距
+                _buildTypographyRow(
+                  label: '字间距',
+                  value: settings.letterSpacing.toStringAsFixed(1),
+                  onDecrease: () {
+                    HapticFeedback.selectionClick();
+                    final newSpacing =
+                        (settings.letterSpacing - 0.1).clamp(0.0, 1.0);
+                    ref
+                        .read(readerSettingsProvider.notifier)
+                        .updateLetterSpacing(newSpacing);
+                  },
+                  onIncrease: () {
+                    HapticFeedback.selectionClick();
+                    final newSpacing =
+                        (settings.letterSpacing + 0.1).clamp(0.0, 1.0);
+                    ref
+                        .read(readerSettingsProvider.notifier)
+                        .updateLetterSpacing(newSpacing);
+                  },
+                  settings: settings,
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 构建排版设置行
+  Widget _buildTypographyRow({
+    required String label,
+    required String value,
+    required VoidCallback onDecrease,
+    required VoidCallback onIncrease,
+    required ReaderSettings settings,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: settings.textStyle.copyWith(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Row(
+          children: [
+            _buildAdjustButton(
+              icon: Icons.remove,
+              onTap: onDecrease,
+              settings: settings,
+            ),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: settings.textStyle.color?.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                value,
+                style: settings.textStyle.copyWith(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            _buildAdjustButton(
+              icon: Icons.add,
+              onTap: onIncrease,
+              settings: settings,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// 构建调整按钮
+  Widget _buildAdjustButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required ReaderSettings settings,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: settings.textStyle.color?.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: settings.textStyle.color?.withOpacity(0.8),
+        ),
+      ),
+    );
+  }
+
   void _showMoreMenu(
       BuildContext context, WidgetRef ref, ReaderSettings settings) {
     showModalBottomSheet(
@@ -1729,7 +2097,7 @@ class _ReaderToolbar extends ConsumerWidget {
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: settings.textStyle.color?.withValues(alpha: 0.3),
+                  color: settings.textStyle.color?.withOpacity(0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -1762,7 +2130,7 @@ class _ReaderToolbar extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         child: Row(
           children: [
-            Icon(icon, color: settings.textStyle.color?.withValues(alpha: 0.8)),
+            Icon(icon, color: settings.textStyle.color?.withOpacity(0.8)),
             const SizedBox(width: 16),
             Text(
               label,
@@ -1776,8 +2144,12 @@ class _ReaderToolbar extends ConsumerWidget {
 
   Widget _buildBottomToolbar(
       BuildContext context, WidgetRef ref, ReaderSettings settings) {
+    final paginationState = ref.watch(readerPaginationProvider);
+    final currentPage = paginationState.currentPageIndex + 1;
+    final totalPages = paginationState.totalPages;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1785,37 +2157,93 @@ class _ReaderToolbar extends ConsumerWidget {
           Row(
             children: [
               Text(
-                '1',
-                style: settings.textStyle.copyWith(fontSize: 12),
+                '$currentPage',
+                style: settings.textStyle.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
               Expanded(
                 child: Slider(
-                  value: 0.5,
+                  value: totalPages > 0 ? currentPage / totalPages : 0,
                   onChanged: (value) {
                     onInteraction?.call();
                     HapticFeedback.selectionClick();
+                    final targetPage =
+                        (value * totalPages).round().clamp(1, totalPages);
+                    ref
+                        .read(readerPaginationProvider.notifier)
+                        .goToPage(targetPage - 1);
                   },
-                  activeColor: settings.textStyle.color?.withValues(alpha: 0.8),
-                  inactiveColor:
-                      settings.textStyle.color?.withValues(alpha: 0.2),
+                  activeColor: settings.textStyle.color?.withOpacity(0.8),
+                  inactiveColor: settings.textStyle.color?.withOpacity(0.2),
                 ),
               ),
               Text(
-                '100',
-                style: settings.textStyle.copyWith(fontSize: 12),
+                '$totalPages',
+                style: settings.textStyle.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          // 第二行：控制按钮
+          const SizedBox(height: 16),
+          // 第二行：新的控制按钮组
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildThemeToggle(ref, settings),
-              _buildFontSizeControls(ref, settings),
-              _buildBrightnessControl(ref, settings),
-              _buildTtsControls(ref, settings),
-              _buildPageFlipMode(ref, settings),
+              _buildToolbarButton(
+                icon: Icons.list_rounded,
+                label: '目录',
+                onTap: () {
+                  onInteraction?.call();
+                  HapticFeedback.lightImpact();
+                  _showTableOfContents(context, ref);
+                },
+                settings: settings,
+              ),
+              _buildToolbarButton(
+                icon: Icons.palette_rounded,
+                label: '主题',
+                onTap: () {
+                  onInteraction?.call();
+                  HapticFeedback.lightImpact();
+                  _showThemeSelector(context, ref, settings);
+                },
+                settings: settings,
+              ),
+              _buildTtsButton(ref, settings),
+              _buildToolbarButton(
+                icon: Icons.format_size_rounded,
+                label: '排版',
+                onTap: () {
+                  onInteraction?.call();
+                  HapticFeedback.lightImpact();
+                  _showTypographyPanel(context, ref, settings);
+                },
+                settings: settings,
+              ),
+              _buildToolbarButton(
+                icon: Icons.share_rounded,
+                label: '分享',
+                onTap: () {
+                  onInteraction?.call();
+                  HapticFeedback.lightImpact();
+                  _handleShare(context, ref);
+                },
+                settings: settings,
+              ),
+              _buildToolbarButton(
+                icon: Icons.settings_rounded,
+                label: '设置',
+                onTap: () {
+                  onInteraction?.call();
+                  HapticFeedback.lightImpact();
+                  _showMoreMenu(context, ref, settings);
+                },
+                settings: settings,
+              ),
             ],
           ),
         ],
@@ -1823,120 +2251,51 @@ class _ReaderToolbar extends ConsumerWidget {
     );
   }
 
-  Widget _buildBrightnessControl(WidgetRef ref, ReaderSettings settings) {
+  /// 构建工具栏按钮
+  Widget _buildToolbarButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    required ReaderSettings settings,
+  }) {
     return GestureDetector(
-      onTap: () {
-        onInteraction?.call();
-        HapticFeedback.lightImpact();
-        _showBrightnessSlider(ref, settings);
-      },
+      onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: settings.textStyle.color?.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          Icons.brightness_6_rounded,
-          size: 20,
-          color: settings.textStyle.color?.withValues(alpha: 0.8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: settings.textStyle.color?.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                icon,
+                size: 22,
+                color: settings.textStyle.color?.withOpacity(0.85),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: settings.textStyle.copyWith(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: settings.textStyle.color?.withOpacity(0.75),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildPageFlipMode(WidgetRef ref, ReaderSettings settings) {
-    return GestureDetector(
-      onTap: () {
-        onInteraction?.call();
-        HapticFeedback.lightImpact();
-        ScaffoldMessenger.of(ref.context).showSnackBar(
-          const SnackBar(content: Text('翻页模式切换')),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: settings.textStyle.color?.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          Icons.auto_stories_rounded,
-          size: 20,
-          color: settings.textStyle.color?.withValues(alpha: 0.8),
-        ),
-      ),
-    );
-  }
-
-  void _showBrightnessSlider(WidgetRef ref, ReaderSettings settings) {
-    // TODO: Implement brightness slider
-    ScaffoldMessenger.of(ref.context).showSnackBar(
-      const SnackBar(content: Text('亮度调节')),
-    );
-  }
-
-  Widget _buildThemeToggle(WidgetRef ref, ReaderSettings settings) {
-    return GestureDetector(
-      onTap: () {
-        onInteraction?.call();
-        HapticFeedback.lightImpact();
-        _cycleTheme(ref);
-      },
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: settings.textStyle.color?.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          _getThemeIcon(settings.theme),
-          size: 20,
-          color: settings.textStyle.color?.withValues(alpha: 0.8),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFontSizeControls(WidgetRef ref, ReaderSettings settings) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildIconButton(
-          icon: Icons.text_decrease,
-          onPressed: () {
-            onInteraction?.call();
-            _decreaseFontSize(ref);
-          },
-          settings: settings,
-        ),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: settings.textStyle.color?.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            '${settings.fontSize.toInt()}',
-            style: settings.textStyle.copyWith(fontSize: 12),
-          ),
-        ),
-        const SizedBox(width: 8),
-        _buildIconButton(
-          icon: Icons.text_increase,
-          onPressed: () {
-            onInteraction?.call();
-            _increaseFontSize(ref);
-          },
-          settings: settings,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTtsControls(WidgetRef ref, ReaderSettings settings) {
+  /// 构建TTS按钮（带状态）
+  Widget _buildTtsButton(WidgetRef ref, ReaderSettings settings) {
     final ttsState = ref.watch(readerTtsProvider);
+    final isPlaying = ttsState.isPlaying;
 
     return GestureDetector(
       onTap: () {
@@ -1945,17 +2304,34 @@ class _ReaderToolbar extends ConsumerWidget {
         _toggleTts(ref);
       },
       child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: ttsState.isPlaying
-              ? settings.textStyle.color?.withValues(alpha: 0.2)
-              : settings.textStyle.color?.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          ttsState.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-          size: 20,
-          color: settings.textStyle.color?.withValues(alpha: 0.8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isPlaying
+                    ? settings.textStyle.color?.withOpacity(0.15)
+                    : settings.textStyle.color?.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                size: 22,
+                color: settings.textStyle.color?.withOpacity(0.85),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '朗读',
+              style: settings.textStyle.copyWith(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: settings.textStyle.color?.withOpacity(0.75),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1974,45 +2350,16 @@ class _ReaderToolbar extends ConsumerWidget {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: settings.textStyle.color?.withValues(alpha: 0.1),
+          color: settings.textStyle.color?.withOpacity(0.1),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Icon(
           icon,
           size: 20,
-          color: settings.textStyle.color?.withValues(alpha: 0.8),
+          color: settings.textStyle.color?.withOpacity(0.8),
         ),
       ),
     );
-  }
-
-  void _cycleTheme(WidgetRef ref) {
-    final settings = ref.read(readerSettingsProvider);
-    ReadingTheme nextTheme;
-
-    switch (settings.theme) {
-      case ReadingTheme.day:
-        nextTheme = ReadingTheme.night;
-        break;
-      case ReadingTheme.night:
-        nextTheme = ReadingTheme.eyeCare;
-        break;
-      case ReadingTheme.eyeCare:
-        nextTheme = ReadingTheme.day;
-        break;
-    }
-
-    ref.read(readerSettingsProvider.notifier).switchTheme(nextTheme);
-  }
-
-  void _increaseFontSize(WidgetRef ref) {
-    final currentSize = ref.read(readerSettingsProvider).fontSize;
-    ref.read(readerSettingsProvider.notifier).updateFontSize(currentSize + 1);
-  }
-
-  void _decreaseFontSize(WidgetRef ref) {
-    final currentSize = ref.read(readerSettingsProvider).fontSize;
-    ref.read(readerSettingsProvider.notifier).updateFontSize(currentSize - 1);
   }
 
   void _toggleTts(WidgetRef ref) {
@@ -2036,6 +2383,16 @@ class _ReaderToolbar extends ConsumerWidget {
         return Icons.nights_stay;
       case ReadingTheme.eyeCare:
         return Icons.eco;
+      case ReadingTheme.warmPaper:
+        return Icons.article_outlined;
+      case ReadingTheme.coolGray:
+        return Icons.ac_unit_outlined;
+      case ReadingTheme.sepia:
+        return Icons.auto_stories_outlined;
+      case ReadingTheme.pureBlack:
+        return Icons.brightness_1;
+      case ReadingTheme.blueLight:
+        return Icons.wb_twilight;
     }
   }
 }

@@ -165,7 +165,7 @@ class _ReaderTextViewState extends State<ReaderTextView> {
             Icon(
               Icons.error_outline,
               size: 48,
-              color: Colors.red.withValues(alpha: 0.7),
+              color: Colors.red.withOpacity(0.7),
             ),
             const SizedBox(height: 16),
             Text(
@@ -212,7 +212,7 @@ class _ReaderTextViewState extends State<ReaderTextView> {
         '没有内容可显示',
         style: settings.textStyle.copyWith(
           fontSize: 16,
-          color: settings.textStyle.color?.withValues(alpha: 0.5),
+          color: settings.textStyle.color?.withOpacity(0.5),
         ),
       ),
     );
@@ -366,7 +366,7 @@ class _SimulationPaginationViewState extends State<_SimulationPaginationView> {
             color: widget.settings.backgroundColor,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
+                color: Colors.black.withOpacity(0.1),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),

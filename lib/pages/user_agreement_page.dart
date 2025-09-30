@@ -138,14 +138,14 @@ class _UserAgreementPageState extends State<UserAgreementPage>
                 end: Alignment.bottomRight,
                 stops: const [0.0, 0.3, 0.6, 1.0],
                 colors: [
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                  Theme.of(context).colorScheme.primary.withOpacity(0.15),
                   Theme.of(
                     context,
-                  ).colorScheme.secondary.withValues(alpha: 0.08),
+                  ).colorScheme.secondary.withOpacity(0.08),
                   Theme.of(
                     context,
-                  ).colorScheme.tertiary.withValues(alpha: 0.12),
-                  Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+                  ).colorScheme.tertiary.withOpacity(0.12),
+                  Theme.of(context).colorScheme.surface.withOpacity(0.95),
                 ],
               ),
             ),
@@ -212,7 +212,7 @@ class _UserAgreementPageState extends State<UserAgreementPage>
               BoxShadow(
                 color: Theme.of(
                   context,
-                ).colorScheme.primary.withValues(alpha: 0.3),
+                ).colorScheme.primary.withOpacity(0.3),
                 blurRadius: 15,
                 offset: const Offset(0, 5),
               ),
@@ -239,7 +239,7 @@ class _UserAgreementPageState extends State<UserAgreementPage>
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
             color: Theme.of(
               context,
-            ).colorScheme.onSurface.withValues(alpha: 0.7),
+            ).colorScheme.onSurface.withOpacity(0.7),
           ),
         ),
       ],
@@ -255,17 +255,17 @@ class _UserAgreementPageState extends State<UserAgreementPage>
         child: Container(
           width: double.infinity,
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+            color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(
                 context,
-              ).colorScheme.outline.withValues(alpha: 0.2),
+              ).colorScheme.outline.withOpacity(0.2),
               width: 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
+                color: Colors.black.withOpacity(0.1),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -283,7 +283,7 @@ class _UserAgreementPageState extends State<UserAgreementPage>
                       decoration: BoxDecoration(
                         color: Theme.of(
                           context,
-                        ).colorScheme.primary.withValues(alpha: 0.1),
+                        ).colorScheme.primary.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -359,7 +359,7 @@ class _UserAgreementPageState extends State<UserAgreementPage>
           decoration: BoxDecoration(
             color: Theme.of(
               context,
-            ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+            ).colorScheme.primaryContainer.withOpacity(0.3),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -406,7 +406,7 @@ class _UserAgreementPageState extends State<UserAgreementPage>
       content,
       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
         height: 1.6,
-        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
       ),
     );
   }
@@ -452,7 +452,7 @@ class _UserAgreementPageState extends State<UserAgreementPage>
                 BoxShadow(
                   color: Theme.of(
                     context,
-                  ).colorScheme.primary.withValues(alpha: 0.3),
+                  ).colorScheme.primary.withOpacity(0.3),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -470,7 +470,7 @@ class _UserAgreementPageState extends State<UserAgreementPage>
                   ? Theme.of(context).colorScheme.primary
                   : Theme.of(
                       context,
-                    ).colorScheme.surface.withValues(alpha: 0.8),
+                    ).colorScheme.surface.withOpacity(0.8),
               foregroundColor: isPrimary
                   ? Theme.of(context).colorScheme.onPrimary
                   : Theme.of(context).colorScheme.onSurface,
@@ -482,7 +482,7 @@ class _UserAgreementPageState extends State<UserAgreementPage>
                     : BorderSide(
                         color: Theme.of(
                           context,
-                        ).colorScheme.outline.withValues(alpha: 0.3),
+                        ).colorScheme.outline.withOpacity(0.3),
                       ),
               ),
             ),

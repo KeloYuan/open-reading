@@ -13,9 +13,14 @@ enum PaginationMode {
 
 /// 阅读主题枚举
 enum ReadingTheme {
-  day, // 白天模式
-  night, // 夜间模式
-  eyeCare, // 护眼模式
+  day, // 白天模式 - 米黄色
+  night, // 夜间模式 - 深灰色
+  eyeCare, // 护眼模式 - 豆沙绿
+  warmPaper, // 温暖纸张 - 暖黄色
+  coolGray, // 冷灰色 - 浅灰蓝
+  sepia, // 复古棕褐 - 棕褐色
+  pureBlack, // 纯黑模式 - OLED黑
+  blueLight, // 蓝光护眼 - 淡蓝
 }
 
 /// 阅读器设置状态
@@ -33,7 +38,7 @@ class ReaderSettings {
     this.fontSize = 18.0,
     this.lineHeight = 1.8,
     this.letterSpacing = 0.2,
-    this.padding = const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+    this.padding = const EdgeInsets.only(left: 20.0, right: 20.0, top: 70.0, bottom: 70.0),
     this.theme = ReadingTheme.day,
     this.paginationMode = PaginationMode.slide,
     this.showPageIndicator = true,
@@ -78,6 +83,21 @@ class ReaderSettings {
       case ReadingTheme.eyeCare:
         textColor = const Color(0xFF2D4A2B);
         break;
+      case ReadingTheme.warmPaper:
+        textColor = const Color(0xFF5D4E37);
+        break;
+      case ReadingTheme.coolGray:
+        textColor = const Color(0xFF37474F);
+        break;
+      case ReadingTheme.sepia:
+        textColor = const Color(0xFF3E2723);
+        break;
+      case ReadingTheme.pureBlack:
+        textColor = const Color(0xFFCCCCCC);
+        break;
+      case ReadingTheme.blueLight:
+        textColor = const Color(0xFF1A237E);
+        break;
     }
 
     return TextStyle(
@@ -94,11 +114,43 @@ class ReaderSettings {
   Color get backgroundColor {
     switch (theme) {
       case ReadingTheme.day:
-        return const Color(0xFFFFFBF0);
+        return const Color(0xFFFFFBF0); // 米黄色
       case ReadingTheme.night:
-        return const Color(0xFF1A1A1A);
+        return const Color(0xFF1A1A1A); // 深灰色
       case ReadingTheme.eyeCare:
-        return const Color(0xFFF5F7E3);
+        return const Color(0xFFC7EDCC); // 豆沙绿
+      case ReadingTheme.warmPaper:
+        return const Color(0xFFFFF8E1); // 温暖纸张
+      case ReadingTheme.coolGray:
+        return const Color(0xFFECEFF1); // 冷灰色
+      case ReadingTheme.sepia:
+        return const Color(0xFFF4ECD8); // 复古棕褐
+      case ReadingTheme.pureBlack:
+        return const Color(0xFF000000); // 纯黑OLED
+      case ReadingTheme.blueLight:
+        return const Color(0xFFE3F2FD); // 蓝光护眼
+    }
+  }
+
+  /// 获取主题显示名称
+  String get themeName {
+    switch (theme) {
+      case ReadingTheme.day:
+        return '白天';
+      case ReadingTheme.night:
+        return '夜间';
+      case ReadingTheme.eyeCare:
+        return '护眼';
+      case ReadingTheme.warmPaper:
+        return '温暖纸张';
+      case ReadingTheme.coolGray:
+        return '冷灰';
+      case ReadingTheme.sepia:
+        return '复古';
+      case ReadingTheme.pureBlack:
+        return '纯黑';
+      case ReadingTheme.blueLight:
+        return '蓝光护眼';
     }
   }
 }

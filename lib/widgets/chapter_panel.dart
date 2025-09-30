@@ -23,7 +23,7 @@ class ChapterPanel extends StatelessWidget {
               size: 64,
               color: Theme.of(
                 context,
-              ).colorScheme.onSurface.withValues(alpha: 0.3),
+              ).colorScheme.onSurface.withOpacity(0.3),
             ),
             const SizedBox(height: 16),
             Text(
@@ -35,7 +35,7 @@ class ChapterPanel extends StatelessWidget {
                       .copyWith(
                         color: Theme.of(
                           context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ).colorScheme.onSurface.withOpacity(0.6),
                       ),
             ),
             const SizedBox(height: 8),
@@ -44,7 +44,7 @@ class ChapterPanel extends StatelessWidget {
               style: const TextStyle().copyWith(
                 color: Theme.of(
                   context,
-                ).colorScheme.onSurface.withValues(alpha: 0.4),
+                ).colorScheme.onSurface.withOpacity(0.4),
                 fontSize: 12,
               ),
             ),
@@ -133,10 +133,10 @@ class ChapterPanel extends StatelessWidget {
     TextStyle? titleStyle = theme.textTheme.bodyLarge;
     TextStyle? subtitleStyle = theme.textTheme.bodySmall;
     IconData iconData = Icons.article_outlined;
-    Color? iconColor = colorScheme.onSurface.withValues(alpha: 0.6);
+    Color? iconColor = colorScheme.onSurface.withOpacity(0.6);
 
     if (isMainChapter) {
-      backgroundColor = colorScheme.primaryContainer.withValues(alpha: 0.3);
+      backgroundColor = colorScheme.primaryContainer.withOpacity(0.3);
       titleStyle =
           (theme.textTheme.titleMedium ??
                   theme.textTheme.bodyLarge ??
@@ -154,7 +154,7 @@ class ChapterPanel extends StatelessWidget {
           (theme.textTheme.bodyMedium ??
                   theme.textTheme.bodyLarge ??
                   const TextStyle())
-              .copyWith(color: colorScheme.onSurface.withValues(alpha: 0.8));
+              .copyWith(color: colorScheme.onSurface.withOpacity(0.8));
       iconData = Icons.subdirectory_arrow_right;
       iconColor = colorScheme.secondary;
     }
@@ -187,7 +187,7 @@ class ChapterPanel extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.1),
+                    color: iconColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Icon(
@@ -222,7 +222,7 @@ class ChapterPanel extends StatelessWidget {
                               ? '层级 ${chapter.level}'
                               : '',
                           style: subtitleStyle?.copyWith(
-                            color: colorScheme.onSurface.withValues(alpha: 0.5),
+                            color: colorScheme.onSurface.withOpacity(0.5),
                           ),
                         ),
                       ],
@@ -234,7 +234,7 @@ class ChapterPanel extends StatelessWidget {
                 Icon(
                   Icons.arrow_forward_ios,
                   size: 12,
-                  color: colorScheme.onSurface.withValues(alpha: 0.3),
+                  color: colorScheme.onSurface.withOpacity(0.3),
                 ),
               ],
             ),

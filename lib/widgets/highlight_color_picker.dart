@@ -92,15 +92,15 @@ class _HighlightColorPickerState extends State<HighlightColorPicker>
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surface.withValues(alpha: 0.95),
+                  color: theme.colorScheme.surface.withOpacity(0.95),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                    color: theme.colorScheme.outline.withOpacity(0.3),
                     width: 1,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.2),
+                      color: Colors.black.withOpacity(0.2),
                       blurRadius: 25,
                       offset: const Offset(0, 12),
                       spreadRadius: 0,
@@ -116,8 +116,8 @@ class _HighlightColorPickerState extends State<HighlightColorPicker>
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: 0.1,
+                            color: theme.colorScheme.primary.withOpacity(
+                              0.1,
                             ),
                             borderRadius: BorderRadius.circular(10),
                           ),
@@ -141,8 +141,8 @@ class _HighlightColorPickerState extends State<HighlightColorPicker>
                           onPressed: _close,
                           icon: Icon(
                             Icons.close_rounded,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
+                            color: theme.colorScheme.onSurface.withOpacity(
+                              0.6,
                             ),
                           ),
                           iconSize: 20,
@@ -157,11 +157,11 @@ class _HighlightColorPickerState extends State<HighlightColorPicker>
                       physics: const NeverScrollableScrollPhysics(),
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            childAspectRatio: 1.2,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                          ),
+                        crossAxisCount: 3,
+                        childAspectRatio: 1.2,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                      ),
                       itemCount: Highlight.highlightColors.length,
                       itemBuilder: (context, index) {
                         final color = Highlight.highlightColors[index];
@@ -175,18 +175,17 @@ class _HighlightColorPickerState extends State<HighlightColorPicker>
                             duration: const Duration(milliseconds: 200),
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: color.withValues(alpha: 0.2),
+                              color: color.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: isSelected
-                                    ? color
-                                    : color.withValues(alpha: 0.3),
+                                color:
+                                    isSelected ? color : color.withOpacity(0.3),
                                 width: isSelected ? 3 : 1.5,
                               ),
                               boxShadow: isSelected
                                   ? [
                                       BoxShadow(
-                                        color: color.withValues(alpha: 0.3),
+                                        color: color.withOpacity(0.3),
                                         blurRadius: 8,
                                         offset: const Offset(0, 4),
                                       ),
@@ -209,7 +208,7 @@ class _HighlightColorPickerState extends State<HighlightColorPicker>
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: color.withValues(alpha: 0.4),
+                                        color: color.withOpacity(0.4),
                                         blurRadius: 4,
                                         offset: const Offset(0, 2),
                                       ),
@@ -234,10 +233,10 @@ class _HighlightColorPickerState extends State<HighlightColorPicker>
                                         : FontWeight.w500,
                                     color: isSelected
                                         ? color.computeLuminance() > 0.5
-                                              ? Colors.black87
-                                              : theme.colorScheme.onSurface
+                                            ? Colors.black87
+                                            : theme.colorScheme.onSurface
                                         : theme.colorScheme.onSurface
-                                              .withValues(alpha: 0.8),
+                                            .withOpacity(0.8),
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
@@ -258,8 +257,8 @@ class _HighlightColorPickerState extends State<HighlightColorPicker>
                         color: theme.colorScheme.surface,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: theme.colorScheme.outline.withValues(
-                            alpha: 0.2,
+                          color: theme.colorScheme.outline.withOpacity(
+                            0.2,
                           ),
                         ),
                       ),
@@ -271,8 +270,8 @@ class _HighlightColorPickerState extends State<HighlightColorPicker>
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
-                              color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.6,
+                              color: theme.colorScheme.onSurface.withOpacity(
+                                0.6,
                               ),
                             ),
                           ),
@@ -289,8 +288,9 @@ class _HighlightColorPickerState extends State<HighlightColorPicker>
                                 TextSpan(
                                   text: '这部分将被高亮显示',
                                   style: TextStyle(
-                                    backgroundColor: _selectedColor?.withValues(
-                                      alpha: 0.4,
+                                    backgroundColor:
+                                        _selectedColor?.withOpacity(
+                                      0.4,
                                     ),
                                     color: theme.colorScheme.onSurface,
                                   ),
@@ -323,7 +323,7 @@ Future<Color?> showHighlightColorPicker({
   await showDialog<void>(
     context: context,
     barrierDismissible: true,
-    barrierColor: Colors.black.withValues(alpha: 0.5),
+    barrierColor: Colors.black.withOpacity(0.5),
     builder: (BuildContext context) {
       return Center(
         child: ConstrainedBox(

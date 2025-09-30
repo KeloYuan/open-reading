@@ -57,7 +57,7 @@ class Highlight {
       cfi: cfi ?? '',
       chapter: chapter,
       type: 'highlight',
-      color: color.toARGB32().toRadixString(16).substring(2).toUpperCase(),
+      color: color.value.toRadixString(16).substring(2).toUpperCase(),
       pageNumber: pageNumber,
       startOffset: startOffset,
       endOffset: endOffset,
@@ -121,14 +121,14 @@ class Highlight {
   /// 获取颜色名称
   String getColorName() {
     return BookNote.getColorName(
-      color.toARGB32().toRadixString(16).substring(2).toUpperCase(),
+      color.value.toRadixString(16).substring(2).toUpperCase(),
     );
   }
 
   /// 静态方法：获取颜色名称（用于与服务类兼容）
   static String getColorNameStatic(Color color) {
     return BookNote.getColorName(
-      color.toARGB32().toRadixString(16).substring(2).toUpperCase(),
+      color.value.toRadixString(16).substring(2).toUpperCase(),
     );
   }
 

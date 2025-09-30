@@ -14,8 +14,8 @@ mixin ThemeMixin<T extends StatefulWidget> on State<T> {
   Color getTextColor(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     return brightness == Brightness.dark
-        ? Colors.white.withValues(alpha:0.9)
-        : Colors.black.withValues(alpha:0.8);
+        ? Colors.white.withOpacity(0.9)
+        : Colors.black.withOpacity(0.8);
   }
 
   /// 获取当前主题的背景色
