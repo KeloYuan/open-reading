@@ -33,6 +33,9 @@ class ReaderSettings {
   final PaginationMode paginationMode;
   final bool showPageIndicator;
   final bool enableTextSelection;
+  final double paragraphSpacing; // 段落间距（0-20px）
+  final double firstLineIndent; // 首行缩进（0-4字符）
+  final double horizontalMargin; // 水平页边距（10-40px）
 
   const ReaderSettings({
     this.fontSize = 18.0,
@@ -43,6 +46,9 @@ class ReaderSettings {
     this.paginationMode = PaginationMode.slide,
     this.showPageIndicator = true,
     this.enableTextSelection = true,
+    this.paragraphSpacing = 8.0,
+    this.firstLineIndent = 2.0,
+    this.horizontalMargin = 20.0,
   });
 
   /// 复制并修改设置
@@ -55,6 +61,9 @@ class ReaderSettings {
     PaginationMode? paginationMode,
     bool? showPageIndicator,
     bool? enableTextSelection,
+    double? paragraphSpacing,
+    double? firstLineIndent,
+    double? horizontalMargin,
   }) {
     return ReaderSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -65,6 +74,9 @@ class ReaderSettings {
       paginationMode: paginationMode ?? this.paginationMode,
       showPageIndicator: showPageIndicator ?? this.showPageIndicator,
       enableTextSelection: enableTextSelection ?? this.enableTextSelection,
+      paragraphSpacing: paragraphSpacing ?? this.paragraphSpacing,
+      firstLineIndent: firstLineIndent ?? this.firstLineIndent,
+      horizontalMargin: horizontalMargin ?? this.horizontalMargin,
     );
   }
 
@@ -295,6 +307,30 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
   /// 更新页边距
   void updatePadding(EdgeInsets padding) {
     state = state.copyWith(padding: padding);
+  }
+
+  /// 更新段落间距
+  void updateParagraphSpacing(double spacing) {
+    state = state.copyWith(paragraphSpacing: spacing.clamp(0.0, 20.0));
+  }
+
+  /// 更新首行缩进
+  void updateFirstLineIndent(double indent) {
+    state = state.copyWith(firstLineIndent: indent.clamp(0.0, 4.0));
+  }
+
+  /// 更新水平页边距
+  void updateHorizontalMargin(double margin) {
+    final newMargin = margin.clamp(10.0, 40.0);
+    state = state.copyWith(
+      horizontalMargin: newMargin,
+      padding: EdgeInsets.only(
+        left: newMargin,
+        right: newMargin,
+        top: state.padding.top,
+        bottom: state.padding.bottom,
+      ),
+    );
   }
 
   /// 切换阅读主题

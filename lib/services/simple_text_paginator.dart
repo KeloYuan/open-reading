@@ -14,6 +14,12 @@ class SimpleTextPaginator {
   }) {
     if (text.isEmpty) return [];
 
+    // 0. 预处理文本：规范化空行
+    // 将3个或以上连续换行符替换为2个，避免过多空白
+    final originalLength = text.length;
+    text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    final emptyLinesRemoved = originalLength - text.length;
+
     // 1. 计算可用宽度和高度
     final availableWidth = screenSize.width - padding.left - padding.right;
     final availableHeight = screenSize.height - padding.top - padding.bottom;
@@ -23,6 +29,9 @@ class SimpleTextPaginator {
     print('   Padding: L${padding.left} R${padding.right} T${padding.top} B${padding.bottom}');
     print('   可用: ${availableWidth.toInt()}×${availableHeight.toInt()}');
     print('   字体: ${fontSize}px, 行高: $lineHeight');
+    if (emptyLinesRemoved > 0) {
+      print('   空行处理: 移除${emptyLinesRemoved}个多余换行符');
+    }
 
     // 2. 创建TextPainter - 配置必须和实际渲染完全一致
     final textStyle = TextStyle(

@@ -114,11 +114,48 @@ class _HighlightedText extends StatelessWidget {
 
   void _calculateSelectionPosition(
       BuildContext context, TextSelection selection, String selectedText) {
-    // 计算选中文本的位置（简化实现）
+    // 计算选中文本的实际位置
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox != null && onTextSelection != null) {
-      final position = renderBox.localToGlobal(Offset.zero);
-      onTextSelection!(selectedText, position);
+      // 获取文本渲染器
+      if (renderBox is RenderParagraph) {
+        // 获取选中文本的起始位置
+        final startOffset = renderBox.getOffsetForCaret(
+          TextPosition(offset: selection.start),
+          Rect.zero,
+        );
+
+        // 获取选中文本的结束位置
+        final endOffset = renderBox.getOffsetForCaret(
+          TextPosition(offset: selection.end),
+          Rect.zero,
+        );
+
+        // 转换为全局坐标
+        final globalStart = renderBox.localToGlobal(startOffset);
+        final globalEnd = renderBox.localToGlobal(endOffset);
+
+        // 工具栏显示在选中文本上方居中位置
+        // 工具栏宽度为370px，需要居中显示
+        const toolbarWidth = 370.0;
+        final selectionCenterX = (globalStart.dx + globalEnd.dx) / 2;
+        final toolbarX = (selectionCenterX - toolbarWidth / 2).clamp(
+          10.0, // 左侧边距
+          MediaQuery.of(context).size.width - toolbarWidth - 10.0, // 右侧边距
+        );
+        final toolbarY = globalStart.dy - 80; // 80px上方，留出工具栏高度
+
+        onTextSelection!(selectedText, Offset(toolbarX, toolbarY));
+      } else {
+        // 降级处理：使用widget顶部位置
+        final position = renderBox.localToGlobal(Offset.zero);
+        const toolbarWidth = 370.0;
+        final toolbarX = (position.dx - toolbarWidth / 2).clamp(
+          10.0,
+          MediaQuery.of(context).size.width - toolbarWidth - 10.0,
+        );
+        onTextSelection!(selectedText, Offset(toolbarX, position.dy - 80));
+      }
     }
   }
 }
@@ -1155,22 +1192,35 @@ class _SlidePaginationViewState extends State<_SlidePaginationView> {
   }
 
   Widget _buildPageContent(BuildContext context, String pageContent) {
+    // 计算可用高度，确保内容不超出视口
+    final screenHeight = MediaQuery.of(context).size.height;
+    final availableHeight = screenHeight - widget.settings.padding.top - widget.settings.padding.bottom;
+
     return RepaintBoundary(
       child: ClipRect(
-        child: Container(
-          padding: widget.settings.padding,
-          alignment: Alignment.topLeft,
-          child: Consumer(
-            builder: (context, ref, child) {
-              final ttsState = ref.watch(readerTtsProvider);
-              return _HighlightedText(
-                text: pageContent,
-                style: widget.settings.textStyle,
-                highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
-                enableSelection: widget.settings.enableTextSelection,
-                onTextSelection: widget.onTextSelection,
-              );
-            },
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: screenHeight,
+            maxWidth: double.infinity,
+          ),
+          child: Container(
+            padding: widget.settings.padding,
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              height: availableHeight,
+              child: Consumer(
+                builder: (context, ref, child) {
+                  final ttsState = ref.watch(readerTtsProvider);
+                  return _HighlightedText(
+                    text: pageContent,
+                    style: widget.settings.textStyle,
+                    highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
+                    enableSelection: widget.settings.enableTextSelection,
+                    onTextSelection: widget.onTextSelection,
+                  );
+                },
+              ),
+            ),
           ),
         ),
       ),
@@ -1898,105 +1948,191 @@ class _ReaderToolbar extends ConsumerWidget {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        decoration: BoxDecoration(
-          color: _getToolbarBackgroundColor(settings),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 拖动指示器
-                Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: settings.textStyle.color?.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // 标题
-                Text(
-                  '排版设置',
-                  style: settings.textStyle.copyWith(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // 字体大小
-                _buildTypographyRow(
-                  label: '字体大小',
-                  value: settings.fontSize.toInt().toString(),
-                  onDecrease: () {
-                    HapticFeedback.selectionClick();
-                    final newSize = (settings.fontSize - 1).clamp(14.0, 28.0);
-                    ref
-                        .read(readerSettingsProvider.notifier)
-                        .updateFontSize(newSize);
-                  },
-                  onIncrease: () {
-                    HapticFeedback.selectionClick();
-                    final newSize = (settings.fontSize + 1).clamp(14.0, 28.0);
-                    ref
-                        .read(readerSettingsProvider.notifier)
-                        .updateFontSize(newSize);
-                  },
-                  settings: settings,
-                ),
-                const SizedBox(height: 20),
-                // 行距
-                _buildTypographyRow(
-                  label: '行距',
-                  value: settings.lineHeight.toStringAsFixed(1),
-                  onDecrease: () {
-                    HapticFeedback.selectionClick();
-                    final newHeight =
-                        (settings.lineHeight - 0.1).clamp(1.2, 2.5);
-                    ref
-                        .read(readerSettingsProvider.notifier)
-                        .updateLineHeight(newHeight);
-                  },
-                  onIncrease: () {
-                    HapticFeedback.selectionClick();
-                    final newHeight =
-                        (settings.lineHeight + 0.1).clamp(1.2, 2.5);
-                    ref
-                        .read(readerSettingsProvider.notifier)
-                        .updateLineHeight(newHeight);
-                  },
-                  settings: settings,
-                ),
-                const SizedBox(height: 20),
-                // 字间距
-                _buildTypographyRow(
-                  label: '字间距',
-                  value: settings.letterSpacing.toStringAsFixed(1),
-                  onDecrease: () {
-                    HapticFeedback.selectionClick();
-                    final newSpacing =
-                        (settings.letterSpacing - 0.1).clamp(0.0, 1.0);
-                    ref
-                        .read(readerSettingsProvider.notifier)
-                        .updateLetterSpacing(newSpacing);
-                  },
-                  onIncrease: () {
-                    HapticFeedback.selectionClick();
-                    final newSpacing =
-                        (settings.letterSpacing + 0.1).clamp(0.0, 1.0);
-                    ref
-                        .read(readerSettingsProvider.notifier)
-                        .updateLetterSpacing(newSpacing);
-                  },
-                  settings: settings,
-                ),
-                const SizedBox(height: 16),
-              ],
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.5,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          decoration: BoxDecoration(
+            color: _getToolbarBackgroundColor(settings),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Consumer(
+                builder: (context, ref, child) {
+                  final settings = ref.watch(readerSettingsProvider);
+                  return ListView(
+                    controller: scrollController,
+                    children: [
+                      // 拖动指示器
+                      Center(
+                        child: Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: settings.textStyle.color?.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // 标题
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '排版设置',
+                            style: settings.textStyle.copyWith(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.close,
+                                color: settings.textStyle.color?.withOpacity(0.6)),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // 字体大小滑块
+                      _buildSliderSetting(
+                        label: '字体大小',
+                        value: settings.fontSize,
+                        min: 12.0,
+                        max: 36.0,
+                        divisions: 24,
+                        displayValue: '${settings.fontSize.toInt()}',
+                        onChanged: (value) {
+                          HapticFeedback.selectionClick();
+                          ref
+                              .read(readerSettingsProvider.notifier)
+                              .updateFontSize(value);
+                        },
+                        settings: settings,
+                      ),
+                      const SizedBox(height: 24),
+
+                      // 行高滑块
+                      _buildSliderSetting(
+                        label: '行高',
+                        value: settings.lineHeight,
+                        min: 1.0,
+                        max: 3.0,
+                        divisions: 20,
+                        displayValue: settings.lineHeight.toStringAsFixed(1),
+                        onChanged: (value) {
+                          HapticFeedback.selectionClick();
+                          ref
+                              .read(readerSettingsProvider.notifier)
+                              .updateLineHeight(value);
+                        },
+                        settings: settings,
+                      ),
+                      const SizedBox(height: 24),
+
+                      // 字间距滑块
+                      _buildSliderSetting(
+                        label: '字间距',
+                        value: settings.letterSpacing,
+                        min: -0.5,
+                        max: 2.0,
+                        divisions: 25,
+                        displayValue: settings.letterSpacing.toStringAsFixed(1),
+                        onChanged: (value) {
+                          HapticFeedback.selectionClick();
+                          ref
+                              .read(readerSettingsProvider.notifier)
+                              .updateLetterSpacing(value);
+                        },
+                        settings: settings,
+                      ),
+                      const SizedBox(height: 24),
+
+                      // 段落间距滑块
+                      _buildSliderSetting(
+                        label: '段落间距',
+                        value: settings.paragraphSpacing,
+                        min: 0.0,
+                        max: 20.0,
+                        divisions: 20,
+                        displayValue: '${settings.paragraphSpacing.toInt()}px',
+                        onChanged: (value) {
+                          HapticFeedback.selectionClick();
+                          ref
+                              .read(readerSettingsProvider.notifier)
+                              .updateParagraphSpacing(value);
+                        },
+                        settings: settings,
+                      ),
+                      const SizedBox(height: 24),
+
+                      // 首行缩进滑块
+                      _buildSliderSetting(
+                        label: '首行缩进',
+                        value: settings.firstLineIndent,
+                        min: 0.0,
+                        max: 4.0,
+                        divisions: 8,
+                        displayValue: '${settings.firstLineIndent.toStringAsFixed(1)}字符',
+                        onChanged: (value) {
+                          HapticFeedback.selectionClick();
+                          ref
+                              .read(readerSettingsProvider.notifier)
+                              .updateFirstLineIndent(value);
+                        },
+                        settings: settings,
+                      ),
+                      const SizedBox(height: 24),
+
+                      // 页边距滑块
+                      _buildSliderSetting(
+                        label: '页边距',
+                        value: settings.horizontalMargin,
+                        min: 10.0,
+                        max: 40.0,
+                        divisions: 30,
+                        displayValue: '${settings.horizontalMargin.toInt()}px',
+                        onChanged: (value) {
+                          HapticFeedback.selectionClick();
+                          ref
+                              .read(readerSettingsProvider.notifier)
+                              .updateHorizontalMargin(value);
+                        },
+                        settings: settings,
+                      ),
+                      const SizedBox(height: 24),
+
+                      // 重置按钮
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: () {
+                            HapticFeedback.lightImpact();
+                            ref.read(readerSettingsProvider.notifier).updateFontSize(18.0);
+                            ref.read(readerSettingsProvider.notifier).updateLineHeight(1.8);
+                            ref.read(readerSettingsProvider.notifier).updateLetterSpacing(0.2);
+                            ref.read(readerSettingsProvider.notifier).updateParagraphSpacing(8.0);
+                            ref.read(readerSettingsProvider.notifier).updateFirstLineIndent(2.0);
+                            ref.read(readerSettingsProvider.notifier).updateHorizontalMargin(20.0);
+                          },
+                          icon: Icon(Icons.refresh,
+                              color: settings.textStyle.color?.withOpacity(0.7)),
+                          label: Text(
+                            '恢复默认',
+                            style: settings.textStyle.copyWith(fontSize: 15),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -2004,79 +2140,68 @@ class _ReaderToolbar extends ConsumerWidget {
     );
   }
 
-  /// 构建排版设置行
-  Widget _buildTypographyRow({
+  /// 构建滑块设置项
+  Widget _buildSliderSetting({
     required String label,
-    required String value,
-    required VoidCallback onDecrease,
-    required VoidCallback onIncrease,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required String displayValue,
+    required ValueChanged<double> onChanged,
     required ReaderSettings settings,
   }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: settings.textStyle.copyWith(
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _buildAdjustButton(
-              icon: Icons.remove,
-              onTap: onDecrease,
-              settings: settings,
+            Text(
+              label,
+              style: settings.textStyle.copyWith(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
             ),
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: settings.textStyle.color?.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(8),
+                color: settings.textStyle.color?.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                value,
+                displayValue,
                 style: settings.textStyle.copyWith(
-                  fontSize: 15,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-            _buildAdjustButton(
-              icon: Icons.add,
-              onTap: onIncrease,
-              settings: settings,
-            ),
           ],
+        ),
+        SliderTheme(
+          data: SliderThemeData(
+            activeTrackColor: settings.textStyle.color?.withOpacity(0.7),
+            inactiveTrackColor: settings.textStyle.color?.withOpacity(0.15),
+            thumbColor: settings.textStyle.color,
+            overlayColor: settings.textStyle.color?.withOpacity(0.2),
+            trackHeight: 4.0,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8.0),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 16.0),
+          ),
+          child: Slider(
+            value: value,
+            min: min,
+            max: max,
+            divisions: divisions,
+            onChanged: onChanged,
+          ),
         ),
       ],
     );
   }
 
-  /// 构建调整按钮
-  Widget _buildAdjustButton({
-    required IconData icon,
-    required VoidCallback onTap,
-    required ReaderSettings settings,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: settings.textStyle.color?.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(
-          icon,
-          size: 20,
-          color: settings.textStyle.color?.withOpacity(0.8),
-        ),
-      ),
-    );
-  }
 
   void _showMoreMenu(
       BuildContext context, WidgetRef ref, ReaderSettings settings) {
@@ -2189,60 +2314,70 @@ class _ReaderToolbar extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 16),
-          // 第二行：新的控制按钮组
+          // 第二行：新的控制按钮组（使用Flexible防止溢出）
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildToolbarButton(
-                icon: Icons.list_rounded,
-                label: '目录',
-                onTap: () {
-                  onInteraction?.call();
-                  HapticFeedback.lightImpact();
-                  _showTableOfContents(context, ref);
-                },
-                settings: settings,
+              Flexible(
+                child: _buildToolbarButton(
+                  icon: Icons.list_rounded,
+                  label: '目录',
+                  onTap: () {
+                    onInteraction?.call();
+                    HapticFeedback.lightImpact();
+                    _showTableOfContents(context, ref);
+                  },
+                  settings: settings,
+                ),
               ),
-              _buildToolbarButton(
-                icon: Icons.palette_rounded,
-                label: '主题',
-                onTap: () {
-                  onInteraction?.call();
-                  HapticFeedback.lightImpact();
-                  _showThemeSelector(context, ref, settings);
-                },
-                settings: settings,
+              Flexible(
+                child: _buildToolbarButton(
+                  icon: Icons.palette_rounded,
+                  label: '主题',
+                  onTap: () {
+                    onInteraction?.call();
+                    HapticFeedback.lightImpact();
+                    _showThemeSelector(context, ref, settings);
+                  },
+                  settings: settings,
+                ),
               ),
-              _buildTtsButton(ref, settings),
-              _buildToolbarButton(
-                icon: Icons.format_size_rounded,
-                label: '排版',
-                onTap: () {
-                  onInteraction?.call();
-                  HapticFeedback.lightImpact();
-                  _showTypographyPanel(context, ref, settings);
-                },
-                settings: settings,
+              Flexible(child: _buildTtsButton(ref, settings)),
+              Flexible(
+                child: _buildToolbarButton(
+                  icon: Icons.format_size_rounded,
+                  label: '排版',
+                  onTap: () {
+                    onInteraction?.call();
+                    HapticFeedback.lightImpact();
+                    _showTypographyPanel(context, ref, settings);
+                  },
+                  settings: settings,
+                ),
               ),
-              _buildToolbarButton(
-                icon: Icons.share_rounded,
-                label: '分享',
-                onTap: () {
-                  onInteraction?.call();
-                  HapticFeedback.lightImpact();
-                  _handleShare(context, ref);
-                },
-                settings: settings,
+              Flexible(
+                child: _buildToolbarButton(
+                  icon: Icons.share_rounded,
+                  label: '分享',
+                  onTap: () {
+                    onInteraction?.call();
+                    HapticFeedback.lightImpact();
+                    _handleShare(context, ref);
+                  },
+                  settings: settings,
+                ),
               ),
-              _buildToolbarButton(
-                icon: Icons.settings_rounded,
-                label: '设置',
-                onTap: () {
-                  onInteraction?.call();
-                  HapticFeedback.lightImpact();
-                  _showMoreMenu(context, ref, settings);
-                },
-                settings: settings,
+              Flexible(
+                child: _buildToolbarButton(
+                  icon: Icons.settings_rounded,
+                  label: '设置',
+                  onTap: () {
+                    onInteraction?.call();
+                    HapticFeedback.lightImpact();
+                    _showMoreMenu(context, ref, settings);
+                  },
+                  settings: settings,
+                ),
               ),
             ],
           ),
