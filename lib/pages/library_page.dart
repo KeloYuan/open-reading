@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/book.dart';
 import '../services/book_dao.dart';
-import '../widgets/reading_engine_selector.dart';
+import '../services/reading_router_service.dart';
 import 'import_book_page.dart';
 import '../utils/responsive_helper.dart';
 // import '../utils/glass_config.dart';
@@ -384,8 +384,8 @@ class _LibraryPageState extends State<LibraryPage> {
             onTap: () async {
               final fullBook = await _bookDao.getBookById(book.id!);
               if (fullBook != null && mounted && context.mounted) {
-                // 显示阅读引擎选择器，让用户选择阅读模式
-                showReadingEngineSelector(context, fullBook);
+                // 直接打开沉浸式阅读器
+                await ReadingRouterService.openBook(context, fullBook);
                 _loadBooks();
               }
             },
@@ -458,8 +458,8 @@ class _LibraryPageState extends State<LibraryPage> {
                       Navigator.pop(context);
                       final fullBook = await _bookDao.getBookById(book.id!);
                       if (fullBook != null && context.mounted) {
-                        // 显示阅读引擎选择器，让用户选择阅读模式
-                        showReadingEngineSelector(context, fullBook);
+                        // 直接打开沉浸式阅读器
+                        await ReadingRouterService.openBook(context, fullBook);
                         _loadBooks();
                       }
                     },

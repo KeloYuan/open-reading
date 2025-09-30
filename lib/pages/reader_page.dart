@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:vector_math/vector_math_64.dart' as vm;
 import '../providers/reader_providers.dart';
 import '../widgets/enhanced_text_selection_toolbar.dart';
 import '../models/book_note.dart';
@@ -349,10 +350,26 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
   /// 进入沉浸式模式（隐藏状态栏和导航栏）
   void _enterImmersiveMode() {
+    // 设置为沉浸式模式，完全隐藏系统UI
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.immersiveSticky,
       overlays: [],
     );
+
+    // 同时设置系统UI样式为透明
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemStatusBarContrastEnforced: false,
+        systemNavigationBarContrastEnforced: false,
+      ),
+    );
+
+    debugPrint('📱 进入沉浸式模式 - 隐藏状态栏和导航栏');
   }
 
   /// 退出沉浸式模式（恢复状态栏和导航栏）
@@ -361,22 +378,63 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       SystemUiMode.edgeToEdge,
       overlays: SystemUiOverlay.values,
     );
+
+    // 恢复系统UI样式
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarIconBrightness: Brightness.dark,
+        systemNavigationBarDividerColor: Colors.transparent,
+      ),
+    );
+
+    debugPrint('📱 退出沉浸式模式 - 恢复系统UI');
   }
 
-  /// 显示系统 UI（状态栏和导航栏）
+  /// 显示系统 UI（状态栏和导航栏）- 工具栏显示时使用
   void _showSystemUI() {
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
       overlays: SystemUiOverlay.values,
     );
+
+    // 设置半透明的系统UI
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.black26,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarDividerColor: Colors.transparent,
+      ),
+    );
+
+    debugPrint('📱 显示系统UI - 工具栏可见');
   }
 
-  /// 隐藏系统 UI（状态栏和导航栏）
+  /// 隐藏系统 UI（状态栏和导航栏）- 工具栏隐藏时使用
   void _hideSystemUI() {
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.immersiveSticky,
       overlays: [],
     );
+
+    // 确保系统UI完全透明
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarIconBrightness: Brightness.light,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemStatusBarContrastEnforced: false,
+        systemNavigationBarContrastEnforced: false,
+      ),
+    );
+
+    debugPrint('📱 隐藏系统UI - 完全沉浸');
   }
 
   /// 处理文本选择
@@ -658,12 +716,12 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
 
   Widget _buildTopStatusBar(ReaderSettings settings) {
     return Positioned(
-      top: MediaQuery.of(context).padding.top,
+      top: 20, // 增加到20px距离顶部，避免圆角屏幕遮挡
       left: 0,
       right: 0,
       child: Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -730,11 +788,11 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     final progress = paginationState.progress;
 
     return Positioned(
-      bottom: MediaQuery.of(context).padding.bottom + 20,
+      bottom: 20,
       left: 0,
       right: 0,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -992,7 +1050,8 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
               onPressed: () {
                 // 通过祖先 widget 重新初始化分页
                 // 获取 ReaderPage 的 context 并触发重新初始化
-                final readerPageState = context.findAncestorStateOfType<_ReaderPageState>();
+                final readerPageState =
+                    context.findAncestorStateOfType<_ReaderPageState>();
                 if (readerPageState != null) {
                   readerPageState._initializePagination();
                 }
@@ -1004,7 +1063,8 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
                   horizontal: 24,
                   vertical: 12,
                 ),
-                backgroundColor: settings.textStyle.color?.withValues(alpha: 0.1),
+                backgroundColor:
+                    settings.textStyle.color?.withValues(alpha: 0.1),
                 foregroundColor: settings.textStyle.color,
               ),
             ),
@@ -1015,7 +1075,8 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
               icon: const Icon(Icons.arrow_back),
               label: const Text('返回'),
               style: TextButton.styleFrom(
-                foregroundColor: settings.textStyle.color?.withValues(alpha: 0.7),
+                foregroundColor:
+                    settings.textStyle.color?.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -1037,8 +1098,9 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
   }
 }
 
-/// 左右滑动翻页视图
-class _SlidePaginationView extends StatelessWidget {
+/// 左右滑动翻页视图 - PageView实现
+/// 支持流畅的左右滑动翻页，带有预加载和缓存优化
+class _SlidePaginationView extends StatefulWidget {
   final List<String> pages;
   final PageController controller;
   final ReaderSettings settings;
@@ -1054,38 +1116,53 @@ class _SlidePaginationView extends StatelessWidget {
   });
 
   @override
+  State<_SlidePaginationView> createState() => _SlidePaginationViewState();
+}
+
+class _SlidePaginationViewState extends State<_SlidePaginationView> {
+  @override
   Widget build(BuildContext context) {
     return PageView.builder(
-      controller: controller,
-      onPageChanged: onPageChanged,
-      itemCount: pages.length,
+      controller: widget.controller,
+      onPageChanged: widget.onPageChanged,
+      itemCount: widget.pages.length,
+      // 优化滚动物理效果
+      physics: const PageScrollPhysics(
+        parent: ClampingScrollPhysics(),
+      ),
       itemBuilder: (context, index) {
-        return _buildPageContent(context, pages[index]);
+        return _buildPageContent(context, widget.pages[index]);
       },
     );
   }
 
   Widget _buildPageContent(BuildContext context, String pageContent) {
-    return Container(
-      padding: settings.padding,
-      child: Consumer(
-        builder: (context, ref, child) {
-          final ttsState = ref.watch(readerTtsProvider);
-          return _HighlightedText(
-            text: pageContent,
-            style: settings.textStyle,
-            highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
-            enableSelection: settings.enableTextSelection,
-            onTextSelection: onTextSelection,
-          );
-        },
+    return RepaintBoundary(
+      child: ClipRect(
+        child: Container(
+          padding: widget.settings.padding,
+          alignment: Alignment.topLeft,
+          child: Consumer(
+            builder: (context, ref, child) {
+              final ttsState = ref.watch(readerTtsProvider);
+              return _HighlightedText(
+                text: pageContent,
+                style: widget.settings.textStyle,
+                highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
+                enableSelection: widget.settings.enableTextSelection,
+                onTextSelection: widget.onTextSelection,
+              );
+            },
+          ),
+        ),
       ),
     );
   }
 }
 
-/// 上下滚动视图
-class _ScrollPaginationView extends StatelessWidget {
+/// 上下滚动视图 - 分页式垂直滚动
+/// 实现类似真实阅读器的分页滚动效果，而非连续滚动
+class _ScrollPaginationView extends StatefulWidget {
   final List<String> pages;
   final ScrollController controller;
   final ReaderSettings settings;
@@ -1101,46 +1178,143 @@ class _ScrollPaginationView extends StatelessWidget {
   });
 
   @override
+  State<_ScrollPaginationView> createState() => _ScrollPaginationViewState();
+}
+
+class _ScrollPaginationViewState extends State<_ScrollPaginationView> {
+  int _currentPageIndex = 0;
+  double _dragStartOffset = 0.0;
+  bool _isDragging = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onScroll);
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_isDragging) return;
+
+    final screenHeight = MediaQuery.of(context).size.height;
+    final currentPage = (widget.controller.offset / screenHeight).round();
+    final clampedPage = currentPage.clamp(0, widget.pages.length - 1);
+
+    if (clampedPage != _currentPageIndex) {
+      setState(() {
+        _currentPageIndex = clampedPage;
+      });
+      widget.onPageChanged?.call(clampedPage);
+    }
+  }
+
+  void _handleDragStart(DragStartDetails details) {
+    setState(() {
+      _isDragging = true;
+      _dragStartOffset = widget.controller.offset;
+    });
+  }
+
+  void _handleDragUpdate(DragUpdateDetails details) {
+    // 反向拖拽（向下拖动时减少偏移，向上拖动时增加偏移）
+    final newOffset = _dragStartOffset - details.primaryDelta!;
+    widget.controller.jumpTo(newOffset.clamp(
+      0.0,
+      widget.controller.position.maxScrollExtent,
+    ));
+  }
+
+  void _handleDragEnd(DragEndDetails details) {
+    setState(() {
+      _isDragging = false;
+    });
+
+    final screenHeight = MediaQuery.of(context).size.height;
+    final velocity = details.primaryVelocity ?? 0;
+    final currentOffset = widget.controller.offset;
+
+    // 根据拖拽方向和速度决定翻页
+    int targetPage = _currentPageIndex;
+
+    if (velocity.abs() > 500) {
+      // 快速滑动：根据速度方向翻页
+      if (velocity < 0 && _currentPageIndex < widget.pages.length - 1) {
+        targetPage = _currentPageIndex + 1; // 向上滑动，下一页
+      } else if (velocity > 0 && _currentPageIndex > 0) {
+        targetPage = _currentPageIndex - 1; // 向下滑动，上一页
+      }
+    } else {
+      // 慢速滑动：根据偏移量决定
+      final currentPageOffset = _currentPageIndex * screenHeight;
+      final delta = currentOffset - currentPageOffset;
+
+      if (delta > screenHeight * 0.3 &&
+          _currentPageIndex < widget.pages.length - 1) {
+        targetPage = _currentPageIndex + 1;
+      } else if (delta < -screenHeight * 0.3 && _currentPageIndex > 0) {
+        targetPage = _currentPageIndex - 1;
+      }
+    }
+
+    // 平滑滚动到目标页面
+    widget.controller.animateTo(
+      targetPage * screenHeight,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
+
+    if (targetPage != _currentPageIndex) {
+      setState(() {
+        _currentPageIndex = targetPage;
+      });
+      widget.onPageChanged?.call(targetPage);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (notification is ScrollUpdateNotification && onPageChanged != null) {
-          final screenHeight = MediaQuery.of(context).size.height * 0.9;
-          final currentPage = (controller.offset / screenHeight).round();
-          final clampedPage = currentPage.clamp(0, pages.length - 1);
-          onPageChanged!(clampedPage);
-        }
-        return false;
-      },
-      child: SingleChildScrollView(
-        controller: controller,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: pages.asMap().entries.map((entry) {
-            return Container(
-              height: MediaQuery.of(context).size.height * 0.9,
-              padding: settings.padding,
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return GestureDetector(
+      onVerticalDragStart: _handleDragStart,
+      onVerticalDragUpdate: _handleDragUpdate,
+      onVerticalDragEnd: _handleDragEnd,
+      child: ListView.builder(
+        controller: widget.controller,
+        physics: const NeverScrollableScrollPhysics(), // 禁用默认滚动
+        itemCount: widget.pages.length,
+        itemBuilder: (context, index) {
+          return SizedBox(
+            height: screenHeight,
+            child: Container(
+              padding: widget.settings.padding,
               child: Consumer(
                 builder: (context, ref, child) {
                   final ttsState = ref.watch(readerTtsProvider);
                   return _HighlightedText(
-                    text: entry.value,
-                    style: settings.textStyle,
+                    text: widget.pages[index],
+                    style: widget.settings.textStyle,
                     highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
-                    enableSelection: settings.enableTextSelection,
-                    onTextSelection: onTextSelection,
+                    enableSelection: widget.settings.enableTextSelection,
+                    onTextSelection: widget.onTextSelection,
                   );
                 },
               ),
-            );
-          }).toList(),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
 }
 
-/// 真实的仿真翻页视图 - 支持3D纸张翻转效果
+/// 仿真翻页视图 - 增强版 3D 纸张翻转效果
+/// 支持平滑的 3D 翻页动画，模拟真实纸张书的翻页体验
 class _SimulationPaginationView extends StatefulWidget {
   final List<String> pages;
   final ReaderSettings settings;
@@ -1161,165 +1335,252 @@ class _SimulationPaginationView extends StatefulWidget {
 }
 
 class _SimulationPaginationViewState extends State<_SimulationPaginationView>
-    with TickerProviderStateMixin {
-  late PageController _pageController;
+    with SingleTickerProviderStateMixin {
   late AnimationController _flipController;
   late Animation<double> _flipAnimation;
   late Animation<double> _scaleAnimation;
+  late Animation<double> _shadowAnimation;
 
-  bool _isAnimating = false;
   int _currentPage = 0;
-  bool _isForwardFlip = true; // true为向前翻页，false为向后翻页
+  int _nextPage = 0;
+  bool _isAnimating = false;
+  bool _isForwardFlip = true;
+  double _dragStartX = 0.0;
+  double _currentDragX = 0.0;
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
     _initializeAnimations();
   }
 
   @override
   void dispose() {
-    _pageController.dispose();
     _flipController.dispose();
     super.dispose();
   }
 
+  /// 初始化动画控制器
   void _initializeAnimations() {
     _flipController = AnimationController(
-      duration: const Duration(milliseconds: 600), // 缩短动画时长，提升响应性
+      duration: const Duration(milliseconds: 500),
       vsync: this,
     );
 
-    // 使用更流畅的动画曲线
     _flipAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
     ).animate(CurvedAnimation(
       parent: _flipController,
-      curve: Curves.fastOutSlowIn, // 使用更流畅的曲线
+      curve: Curves.easeOutCubic,
     ));
 
     _scaleAnimation = Tween<double>(
       begin: 1.0,
-      end: 0.985, // 减小缩放幅度，减少视觉跳跃
+      end: 0.98,
     ).animate(CurvedAnimation(
       parent: _flipController,
-      curve: Curves.easeOutQuart, // 使用更平滑的曲线
+      curve: Curves.easeInOut,
     ));
 
-    _flipController.addStatusListener(_onAnimationStatusChanged);
+    _shadowAnimation = Tween<double>(
+      begin: 0.1,
+      end: 0.3,
+    ).animate(CurvedAnimation(
+      parent: _flipController,
+      curve: Curves.easeInOut,
+    ));
+
+    _flipController.addStatusListener(_onFlipStatusChanged);
   }
 
-  void _onAnimationStatusChanged(AnimationStatus status) {
+  void _onFlipStatusChanged(AnimationStatus status) {
     if (status == AnimationStatus.completed) {
       setState(() {
+        _currentPage = _nextPage;
         _isAnimating = false;
-        _currentPage = _pageController.page?.round() ?? _currentPage;
       });
+      _flipController.reset();
+      widget.onPageChanged?.call(_currentPage);
     }
   }
 
-  void _handlePageChange(int pageIndex) {
-    if (_isAnimating || pageIndex == _currentPage) return;
+  /// 处理水平拖动开始
+  void _handleDragStart(DragStartDetails details) {
+    if (_isAnimating) return;
+    _dragStartX = details.globalPosition.dx;
+    _currentDragX = _dragStartX;
+  }
 
-    final direction = pageIndex > _currentPage ? 1 : -1;
-    _isForwardFlip = direction > 0;
+  /// 处理水平拖动更新
+  void _handleDragUpdate(DragUpdateDetails details) {
+    if (_isAnimating) return;
 
     setState(() {
-      _isAnimating = true;
+      _currentDragX = details.globalPosition.dx;
     });
 
-    _flipController.forward(from: 0.0).then((_) {
-      _pageController.jumpToPage(pageIndex);
-      widget.onPageChanged?.call(pageIndex);
+    final delta = _currentDragX - _dragStartX;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final progress = (delta.abs() / screenWidth).clamp(0.0, 1.0);
+
+    // 实时更新动画进度
+    if (delta < 0 && _currentPage < widget.pages.length - 1) {
+      // 向左拖拽
+      _isForwardFlip = true;
+      _flipController.value = progress;
+    } else if (delta > 0 && _currentPage > 0) {
+      // 向右拖拽
+      _isForwardFlip = false;
+      _flipController.value = progress;
+    }
+  }
+
+  /// 处理水平拖动结束
+  void _handleDragEnd(DragEndDetails details) {
+    if (_isAnimating) return;
+
+    final delta = _currentDragX - _dragStartX;
+    final velocity = details.primaryVelocity ?? 0;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final progress = delta.abs() / screenWidth;
+
+    // 决定是否翻页
+    bool shouldFlip = false;
+    int targetPage = _currentPage;
+
+    if (velocity.abs() > 500) {
+      // 快速滑动
+      if (velocity < 0 && _currentPage < widget.pages.length - 1) {
+        shouldFlip = true;
+        targetPage = _currentPage + 1;
+        _isForwardFlip = true;
+      } else if (velocity > 0 && _currentPage > 0) {
+        shouldFlip = true;
+        targetPage = _currentPage - 1;
+        _isForwardFlip = false;
+      }
+    } else if (progress > 0.3) {
+      // 拖动超过 30%
+      if (delta < 0 && _currentPage < widget.pages.length - 1) {
+        shouldFlip = true;
+        targetPage = _currentPage + 1;
+        _isForwardFlip = true;
+      } else if (delta > 0 && _currentPage > 0) {
+        shouldFlip = true;
+        targetPage = _currentPage - 1;
+        _isForwardFlip = false;
+      }
+    }
+
+    if (shouldFlip) {
+      // 执行翻页动画
       setState(() {
-        _currentPage = pageIndex;
+        _isAnimating = true;
+        _nextPage = targetPage;
       });
-    });
+      _flipController.forward();
+    } else {
+      // 回弹到当前页
+      _flipController.reverse();
+    }
+
+    _dragStartX = 0.0;
+    _currentDragX = 0.0;
   }
 
   @override
   Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragStart: _handleDragStart,
+      onHorizontalDragUpdate: _handleDragUpdate,
+      onHorizontalDragEnd: _handleDragEnd,
+      child: Stack(
+        children: [
+          // 背景页（下一页）
+          if (_isAnimating || _flipController.value > 0)
+            _buildPageContent(_nextPage, isBackground: true),
+
+          // 前景页（当前页）带翻页动画
+          AnimatedBuilder(
+            animation: _flipController,
+            builder: (context, child) {
+              final rotationY = _isForwardFlip
+                  ? -_flipAnimation.value * 3.14159 * 0.5
+                  : _flipAnimation.value * 3.14159 * 0.5;
+
+              return Transform(
+                alignment: _isForwardFlip
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
+                transform: Matrix4.identity()
+                  ..setEntry(3, 2, 0.002) // 透视效果
+                  ..rotateY(rotationY)
+                  ..scaleByVector3(vm.Vector3.all(_scaleAnimation.value)),
+                child: _buildPageContent(_currentPage),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建页面内容
+  Widget _buildPageContent(int pageIndex, {bool isBackground = false}) {
+    if (pageIndex < 0 || pageIndex >= widget.pages.length) {
+      return const SizedBox.shrink();
+    }
+
     return RepaintBoundary(
-      child: GestureDetector(
-        onHorizontalDragEnd: _handleDragEnd,
-        child: AnimatedBuilder(
-          animation: _flipController,
-          builder: (context, child) {
-            return Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.001) // 轻微透视效果
-                ..rotateY(_isForwardFlip
-                    ? _flipAnimation.value * 3.14159
-                    : -_flipAnimation.value * 3.14159)
-                ..scale(_scaleAnimation.value),
-              child: _buildPageContent(),
-            );
-          },
+      child: Container(
+        decoration: BoxDecoration(
+          color: widget.settings.backgroundColor,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(
+                alpha: isBackground ? 0.05 : _shadowAnimation.value,
+              ),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Container(
+          padding: widget.settings.padding,
+          alignment: Alignment.topLeft,
+          child: Consumer(
+            builder: (context, ref, child) {
+              final ttsState = ref.watch(readerTtsProvider);
+              return _HighlightedText(
+                text: widget.pages[pageIndex],
+                style: widget.settings.textStyle,
+                highlightedSentenceIndex: pageIndex == _currentPage
+                    ? ttsState.highlightedSentenceIndex
+                    : null,
+                enableSelection:
+                    !isBackground && widget.settings.enableTextSelection,
+                onTextSelection: !isBackground ? widget.onTextSelection : null,
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildPageContent() {
-    return Container(
-      padding: widget.settings.padding,
-      decoration: BoxDecoration(
-        color: widget.settings.backgroundColor,
-        boxShadow: _isAnimating
-            ? [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                ),
-              ]
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-      ),
-      child: Consumer(
-        builder: (context, ref, child) {
-          final ttsState = ref.watch(readerTtsProvider);
-          return _HighlightedText(
-            text: widget.pages[_currentPage],
-            style: widget.settings.textStyle,
-            highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
-            enableSelection: widget.settings.enableTextSelection,
-            onTextSelection: widget.onTextSelection,
-          );
-        },
-      ),
-    );
-  }
-
-  void _handleDragEnd(DragEndDetails details) {
-    if (_isAnimating) return;
-
-    // 根据拖拽速度和方向决定是否翻页
-    final velocity = details.primaryVelocity ?? 0;
-    const minVelocity = 300.0;
-
-    if (velocity.abs() > minVelocity) {
-      if (velocity < 0 && _currentPage < widget.pages.length - 1) {
-        // 向左拖拽，前翻页
-        _handlePageChange(_currentPage + 1);
-      } else if (velocity > 0 && _currentPage > 0) {
-        // 向右拖拽，后翻页
-        _handlePageChange(_currentPage - 1);
-      }
-    }
-  }
-
+  /// 跳转到指定页面
   void goToPage(int pageIndex) {
-    if (pageIndex >= 0 && pageIndex < widget.pages.length && !_isAnimating) {
-      _handlePageChange(pageIndex);
+    if (pageIndex >= 0 &&
+        pageIndex < widget.pages.length &&
+        !_isAnimating &&
+        pageIndex != _currentPage) {
+      setState(() {
+        _isAnimating = true;
+        _nextPage = pageIndex;
+        _isForwardFlip = pageIndex > _currentPage;
+      });
+      _flipController.forward();
     }
   }
 }
@@ -1384,8 +1645,11 @@ class _ReaderToolbar extends ConsumerWidget {
       child: Row(
         children: [
           _buildIconButton(
-            icon: Icons.arrow_back,
-            onPressed: () => Navigator.of(context).pop(),
+            icon: Icons.arrow_back_ios_new_rounded,
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              Navigator.of(context).pop();
+            },
             settings: settings,
           ),
           const SizedBox(width: 16),
@@ -1400,10 +1664,31 @@ class _ReaderToolbar extends ConsumerWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           _buildIconButton(
-            icon: Icons.list,
-            onPressed: () {},
+            icon: Icons.bookmark_border_rounded,
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              _handleBookmark(context, ref);
+            },
+            settings: settings,
+          ),
+          const SizedBox(width: 8),
+          _buildIconButton(
+            icon: Icons.list_rounded,
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              _showTableOfContents(context, ref);
+            },
+            settings: settings,
+          ),
+          const SizedBox(width: 8),
+          _buildIconButton(
+            icon: Icons.more_vert_rounded,
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              _showMoreMenu(context, ref, settings);
+            },
             settings: settings,
           ),
         ],
@@ -1411,19 +1696,183 @@ class _ReaderToolbar extends ConsumerWidget {
     );
   }
 
+  void _handleBookmark(BuildContext context, WidgetRef ref) {
+    // TODO: Implement bookmark functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('书签功能')),
+    );
+  }
+
+  void _showTableOfContents(BuildContext context, WidgetRef ref) {
+    // TODO: Implement TOC navigation
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('目录导航')),
+    );
+  }
+
+  void _showMoreMenu(
+      BuildContext context, WidgetRef ref, ReaderSettings settings) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: _getToolbarBackgroundColor(settings),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: settings.textStyle.color?.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildMoreMenuItem(context, Icons.search_rounded, '搜索', settings),
+              _buildMoreMenuItem(context, Icons.share_rounded, '分享', settings),
+              _buildMoreMenuItem(
+                  context, Icons.brightness_6_rounded, '亮度', settings),
+              _buildMoreMenuItem(
+                  context, Icons.settings_rounded, '设置', settings),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoreMenuItem(BuildContext context, IconData icon, String label,
+      ReaderSettings settings) {
+    return InkWell(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(label)),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: Row(
+          children: [
+            Icon(icon, color: settings.textStyle.color?.withValues(alpha: 0.8)),
+            const SizedBox(width: 16),
+            Text(
+              label,
+              style: settings.textStyle.copyWith(fontSize: 16),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildBottomToolbar(
       BuildContext context, WidgetRef ref, ReaderSettings settings) {
     return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _buildThemeToggle(ref, settings),
-          _buildFontSizeControls(ref, settings),
-          _buildTtsControls(ref, settings),
+          // 第一行：进度滑块
+          Row(
+            children: [
+              Text(
+                '1',
+                style: settings.textStyle.copyWith(fontSize: 12),
+              ),
+              Expanded(
+                child: Slider(
+                  value: 0.5,
+                  onChanged: (value) {
+                    onInteraction?.call();
+                    HapticFeedback.selectionClick();
+                  },
+                  activeColor: settings.textStyle.color?.withValues(alpha: 0.8),
+                  inactiveColor:
+                      settings.textStyle.color?.withValues(alpha: 0.2),
+                ),
+              ),
+              Text(
+                '100',
+                style: settings.textStyle.copyWith(fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // 第二行：控制按钮
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildThemeToggle(ref, settings),
+              _buildFontSizeControls(ref, settings),
+              _buildBrightnessControl(ref, settings),
+              _buildTtsControls(ref, settings),
+              _buildPageFlipMode(ref, settings),
+            ],
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildBrightnessControl(WidgetRef ref, ReaderSettings settings) {
+    return GestureDetector(
+      onTap: () {
+        onInteraction?.call();
+        HapticFeedback.lightImpact();
+        _showBrightnessSlider(ref, settings);
+      },
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: settings.textStyle.color?.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          Icons.brightness_6_rounded,
+          size: 20,
+          color: settings.textStyle.color?.withValues(alpha: 0.8),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPageFlipMode(WidgetRef ref, ReaderSettings settings) {
+    return GestureDetector(
+      onTap: () {
+        onInteraction?.call();
+        HapticFeedback.lightImpact();
+        ScaffoldMessenger.of(ref.context).showSnackBar(
+          const SnackBar(content: Text('翻页模式切换')),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: settings.textStyle.color?.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          Icons.auto_stories_rounded,
+          size: 20,
+          color: settings.textStyle.color?.withValues(alpha: 0.8),
+        ),
+      ),
+    );
+  }
+
+  void _showBrightnessSlider(WidgetRef ref, ReaderSettings settings) {
+    // TODO: Implement brightness slider
+    ScaffoldMessenger.of(ref.context).showSnackBar(
+      const SnackBar(content: Text('亮度调节')),
     );
   }
 
@@ -1431,28 +1880,19 @@ class _ReaderToolbar extends ConsumerWidget {
     return GestureDetector(
       onTap: () {
         onInteraction?.call();
+        HapticFeedback.lightImpact();
         _cycleTheme(ref);
       },
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: settings.textStyle.color?.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _getThemeIcon(settings.theme),
-              size: 20,
-              color: settings.textStyle.color?.withValues(alpha: 0.8),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _getThemeName(settings.theme),
-              style: settings.textStyle.copyWith(fontSize: 10),
-            ),
-          ],
+        child: Icon(
+          _getThemeIcon(settings.theme),
+          size: 20,
+          color: settings.textStyle.color?.withValues(alpha: 0.8),
         ),
       ),
     );
@@ -1501,10 +1941,11 @@ class _ReaderToolbar extends ConsumerWidget {
     return GestureDetector(
       onTap: () {
         onInteraction?.call();
+        HapticFeedback.lightImpact();
         _toggleTts(ref);
       },
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: ttsState.isPlaying
               ? settings.textStyle.color?.withValues(alpha: 0.2)
@@ -1512,7 +1953,7 @@ class _ReaderToolbar extends ConsumerWidget {
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(
-          ttsState.isPlaying ? Icons.pause : Icons.play_arrow,
+          ttsState.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
           size: 20,
           color: settings.textStyle.color?.withValues(alpha: 0.8),
         ),
@@ -1595,17 +2036,6 @@ class _ReaderToolbar extends ConsumerWidget {
         return Icons.nights_stay;
       case ReadingTheme.eyeCare:
         return Icons.eco;
-    }
-  }
-
-  String _getThemeName(ReadingTheme theme) {
-    switch (theme) {
-      case ReadingTheme.day:
-        return '白天';
-      case ReadingTheme.night:
-        return '夜间';
-      case ReadingTheme.eyeCare:
-        return '护眼';
     }
   }
 }

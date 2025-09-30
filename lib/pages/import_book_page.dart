@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../services/book_import_service.dart';
-import 'reading_mode_selector.dart';
 
 class ImportBookPage extends StatefulWidget {
   const ImportBookPage({super.key});
@@ -22,12 +21,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
       final book = await BookImportService().importBook();
 
       if (book != null && mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ReadingModeSelector(book: book),
-          ),
-        );
+        // 直接返回上一页，让用户从书库打开
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
@@ -93,7 +88,9 @@ class _ImportBookPageState extends State<ImportBookPage> {
                       const SizedBox(height: 24),
                       Text(
                         '选择电子书文件',
-                        style: Theme.of(context).textTheme.headlineSmall
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 12),
@@ -101,10 +98,10 @@ class _ImportBookPageState extends State<ImportBookPage> {
                         '支持 EPUB、PDF、TXT、MOBI 等多种格式',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.7),
-                        ),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.7),
+                            ),
                       ),
                       const SizedBox(height: 32),
                       ElevatedButton(

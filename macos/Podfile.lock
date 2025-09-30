@@ -109,7 +109,7 @@ SPEC CHECKSUMS:
   audio_session: eaca2512cf2b39212d724f35d11f46180ad3a33e
   battery_plus: f51ad29136e025b714b96f7d096f44f604615da7
   connectivity_plus: 4adf20a405e25b42b9c9f87feff8f4b6fde18a4e
-  device_info_plus: 4fb280989f669696856f8b129e4a5e3cd6c48f76
+  device_info_plus: a56e6e74dbbd2bb92f2da12c64ddd4f67a749041
   file_picker: 7584aae6fa07a041af2b36a2655122d42f578c1a
   flutter_inappwebview_macos: c2d68649f9f8f1831bfcd98d73fd6256366d9d1d
   flutter_tts: ae915565cc6948444b513acc8ee021993281e027

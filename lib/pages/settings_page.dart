@@ -31,10 +31,7 @@ class _SettingsPageState extends State<SettingsPage> {
   // 阅读设置
   bool _enablePageAnimation = true;
   bool _enableVolumeKeyTurn = true;
-  ReadingEngineType _preferredEngine = ReadingEngineType.webView;
-  EngineSelectionStrategy _selectionStrategy =
-      EngineSelectionStrategy.automatic;
-  double _preferenceStrength = 0.5;
+  // 只使用沉浸式阅读器，不需要引擎选择
 
   // 书源设置
   bool _enableBooksource = false;
@@ -85,25 +82,8 @@ class _SettingsPageState extends State<SettingsPage> {
       // 阅读设置
       _enablePageAnimation = prefs.getBool('enablePageAnimation') ?? true;
       _enableVolumeKeyTurn = prefs.getBool('enableVolumeKeyTurn') ?? true;
-      final preferredIndex = prefs.getInt('preferred_reading_engine');
-      final strategyIndex = prefs.getInt('engine_selection_strategy');
-      final preferenceStrength = prefs.getDouble('engine_preference_strength');
 
-      if (preferredIndex != null &&
-          preferredIndex >= 0 &&
-          preferredIndex < ReadingEngineType.values.length) {
-        _preferredEngine = ReadingEngineType.values[preferredIndex];
-      }
-
-      if (strategyIndex != null &&
-          strategyIndex >= 0 &&
-          strategyIndex < EngineSelectionStrategy.values.length) {
-        _selectionStrategy = EngineSelectionStrategy.values[strategyIndex];
-      }
-
-      if (preferenceStrength != null) {
-        _preferenceStrength = preferenceStrength.clamp(0.0, 1.0);
-      }
+      // 引擎选择相关配置已移除，只使用沉浸式阅读器
 
       // 其他设置
       _enableBatteryOptimization =
@@ -141,9 +121,7 @@ class _SettingsPageState extends State<SettingsPage> {
     // 阅读设置
     await prefs.setBool('enablePageAnimation', _enablePageAnimation);
     await prefs.setBool('enableVolumeKeyTurn', _enableVolumeKeyTurn);
-    await prefs.setInt('preferred_reading_engine', _preferredEngine.index);
-    await prefs.setInt('engine_selection_strategy', _selectionStrategy.index);
-    await prefs.setDouble('engine_preference_strength', _preferenceStrength);
+    // 引擎选择相关配置已移除，只使用沉浸式阅读器
 
     // 其他设置
     await prefs.setBool(
@@ -1937,7 +1915,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Icon(
-                    _getReadingEngineIcon(_preferredEngine),
+                    Icons.auto_stories,
                     size: 16,
                     color: Theme.of(context).colorScheme.primary,
                   ),
@@ -1948,13 +1926,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '默认阅读引擎',
+                        '阅读引擎',
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                               fontWeight: FontWeight.w500,
                             ),
                       ),
                       Text(
-                        _getReadingEngineName(_preferredEngine),
+                        '沉浸式阅读器',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: Theme.of(
                                 context,
@@ -1977,30 +1955,6 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     );
-  }
-
-  // 获取阅读引擎名称
-  String _getReadingEngineName(ReadingEngineType engine) {
-    switch (engine) {
-      case ReadingEngineType.advanced:
-        return 'Flutter原生阅读器 (最快)';
-      case ReadingEngineType.webView:
-        return 'WebView标准版 (完整功能)';
-      case ReadingEngineType.immersive:
-        return '沉浸式阅读器 (符合需求规范)';
-    }
-  }
-
-  // 获取阅读引擎图标
-  IconData _getReadingEngineIcon(ReadingEngineType engine) {
-    switch (engine) {
-      case ReadingEngineType.advanced:
-        return Icons.speed;
-      case ReadingEngineType.webView:
-        return Icons.web;
-      case ReadingEngineType.immersive:
-        return Icons.visibility;
-    }
   }
 
   // 显示阅读引擎选择对话框
@@ -2075,25 +2029,14 @@ class _SettingsPageState extends State<SettingsPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     children: [
                       _buildEngineOption(
-                        engine: ReadingEngineType.webView,
-                        title: 'WebView标准版',
-                        subtitle: '完整功能，推荐使用',
-                        description: '• 功能最完整\n• 支持所有格式\n• 稳定可靠\n• 最佳用户体验',
-                        icon: Icons.web,
+                        engine: ReadingEngineType.immersive,
+                        title: '沉浸式阅读器',
+                        subtitle: '全新体验，推荐使用',
+                        description:
+                            '• 90%屏幕利用率\n• 三种翻页模式\n• TTS语音朗读\n• 流畅的阅读体验',
+                        icon: Icons.auto_stories,
                         color: Colors.blue,
                         isRecommended: true,
-                        setModalState: setModalState,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildEngineOption(
-                        engine: ReadingEngineType.advanced,
-                        title: 'Flutter原生阅读器',
-                        subtitle: '极致性能，启动最快',
-                        description:
-                            '• 零WebView开销\n• 最佳性能表现\n• 主要支持TXT格式\n• 流畅的阅读体验',
-                        icon: Icons.speed,
-                        color: Colors.green,
-                        isRecommended: false,
                         setModalState: setModalState,
                       ),
                     ],
@@ -2146,15 +2089,11 @@ class _SettingsPageState extends State<SettingsPage> {
     required bool isRecommended,
     required StateSetter setModalState,
   }) {
-    final isSelected = _preferredEngine == engine;
+    final isSelected = true; // 只有一个引擎，总是选中
 
     return GestureDetector(
       onTap: () {
-        setState(() {
-          _preferredEngine = engine;
-        });
-        setModalState(() {});
-        _saveSettings();
+        // 只有一个引擎，无需切换
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -2356,9 +2295,7 @@ class _SettingsPageState extends State<SettingsPage> {
             onPressed: () async {
               Navigator.pop(context);
               setState(() {
-                _preferredEngine = ReadingEngineType.webView;
-                _selectionStrategy = EngineSelectionStrategy.automatic;
-                _preferenceStrength = 0.5;
+                // 只使用沉浸式阅读器，无需重置引擎
                 _enablePerformanceMonitor = false;
                 _enableDebugLogging = false;
                 _enableMemoryStats = false;

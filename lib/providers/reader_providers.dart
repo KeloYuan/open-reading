@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../services/advanced_text_paginator.dart';
+import '../services/simple_text_paginator.dart';
 import '../services/tts/system_tts.dart';
 import '../services/tts/base_tts.dart';
 
@@ -109,14 +109,12 @@ class ReaderPaginationState {
   final int currentPageIndex;
   final bool isLoading;
   final String? error;
-  final PaginationParams? paginationParams;
 
   const ReaderPaginationState({
     this.pages = const [],
     this.currentPageIndex = 0,
     this.isLoading = false,
     this.error,
-    this.paginationParams,
   });
 
   /// 复制并修改状态
@@ -125,14 +123,12 @@ class ReaderPaginationState {
     int? currentPageIndex,
     bool? isLoading,
     String? error,
-    PaginationParams? paginationParams,
   }) {
     return ReaderPaginationState(
       pages: pages ?? this.pages,
       currentPageIndex: currentPageIndex ?? this.currentPageIndex,
       isLoading: isLoading ?? this.isLoading,
       error: error,
-      paginationParams: paginationParams ?? this.paginationParams,
     );
   }
 
@@ -308,20 +304,14 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       debugPrint('  - 字体: ${settings.fontSize}px, 行高: ${settings.lineHeight}');
       debugPrint('  - 文本长度: ${text.length} 字符');
 
-      // 计算分页参数
-      final params = AdvancedTextPaginator.calculatePreciseParams(
+      // 使用简单分页器
+      final pages = SimpleTextPaginator.paginate(
+        text: text,
         screenSize: screenSize,
         fontSize: settings.fontSize,
         lineHeight: settings.lineHeight,
-        letterSpacing: settings.letterSpacing,
         padding: settings.padding,
-        statusBarHeight: realStatusBarHeight,
-        controlBarHeight: controlBarHeight,
-        isLandscape: screenSize.width > screenSize.height,
       );
-
-      // 执行分页
-      final pages = AdvancedTextPaginator.paginateText(text, params);
 
       if (pages.isEmpty) {
         throw Exception('分页结果为空，请检查文本内容');
@@ -331,13 +321,9 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         pages: pages,
         currentPageIndex: 0,
         isLoading: false,
-        paginationParams: params,
       );
 
-      debugPrint('✅ 沉浸式阅读器分页完成: ${pages.length}页');
-      debugPrint('   - 每页约 ${params.pageMetrics.charsPerPage} 字符');
-      debugPrint('   - 每行 ${params.pageMetrics.charsPerLine} 字符');
-      debugPrint('   - 每页 ${params.pageMetrics.linesPerPage} 行');
+      debugPrint('✅ 简单分页完成: ${pages.length}页');
     } catch (e, stackTrace) {
       state = state.copyWith(
         error: '分页失败: $e\n\n请尝试调整字体大小或重新打开',

@@ -8,7 +8,7 @@ import 'package:intl/intl.dart';
 
 import '../models/book.dart';
 import 'book_player_server.dart';
-import '../pages/advanced_reading_page.dart'; // 引入你现有的主题
+import '../services/reading_theme_manager.dart'; // 引入主题管理器
 
 /// 基于anx-reader架构的增强WebView阅读器
 /// 完全保留原有UI风格，使用WebView作为渲染引擎
@@ -406,8 +406,7 @@ class _EnhancedWebViewReaderState extends State<EnhancedWebViewReader>
     if (_webViewController == null) return;
 
     await _webViewController!.evaluateJavascript(
-      source:
-          '''
+      source: '''
       if (typeof reader !== 'undefined' && reader.view) {
         reader.view.renderer?.setStyles({
             fontSize: ${widget.fontSize}px,
@@ -669,8 +668,7 @@ class _EnhancedWebViewReaderState extends State<EnhancedWebViewReader>
 
   Future<void> addHighlight(String cfi, String color, String note) async {
     await _webViewController?.evaluateJavascript(
-      source:
-          '''
+      source: '''
       reader.view.addAnnotation({
         type: 'highlight',
         value: '$cfi',
