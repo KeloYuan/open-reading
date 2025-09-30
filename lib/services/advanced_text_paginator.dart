@@ -110,17 +110,39 @@ class AdvancedTextPaginator {
     final viewWidth = screenSize.width.toInt();
     final viewHeight = screenSize.height.toInt();
 
-    // 优化边距计算 - 最小化边距，最大化文字显示区域到90%
-    // 左右边距：最小化，只保留必要的安全区
-    final paddingLeft = (padding.left * 0.5).toInt(); // 减少50%左边距
-    final paddingRight = (padding.right * 0.5).toInt(); // 减少50%右边距
+    // 优化边距计算 - 确保有足够的显示空间
+    // 左右边距：使用实际padding，但设置最小值确保可读性
+    final paddingLeft = math.max((padding.left * 0.5).toInt(), 16);
+    final paddingRight = math.max((padding.right * 0.5).toInt(), 16);
 
-    // 上下边距：保留系统必需区域，但最小化额外边距
-    final paddingTop = statusBarHeight.toInt(); // 只保留状态栏高度
-    final paddingBottom = (controlBarHeight * 0.3).toInt(); // 大幅减少底部边距
+    // 上下边距：保留系统必需区域，但确保最小空间
+    final paddingTop = math.max(statusBarHeight.toInt(), 20);
+    // 修复：确保底部边距足够，避免分页失败
+    final paddingBottom = math.max(
+      (controlBarHeight * 0.3).toInt(),
+      60, // 至少保留60px底部空间
+    );
 
     final visibleWidth = viewWidth - paddingLeft - paddingRight;
     final visibleHeight = viewHeight - paddingTop - paddingBottom;
+
+    // 安全检查：确保可见区域有效
+    if (visibleWidth <= 0 || visibleHeight <= 0) {
+      debugPrint('⚠️ 警告：计算的可见区域无效，使用默认值');
+      return ViewMetrics(
+        viewWidth: viewWidth,
+        viewHeight: viewHeight,
+        paddingLeft: 20,
+        paddingTop: 40,
+        paddingRight: 20,
+        paddingBottom: 80,
+        visibleWidth: math.max(viewWidth - 40, 300),
+        visibleHeight: math.max(viewHeight - 120, 400),
+        visibleRight: viewWidth - 20,
+        visibleBottom: viewHeight - 80,
+      );
+    }
+
     final visibleRight = paddingLeft + visibleWidth;
     final visibleBottom = paddingTop + visibleHeight;
 
@@ -316,9 +338,24 @@ class AdvancedTextPaginator {
 
   /// 分页文本内容 - 优化版本，确保不缺字漏字
   static List<String> paginateText(String text, PaginationParams params) {
-    if (text.isEmpty) return [''];
+    if (text.isEmpty) {
+      debugPrint('⚠️ 警告：尝试分页空文本');
+      return [''];
+    }
+
+    // 验证分页参数
+    if (params.pageMetrics.charsPerPage <= 0) {
+      debugPrint('❌ 错误：无效的分页参数 charsPerPage=${params.pageMetrics.charsPerPage}');
+      debugPrint('   - visibleWidth=${params.viewMetrics.visibleWidth}');
+      debugPrint('   - visibleHeight=${params.viewMetrics.visibleHeight}');
+      debugPrint('   - averageCharWidth=${params.fontMetrics.averageCharWidth}');
+      return ['分页参数无效，可能是屏幕空间不足\n\n请尝试调整字体大小或设备方向'];
+    }
 
     debugPrint('🔄 开始高级分页: 文本长度${text.length}字符');
+    debugPrint('   - 每页字符数: ${params.pageMetrics.charsPerPage}');
+    debugPrint('   - 每行字符数: ${params.pageMetrics.charsPerLine}');
+    debugPrint('   - 每页行数: ${params.pageMetrics.linesPerPage}');
 
     final pages = <String>[];
     int currentIndex = 0;
@@ -326,7 +363,10 @@ class AdvancedTextPaginator {
     const int maxPages = 100000; // 防止无限循环
 
     // 计算每页最大字符数，使用90%空间利用率策略
-    final maxCharsPerPage = (params.pageMetrics.charsPerPage * 0.93).floor();
+    final maxCharsPerPage = math.max(
+      (params.pageMetrics.charsPerPage * 0.93).floor(),
+      50, // 至少50个字符
+    );
 
     while (currentIndex < text.length && pageCount < maxPages) {
       pageCount++;

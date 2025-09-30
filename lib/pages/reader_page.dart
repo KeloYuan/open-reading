@@ -169,12 +169,14 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     super.initState();
     _initializeAnimations();
     _initializePage();
+    _enterImmersiveMode();
   }
 
   @override
   void dispose() {
     _toolbarAnimationController.dispose();
     _autoHideTimer?.cancel();
+    _exitImmersiveMode();
     super.dispose();
   }
 
@@ -230,11 +232,19 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   void _initializePagination() {
     final size = MediaQuery.of(context).size;
     final settings = ref.read(readerSettingsProvider);
+    final statusBarHeight = MediaQuery.of(context).padding.top;
+    final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+
+    debugPrint('🎯 初始化沉浸式阅读器分页');
+    debugPrint('   - 书籍内容长度: ${widget.bookContent.length} 字符');
+    debugPrint('   - 屏幕尺寸: ${size.width.toInt()}x${size.height.toInt()}');
 
     ref.read(readerPaginationProvider.notifier).initializePagination(
           text: widget.bookContent,
           screenSize: size,
           settings: settings,
+          statusBarHeight: statusBarHeight,
+          bottomSafeArea: bottomSafeArea,
         );
   }
 
@@ -299,6 +309,9 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     ref.read(toolbarProvider.notifier).show();
     _toolbarAnimationController.forward();
 
+    // 显示系统 UI（状态栏和导航栏）
+    _showSystemUI();
+
     // 启动自动隐藏计时器
     _startAutoHideTimer();
 
@@ -310,6 +323,9 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   void _hideToolbar() {
     ref.read(toolbarProvider.notifier).hide();
     _toolbarAnimationController.reverse();
+
+    // 隐藏系统 UI（状态栏和导航栏）
+    _hideSystemUI();
 
     // 取消自动隐藏计时器
     _cancelAutoHideTimer();
@@ -329,6 +345,38 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   void _cancelAutoHideTimer() {
     _autoHideTimer?.cancel();
     _autoHideTimer = null;
+  }
+
+  /// 进入沉浸式模式（隐藏状态栏和导航栏）
+  void _enterImmersiveMode() {
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.immersiveSticky,
+      overlays: [],
+    );
+  }
+
+  /// 退出沉浸式模式（恢复状态栏和导航栏）
+  void _exitImmersiveMode() {
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.edgeToEdge,
+      overlays: SystemUiOverlay.values,
+    );
+  }
+
+  /// 显示系统 UI（状态栏和导航栏）
+  void _showSystemUI() {
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
+  }
+
+  /// 隐藏系统 UI（状态栏和导航栏）
+  void _hideSystemUI() {
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.immersiveSticky,
+      overlays: [],
+    );
   }
 
   /// 处理文本选择
@@ -921,22 +969,54 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
           children: [
             Icon(
               Icons.error_outline,
-              size: 48,
+              size: 64,
               color: Colors.red.withValues(alpha: 0.7),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Text(
               '分页失败',
               style: settings.textStyle.copyWith(
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Text(
               error,
               style: settings.textStyle.copyWith(fontSize: 14),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            // 重试按钮
+            ElevatedButton.icon(
+              onPressed: () {
+                // 通过祖先 widget 重新初始化分页
+                // 获取 ReaderPage 的 context 并触发重新初始化
+                final readerPageState = context.findAncestorStateOfType<_ReaderPageState>();
+                if (readerPageState != null) {
+                  readerPageState._initializePagination();
+                }
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('重试'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                backgroundColor: settings.textStyle.color?.withValues(alpha: 0.1),
+                foregroundColor: settings.textStyle.color,
+              ),
+            ),
+            const SizedBox(height: 16),
+            // 返回按钮
+            TextButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('返回'),
+              style: TextButton.styleFrom(
+                foregroundColor: settings.textStyle.color?.withValues(alpha: 0.7),
+              ),
             ),
           ],
         ),

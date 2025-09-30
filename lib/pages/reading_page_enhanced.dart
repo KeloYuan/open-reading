@@ -139,6 +139,10 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   @override
   void initState() {
     super.initState();
+
+    // 进入沉浸式模式
+    _enterImmersiveMode();
+
     // 安全地设置初始页面索引，避免超出范围
     _currentPageIndex = widget.book.currentPage.clamp(0, 0); // 初始化时先设为0
     _pageController = PageController(initialPage: 0); // 初始页面设为0，等分页完成后再跳转
@@ -649,6 +653,7 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }
 
   /// 智能计算控制栏高度，根据屏幕尺寸和设备特性动态调整
+  /// 计算最优控制栏高度，确保不会影响分页空间
   double _calculateOptimalControlBarHeight(
     Size screenSize,
     double bottomSafeArea,
@@ -658,24 +663,31 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
           screenSize.height * screenSize.height,
     );
 
-    // 基础控制栏高度
+    // 基础控制栏高度 - 优化为更保守的值
     double baseHeight;
 
     if (diagonal > 1200) {
       // 平板设备：更大的控制栏
-      baseHeight = 180.0;
+      baseHeight = 160.0; // 从180降低到160
     } else if (diagonal > 900) {
       // 大屏手机：中等控制栏
-      baseHeight = 160.0;
+      baseHeight = 140.0; // 从160降低到140
     } else {
       // 普通手机：紧凑控制栏
-      baseHeight = 140.0;
+      baseHeight = 120.0; // 从140降低到120
     }
 
-    // 考虑底部安全区域
-    final safeAreaAdjustment = bottomSafeArea > 20 ? 20.0 : 0.0;
+    // 考虑底部安全区域，但不过度增加高度
+    final safeAreaAdjustment = math.min(bottomSafeArea, 30.0);
 
-    return baseHeight + safeAreaAdjustment;
+    // 确保最小高度
+    final totalHeight = baseHeight + safeAreaAdjustment;
+
+    debugPrint(
+      '📐 控制栏高度计算 - 对角线: ${diagonal.toInt()}px, 基础: ${baseHeight.toInt()}px, 安全区: ${safeAreaAdjustment.toInt()}px, 总计: ${totalHeight.toInt()}px',
+    );
+
+    return totalHeight;
   }
 
   /// 智能计算自适应字体大小，根据屏幕尺寸和DPI优化阅读体验
@@ -1366,13 +1378,49 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
   }
 
   // --- UI Controls ---
+  /// 进入沉浸式模式（隐藏状态栏和导航栏）
+  void _enterImmersiveMode() {
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.immersiveSticky,
+      overlays: [],
+    );
+  }
+
+  /// 退出沉浸式模式（恢复状态栏和导航栏）
+  void _exitImmersiveMode() {
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.edgeToEdge,
+      overlays: SystemUiOverlay.values,
+    );
+  }
+
+  /// 显示系统 UI（状态栏和导航栏）- 在显示控制栏时临时显示
+  void _showSystemUI() {
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
+  }
+
+  /// 隐藏系统 UI（状态栏和导航栏）- 完全沉浸式
+  void _hideSystemUI() {
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.immersiveSticky,
+      overlays: [],
+    );
+  }
+
   void _setImmersiveMode() {
     final isLightBackground =
         _currentTheme.backgroundColor.computeLuminance() > 0.5;
 
     if (!_showControls) {
+      // 控制栏隐藏时，完全沉浸式
+      _hideSystemUI();
       SystemUiManager.enterImmersive(sticky: true);
     } else {
+      // 控制栏显示时，临时显示系统UI
+      _showSystemUI();
       SystemUiManager.exitImmersive(
         navigationBarColor: _currentTheme.controlBarColor,
         navIconBrightness: isLightBackground
@@ -4015,6 +4063,9 @@ class _ReadingPageEnhancedState extends State<ReadingPageEnhanced> {
 
   @override
   void dispose() {
+    // 退出沉浸式模式
+    _exitImmersiveMode();
+
     // 标记为已销毁
     _isDisposed = true;
 

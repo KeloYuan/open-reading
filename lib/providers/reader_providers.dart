@@ -279,6 +279,8 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     required String text,
     required Size screenSize,
     required ReaderSettings settings,
+    double? statusBarHeight,
+    double? bottomSafeArea,
   }) async {
     if (text.isEmpty) {
       state = state.copyWith(
@@ -291,6 +293,21 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
+      // 计算真实的状态栏和控制栏高度
+      final realStatusBarHeight = statusBarHeight ?? 0.0;
+      final realBottomSafeArea = bottomSafeArea ?? 0.0;
+
+      // 预留工具栏空间（120px基础 + 安全区域，但不超过30px）
+      final controlBarHeight = 120.0 + (realBottomSafeArea > 30.0 ? 30.0 : realBottomSafeArea);
+
+      debugPrint('📐 沉浸式阅读器分页参数:');
+      debugPrint('  - 屏幕: ${screenSize.width.toInt()}x${screenSize.height.toInt()}');
+      debugPrint('  - 状态栏: ${realStatusBarHeight.toInt()}px');
+      debugPrint('  - 底部安全: ${realBottomSafeArea.toInt()}px');
+      debugPrint('  - 控制栏: ${controlBarHeight.toInt()}px');
+      debugPrint('  - 字体: ${settings.fontSize}px, 行高: ${settings.lineHeight}');
+      debugPrint('  - 文本长度: ${text.length} 字符');
+
       // 计算分页参数
       final params = AdvancedTextPaginator.calculatePreciseParams(
         screenSize: screenSize,
@@ -298,8 +315,8 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         lineHeight: settings.lineHeight,
         letterSpacing: settings.letterSpacing,
         padding: settings.padding,
-        statusBarHeight: 0.0,
-        controlBarHeight: 0.0,
+        statusBarHeight: realStatusBarHeight,
+        controlBarHeight: controlBarHeight,
         isLandscape: screenSize.width > screenSize.height,
       );
 
@@ -307,7 +324,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       final pages = AdvancedTextPaginator.paginateText(text, params);
 
       if (pages.isEmpty) {
-        throw Exception('分页结果为空');
+        throw Exception('分页结果为空，请检查文本内容');
       }
 
       state = state.copyWith(
@@ -317,13 +334,17 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         paginationParams: params,
       );
 
-      debugPrint('✅ 分页初始化完成: ${pages.length}页');
-    } catch (e) {
+      debugPrint('✅ 沉浸式阅读器分页完成: ${pages.length}页');
+      debugPrint('   - 每页约 ${params.pageMetrics.charsPerPage} 字符');
+      debugPrint('   - 每行 ${params.pageMetrics.charsPerLine} 字符');
+      debugPrint('   - 每页 ${params.pageMetrics.linesPerPage} 行');
+    } catch (e, stackTrace) {
       state = state.copyWith(
-        error: '分页失败: $e',
+        error: '分页失败: $e\n\n请尝试调整字体大小或重新打开',
         isLoading: false,
       );
-      debugPrint('❌ 分页初始化失败: $e');
+      debugPrint('❌ 沉浸式阅读器分页失败: $e');
+      debugPrint('堆栈: $stackTrace');
     }
   }
 

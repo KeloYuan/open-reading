@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/book.dart';
 import '../pages/enhanced_webview_reading_page.dart';
@@ -42,10 +43,35 @@ class ReadingRouterService {
       case ReadingEngineType.immersive:
       default:
         // 使用新的沉浸式阅读器
+        String bookContent = book.cachedContent ?? '';
+
+        // 如果缓存内容为空，尝试从文件加载
+        if (bookContent.isEmpty) {
+          debugPrint('📖 沉浸式阅读器：缓存内容为空，从文件加载...');
+          try {
+            final file = File(book.filePath);
+            if (await file.exists()) {
+              if (book.format.toLowerCase() == 'txt') {
+                bookContent = await file.readAsString();
+                debugPrint('✅ 成功加载TXT文件，长度: ${bookContent.length}');
+              } else {
+                debugPrint('⚠️ 非TXT格式，需要使用其他阅读器');
+                bookContent = '此格式暂不支持沉浸式阅读器\n\n请选择"高级阅读器"或"WebView阅读器"';
+              }
+            } else {
+              bookContent = '文件不存在: ${book.filePath}';
+              debugPrint('❌ 文件不存在');
+            }
+          } catch (e) {
+            bookContent = '加载文件失败: $e';
+            debugPrint('❌ 加载文件失败: $e');
+          }
+        }
+
         page = ReaderPage(
-          bookContent: book.cachedContent ?? '',
+          bookContent: bookContent,
           bookTitle: book.title,
-          initialPageIndex: 0,
+          initialPageIndex: book.currentPage,
         );
     }
 
