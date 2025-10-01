@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
@@ -80,7 +80,7 @@ class PlatformLayoutHelper {
     if (debugMode) {
       return Container(
         height: spacing,
-        color: Colors.red.withOpacity(0.3),
+        color: Colors.red.withValues(alpha: 0.3),
         child: Center(
           child: Text(
             '${spacing.toInt()}px',
@@ -169,7 +169,7 @@ class PlatformLayoutHelper {
 
     return Container(
       height: adaptiveHeight,
-      color: color ?? Colors.grey.withOpacity(0.2),
+      color: color ?? Colors.grey.withValues(alpha: 0.2),
     );
   }
 

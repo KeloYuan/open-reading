@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/tts_service.dart';
@@ -93,7 +93,7 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: _getModalAccentColor().withOpacity(0.1),
+            color: _getModalAccentColor().withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Row(
@@ -177,7 +177,7 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: _getModalAccentColor().withOpacity(0.3),
+                color: _getModalAccentColor().withValues(alpha: 0.3),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -193,7 +193,7 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
           label,
           style: TextStyle(
             fontSize: 12,
-            color: _getModalTextColor().withOpacity(0.8),
+            color: _getModalTextColor().withValues(alpha: 0.8),
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -218,9 +218,9 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
           decoration: BoxDecoration(
             color: isEnabled
                 ? (isSecondary
-                      ? _getModalTextColor().withOpacity(0.1)
-                      : _getModalAccentColor().withOpacity(0.1))
-                : _getModalTextColor().withOpacity(0.05),
+                      ? _getModalTextColor().withValues(alpha: 0.1)
+                      : _getModalAccentColor().withValues(alpha: 0.1))
+                : _getModalTextColor().withValues(alpha: 0.05),
             shape: BoxShape.circle,
           ),
           child: IconButton(
@@ -229,9 +229,9 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
               icon,
               color: isEnabled
                   ? (isSecondary
-                        ? _getModalTextColor().withOpacity(0.8)
+                        ? _getModalTextColor().withValues(alpha: 0.8)
                         : _getModalAccentColor())
-                  : _getModalTextColor().withOpacity(0.3),
+                  : _getModalTextColor().withValues(alpha: 0.3),
               size: 24,
             ),
           ),
@@ -242,8 +242,8 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
           style: TextStyle(
             fontSize: 12,
             color: isEnabled
-                ? _getModalTextColor().withOpacity(0.8)
-                : _getModalTextColor().withOpacity(0.3),
+                ? _getModalTextColor().withValues(alpha: 0.8)
+                : _getModalTextColor().withValues(alpha: 0.3),
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -304,7 +304,7 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _getModalTextColor().withOpacity(0.05),
+        color: _getModalTextColor().withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -317,7 +317,7 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
                 title,
                 style: TextStyle(
                   fontSize: 14,
-                  color: _getModalTextColor().withOpacity(0.8),
+                  color: _getModalTextColor().withValues(alpha: 0.8),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -336,9 +336,9 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
               activeTrackColor: _getModalAccentColor(),
-              inactiveTrackColor: _getModalAccentColor().withOpacity(0.2),
+              inactiveTrackColor: _getModalAccentColor().withValues(alpha: 0.2),
               thumbColor: _getModalAccentColor(),
-              overlayColor: _getModalAccentColor().withOpacity(0.2),
+              overlayColor: _getModalAccentColor().withValues(alpha: 0.2),
               trackHeight: 4,
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
             ),
@@ -358,7 +358,7 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _getModalAccentColor().withOpacity(0.1),
+        color: _getModalAccentColor().withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -376,7 +376,7 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
                 '朗读进度',
                 style: TextStyle(
                   fontSize: 14,
-                  color: _getModalTextColor().withOpacity(0.8),
+                  color: _getModalTextColor().withValues(alpha: 0.8),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -385,7 +385,7 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
           const SizedBox(height: 12),
           LinearProgressIndicator(
             value: ttsService.playbackProgress,
-            backgroundColor: _getModalAccentColor().withOpacity(0.2),
+            backgroundColor: _getModalAccentColor().withValues(alpha: 0.2),
             valueColor: AlwaysStoppedAnimation<Color>(_getModalAccentColor()),
           ),
         ],
@@ -397,8 +397,8 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
   Color _getModalDecoration() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return isDarkMode
-        ? const Color(0xFF1E1E1E).withOpacity(0.95)
-        : const Color(0xFFFFFBF0).withOpacity(0.95);
+        ? const Color(0xFF1E1E1E).withValues(alpha: 0.95)
+        : const Color(0xFFFFFBF0).withValues(alpha: 0.95);
   }
 
   // 获取模态文本颜色
@@ -416,7 +416,7 @@ class _TtsPanelEnhancedState extends State<TtsPanelEnhanced> {
   Color _getModalIconColor() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return isDarkMode
-        ? Colors.white.withOpacity(0.6)
-        : Colors.black.withOpacity(0.6);
+        ? Colors.white.withValues(alpha: 0.6)
+        : Colors.black.withValues(alpha: 0.6);
   }
 }

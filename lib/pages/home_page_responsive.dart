@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
@@ -183,16 +183,16 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
             stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
             colors: [
               // 使用主题的主色调创建更丰富的渐变
-              Theme.of(context).colorScheme.primary.withOpacity(0.06),
-              Theme.of(context).colorScheme.secondary.withOpacity(0.10),
-              Theme.of(context).colorScheme.tertiary.withOpacity(0.04),
+              Theme.of(context).colorScheme.primary.withValues(alpha: 0.06),
+              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.10),
+              Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.04),
               Theme.of(
                 context,
-              ).colorScheme.primaryContainer.withOpacity(0.12),
+              ).colorScheme.primaryContainer.withValues(alpha: 0.12),
               Theme.of(
                 context,
-              ).colorScheme.secondaryContainer.withOpacity(0.08),
-              Theme.of(context).colorScheme.surface.withOpacity(0.98),
+              ).colorScheme.secondaryContainer.withValues(alpha: 0.08),
+              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
             ],
           ),
         ),
@@ -211,12 +211,12 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                   decoration: BoxDecoration(
                     color: Theme.of(
                       context,
-                    ).colorScheme.surface.withOpacity(0.8),
+                    ).colorScheme.surface.withValues(alpha: 0.8),
                     border: Border(
                       right: BorderSide(
                         color: Theme.of(
                           context,
-                        ).colorScheme.outline.withOpacity(0.2),
+                        ).colorScheme.outline.withValues(alpha: 0.2),
                         width: 1,
                       ),
                     ),
@@ -253,14 +253,14 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                     backgroundColor: Colors.transparent,
                     indicatorColor: Theme.of(
                       context,
-                    ).colorScheme.primary.withOpacity(0.2),
+                    ).colorScheme.primary.withValues(alpha: 0.2),
                     selectedIconTheme: IconThemeData(
                       color: Theme.of(context).colorScheme.primary,
                     ),
                     unselectedIconTheme: IconThemeData(
                       color: Theme.of(
                         context,
-                      ).colorScheme.onSurface.withOpacity(0.6),
+                      ).colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                     selectedLabelTextStyle: TextStyle(
                       color: Theme.of(context).colorScheme.primary,
@@ -269,7 +269,7 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                     unselectedLabelTextStyle: TextStyle(
                       color: Theme.of(
                         context,
-                      ).colorScheme.onSurface.withOpacity(0.6),
+                      ).colorScheme.onSurface.withValues(alpha: 0.6),
                       fontWeight: FontWeight.w500,
                     ),
                     destinations: _navigationItems
@@ -297,7 +297,7 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                   BoxShadow(
                     color: Theme.of(
                       context,
-                    ).colorScheme.primary.withOpacity(0.3),
+                    ).colorScheme.primary.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 4),
                   ),
@@ -311,7 +311,7 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                     onPressed: () => _navigateToImport(),
                     backgroundColor: Theme.of(
                       context,
-                    ).colorScheme.primary.withOpacity(0.9),
+                    ).colorScheme.primary.withValues(alpha: 0.9),
                     icon: const Icon(Icons.add),
                     label: const Text('导入书籍'),
                   ),
@@ -394,26 +394,26 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                         ),
                         decoration: BoxDecoration(
                           color:
-                              Theme.of(context).colorScheme.surface.withOpacity(
+                              Theme.of(context).colorScheme.surface.withValues(alpha: 
                                     GlassEffectConfig.navigationBarOpacity,
                                   ),
                           borderRadius: BorderRadius.circular(60), // 更大的圆角半径
                           border: Border.all(
                             color: Theme.of(
                               context,
-                            ).colorScheme.outline.withOpacity(0.15),
+                            ).colorScheme.outline.withValues(alpha: 0.15),
                             width: 0.5,
                           ),
                           boxShadow: [
                             // 增强阴影效果，让悬浮感更强
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.12),
+                              color: Colors.black.withValues(alpha: 0.12),
                               blurRadius: 30,
                               offset: const Offset(0, 8),
                               spreadRadius: 0,
                             ),
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.06),
+                              color: Colors.black.withValues(alpha: 0.06),
                               blurRadius: 60,
                               offset: const Offset(0, 16),
                               spreadRadius: 0,
@@ -518,7 +518,7 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                 BoxShadow(
                   color: Theme.of(
                     context,
-                  ).colorScheme.primary.withOpacity(0.3),
+                  ).colorScheme.primary.withValues(alpha: 0.3),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -558,7 +558,7 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                 fontSize: 12,
                 color: Theme.of(
                   context,
-                ).colorScheme.onSurface.withOpacity(0.6),
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
                 letterSpacing: 0.3,
               ),
             ),
@@ -653,7 +653,7 @@ class _BounceNavigationItemState extends State<_BounceNavigationItem>
                 color: widget.isSelected
                     ? Theme.of(
                         context,
-                      ).colorScheme.primary.withOpacity(0.15)
+                      ).colorScheme.primary.withValues(alpha: 0.15)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(28),
               ),
@@ -669,7 +669,7 @@ class _BounceNavigationItemState extends State<_BounceNavigationItem>
                         ? Theme.of(context).colorScheme.primary
                         : Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacity(0.6),
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
                     size: 24,
                   ),
                   const SizedBox(height: 4),
@@ -684,7 +684,7 @@ class _BounceNavigationItemState extends State<_BounceNavigationItem>
                           ? Theme.of(context).colorScheme.primary
                           : Theme.of(
                               context,
-                            ).colorScheme.onSurface.withOpacity(0.6),
+                            ).colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                     child: Text(
                       widget.item.label,
@@ -814,16 +814,16 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
           stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
           colors: [
             // 使用主题的主色调创建更丰富的渐变
-            Theme.of(context).colorScheme.primary.withOpacity(0.08),
-            Theme.of(context).colorScheme.secondary.withOpacity(0.12),
-            Theme.of(context).colorScheme.tertiary.withOpacity(0.06),
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+            Theme.of(context).colorScheme.secondary.withValues(alpha: 0.12),
+            Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.06),
             Theme.of(
               context,
-            ).colorScheme.primaryContainer.withOpacity(0.15),
+            ).colorScheme.primaryContainer.withValues(alpha: 0.15),
             Theme.of(
               context,
-            ).colorScheme.secondaryContainer.withOpacity(0.10),
-            Theme.of(context).colorScheme.surface.withOpacity(0.98),
+            ).colorScheme.secondaryContainer.withValues(alpha: 0.10),
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
           ],
         ),
       ),
@@ -839,7 +839,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   color: Theme.of(context).colorScheme.primary, // 主题色
                   backgroundColor: Theme.of(
                     context,
-                  ).colorScheme.surface.withOpacity(0.9), // 半透明背景
+                  ).colorScheme.surface.withValues(alpha: 0.9), // 半透明背景
                   edgeOffset: refreshEdgeOffset,
                   child: ListView(
                     padding: EdgeInsets.fromLTRB(
@@ -886,14 +886,14 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   height: MediaQuery.of(context).padding.top +
                       60, // 状态栏高度 + AppBar高度
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface.withOpacity(
+                    color: Theme.of(context).colorScheme.surface.withValues(alpha: 
                           GlassEffectConfig.appBarOpacity,
                         ),
                     border: Border(
                       bottom: BorderSide(
                         color: Theme.of(
                           context,
-                        ).colorScheme.outline.withOpacity(0.2),
+                        ).colorScheme.outline.withValues(alpha: 0.2),
                         width: 0.5,
                       ),
                     ),
@@ -945,12 +945,12 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
             decoration: BoxDecoration(
               color: Theme.of(
                 context,
-              ).colorScheme.surface.withOpacity(0.8),
+              ).colorScheme.surface.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: Theme.of(
                   context,
-                ).colorScheme.outline.withOpacity(0.2),
+                ).colorScheme.outline.withValues(alpha: 0.2),
                 width: 1,
               ),
             ),
@@ -964,7 +964,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                       decoration: BoxDecoration(
                         color: Theme.of(
                           context,
-                        ).colorScheme.primary.withOpacity(0.1),
+                        ).colorScheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
@@ -997,7 +997,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                                   color: Theme.of(context)
                                       .colorScheme
                                       .onSurface
-                                      .withOpacity(0.7),
+                                      .withValues(alpha: 0.7),
                                 ),
                           ),
                         ],
@@ -1014,11 +1014,11 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                         colors: [
                           Theme.of(
                             context,
-                          ).colorScheme.primaryContainer.withOpacity(0.4),
+                          ).colorScheme.primaryContainer.withValues(alpha: 0.4),
                           Theme.of(context)
                               .colorScheme
                               .secondaryContainer
-                              .withOpacity(0.3),
+                              .withValues(alpha: 0.3),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(12),
@@ -1030,7 +1030,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                           decoration: BoxDecoration(
                             color: Theme.of(
                               context,
-                            ).colorScheme.primary.withOpacity(0.2),
+                            ).colorScheme.primary.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Icon(
@@ -1233,12 +1233,12 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(
                 context,
-              ).colorScheme.outline.withOpacity(0.2),
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -1252,7 +1252,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                     decoration: BoxDecoration(
                       color: Theme.of(
                         context,
-                      ).colorScheme.secondary.withOpacity(0.1),
+                      ).colorScheme.secondary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -1330,7 +1330,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                         return FlLine(
                           color: Theme.of(
                             context,
-                          ).colorScheme.outline.withOpacity(0.1),
+                          ).colorScheme.outline.withValues(alpha: 0.1),
                           strokeWidth: 1,
                         );
                       },
@@ -1348,7 +1348,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                               colors: [
                                 Theme.of(
                                   context,
-                                ).colorScheme.primary.withOpacity(0.8),
+                                ).colorScheme.primary.withValues(alpha: 0.8),
                                 Theme.of(context).colorScheme.primary,
                               ],
                             ),
@@ -1379,12 +1379,12 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(
                 context,
-              ).colorScheme.outline.withOpacity(0.2),
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -1398,7 +1398,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                     decoration: BoxDecoration(
                       color: Theme.of(
                         context,
-                      ).colorScheme.tertiary.withOpacity(0.1),
+                      ).colorScheme.tertiary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -1457,7 +1457,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -1465,7 +1465,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.2),
+              color: color.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: color, size: 20),
@@ -1486,7 +1486,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(
                           context,
-                        ).colorScheme.onSurface.withOpacity(0.6),
+                        ).colorScheme.onSurface.withValues(alpha: 0.6),
                       ),
                 ),
               ],
@@ -1558,16 +1558,16 @@ class _GenericPageWrapper extends StatelessWidget {
           stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
           colors: [
             // 使用主题的主色调创建更丰富的渐变
-            Theme.of(context).colorScheme.primary.withOpacity(0.08),
-            Theme.of(context).colorScheme.secondary.withOpacity(0.12),
-            Theme.of(context).colorScheme.tertiary.withOpacity(0.06),
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+            Theme.of(context).colorScheme.secondary.withValues(alpha: 0.12),
+            Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.06),
             Theme.of(
               context,
-            ).colorScheme.primaryContainer.withOpacity(0.15),
+            ).colorScheme.primaryContainer.withValues(alpha: 0.15),
             Theme.of(
               context,
-            ).colorScheme.secondaryContainer.withOpacity(0.10),
-            Theme.of(context).colorScheme.surface.withOpacity(0.98),
+            ).colorScheme.secondaryContainer.withValues(alpha: 0.10),
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
           ],
         ),
       ),
@@ -1609,12 +1609,12 @@ class _StatCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(10.0),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: Theme.of(
                 context,
-              ).colorScheme.outline.withOpacity(0.2),
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -1626,7 +1626,7 @@ class _StatCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, size: 20, color: color),
@@ -1643,7 +1643,7 @@ class _StatCard extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Theme.of(
                               context,
-                            ).colorScheme.onSurface.withOpacity(0.8),
+                            ).colorScheme.onSurface.withValues(alpha: 0.8),
                             fontSize: 12,
                           ),
                       maxLines: 1,
@@ -1676,7 +1676,7 @@ class _StatCard extends StatelessWidget {
                                       color: Theme.of(context)
                                           .colorScheme
                                           .onSurface
-                                          .withOpacity(0.6),
+                                          .withValues(alpha: 0.6),
                                       fontSize: 10,
                                     ),
                           ),
@@ -1766,14 +1766,14 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                 height:
                     MediaQuery.of(context).padding.top + 60, // 状态栏高度 + AppBar高度
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface.withOpacity(
+                  color: Theme.of(context).colorScheme.surface.withValues(alpha: 
                         GlassEffectConfig.appBarOpacity,
                       ),
                   border: Border(
                     bottom: BorderSide(
                       color: Theme.of(
                         context,
-                      ).colorScheme.outline.withOpacity(0.2),
+                      ).colorScheme.outline.withValues(alpha: 0.2),
                       width: 0.5,
                     ),
                   ),

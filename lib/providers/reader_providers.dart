@@ -384,18 +384,26 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       // 预留工具栏空间（120px基础 + 安全区域，但不超过30px）
       final controlBarHeight = 120.0 + (realBottomSafeArea > 30.0 ? 30.0 : realBottomSafeArea);
 
+      // 计算实际可用的屏幕尺寸
+      // 注意：这里不减去padding，因为padding会在分页器内部处理
+      // 这里只减去状态栏、工具栏等UI占用的空间
+      final actualAvailableHeight = screenSize.height - realStatusBarHeight - controlBarHeight;
+      final actualScreenSize = Size(screenSize.width, actualAvailableHeight);
+
       debugPrint('📐 沉浸式阅读器分页参数:');
-      debugPrint('  - 屏幕: ${screenSize.width.toInt()}x${screenSize.height.toInt()}');
+      debugPrint('  - 原始屏幕: ${screenSize.width.toInt()}x${screenSize.height.toInt()}');
       debugPrint('  - 状态栏: ${realStatusBarHeight.toInt()}px');
       debugPrint('  - 底部安全: ${realBottomSafeArea.toInt()}px');
       debugPrint('  - 控制栏: ${controlBarHeight.toInt()}px');
+      debugPrint('  - 实际可用: ${actualScreenSize.width.toInt()}x${actualScreenSize.height.toInt()}');
+      debugPrint('  - Padding: L${settings.padding.left} R${settings.padding.right} T${settings.padding.top} B${settings.padding.bottom}');
       debugPrint('  - 字体: ${settings.fontSize}px, 行高: ${settings.lineHeight}');
       debugPrint('  - 文本长度: ${text.length} 字符');
 
-      // 使用简单分页器
+      // 使用简单分页器 - 传入调整后的屏幕尺寸
       final pages = SimpleTextPaginator.paginate(
         text: text,
-        screenSize: screenSize,
+        screenSize: actualScreenSize,  // 使用实际可用尺寸，而非完整屏幕
         fontSize: settings.fontSize,
         lineHeight: settings.lineHeight,
         padding: settings.padding,

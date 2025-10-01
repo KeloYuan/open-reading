@@ -1,27 +1,13 @@
 import 'package:flutter/material.dart';
 
 extension ColorExtension on Color {
-  // 使用 0.0 - 1.0 的分量值进行更新，未提供则沿用当前分量
-  Color withValues({double? alpha, double? red, double? green, double? blue}) {
-    final aInt =
-        alpha != null ? (alpha.clamp(0.0, 1.0) * 255).round() : this.alpha;
-    final rInt = red != null ? (red.clamp(0.0, 1.0) * 255).round() : this.red;
-    final gInt =
-        green != null ? (green.clamp(0.0, 1.0) * 255).round() : this.green;
-    final bInt =
-        blue != null ? (blue.clamp(0.0, 1.0) * 255).round() : this.blue;
-
-    return Color.fromARGB(aInt, rInt, gInt, bInt);
-  }
-
-  // 使用 0.0 - 1.0 的透明度
-  Color withOpacity(double opacity) {
-    final aInt = (opacity.clamp(0.0, 1.0) * 255).round();
-    return withAlpha(aInt);
-  }
-
+  /// 将Color转换为32位ARGB整数
+  /// 替代已弃用的 color.value
+  /// 在Flutter 3.27+中，Color组件是浮点数(0.0-1.0)，需要转换为整数
   int toARGB32() {
-    // 直接使用现有通道（0-255）拼装 ARGB 32 位整数
-    return (alpha << 24) | (red << 16) | (green << 8) | blue;
+    return (a * 255).round() << 24 |
+        (r * 255).round() << 16 |
+        (g * 255).round() << 8 |
+        (b * 255).round();
   }
 }

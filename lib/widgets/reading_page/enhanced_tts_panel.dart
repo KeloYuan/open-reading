@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../services/tts/enhanced_tts_handler.dart';
@@ -177,7 +177,7 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
           width: 40,
           height: 4,
           decoration: BoxDecoration(
-            color: Colors.grey.withOpacity(0.3),
+            color: Colors.grey.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -311,7 +311,7 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
           borderRadius: BorderRadius.circular(isPrimary ? 32 : 24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -567,7 +567,7 @@ class SoundWavePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = color.withOpacity(isPlaying ? 0.8 : 0.3)
+      ..color = color.withValues(alpha: isPlaying ? 0.8 : 0.3)
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round;
 

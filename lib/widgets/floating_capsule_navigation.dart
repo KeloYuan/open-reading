@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../utils/glass_config.dart';
 
@@ -138,13 +138,13 @@ class _FloatingCapsuleNavigationState extends State<FloatingCapsuleNavigation>
         boxShadow: [
           // 悬浮效果阴影 - 增强阴影让Q弹感更强
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 25,
             offset: const Offset(0, 10),
             spreadRadius: 0,
           ),
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 45,
             offset: const Offset(0, 20),
             spreadRadius: 0,
@@ -161,10 +161,10 @@ class _FloatingCapsuleNavigationState extends State<FloatingCapsuleNavigation>
           ),
           child: Container(
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface.withOpacity(0.9),
+              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
               borderRadius: BorderRadius.circular(borderRadius),
               border: Border.all(
-                color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
                 width: 0.5,
               ),
             ),
@@ -196,10 +196,10 @@ class _FloatingCapsuleNavigationState extends State<FloatingCapsuleNavigation>
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 6), // 增加边距
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(borderRadius),
           border: Border.all(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
             width: 1,
           ),
         ),
@@ -209,7 +209,7 @@ class _FloatingCapsuleNavigationState extends State<FloatingCapsuleNavigation>
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Container(
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(borderRadius),
               ),
             ),
@@ -459,7 +459,7 @@ class _CapsuleNavigationItemState extends State<_CapsuleNavigationItem>
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(widget.borderRadius),
                   color: _isHovering
-                      ? Theme.of(context).colorScheme.primary.withOpacity(0.05)
+                      ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.05)
                       : Colors.transparent,
                 ),
                 child: Row(
@@ -483,7 +483,7 @@ class _CapsuleNavigationItemState extends State<_CapsuleNavigationItem>
                                     ? Theme.of(context).colorScheme.primary
                                     : Theme.of(
                                         context,
-                                      ).colorScheme.onSurface.withOpacity(0.6),
+                                      ).colorScheme.onSurface.withValues(alpha: 0.6),
                               ),
                             ),
                           );
@@ -500,7 +500,7 @@ class _CapsuleNavigationItemState extends State<_CapsuleNavigationItem>
                             ? Theme.of(context).colorScheme.primary
                             : Theme.of(
                                 context,
-                              ).colorScheme.onSurface.withOpacity(0.6),
+                              ).colorScheme.onSurface.withValues(alpha: 0.6),
                         fontWeight: widget.isSelected
                             ? FontWeight.w600
                             : FontWeight.w400,

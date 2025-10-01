@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/reader_providers.dart';
 
@@ -59,7 +59,7 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
       color: _getToolbarBackgroundColor(settings),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.1),
+          color: Colors.black.withValues(alpha: 0.1),
           blurRadius: 8,
           offset: widget.position == ToolbarPosition.top
               ? const Offset(0, 2)
@@ -183,8 +183,8 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
         color: _getToolbarBackgroundColor(settings),
         border: Border(
           bottom: BorderSide(
-            color: settings.textStyle.color?.withOpacity(0.1) ??
-                Colors.grey.withOpacity(0.1),
+            color: settings.textStyle.color?.withValues(alpha: 0.1) ??
+                Colors.grey.withValues(alpha: 0.1),
             width: 1,
           ),
         ),
@@ -219,7 +219,7 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: settings.textStyle.color?.withOpacity(0.1),
+          color: settings.textStyle.color?.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Column(
@@ -228,7 +228,7 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
             Icon(
               _getThemeIcon(settings.theme),
               size: 20,
-              color: settings.textStyle.color?.withOpacity(0.8),
+              color: settings.textStyle.color?.withValues(alpha: 0.8),
             ),
             const SizedBox(height: 4),
             Text(
@@ -258,7 +258,7 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: settings.textStyle.color?.withOpacity(0.1),
+            color: settings.textStyle.color?.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(
@@ -292,14 +292,14 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: _showAdvancedSettings
-              ? settings.textStyle.color?.withOpacity(0.2)
-              : settings.textStyle.color?.withOpacity(0.1),
+              ? settings.textStyle.color?.withValues(alpha: 0.2)
+              : settings.textStyle.color?.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(
           _showAdvancedSettings ? Icons.tune : Icons.settings,
           size: 20,
-          color: settings.textStyle.color?.withOpacity(0.8),
+          color: settings.textStyle.color?.withValues(alpha: 0.8),
         ),
       ),
     );
@@ -324,14 +324,14 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: ttsState.isPlaying
-                      ? settings.textStyle.color?.withOpacity(0.2)
-                      : settings.textStyle.color?.withOpacity(0.1),
+                      ? settings.textStyle.color?.withValues(alpha: 0.2)
+                      : settings.textStyle.color?.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   ttsState.isPlaying ? Icons.pause : Icons.play_arrow,
                   size: 20,
-                  color: settings.textStyle.color?.withOpacity(0.8),
+                  color: settings.textStyle.color?.withValues(alpha: 0.8),
                 ),
               );
             },
@@ -420,8 +420,8 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? settings.textStyle.color?.withOpacity(0.2)
-                        : settings.textStyle.color?.withOpacity(0.1),
+                        ? settings.textStyle.color?.withValues(alpha: 0.2)
+                        : settings.textStyle.color?.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -452,13 +452,13 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: settings.textStyle.color?.withOpacity(0.1),
+          color: settings.textStyle.color?.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Icon(
           icon,
           size: 20,
-          color: settings.textStyle.color?.withOpacity(0.8),
+          color: settings.textStyle.color?.withValues(alpha: 0.8),
         ),
       ),
     );

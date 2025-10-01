@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -89,7 +89,7 @@ class _HighlightedText extends StatelessWidget {
         text: sentence,
         style: style.copyWith(
           backgroundColor:
-              isHighlighted ? highlightColor.withOpacity(0.3) : null,
+              isHighlighted ? highlightColor.withValues(alpha: 0.3) : null,
         ),
       ));
     }
@@ -617,7 +617,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
           child: FadeTransition(
             opacity: _toolbarOpacityAnimation,
             child: Container(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               child: GestureDetector(
                 onTap: _hideToolbar,
                 behavior: HitTestBehavior.translucent,
@@ -795,7 +795,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withOpacity(0.1),
+        color: settings.textStyle.color?.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -803,7 +803,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
         style: settings.textStyle.copyWith(
           fontSize: 12,
           fontWeight: FontWeight.w500,
-          color: settings.textStyle.color?.withOpacity(0.8),
+          color: settings.textStyle.color?.withValues(alpha: 0.8),
         ),
       ),
     );
@@ -813,7 +813,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withOpacity(0.1),
+        color: settings.textStyle.color?.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -830,7 +830,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
             style: settings.textStyle.copyWith(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: settings.textStyle.color?.withOpacity(0.8),
+              color: settings.textStyle.color?.withValues(alpha: 0.8),
             ),
           ),
         ],
@@ -866,7 +866,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withOpacity(0.1),
+        color: settings.textStyle.color?.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Text(
@@ -874,7 +874,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
         style: settings.textStyle.copyWith(
           fontSize: 12,
           fontWeight: FontWeight.w500,
-          color: settings.textStyle.color?.withOpacity(0.7),
+          color: settings.textStyle.color?.withValues(alpha: 0.7),
         ),
       ),
     );
@@ -886,7 +886,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withOpacity(0.1),
+        color: settings.textStyle.color?.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Row(
@@ -897,13 +897,13 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
             height: 3,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(1.5),
-              color: settings.textStyle.color?.withOpacity(0.2),
+              color: settings.textStyle.color?.withValues(alpha: 0.2),
             ),
             child: LinearProgressIndicator(
               value: progress,
               backgroundColor: Colors.transparent,
               valueColor: AlwaysStoppedAnimation<Color>(
-                settings.textStyle.color?.withOpacity(0.6) ?? Colors.grey,
+                settings.textStyle.color?.withValues(alpha: 0.6) ?? Colors.grey,
               ),
             ),
           ),
@@ -913,7 +913,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
             style: settings.textStyle.copyWith(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: settings.textStyle.color?.withOpacity(0.7),
+              color: settings.textStyle.color?.withValues(alpha: 0.7),
             ),
           ),
         ],
@@ -937,7 +937,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     } else if (_batteryLevel <= 40) {
       return Colors.orange;
     } else {
-      return baseColor.withOpacity(0.8);
+      return baseColor.withValues(alpha: 0.8);
     }
   }
 }
@@ -1086,7 +1086,7 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
             Icon(
               Icons.error_outline,
               size: 64,
-              color: Colors.red.withOpacity(0.7),
+              color: Colors.red.withValues(alpha: 0.7),
             ),
             const SizedBox(height: 24),
             Text(
@@ -1121,7 +1121,7 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
                   horizontal: 24,
                   vertical: 12,
                 ),
-                backgroundColor: settings.textStyle.color?.withOpacity(0.1),
+                backgroundColor: settings.textStyle.color?.withValues(alpha: 0.1),
                 foregroundColor: settings.textStyle.color,
               ),
             ),
@@ -1132,7 +1132,7 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
               icon: const Icon(Icons.arrow_back),
               label: const Text('返回'),
               style: TextButton.styleFrom(
-                foregroundColor: settings.textStyle.color?.withOpacity(0.7),
+                foregroundColor: settings.textStyle.color?.withValues(alpha: 0.7),
               ),
             ),
           ],
@@ -1147,7 +1147,7 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
         '没有内容可显示',
         style: settings.textStyle.copyWith(
           fontSize: 16,
-          color: settings.textStyle.color?.withOpacity(0.5),
+          color: settings.textStyle.color?.withValues(alpha: 0.5),
         ),
       ),
     );
@@ -1193,39 +1193,40 @@ class _SlidePaginationViewState extends State<_SlidePaginationView> {
   }
 
   Widget _buildPageContent(BuildContext context, String pageContent) {
-    // 计算可用高度，确保内容不超出视口
-    final screenHeight = MediaQuery.of(context).size.height;
-    final availableHeight = screenHeight -
-        widget.settings.padding.top -
-        widget.settings.padding.bottom;
-
+    // 使用 LayoutBuilder 自适应可用空间，而不是硬编码计算高度
+    // 这样可以确保与分页器计算的空间完全一致
     return RepaintBoundary(
-      child: ClipRect(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: screenHeight,
-            maxWidth: double.infinity,
-          ),
-          child: Container(
-            padding: widget.settings.padding,
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              height: availableHeight,
-              child: Consumer(
-                builder: (context, ref, child) {
-                  final ttsState = ref.watch(readerTtsProvider);
-                  return _HighlightedText(
-                    text: pageContent,
-                    style: widget.settings.textStyle,
-                    highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
-                    enableSelection: widget.settings.enableTextSelection,
-                    onTextSelection: widget.onTextSelection,
-                  );
-                },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // 使用 constraints.maxHeight 作为实际可用高度
+          // 这是父组件分配给我们的真实空间
+          final availableHeight = constraints.maxHeight -
+              widget.settings.padding.top -
+              widget.settings.padding.bottom;
+
+          return ClipRect(
+            child: Container(
+              padding: widget.settings.padding,
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                height: availableHeight,
+                width: constraints.maxWidth - widget.settings.padding.left - widget.settings.padding.right,
+                child: Consumer(
+                  builder: (context, ref, child) {
+                    final ttsState = ref.watch(readerTtsProvider);
+                    return _HighlightedText(
+                      text: pageContent,
+                      style: widget.settings.textStyle,
+                      highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
+                      enableSelection: widget.settings.enableTextSelection,
+                      onTextSelection: widget.onTextSelection,
+                    );
+                  },
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -1609,7 +1610,7 @@ class _SimulationPaginationViewState extends State<_SimulationPaginationView>
           color: widget.settings.backgroundColor,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(
+              color: Colors.black.withValues(alpha: 
                 isBackground ? 0.05 : _shadowAnimation.value,
               ),
               blurRadius: 20,
@@ -1687,7 +1688,7 @@ class _ReaderToolbar extends ConsumerWidget {
       color: _getToolbarBackgroundColor(settings),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.1),
+          color: Colors.black.withValues(alpha: 0.1),
           blurRadius: 8,
           offset: position == _ToolbarPosition.top
               ? const Offset(0, 2)
@@ -1825,7 +1826,7 @@ class _ReaderToolbar extends ConsumerWidget {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: settings.textStyle.color?.withOpacity(0.3),
+                    color: settings.textStyle.color?.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -1884,14 +1885,14 @@ class _ReaderToolbar extends ConsumerWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected
-                ? currentSettings.textStyle.color?.withOpacity(0.5) ??
+                ? currentSettings.textStyle.color?.withValues(alpha: 0.5) ??
                     Colors.grey
                 : Colors.transparent,
             width: 2.5,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: Colors.black.withValues(alpha: 0.08),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -1928,7 +1929,7 @@ class _ReaderToolbar extends ConsumerWidget {
                 child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: currentSettings.textStyle.color?.withOpacity(0.15),
+                    color: currentSettings.textStyle.color?.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -1977,7 +1978,7 @@ class _ReaderToolbar extends ConsumerWidget {
                           width: 36,
                           height: 4,
                           decoration: BoxDecoration(
-                            color: settings.textStyle.color?.withOpacity(0.3),
+                            color: settings.textStyle.color?.withValues(alpha: 0.3),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -1997,7 +1998,7 @@ class _ReaderToolbar extends ConsumerWidget {
                           IconButton(
                             icon: Icon(Icons.close,
                                 color:
-                                    settings.textStyle.color?.withOpacity(0.6)),
+                                    settings.textStyle.color?.withValues(alpha: 0.6)),
                             onPressed: () => Navigator.pop(context),
                           ),
                         ],
@@ -2139,7 +2140,7 @@ class _ReaderToolbar extends ConsumerWidget {
                           },
                           icon: Icon(Icons.refresh,
                               color:
-                                  settings.textStyle.color?.withOpacity(0.7)),
+                                  settings.textStyle.color?.withValues(alpha: 0.7)),
                           label: Text(
                             '恢复默认',
                             style: settings.textStyle.copyWith(fontSize: 15),
@@ -2185,7 +2186,7 @@ class _ReaderToolbar extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: settings.textStyle.color?.withOpacity(0.1),
+                color: settings.textStyle.color?.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
@@ -2200,10 +2201,10 @@ class _ReaderToolbar extends ConsumerWidget {
         ),
         SliderTheme(
           data: SliderThemeData(
-            activeTrackColor: settings.textStyle.color?.withOpacity(0.7),
-            inactiveTrackColor: settings.textStyle.color?.withOpacity(0.15),
+            activeTrackColor: settings.textStyle.color?.withValues(alpha: 0.7),
+            inactiveTrackColor: settings.textStyle.color?.withValues(alpha: 0.15),
             thumbColor: settings.textStyle.color,
-            overlayColor: settings.textStyle.color?.withOpacity(0.2),
+            overlayColor: settings.textStyle.color?.withValues(alpha: 0.2),
             trackHeight: 4.0,
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8.0),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 16.0),
@@ -2239,7 +2240,7 @@ class _ReaderToolbar extends ConsumerWidget {
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: settings.textStyle.color?.withOpacity(0.3),
+                  color: settings.textStyle.color?.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -2272,7 +2273,7 @@ class _ReaderToolbar extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         child: Row(
           children: [
-            Icon(icon, color: settings.textStyle.color?.withOpacity(0.8)),
+            Icon(icon, color: settings.textStyle.color?.withValues(alpha: 0.8)),
             const SizedBox(width: 16),
             Text(
               label,
@@ -2317,8 +2318,8 @@ class _ReaderToolbar extends ConsumerWidget {
                         .read(readerPaginationProvider.notifier)
                         .goToPage(targetPage - 1);
                   },
-                  activeColor: settings.textStyle.color?.withOpacity(0.8),
-                  inactiveColor: settings.textStyle.color?.withOpacity(0.2),
+                  activeColor: settings.textStyle.color?.withValues(alpha: 0.8),
+                  inactiveColor: settings.textStyle.color?.withValues(alpha: 0.2),
                 ),
               ),
               Text(
@@ -2420,13 +2421,13 @@ class _ReaderToolbar extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: settings.textStyle.color?.withOpacity(0.08),
+                color: settings.textStyle.color?.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
                 icon,
                 size: 22,
-                color: settings.textStyle.color?.withOpacity(0.85),
+                color: settings.textStyle.color?.withValues(alpha: 0.85),
               ),
             ),
             const SizedBox(height: 6),
@@ -2435,7 +2436,7 @@ class _ReaderToolbar extends ConsumerWidget {
               style: settings.textStyle.copyWith(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
-                color: settings.textStyle.color?.withOpacity(0.75),
+                color: settings.textStyle.color?.withValues(alpha: 0.75),
               ),
             ),
           ],
@@ -2464,14 +2465,14 @@ class _ReaderToolbar extends ConsumerWidget {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: isPlaying
-                    ? settings.textStyle.color?.withOpacity(0.15)
-                    : settings.textStyle.color?.withOpacity(0.08),
+                    ? settings.textStyle.color?.withValues(alpha: 0.15)
+                    : settings.textStyle.color?.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
                 isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
                 size: 22,
-                color: settings.textStyle.color?.withOpacity(0.85),
+                color: settings.textStyle.color?.withValues(alpha: 0.85),
               ),
             ),
             const SizedBox(height: 6),
@@ -2480,7 +2481,7 @@ class _ReaderToolbar extends ConsumerWidget {
               style: settings.textStyle.copyWith(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
-                color: settings.textStyle.color?.withOpacity(0.75),
+                color: settings.textStyle.color?.withValues(alpha: 0.75),
               ),
             ),
           ],
@@ -2502,13 +2503,13 @@ class _ReaderToolbar extends ConsumerWidget {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: settings.textStyle.color?.withOpacity(0.1),
+          color: settings.textStyle.color?.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Icon(
           icon,
           size: 20,
-          color: settings.textStyle.color?.withOpacity(0.8),
+          color: settings.textStyle.color?.withValues(alpha: 0.8),
         ),
       ),
     );

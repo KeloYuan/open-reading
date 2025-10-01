@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/highlight.dart';
 import 'highlight_color_picker.dart';
@@ -92,7 +92,7 @@ class _CustomSelectableTextState extends State<CustomSelectableText> {
             onTap: () => widget.onHighlightTap?.call(highlight),
             child: Container(
               decoration: BoxDecoration(
-                color: highlight.color.withOpacity(0.4),
+                color: highlight.color.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(2),
               ),
               child: Text(
@@ -327,7 +327,7 @@ class _CustomSelectableTextState extends State<CustomSelectableText> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.2),
+                  color: Colors.grey.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(selectedText),

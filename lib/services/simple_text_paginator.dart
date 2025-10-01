@@ -20,13 +20,16 @@ class SimpleTextPaginator {
     text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
     final emptyLinesRemoved = originalLength - text.length;
 
-    // 1. 计算可用宽度和高度
+    // 1. 计算可用宽度和高度，并添加安全边距
     final availableWidth = screenSize.width - padding.left - padding.right;
-    final availableHeight = screenSize.height - padding.top - padding.bottom;
+    // 减去10px安全边距，防止边界情况下文字溢出
+    final safetyMargin = 10.0;
+    final availableHeight = screenSize.height - padding.top - padding.bottom - safetyMargin;
 
     print('📄 开始分页:');
     print('   屏幕: ${screenSize.width.toInt()}×${screenSize.height.toInt()}');
     print('   Padding: L${padding.left} R${padding.right} T${padding.top} B${padding.bottom}');
+    print('   安全边距: ${safetyMargin.toInt()}px');
     print('   可用: ${availableWidth.toInt()}×${availableHeight.toInt()}');
     print('   字体: ${fontSize}px, 行高: $lineHeight');
     if (emptyLinesRemoved > 0) {
@@ -54,13 +57,17 @@ class SimpleTextPaginator {
     while (currentIndex < text.length) {
       pageNum++;
 
-      // 估算起始范围
+      // 估算起始范围 - 使用更保守的估算
       final remainingChars = text.length - currentIndex;
-      final estimatedCharsPerPage = ((availableWidth / fontSize) * (availableHeight / (fontSize * lineHeight)) * 0.9).floor();
+      // 估算每行字符数和总行数，使用0.85的保守系数
+      final charsPerLine = (availableWidth / fontSize * 0.95).floor();
+      final linesPerPage = (availableHeight / (fontSize * lineHeight) * 0.85).floor();
+      final estimatedCharsPerPage = (charsPerLine * linesPerPage).floor();
 
       // 二分查找最佳字符数
       int left = math.min(1, remainingChars);
-      int right = math.min(estimatedCharsPerPage * 2, remainingChars);
+      // 右边界限制为估算值的1.5倍，避免过度估算
+      int right = math.min(estimatedCharsPerPage * 1.5, remainingChars).floor();
       int bestFit = left;
 
       while (left <= right) {

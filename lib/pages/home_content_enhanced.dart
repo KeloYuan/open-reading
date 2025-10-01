@@ -84,7 +84,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                 bottom: BorderSide(
                   color: Theme.of(
                     context,
-                  ).colorScheme.outline.withOpacity(0.2),
+                  ).colorScheme.outline.withValues(alpha: 0.2),
                   width: 0.5,
                 ),
               ),
@@ -100,16 +100,16 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
             stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
             colors: [
               // 使用主题的主色调创建更丰富的渐变
-              Theme.of(context).colorScheme.primary.withOpacity(0.08),
-              Theme.of(context).colorScheme.secondary.withOpacity(0.12),
-              Theme.of(context).colorScheme.tertiary.withOpacity(0.06),
+              Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.12),
+              Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.06),
               Theme.of(
                 context,
-              ).colorScheme.primaryContainer.withOpacity(0.15),
+              ).colorScheme.primaryContainer.withValues(alpha: 0.15),
               Theme.of(
                 context,
-              ).colorScheme.secondaryContainer.withOpacity(0.10),
-              Theme.of(context).colorScheme.surface.withOpacity(0.98),
+              ).colorScheme.secondaryContainer.withValues(alpha: 0.10),
+              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
             ],
           ),
         ),
@@ -177,12 +177,12 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(
                 context,
-              ).colorScheme.outline.withOpacity(0.2),
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -196,7 +196,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                     decoration: BoxDecoration(
                       color: Theme.of(
                         context,
-                      ).colorScheme.primary.withOpacity(0.1),
+                      ).colorScheme.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
@@ -212,7 +212,9 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                       children: [
                         Text(
                           '今日阅读时光',
-                          style: Theme.of(context).textTheme.titleLarge
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
                               ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 4),
@@ -220,11 +222,13 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                           todayMinutes > 0
                               ? '已阅读 $todayMinutes 分钟，继续保持！'
                               : '开始今天的阅读之旅吧',
-                          style: Theme.of(context).textTheme.bodyMedium
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
                               ?.copyWith(
                                 color: Theme.of(
                                   context,
-                                ).colorScheme.onSurface.withOpacity(0.7),
+                                ).colorScheme.onSurface.withValues(alpha: 0.7),
                               ),
                         ),
                       ],
@@ -241,10 +245,10 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                       colors: [
                         Theme.of(
                           context,
-                        ).colorScheme.primaryContainer.withOpacity(0.4),
+                        ).colorScheme.primaryContainer.withValues(alpha: 0.4),
                         Theme.of(
                           context,
-                        ).colorScheme.secondaryContainer.withOpacity(0.3),
+                        ).colorScheme.secondaryContainer.withValues(alpha: 0.3),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(12),
@@ -256,7 +260,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                         decoration: BoxDecoration(
                           color: Theme.of(
                             context,
-                          ).colorScheme.primary.withOpacity(0.2),
+                          ).colorScheme.primary.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Icon(
@@ -269,8 +273,8 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                       Text(
                         '累计阅读 ${(totalMinutes / 60).toStringAsFixed(1)} 小时',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
+                              fontWeight: FontWeight.w500,
+                            ),
                       ),
                     ],
                   ),
@@ -472,8 +476,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
       return Container();
     }
 
-    final maxY =
-        (_weeklyData
+    final maxY = (_weeklyData
                 .map((d) => d['duration'] as int)
                 .reduce((a, b) => a > b ? a : b) /
             60) +
@@ -486,12 +489,12 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(
                 context,
-              ).colorScheme.outline.withOpacity(0.2),
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -505,7 +508,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                     decoration: BoxDecoration(
                       color: Theme.of(
                         context,
-                      ).colorScheme.secondary.withOpacity(0.1),
+                      ).colorScheme.secondary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -518,8 +521,8 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                   Text(
                     '本周阅读趋势',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                 ],
               ),
@@ -583,7 +586,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                         return FlLine(
                           color: Theme.of(
                             context,
-                          ).colorScheme.outline.withOpacity(0.1),
+                          ).colorScheme.outline.withValues(alpha: 0.1),
                           strokeWidth: 1,
                         );
                       },
@@ -601,7 +604,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                               colors: [
                                 Theme.of(
                                   context,
-                                ).colorScheme.primary.withOpacity(0.8),
+                                ).colorScheme.primary.withValues(alpha: 0.8),
                                 Theme.of(context).colorScheme.primary,
                               ],
                             ),
@@ -632,12 +635,12 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(
                 context,
-              ).colorScheme.outline.withOpacity(0.2),
+              ).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -651,7 +654,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                     decoration: BoxDecoration(
                       color: Theme.of(
                         context,
-                      ).colorScheme.tertiary.withOpacity(0.1),
+                      ).colorScheme.tertiary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -664,8 +667,8 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                   Text(
                     '阅读成就',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                 ],
               ),
@@ -710,7 +713,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -718,7 +721,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.2),
+              color: color.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: color, size: 20),
@@ -737,10 +740,10 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                 Text(
                   description,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.6),
-                  ),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.6),
+                      ),
                 ),
               ],
             ),
@@ -748,9 +751,9 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
           Text(
             value,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
           ),
         ],
       ),
@@ -920,7 +923,7 @@ class _StatCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: Theme.of(
                 context,
-              ).colorScheme.surface.withOpacity(0.8),
+              ).colorScheme.surface.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(
                 ResponsiveHelper.getValue(
                   context,
@@ -932,7 +935,7 @@ class _StatCard extends StatelessWidget {
               border: Border.all(
                 color: Theme.of(
                   context,
-                ).colorScheme.outline.withOpacity(0.2),
+                ).colorScheme.outline.withValues(alpha: 0.2),
                 width: 1,
               ),
             ),
@@ -951,7 +954,7 @@ class _StatCard extends StatelessWidget {
                     ),
                   ),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(
                       ResponsiveHelper.getValue(
                         context,
@@ -989,11 +992,11 @@ class _StatCard extends StatelessWidget {
                       Text(
                         title,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.8),
-                          fontSize: 12,
-                        ),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.8),
+                              fontSize: 12,
+                            ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1015,7 +1018,9 @@ class _StatCard extends StatelessWidget {
                           children: [
                             Text(
                               value,
-                              style: Theme.of(context).textTheme.headlineSmall
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineSmall
                                   ?.copyWith(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 18,
@@ -1031,12 +1036,14 @@ class _StatCard extends StatelessWidget {
                             ),
                             Text(
                               unit,
-                              style: Theme.of(context).textTheme.bodySmall
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
                                   ?.copyWith(
                                     color: Theme.of(context)
                                         .colorScheme
                                         .onSurface
-                                        .withOpacity(0.6),
+                                        .withValues(alpha: 0.6),
                                     fontSize: 10,
                                   ),
                             ),

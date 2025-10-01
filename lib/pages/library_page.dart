@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -108,12 +108,12 @@ class _LibraryPageState extends State<LibraryPage> {
               decoration: BoxDecoration(
                 color: Theme.of(
                   context,
-                ).colorScheme.surface.withOpacity(0.8),
+                ).colorScheme.surface.withValues(alpha: 0.8),
                 border: Border(
                   bottom: BorderSide(
                     color: Theme.of(
                       context,
-                    ).colorScheme.outline.withOpacity(0.2),
+                    ).colorScheme.outline.withValues(alpha: 0.2),
                     width: 0.5,
                   ),
                 ),
@@ -131,14 +131,14 @@ class _LibraryPageState extends State<LibraryPage> {
             colors: [
               Theme.of(
                 context,
-              ).colorScheme.secondaryContainer.withOpacity(0.12),
-              Theme.of(context).colorScheme.surface.withOpacity(0.98),
+              ).colorScheme.secondaryContainer.withValues(alpha: 0.12),
+              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
               Theme.of(
                 context,
-              ).colorScheme.primaryContainer.withOpacity(0.08),
+              ).colorScheme.primaryContainer.withValues(alpha: 0.08),
               Theme.of(
                 context,
-              ).colorScheme.tertiaryContainer.withOpacity(0.10),
+              ).colorScheme.tertiaryContainer.withValues(alpha: 0.10),
             ],
           ),
         ),
@@ -156,7 +156,7 @@ class _LibraryPageState extends State<LibraryPage> {
                         color: Theme.of(context).colorScheme.primary,
                         backgroundColor: Theme.of(
                           context,
-                        ).colorScheme.surface.withOpacity(0.9),
+                        ).colorScheme.surface.withValues(alpha: 0.9),
                         child: _buildBooksGrid(),
                       ),
             // 顶部自定义 Positioned 已移除，沿用 AppBar 的 flexibleSpace
@@ -177,7 +177,7 @@ class _LibraryPageState extends State<LibraryPage> {
             BoxShadow(
               color: Theme.of(
                 context,
-              ).colorScheme.primary.withOpacity(0.3),
+              ).colorScheme.primary.withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4),
               spreadRadius: 0,
@@ -203,7 +203,7 @@ class _LibraryPageState extends State<LibraryPage> {
               },
               backgroundColor: Theme.of(
                 context,
-              ).colorScheme.primary.withOpacity(0.9),
+              ).colorScheme.primary.withValues(alpha: 0.9),
               foregroundColor: Colors.white,
               elevation: 0,
               heroTag: "add_book_fab", // 添加唯一标识避免冲突
@@ -232,12 +232,12 @@ class _LibraryPageState extends State<LibraryPage> {
               decoration: BoxDecoration(
                 color: Theme.of(
                   context,
-                ).colorScheme.surface.withOpacity(0.8),
+                ).colorScheme.surface.withValues(alpha: 0.8),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
                   color: Theme.of(
                     context,
-                  ).colorScheme.outline.withOpacity(0.2),
+                  ).colorScheme.outline.withValues(alpha: 0.2),
                   width: 1,
                 ),
               ),
@@ -249,7 +249,7 @@ class _LibraryPageState extends State<LibraryPage> {
                     decoration: BoxDecoration(
                       color: Theme.of(
                         context,
-                      ).colorScheme.primary.withOpacity(0.1),
+                      ).colorScheme.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Icon(
@@ -272,7 +272,7 @@ class _LibraryPageState extends State<LibraryPage> {
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacity(0.7),
+                          ).colorScheme.onSurface.withValues(alpha: 0.7),
                           height: 1.5,
                         ),
                   ),
@@ -348,14 +348,14 @@ class _LibraryPageState extends State<LibraryPage> {
           end: Alignment.bottomCenter,
           stops: const [0.0, 0.3, 0.7, 1.0],
           colors: [
-            Theme.of(context).colorScheme.surface.withOpacity(0.0),
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.0),
             Theme.of(
               context,
-            ).colorScheme.primaryContainer.withOpacity(0.03),
+            ).colorScheme.primaryContainer.withValues(alpha: 0.03),
             Theme.of(
               context,
-            ).colorScheme.secondaryContainer.withOpacity(0.03),
-            Theme.of(context).colorScheme.surface.withOpacity(0.0),
+            ).colorScheme.secondaryContainer.withValues(alpha: 0.03),
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.0),
           ],
         ),
       ),
@@ -410,7 +410,7 @@ class _LibraryPageState extends State<LibraryPage> {
             decoration: BoxDecoration(
               color: Theme.of(
                 context,
-              ).colorScheme.surface.withOpacity(0.9),
+              ).colorScheme.surface.withValues(alpha: 0.9),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(24),
               ),
@@ -425,7 +425,7 @@ class _LibraryPageState extends State<LibraryPage> {
                       width: 44,
                       height: 5,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         borderRadius: BorderRadius.circular(2.5),
                       ),
                     ),
@@ -440,7 +440,7 @@ class _LibraryPageState extends State<LibraryPage> {
                   decoration: BoxDecoration(
                     color: Theme.of(
                       context,
-                    ).colorScheme.primaryContainer.withOpacity(0.1),
+                    ).colorScheme.primaryContainer.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: ListTile(
@@ -474,7 +474,7 @@ class _LibraryPageState extends State<LibraryPage> {
                   decoration: BoxDecoration(
                     color: Theme.of(
                       context,
-                    ).colorScheme.errorContainer.withOpacity(0.1),
+                    ).colorScheme.errorContainer.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: ListTile(
@@ -516,7 +516,7 @@ class _LibraryPageState extends State<LibraryPage> {
             child: AlertDialog(
               backgroundColor: Theme.of(
                 context,
-              ).colorScheme.surface.withOpacity(0.95),
+              ).colorScheme.surface.withValues(alpha: 0.95),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
@@ -600,7 +600,7 @@ class _BookCoverItem extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.15),
+                    color: Colors.black.withValues(alpha: 0.15),
                     blurRadius: 8,
                     offset: const Offset(0, 3),
                     spreadRadius: 0,
@@ -623,7 +623,7 @@ class _BookCoverItem extends StatelessWidget {
                       child: Container(
                         height: 4,
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           borderRadius: const BorderRadius.only(
                             bottomLeft: Radius.circular(12),
                             bottomRight: Radius.circular(12),
@@ -659,7 +659,7 @@ class _BookCoverItem extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
+                              color: Colors.black.withValues(alpha: 0.2),
                               blurRadius: 4,
                               offset: const Offset(0, 2),
                             ),
@@ -712,7 +712,7 @@ class _BookCoverItem extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(
                               context,
-                            ).colorScheme.onSurface.withOpacity(0.6),
+                            ).colorScheme.onSurface.withValues(alpha: 0.6),
                             fontSize: 11,
                           ),
                     ),
@@ -758,8 +758,8 @@ class _BookCoverItem extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Theme.of(context).colorScheme.primary.withOpacity(0.8),
-            Theme.of(context).colorScheme.secondary.withOpacity(0.6),
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
+            Theme.of(context).colorScheme.secondary.withValues(alpha: 0.6),
           ],
         ),
       ),

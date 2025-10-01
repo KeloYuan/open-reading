@@ -1,4 +1,4 @@
-// 毛玻璃效果配置管理器
+﻿// 毛玻璃效果配置管理器
 // 集中管理所有界面的毛玻璃效果和透明度设置
 
 import 'package:flutter/material.dart';
@@ -176,10 +176,10 @@ class GlassEffectHelper {
         decoration: BoxDecoration(
           color: Theme.of(
             context,
-          ).colorScheme.surface.withOpacity(scaledOpacity),
+          ).colorScheme.surface.withValues(alpha: scaledOpacity),
           border: Border(
             bottom: BorderSide(
-              color: Theme.of(context).colorScheme.outline.withOpacity(0.16),
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.16),
               width: 0.5,
             ),
           ),
@@ -194,7 +194,7 @@ class GlassEffectHelper {
         decoration: BoxDecoration(
           color: Theme.of(
             context,
-          ).colorScheme.surface.withOpacity(scaledOpacity),
+          ).colorScheme.surface.withValues(alpha: scaledOpacity),
         ),
         child: child,
       ),
@@ -217,15 +217,15 @@ class GlassEffectHelper {
       // 使用更清晰的实体卡片样式
       return Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withOpacity(0.98),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
           borderRadius: borderRadius,
           border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.16),
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.16),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Theme.of(context).colorScheme.shadow.withOpacity(0.12),
+              color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.12),
               blurRadius: 18,
               offset: const Offset(0, 8),
             ),
@@ -240,10 +240,10 @@ class GlassEffectHelper {
         decoration: BoxDecoration(
           color: Theme.of(
             context,
-          ).colorScheme.surface.withOpacity(GlassEffectConfig.cardOpacity),
+          ).colorScheme.surface.withValues(alpha: GlassEffectConfig.cardOpacity),
           borderRadius: borderRadius,
           border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
             width: 1,
           ),
         ),
@@ -291,10 +291,10 @@ class GlassEffectHelper {
             colors: [
               Theme.of(
                 context,
-              ).colorScheme.surface.withOpacity(config['opacity']! + 0.1),
+              ).colorScheme.surface.withValues(alpha: config['opacity']! + 0.1),
               Theme.of(
                 context,
-              ).colorScheme.surface.withOpacity(config['opacity']!),
+              ).colorScheme.surface.withValues(alpha: config['opacity']!),
               Colors.transparent,
             ],
             stops: const [0.0, 0.7, 1.0],
@@ -318,7 +318,7 @@ BackdropFilter(
     sigmaY: GlassEffectConfig.appBarBlur,
   ),
   child: Container(
-    color: Theme.of(context).colorScheme.surface.withOpacity(
+    color: Theme.of(context).colorScheme.surface.withValues(alpha: 
       GlassEffectConfig.appBarOpacity
     ),
   ),
@@ -332,7 +332,7 @@ BackdropFilter(
     sigmaY: config['blur']!,
   ),
   child: Container(
-    color: Theme.of(context).colorScheme.surface.withOpacity(
+    color: Theme.of(context).colorScheme.surface.withValues(alpha: 
       config['opacity']!
     ),
   ),

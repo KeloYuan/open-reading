@@ -1,4 +1,4 @@
-// 渐进模糊效果工具类
+﻿// 渐进模糊效果工具类
 // Progressive Blur Effects Helper
 
 import 'dart:ui';
@@ -61,8 +61,8 @@ class ProgressiveBlur extends StatelessWidget {
                 : [
                     Colors.transparent,
                     // 降低默认覆盖层不透明度，减少内容发灰
-                    Theme.of(context).colorScheme.surface.withOpacity(0.06),
-                    Theme.of(context).colorScheme.surface.withOpacity(0.12),
+                    Theme.of(context).colorScheme.surface.withValues(alpha: 0.06),
+                    Theme.of(context).colorScheme.surface.withValues(alpha: 0.12),
                   ],
             stops: stops ?? [0.0, 0.55, 1.0],
           ),
@@ -98,8 +98,8 @@ class ProgressiveBlurPresets {
       gradientColors: [
         // 以透明开始，减少整体发灰，解决顶栏下方发暗问题
         Colors.transparent,
-        Theme.of(context).colorScheme.surface.withOpacity(0.6),
-        Theme.of(context).colorScheme.surface.withOpacity(0.4),
+        Theme.of(context).colorScheme.surface.withValues(alpha: 0.6),
+        Theme.of(context).colorScheme.surface.withValues(alpha: 0.4),
       ],
       stops: const [0.0, 0.6, 1.0],
       borderRadius: borderRadius,
@@ -136,8 +136,8 @@ class ProgressiveBlurPresets {
                       colors: [
                         Colors.transparent,
                         // 明显降低覆盖层不透明度
-                        Theme.of(context).colorScheme.surface.withOpacity(0.04),
-                        Theme.of(context).colorScheme.surface.withOpacity(0.08),
+                        Theme.of(context).colorScheme.surface.withValues(alpha: 0.04),
+                        Theme.of(context).colorScheme.surface.withValues(alpha: 0.08),
                       ],
                       stops: const [0.0, 0.75, 1.0],
                     ),
@@ -177,10 +177,10 @@ class ProgressiveBlurPresets {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Theme.of(context).colorScheme.surface.withOpacity(0.85),
-                      Theme.of(context).colorScheme.surface.withOpacity(0.65),
-                      Theme.of(context).colorScheme.surface.withOpacity(0.7),
-                      Theme.of(context).colorScheme.surface.withOpacity(0.9),
+                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
+                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.65),
+                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
+                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
                     ],
                     stops: const [0.0, 0.3, 0.7, 1.0],
                   ),
@@ -206,8 +206,8 @@ class ProgressiveBlurPresets {
       beginAlignment: Alignment.bottomCenter,
       endAlignment: Alignment.topCenter,
       gradientColors: [
-        Theme.of(context).colorScheme.surface.withOpacity(0.75),
-        Theme.of(context).colorScheme.surface.withOpacity(0.5),
+        Theme.of(context).colorScheme.surface.withValues(alpha: 0.75),
+        Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
         Colors.transparent,
       ],
       stops: const [0.0, 0.6, 1.0],

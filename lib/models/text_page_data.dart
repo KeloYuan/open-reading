@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/color_extensions.dart';
 
 /// 文本页面数据结构
 /// 高级文本页面数据，用于精确文本分页和渲染
@@ -422,13 +423,13 @@ class TextColumnData {
   void draw(Canvas canvas, Paint paint, TextStyle style) {
     // 绘制高亮背景
     if (isHighlighted && highlightColor != null) {
-      paint.color = highlightColor!.withOpacity(0.3);
+      paint.color = highlightColor!.withValues(alpha: 0.3);
       canvas.drawRect(bounds, paint);
     }
 
     // 绘制选择背景
     if (isSelected) {
-      paint.color = Colors.blue.withOpacity(0.3);
+      paint.color = Colors.blue.withValues(alpha: 0.3);
       canvas.drawRect(bounds, paint);
     }
 
@@ -463,7 +464,7 @@ class TextColumnData {
       },
       'isSelected': isSelected,
       'isHighlighted': isHighlighted,
-      'highlightColor': highlightColor?.value,
+      'highlightColor': highlightColor?.toARGB32(),
       'baseline': baseline,
       'fontMetrics': fontMetrics.toMap(),
     };

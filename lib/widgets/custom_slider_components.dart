@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 // 自定义滑块拇指形状
 class CustomSliderThumbShape extends SliderComponentShape {
@@ -34,7 +34,7 @@ class CustomSliderThumbShape extends SliderComponentShape {
 
     // 外圈阴影
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.2)
+      ..color = Colors.black.withValues(alpha: 0.2)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
     canvas.drawCircle(center + const Offset(0, 2), enabledThumbRadius, shadowPaint);
 
@@ -46,13 +46,13 @@ class CustomSliderThumbShape extends SliderComponentShape {
 
     // 内圈高光
     final highlightPaint = Paint()
-      ..color = Colors.white.withOpacity(0.4)
+      ..color = Colors.white.withValues(alpha: 0.4)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(center, enabledThumbRadius * 0.5, highlightPaint);
 
     // 边框
     final borderPaint = Paint()
-      ..color = Colors.white.withOpacity(0.8)
+      ..color = Colors.white.withValues(alpha: 0.8)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
     canvas.drawCircle(center, enabledThumbRadius, borderPaint);
@@ -115,7 +115,7 @@ class CustomSliderTrackShape extends SliderTrackShape with BaseSliderTrackShape 
     
     // 非活动轨道阴影
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.1)
+      ..color = Colors.black.withValues(alpha: 0.1)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
     context.canvas.drawRRect(
       inactiveTrackRRect.shift(const Offset(0, 1)), 
@@ -131,9 +131,9 @@ class CustomSliderTrackShape extends SliderTrackShape with BaseSliderTrackShape 
       // 创建渐变
       final gradient = LinearGradient(
         colors: [
-          activeTrackColor.withOpacity(0.8),
+          activeTrackColor.withValues(alpha: 0.8),
           activeTrackColor,
-          activeTrackColor.withOpacity(0.9),
+          activeTrackColor.withValues(alpha: 0.9),
         ],
         stops: const [0.0, 0.5, 1.0],
       );
@@ -146,7 +146,7 @@ class CustomSliderTrackShape extends SliderTrackShape with BaseSliderTrackShape 
       
       // 活动轨道高光
       final highlightPaint = Paint()
-        ..color = Colors.white.withOpacity(0.2)
+        ..color = Colors.white.withValues(alpha: 0.2)
         ..style = PaintingStyle.fill;
       final highlightRect = Rect.fromLTRB(
         activeTrackRect.left,

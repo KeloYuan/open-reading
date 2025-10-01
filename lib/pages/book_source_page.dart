@@ -129,8 +129,8 @@ class _BookSourcePageState extends State<BookSourcePage>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              Theme.of(context).colorScheme.secondary.withOpacity(0.05),
+              Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.05),
             ],
           ),
         ),
@@ -177,7 +177,7 @@ class _BookSourcePageState extends State<BookSourcePage>
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(
                             context,
-                          ).colorScheme.onSurface.withOpacity(0.6),
+                          ).colorScheme.onSurface.withValues(alpha: 0.6),
                         ),
                   ),
               ],
@@ -197,10 +197,10 @@ class _BookSourcePageState extends State<BookSourcePage>
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
         ),
       ),
       child: TextField(
@@ -276,10 +276,10 @@ class _BookSourcePageState extends State<BookSourcePage>
   ) {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
         ),
       ),
       child: DropdownButtonHideUnderline(
@@ -329,7 +329,7 @@ class _BookSourcePageState extends State<BookSourcePage>
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(
                       context,
-                    ).colorScheme.onSurface.withOpacity(0.6),
+                    ).colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
             ),
           ],
@@ -356,12 +356,12 @@ class _BookSourcePageState extends State<BookSourcePage>
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: surface.withOpacity(0.9),
+        color: surface.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.outline.withOpacity(0.15)),
+        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.15)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -397,7 +397,7 @@ class _BookSourcePageState extends State<BookSourcePage>
                                     fontWeight: FontWeight.w600,
                                     color: source.enabled
                                         ? onSurface
-                                        : onSurface.withOpacity(0.45),
+                                        : onSurface.withValues(alpha: 0.45),
                                   ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -446,7 +446,7 @@ class _BookSourcePageState extends State<BookSourcePage>
                 Text(
                   source.bookSourceComment,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: onSurface.withOpacity(0.65),
+                        color: onSurface.withValues(alpha: 0.65),
                         height: 1.4,
                       ),
                   maxLines: 2,
@@ -460,7 +460,7 @@ class _BookSourcePageState extends State<BookSourcePage>
                   Text(
                     source.bookSourceUrl,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: onSurface.withOpacity(0.45),
+                          color: onSurface.withValues(alpha: 0.45),
                         ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -492,7 +492,7 @@ class _BookSourcePageState extends State<BookSourcePage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -516,7 +516,7 @@ class _BookSourcePageState extends State<BookSourcePage>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(

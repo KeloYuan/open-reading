@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../services/reading_theme_manager.dart';
 import '../services/page_animation_manager.dart';
 
@@ -112,7 +112,7 @@ class _EnhancedReadingSettingsDialogState extends State<EnhancedReadingSettingsD
           width: 36,
           height: 4,
           decoration: BoxDecoration(
-            color: _currentTheme.controlBarTextColor.withOpacity(0.3),
+            color: _currentTheme.controlBarTextColor.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -156,13 +156,13 @@ class _EnhancedReadingSettingsDialogState extends State<EnhancedReadingSettingsD
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: _currentTheme.backgroundColor.withOpacity(0.3),
+        color: _currentTheme.backgroundColor.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(25),
       ),
       child: TabBar(
         controller: _tabController,
         labelColor: _currentTheme.controlBarTextColor,
-        unselectedLabelColor: _currentTheme.controlBarTextColor.withOpacity(0.6),
+        unselectedLabelColor: _currentTheme.controlBarTextColor.withValues(alpha: 0.6),
         indicator: BoxDecoration(
           color: _currentTheme.sliderActiveColor,
           borderRadius: BorderRadius.circular(25),
@@ -377,8 +377,8 @@ class _EnhancedReadingSettingsDialogState extends State<EnhancedReadingSettingsD
                   margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? _currentTheme.sliderActiveColor.withOpacity(0.2)
-                        : _currentTheme.backgroundColor.withOpacity(0.3),
+                        ? _currentTheme.sliderActiveColor.withValues(alpha: 0.2)
+                        : _currentTheme.backgroundColor.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isSelected
@@ -407,7 +407,7 @@ class _EnhancedReadingSettingsDialogState extends State<EnhancedReadingSettingsD
                         Text(
                           animationType.description,
                           style: TextStyle(
-                            color: _currentTheme.controlBarTextColor.withOpacity(0.7),
+                            color: _currentTheme.controlBarTextColor.withValues(alpha: 0.7),
                             fontSize: 12,
                           ),
                         ),
@@ -504,10 +504,10 @@ class _EnhancedReadingSettingsDialogState extends State<EnhancedReadingSettingsD
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: _currentTheme.backgroundColor.withOpacity(0.5),
+              color: _currentTheme.backgroundColor.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: _currentTheme.sliderActiveColor.withOpacity(0.3),
+                color: _currentTheme.sliderActiveColor.withValues(alpha: 0.3),
               ),
             ),
             child: Row(
@@ -522,7 +522,7 @@ class _EnhancedReadingSettingsDialogState extends State<EnhancedReadingSettingsD
                   child: Text(
                     '设置会自动保存，无需手动确认',
                     style: TextStyle(
-                      color: _currentTheme.controlBarTextColor.withOpacity(0.8),
+                      color: _currentTheme.controlBarTextColor.withValues(alpha: 0.8),
                       fontSize: 12,
                     ),
                   ),

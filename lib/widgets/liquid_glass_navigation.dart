@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'dart:ui';
 
 /// 液态玻璃导航栏组件
@@ -224,21 +224,21 @@ class _LiquidGlassNavigationState extends State<LiquidGlassNavigation>
             child: Container(
               height: widget.height,
               decoration: BoxDecoration(
-                color: widget.backgroundColor.withOpacity(0.85),
+                color: widget.backgroundColor.withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(widget.height / 2),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.15),
+                  color: Colors.white.withValues(alpha: 0.15),
                   width: 0.5,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
+                    color: Colors.black.withValues(alpha: 0.08),
                     blurRadius: 24,
                     offset: const Offset(0, 6),
                     spreadRadius: 0,
                   ),
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
+                    color: Colors.black.withValues(alpha: 0.04),
                     blurRadius: 48,
                     offset: const Offset(0, 12),
                     spreadRadius: 0,
@@ -265,7 +265,7 @@ class _LiquidGlassNavigationState extends State<LiquidGlassNavigation>
                             width: _itemWidth,
                             height: _itemWidth,
                             decoration: BoxDecoration(
-                              color: widget.indicatorColor.withOpacity(0.15),
+                              color: widget.indicatorColor.withValues(alpha: 0.15),
                               borderRadius:
                                   BorderRadius.circular(_itemWidth / 2),
                             ),
@@ -316,7 +316,7 @@ class _LiquidGlassNavigationState extends State<LiquidGlassNavigation>
                                               : item.icon,
                                           color: isSelected
                                               ? widget.indicatorColor
-                                              : Colors.black.withOpacity(0.6),
+                                              : Colors.black.withValues(alpha: 0.6),
                                           size: 24,
                                         ),
                                       ),
@@ -331,7 +331,7 @@ class _LiquidGlassNavigationState extends State<LiquidGlassNavigation>
                                               : FontWeight.w500,
                                           color: isSelected
                                               ? widget.indicatorColor
-                                              : Colors.black.withOpacity(0.6),
+                                              : Colors.black.withValues(alpha: 0.6),
                                         ),
                                         child: Text(
                                           item.label,
@@ -380,8 +380,8 @@ class LiquidGlassPainter extends CustomPainter {
     final outerPaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          color.withOpacity(0.3),
-          color.withOpacity(0.1),
+          color.withValues(alpha: 0.3),
+          color.withValues(alpha: 0.1),
           Colors.transparent,
         ],
         stops: const [0.0, 0.7, 1.0],
@@ -392,7 +392,7 @@ class LiquidGlassPainter extends CustomPainter {
     // 内层折射效果（拖拽时显示）
     if (isDragging || refractionIntensity > 0) {
       final refractionPaint = Paint()
-        ..color = Colors.white.withOpacity(0.4 * refractionIntensity)
+        ..color = Colors.white.withValues(alpha: 0.4 * refractionIntensity)
         ..maskFilter =
             MaskFilter.blur(BlurStyle.normal, 2 * refractionIntensity);
 
@@ -408,7 +408,7 @@ class LiquidGlassPainter extends CustomPainter {
       // 绘制液态波纹效果
       for (int i = 0; i < 3; i++) {
         final ripplePaint = Paint()
-          ..color = color.withOpacity(0.1 * refractionIntensity * (1 - i * 0.3))
+          ..color = color.withValues(alpha: 0.1 * refractionIntensity * (1 - i * 0.3))
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2;
 

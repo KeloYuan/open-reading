@@ -5,6 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   battery_plus
   connectivity_plus
+  flutter_inappwebview_windows
   flutter_tts
   pdfx
   permission_handler_windows

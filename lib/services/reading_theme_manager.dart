@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 阅读主题管理器
@@ -41,7 +41,7 @@ class ReadingThemeManager {
         activeTrackColor: readingTheme.sliderActiveColor,
         inactiveTrackColor: readingTheme.sliderInactiveColor,
         thumbColor: readingTheme.sliderActiveColor,
-        overlayColor: readingTheme.sliderActiveColor.withOpacity(0.2),
+        overlayColor: readingTheme.sliderActiveColor.withValues(alpha: 0.2),
       ),
     );
   }
@@ -53,7 +53,7 @@ class ReadingThemeManager {
       borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       boxShadow: [
         BoxShadow(
-          color: theme.textColor.withOpacity(0.1),
+          color: theme.textColor.withValues(alpha: 0.1),
           blurRadius: 10,
           offset: const Offset(0, -2),
         ),
@@ -68,7 +68,7 @@ class ReadingThemeManager {
       borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
       boxShadow: [
         BoxShadow(
-          color: theme.textColor.withOpacity(0.1),
+          color: theme.textColor.withValues(alpha: 0.1),
           blurRadius: 10,
           offset: const Offset(0, 2),
         ),
@@ -86,7 +86,7 @@ class ReadingThemeManager {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ).copyWith(
       overlayColor: WidgetStateProperty.all(
-        theme.sliderActiveColor.withOpacity(0.1),
+        theme.sliderActiveColor.withValues(alpha: 0.1),
       ),
     );
   }
@@ -106,7 +106,7 @@ class ReadingThemeManager {
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
         decoration: isActive
             ? BoxDecoration(
-                color: theme.sliderActiveColor.withOpacity(0.2),
+                color: theme.sliderActiveColor.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               )
             : null,
@@ -148,7 +148,7 @@ class ReadingThemeManager {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: theme.backgroundColor.withOpacity(0.5),
+        color: theme.backgroundColor.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
       ),
       child: ListTile(
@@ -164,7 +164,7 @@ class ReadingThemeManager {
             ? Text(
                 subtitle,
                 style: TextStyle(
-                  color: theme.controlBarTextColor.withOpacity(0.7),
+                  color: theme.controlBarTextColor.withValues(alpha: 0.7),
                   fontSize: 14,
                 ),
               )
@@ -191,7 +191,7 @@ class ReadingThemeManager {
         activeTrackColor: theme.sliderActiveColor,
         inactiveTrackColor: theme.sliderInactiveColor,
         thumbColor: theme.sliderActiveColor,
-        overlayColor: theme.sliderActiveColor.withOpacity(0.2),
+        overlayColor: theme.sliderActiveColor.withValues(alpha: 0.2),
         valueIndicatorColor: theme.sliderActiveColor,
         valueIndicatorTextStyle: TextStyle(
           color: theme.backgroundColor,
@@ -230,9 +230,9 @@ class ReadingThemeManager {
       }),
       trackColor: WidgetStateProperty.resolveWith<Color?>((states) {
         if (states.contains(WidgetState.selected)) {
-          return theme.sliderActiveColor.withOpacity(0.3);
+          return theme.sliderActiveColor.withValues(alpha: 0.3);
         }
-        return theme.sliderInactiveColor.withOpacity(0.3);
+        return theme.sliderInactiveColor.withValues(alpha: 0.3);
       }),
     );
   }
@@ -250,7 +250,7 @@ class ReadingThemeManager {
       suffixIcon: suffixIcon,
       labelStyle: TextStyle(color: theme.controlBarTextColor),
       hintStyle: TextStyle(
-        color: theme.controlBarTextColor.withOpacity(0.5),
+        color: theme.controlBarTextColor.withValues(alpha: 0.5),
       ),
       enabledBorder: OutlineInputBorder(
         borderSide: BorderSide(color: theme.sliderInactiveColor),
@@ -261,7 +261,7 @@ class ReadingThemeManager {
         borderRadius: BorderRadius.circular(8),
       ),
       filled: true,
-      fillColor: theme.backgroundColor.withOpacity(0.5),
+      fillColor: theme.backgroundColor.withValues(alpha: 0.5),
     );
   }
 
@@ -343,7 +343,7 @@ class ReadingThemeManager {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: theme.controlBarTextColor.withOpacity(
+                            color: theme.controlBarTextColor.withValues(alpha: 
                               0.3,
                             ),
                             borderRadius: BorderRadius.circular(2),
@@ -364,19 +364,19 @@ class ReadingThemeManager {
                         Container(
                           width: double.infinity,
                           height: 3,
-                          color: theme.textColor.withOpacity(0.8),
+                          color: theme.textColor.withValues(alpha: 0.8),
                           margin: const EdgeInsets.only(bottom: 2),
                         ),
                         Container(
                           width: 60,
                           height: 3,
-                          color: theme.textColor.withOpacity(0.6),
+                          color: theme.textColor.withValues(alpha: 0.6),
                           margin: const EdgeInsets.only(bottom: 2),
                         ),
                         Container(
                           width: 80,
                           height: 3,
-                          color: theme.textColor.withOpacity(0.4),
+                          color: theme.textColor.withValues(alpha: 0.4),
                         ),
                       ],
                     ),

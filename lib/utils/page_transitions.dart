@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 /// 自定义页面过渡动画
 /// 提供流畅的页面进入和退出动画效果
@@ -165,7 +165,7 @@ class CustomPageTransitions {
             // 背景阴影层
             if (secondaryAnimation.value > 0)
               Container(
-                color: Colors.black.withOpacity(
+                color: Colors.black.withValues(alpha: 
                   shadowAnimation.value * 0.3,
                 ),
               ),

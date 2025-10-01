@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart'; 
+﻿import 'package:flutter/material.dart'; 
 import 'package:flutter/services.dart';
 import '../models/book_note.dart';
 import '../services/book_note_dao.dart';
@@ -239,8 +239,8 @@ class _EnhancedTextSelectionToolbarState
           duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
           backgroundColor:
-              widget.backgroundColor?.withOpacity(0.9) ??
-              Theme.of(context).primaryColor.withOpacity(0.9),
+              widget.backgroundColor?.withValues(alpha: 0.9) ??
+              Theme.of(context).primaryColor.withValues(alpha: 0.9),
         ),
       );
     }
@@ -258,8 +258,8 @@ class _EnhancedTextSelectionToolbarState
     final backgroundColor =
         widget.backgroundColor ??
         (theme.brightness == Brightness.dark
-            ? Colors.grey[900]!.withOpacity(0.95)
-            : Colors.white.withOpacity(0.95));
+            ? Colors.grey[900]!.withValues(alpha: 0.95)
+            : Colors.white.withValues(alpha: 0.95));
     final iconColor = widget.iconColor ?? theme.colorScheme.primary;
     final textColor = widget.textColor ?? theme.colorScheme.onSurface;
 
@@ -323,10 +323,10 @@ class _EnhancedTextSelectionToolbarState
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: iconColor.withOpacity(0.2), width: 1),
+          border: Border.all(color: iconColor.withValues(alpha: 0.2), width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.15),
+              color: Colors.black.withValues(alpha: 0.15),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -391,7 +391,7 @@ class _EnhancedTextSelectionToolbarState
               // 关闭
               _buildIconButton(
                 icon: Icons.close,
-                color: iconColor.withOpacity(0.7),
+                color: iconColor.withValues(alpha: 0.7),
                 onTap: _close,
               ),
             ],
@@ -416,7 +416,7 @@ class _EnhancedTextSelectionToolbarState
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: iconColor.withOpacity(0.2), width: 1),
+          border: Border.all(color: iconColor.withValues(alpha: 0.2), width: 1),
         ),
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
@@ -432,7 +432,7 @@ class _EnhancedTextSelectionToolbarState
                 width: 1,
                 height: 32,
                 margin: const EdgeInsets.symmetric(horizontal: 8),
-                color: iconColor.withOpacity(0.2),
+                color: iconColor.withValues(alpha: 0.2),
               ),
 
               // 颜色选择
@@ -459,7 +459,7 @@ class _EnhancedTextSelectionToolbarState
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: iconColor.withOpacity(0.2), width: 1),
+          border: Border.all(color: iconColor.withValues(alpha: 0.2), width: 1),
         ),
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -469,7 +469,7 @@ class _EnhancedTextSelectionToolbarState
               decoration: InputDecoration(
                 border: InputBorder.none,
                 hintText: '添加笔记...',
-                hintStyle: TextStyle(color: textColor.withOpacity(0.6)),
+                hintStyle: TextStyle(color: textColor.withValues(alpha: 0.6)),
               ),
               style: TextStyle(color: textColor),
               maxLines: 5,
@@ -504,7 +504,7 @@ class _EnhancedTextSelectionToolbarState
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: iconColor.withOpacity(0.2), width: 1),
+          border: Border.all(color: iconColor.withValues(alpha: 0.2), width: 1),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -521,7 +521,7 @@ class _EnhancedTextSelectionToolbarState
             Text(
               '翻译功能需要集成翻译服务',
               style: TextStyle(
-                color: textColor.withOpacity(0.8),
+                color: textColor.withValues(alpha: 0.8),
                 fontSize: 13,
               ),
             ),

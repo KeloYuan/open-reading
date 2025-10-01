@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -89,7 +89,7 @@ class _ShareDialogState extends State<ShareDialog>
     return Material(
       color: Colors.transparent,
       child: Container(
-        color: Colors.black.withOpacity(0.4),
+        color: Colors.black.withValues(alpha: 0.4),
         child: Center(
           child: ScaleTransition(
             scale: _scaleAnimation,
@@ -102,13 +102,13 @@ class _ShareDialogState extends State<ShareDialog>
                   borderRadius: BorderRadius.circular(28),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(isDarkMode ? 0.4 : 0.15),
+                      color: Colors.black.withValues(alpha: isDarkMode ? 0.4 : 0.15),
                       blurRadius: 40,
                       offset: const Offset(0, 20),
                       spreadRadius: 0,
                     ),
                     BoxShadow(
-                      color: Colors.black.withOpacity(isDarkMode ? 0.2 : 0.05),
+                      color: Colors.black.withValues(alpha: isDarkMode ? 0.2 : 0.05),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                       spreadRadius: 0,
@@ -122,12 +122,12 @@ class _ShareDialogState extends State<ShareDialog>
                     child: Container(
                       decoration: BoxDecoration(
                         color: isDarkMode
-                            ? Colors.grey[900]!.withOpacity(0.85)
-                            : Colors.white.withOpacity(0.9),
+                            ? Colors.grey[900]!.withValues(alpha: 0.85)
+                            : Colors.white.withValues(alpha: 0.9),
                         border: Border.all(
                           color: isDarkMode
-                              ? Colors.white.withOpacity(0.1)
-                              : Colors.black.withOpacity(0.08),
+                              ? Colors.white.withValues(alpha: 0.1)
+                              : Colors.black.withValues(alpha: 0.08),
                           width: 0.5,
                         ),
                         borderRadius: BorderRadius.circular(28),
@@ -161,7 +161,7 @@ class _ShareDialogState extends State<ShareDialog>
             width: 36,
             height: 4,
             decoration: BoxDecoration(
-              color: getTextColor(context).withOpacity(0.3),
+              color: getTextColor(context).withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -175,7 +175,7 @@ class _ShareDialogState extends State<ShareDialog>
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      getAccentColor(context).withOpacity(0.8),
+                      getAccentColor(context).withValues(alpha: 0.8),
                       getAccentColor(context),
                     ],
                     begin: Alignment.topLeft,
@@ -184,7 +184,7 @@ class _ShareDialogState extends State<ShareDialog>
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: getAccentColor(context).withOpacity(0.3),
+                      color: getAccentColor(context).withValues(alpha: 0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
@@ -216,7 +216,7 @@ class _ShareDialogState extends State<ShareDialog>
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w500,
-                        color: getTextColor(context).withOpacity(0.7),
+                        color: getTextColor(context).withValues(alpha: 0.7),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -227,7 +227,7 @@ class _ShareDialogState extends State<ShareDialog>
                         widget.author!,
                         style: TextStyle(
                           fontSize: 13,
-                          color: getTextColor(context).withOpacity(0.5),
+                          color: getTextColor(context).withValues(alpha: 0.5),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -263,7 +263,7 @@ class _ShareDialogState extends State<ShareDialog>
                     gradient: LinearGradient(
                       colors: [
                         Colors.transparent,
-                        getTextColor(context).withOpacity(0.2),
+                        getTextColor(context).withValues(alpha: 0.2),
                         Colors.transparent,
                       ],
                     ),
@@ -302,23 +302,23 @@ class _ShareDialogState extends State<ShareDialog>
               ? () => _handleShare(context, option.type, shareService)
               : null,
           borderRadius: BorderRadius.circular(20),
-          splashColor: getAccentColor(context).withOpacity(0.1),
-          highlightColor: getAccentColor(context).withOpacity(0.05),
+          splashColor: getAccentColor(context).withValues(alpha: 0.1),
+          highlightColor: getAccentColor(context).withValues(alpha: 0.05),
           child: Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: isEnabled
                   ? (isDarkMode
-                      ? Colors.white.withOpacity(0.08)
-                      : Colors.black.withOpacity(0.04))
-                  : getTextColor(context).withOpacity(0.02),
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.04))
+                  : getTextColor(context).withValues(alpha: 0.02),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: isEnabled
                     ? (isDarkMode
-                        ? Colors.white.withOpacity(0.12)
-                        : Colors.black.withOpacity(0.08))
-                    : getTextColor(context).withOpacity(0.05),
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : Colors.black.withValues(alpha: 0.08))
+                    : getTextColor(context).withValues(alpha: 0.05),
                 width: 0.5,
               ),
             ),
@@ -331,21 +331,21 @@ class _ShareDialogState extends State<ShareDialog>
                     gradient: isEnabled
                         ? LinearGradient(
                             colors: [
-                              getAccentColor(context).withOpacity(0.1),
-                              getAccentColor(context).withOpacity(0.15),
+                              getAccentColor(context).withValues(alpha: 0.1),
+                              getAccentColor(context).withValues(alpha: 0.15),
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           )
                         : null,
                     color: !isEnabled
-                        ? getTextColor(context).withOpacity(0.05)
+                        ? getTextColor(context).withValues(alpha: 0.05)
                         : null,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: isEnabled
-                          ? getAccentColor(context).withOpacity(0.2)
-                          : getTextColor(context).withOpacity(0.1),
+                          ? getAccentColor(context).withValues(alpha: 0.2)
+                          : getTextColor(context).withValues(alpha: 0.1),
                       width: 0.5,
                     ),
                   ),
@@ -356,7 +356,7 @@ class _ShareDialogState extends State<ShareDialog>
                         fontSize: 22,
                         color: isEnabled
                             ? getAccentColor(context)
-                            : getTextColor(context).withOpacity(0.3),
+                            : getTextColor(context).withValues(alpha: 0.3),
                       ),
                     ),
                   ),
@@ -373,7 +373,7 @@ class _ShareDialogState extends State<ShareDialog>
                           fontWeight: FontWeight.w600,
                           color: isEnabled
                               ? getTextColor(context)
-                              : getTextColor(context).withOpacity(0.3),
+                              : getTextColor(context).withValues(alpha: 0.3),
                           letterSpacing: 0.2,
                         ),
                       ),
@@ -384,8 +384,8 @@ class _ShareDialogState extends State<ShareDialog>
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
                           color: isEnabled
-                              ? getTextColor(context).withOpacity(0.65)
-                              : getTextColor(context).withOpacity(0.3),
+                              ? getTextColor(context).withValues(alpha: 0.65)
+                              : getTextColor(context).withValues(alpha: 0.3),
                           height: 1.3,
                         ),
                       ),
@@ -397,7 +397,7 @@ class _ShareDialogState extends State<ShareDialog>
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: getAccentColor(context).withOpacity(0.1),
+                      color: getAccentColor(context).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
@@ -425,7 +425,7 @@ class _ShareDialogState extends State<ShareDialog>
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: getTextColor(context).withOpacity(0.2),
+                color: getTextColor(context).withValues(alpha: 0.2),
                 width: 0.5,
               ),
             ),
@@ -434,7 +434,7 @@ class _ShareDialogState extends State<ShareDialog>
               child: InkWell(
                 onTap: _close,
                 borderRadius: BorderRadius.circular(16),
-                splashColor: getTextColor(context).withOpacity(0.1),
+                splashColor: getTextColor(context).withValues(alpha: 0.1),
                 child: Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
@@ -443,7 +443,7 @@ class _ShareDialogState extends State<ShareDialog>
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
-                      color: getTextColor(context).withOpacity(0.7),
+                      color: getTextColor(context).withValues(alpha: 0.7),
                       letterSpacing: 0.2,
                     ),
                   ),

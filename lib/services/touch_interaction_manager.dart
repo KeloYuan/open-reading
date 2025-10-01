@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/text_page_data.dart';
@@ -344,7 +344,7 @@ class TouchInteractionManager {
   /// 绘制选择高亮和手柄
   void paintSelection(Canvas canvas, Paint paint) {
     // 绘制选择高亮
-    paint.color = Colors.blue.withOpacity(0.3);
+    paint.color = Colors.blue.withValues(alpha: 0.3);
     for (final char in _selectedChars) {
       canvas.drawRect(char.bounds, paint);
     }

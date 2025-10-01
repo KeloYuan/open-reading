@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../models/note.dart';
 
 class NoteDialog extends StatefulWidget {
@@ -79,7 +79,7 @@ class _NoteDialogState extends State<NoteDialog> {
                 border: Border.all(
                   color: Theme.of(
                     context,
-                  ).colorScheme.outline.withOpacity(0.3),
+                  ).colorScheme.outline.withValues(alpha: 0.3),
                 ),
               ),
               child: Column(

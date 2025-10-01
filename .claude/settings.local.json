@@ -41,7 +41,13 @@
       "Bash(for file in lib/pages/detailed_stats_page.dart lib/pages/home_content_enhanced.dart lib/pages/home_page_responsive.dart lib/pages/import_book_page.dart lib/pages/library_page.dart lib/utils/color_extensions.dart lib/utils/glass_config.dart lib/utils/progressive_blur.dart lib/utils/theme_mixin.dart)",
       "Bash(do echo \"Processing $file...\")",
       "Bash(done)",
-      "Bash(nc:*)"
+      "Bash(nc:*)",
+      "Read(//f/**)",
+      "Bash(/c/dev/flutter/flutter/bin/flutter doctor -v)",
+      "Bash(where flutter)",
+      "Bash(export:*)",
+      "Bash(hash -r)",
+      "Bash(awk:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

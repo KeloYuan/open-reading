@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 /// 翻页手势区域类型
 enum PageTurningType {
@@ -104,7 +104,7 @@ class PageTurningZoneVisualizer extends StatelessWidget {
 
     return Positioned.fill(
       child: Container(
-        color: Colors.black.withOpacity(0.3),
+        color: Colors.black.withValues(alpha: 0.3),
         child: GridView.builder(
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -152,11 +152,11 @@ class PageTurningZoneVisualizer extends StatelessWidget {
   Color _getActionColor(PageTurningType action) {
     switch (action) {
       case PageTurningType.prev:
-        return Colors.blue.withOpacity(0.7);
+        return Colors.blue.withValues(alpha: 0.7);
       case PageTurningType.next:
-        return Colors.green.withOpacity(0.7);
+        return Colors.green.withValues(alpha: 0.7);
       case PageTurningType.menu:
-        return Colors.orange.withOpacity(0.7);
+        return Colors.orange.withValues(alpha: 0.7);
     }
   }
 

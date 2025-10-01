@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:battery_plus/battery_plus.dart';
@@ -130,7 +130,7 @@ class _ReaderOverlayState extends State<ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withOpacity(0.1),
+        color: settings.textStyle.color?.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -138,7 +138,7 @@ class _ReaderOverlayState extends State<ReaderOverlay> {
         style: settings.textStyle.copyWith(
           fontSize: 12,
           fontWeight: FontWeight.w500,
-          color: settings.textStyle.color?.withOpacity(0.8),
+          color: settings.textStyle.color?.withValues(alpha: 0.8),
         ),
       ),
     );
@@ -149,7 +149,7 @@ class _ReaderOverlayState extends State<ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withOpacity(0.1),
+        color: settings.textStyle.color?.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -166,7 +166,7 @@ class _ReaderOverlayState extends State<ReaderOverlay> {
             style: settings.textStyle.copyWith(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: settings.textStyle.color?.withOpacity(0.8),
+              color: settings.textStyle.color?.withValues(alpha: 0.8),
             ),
           ),
         ],
@@ -193,7 +193,7 @@ class _ReaderOverlayState extends State<ReaderOverlay> {
     } else if (_batteryLevel <= 40) {
       return Colors.orange;
     } else {
-      return baseColor.withOpacity(0.8);
+      return baseColor.withValues(alpha: 0.8);
     }
   }
 
@@ -234,7 +234,7 @@ class _ReaderOverlayState extends State<ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withOpacity(0.1),
+        color: settings.textStyle.color?.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Text(
@@ -242,7 +242,7 @@ class _ReaderOverlayState extends State<ReaderOverlay> {
         style: settings.textStyle.copyWith(
           fontSize: 12,
           fontWeight: FontWeight.w500,
-          color: settings.textStyle.color?.withOpacity(0.7),
+          color: settings.textStyle.color?.withValues(alpha: 0.7),
         ),
       ),
     );
@@ -255,7 +255,7 @@ class _ReaderOverlayState extends State<ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withOpacity(0.1),
+        color: settings.textStyle.color?.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Row(
@@ -267,13 +267,13 @@ class _ReaderOverlayState extends State<ReaderOverlay> {
             height: 3,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(1.5),
-              color: settings.textStyle.color?.withOpacity(0.2),
+              color: settings.textStyle.color?.withValues(alpha: 0.2),
             ),
             child: LinearProgressIndicator(
               value: progress,
               backgroundColor: Colors.transparent,
               valueColor: AlwaysStoppedAnimation<Color>(
-                settings.textStyle.color?.withOpacity(0.6) ?? Colors.grey,
+                settings.textStyle.color?.withValues(alpha: 0.6) ?? Colors.grey,
               ),
             ),
           ),
@@ -284,7 +284,7 @@ class _ReaderOverlayState extends State<ReaderOverlay> {
             style: settings.textStyle.copyWith(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: settings.textStyle.color?.withOpacity(0.7),
+              color: settings.textStyle.color?.withValues(alpha: 0.7),
             ),
           ),
         ],

@@ -13,6 +13,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'pages/home_page_responsive.dart';
 import 'pages/user_agreement_page.dart';
 import 'utils/app_themes.dart';
+import 'utils/color_extensions.dart';
 import 'services/tts_service.dart';
 import 'services/share_service.dart';
 import 'services/data_manager.dart';
@@ -228,9 +229,9 @@ class ThemeNotifier extends ChangeNotifier {
     // 异步保存设置
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('appTheme', 'custom');
-    await prefs.setInt('customAccentColor', color.value);
+    await prefs.setInt('customAccentColor', color.toARGB32());
     await prefs.remove('globalAccentColor'); // 清除全局强调色设置
-    debugPrint('🎨 自定义颜色已保存: ${color.value}');
+    debugPrint('🎨 自定义颜色已保存: ${color.toARGB32()}');
   }
 
   // 设置全局强调色（与应用主题分离）
@@ -247,7 +248,7 @@ class ThemeNotifier extends ChangeNotifier {
     // 异步保存设置
     SharedPreferences prefs = await SharedPreferences.getInstance();
     if (color != null) {
-      await prefs.setInt('globalAccentColor', color.value);
+      await prefs.setInt('globalAccentColor', color.toARGB32());
     } else {
       await prefs.remove('globalAccentColor');
     }
@@ -410,8 +411,8 @@ class _XxReadAppState extends State<XxReadApp> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              Theme.of(context).colorScheme.secondary.withOpacity(0.05),
+              Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.05),
               Theme.of(context).colorScheme.surface,
             ],
           ),
