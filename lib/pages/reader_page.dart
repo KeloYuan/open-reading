@@ -33,7 +33,7 @@ class _HighlightedText extends StatelessWidget {
           ? SelectableText(
               text,
               style: style,
-              textAlign: TextAlign.justify,
+              textAlign: TextAlign.left, // 改为left对齐，与分页器TextPainter一致
               onSelectionChanged: onTextSelection != null
                   ? (selection, cause) {
                       if (!selection.isCollapsed) {
@@ -48,7 +48,7 @@ class _HighlightedText extends StatelessWidget {
           : Text(
               text,
               style: style,
-              textAlign: TextAlign.justify,
+              textAlign: TextAlign.left, // 改为left对齐，与分页器TextPainter一致
             );
     }
 
@@ -59,7 +59,7 @@ class _HighlightedText extends StatelessWidget {
           ? SelectableText(
               text,
               style: style,
-              textAlign: TextAlign.justify,
+              textAlign: TextAlign.left, // 改为left对齐，与分页器TextPainter一致
               onSelectionChanged: onTextSelection != null
                   ? (selection, cause) {
                       if (!selection.isCollapsed) {
@@ -74,7 +74,7 @@ class _HighlightedText extends StatelessWidget {
           : Text(
               text,
               style: style,
-              textAlign: TextAlign.justify,
+              textAlign: TextAlign.left, // 改为left对齐，与分页器TextPainter一致
             );
     }
 
@@ -96,7 +96,7 @@ class _HighlightedText extends StatelessWidget {
 
     return RichText(
       text: TextSpan(children: spans),
-      textAlign: TextAlign.justify,
+      textAlign: TextAlign.left, // 改为left对齐，与分页器TextPainter一致
     );
   }
 
@@ -208,6 +208,26 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     _initializeAnimations();
     _initializePage();
     _enterImmersiveMode();
+
+    // 延迟再次强制进入沉浸式模式（确保系统UI完全隐藏）
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) _hideSystemUI();
+    });
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) _hideSystemUI();
+    });
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) _hideSystemUI();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 在依赖变化时也强制隐藏系统UI
+    if (!ref.read(toolbarProvider).isVisible) {
+      _hideSystemUI();
+    }
   }
 
   @override
@@ -254,7 +274,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   /// 初始化页面
   void _initializePage() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializePagination();
+      initializePagination();
       _initializeTts();
 
       // 跳转到初始页面
@@ -266,21 +286,31 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     });
   }
 
-  /// 初始化分页
-  void _initializePagination() {
+
+  /// 初始化分页（公共方法，供子组件调用）
+  void initializePagination() {
     final size = MediaQuery.of(context).size;
-    final settings = ref.read(readerSettingsProvider);
     final statusBarHeight = MediaQuery.of(context).padding.top;
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+
+    // 读取当前settings
+    final settings = ref.read(readerSettingsProvider);
+
+    // 计算响应式padding（不修改state，避免触发监听器）
+    final responsivePadding = settings.getResponsivePadding(size);
+
+    // 创建临时settings，带有响应式padding
+    final settingsWithPadding = settings.copyWith(padding: responsivePadding);
 
     debugPrint('🎯 初始化沉浸式阅读器分页');
     debugPrint('   - 书籍内容长度: ${widget.bookContent.length} 字符');
     debugPrint('   - 屏幕尺寸: ${size.width.toInt()}x${size.height.toInt()}');
+    debugPrint('   - 响应式Padding: T${responsivePadding.top.toInt()} B${responsivePadding.bottom.toInt()} L${responsivePadding.left.toInt()} R${responsivePadding.right.toInt()}');
 
     ref.read(readerPaginationProvider.notifier).initializePagination(
           text: widget.bookContent,
           screenSize: size,
-          settings: settings,
+          settings: settingsWithPadding,
           statusBarHeight: statusBarHeight,
           bottomSafeArea: bottomSafeArea,
         );
@@ -521,6 +551,43 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   Widget build(BuildContext context) {
     final settings = ref.watch(readerSettingsProvider);
     final toolbarState = ref.watch(toolbarProvider);
+
+    // 在build方法中设置监听器（必须在build方法中）
+    ref.listen<ReaderSettings>(
+      readerSettingsProvider,
+      (previous, next) {
+        if (previous == null) return;
+
+        // 检测影响分页的设置是否变化
+        final needRepagination = previous.fontSize != next.fontSize ||
+            previous.lineHeight != next.lineHeight ||
+            previous.letterSpacing != next.letterSpacing ||
+            previous.horizontalMargin != next.horizontalMargin ||
+            previous.paragraphSpacing != next.paragraphSpacing ||
+            previous.firstLineIndent != next.firstLineIndent;
+
+        if (needRepagination) {
+          debugPrint('📝 排版设置变化，触发重新分页...');
+          debugPrint('   字体: ${previous.fontSize} → ${next.fontSize}');
+
+          // 保存当前阅读进度（相对位置）
+          final currentProgress = ref.read(readerPaginationProvider).progress;
+
+          // 重新分页
+          initializePagination();
+
+          // 重新分页完成后，恢复到相应的阅读位置
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              ref
+                  .read(readerPaginationProvider.notifier)
+                  .goToProgress(currentProgress);
+              debugPrint('✅ 重新分页完成，已恢复到 ${(currentProgress * 100).toStringAsFixed(1)}% 位置');
+            }
+          });
+        }
+      },
+    );
 
     // 确保在每次build时都强制进入沉浸式模式（如果工具栏未显示）
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -773,10 +840,15 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
   }
 
   Widget _buildTopStatusBar(ReaderSettings settings) {
+    final screenSize = MediaQuery.of(context).size;
+    // 响应式计算：top使用屏幕高度的1%，水平边距使用屏幕宽度的8%
+    final topMargin = screenSize.height * 0.01;
+    final horizontalMargin = screenSize.width * 0.08;
+
     return Positioned(
-      top: 12, // 往上贴近顶部，避开文字区域
-      left: 40, // 水平方向往中间靠拢
-      right: 40,
+      top: topMargin,
+      left: horizontalMargin,
+      right: horizontalMargin,
       child: Container(
         height: 44,
         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -845,10 +917,15 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
         : '${paginationState.currentPageIndex + 1}/${paginationState.totalPages}';
     final progress = paginationState.progress;
 
+    final screenSize = MediaQuery.of(context).size;
+    // 响应式计算：bottom使用屏幕高度的1%，水平边距使用屏幕宽度的8%
+    final bottomMargin = screenSize.height * 0.01;
+    final horizontalMargin = screenSize.width * 0.08;
+
     return Positioned(
-      bottom: 12, // 往下贴近底部，避开文字区域
-      left: 40, // 水平方向往中间靠拢
-      right: 40,
+      bottom: bottomMargin,
+      left: horizontalMargin,
+      right: horizontalMargin,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
@@ -1006,6 +1083,9 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
     final paginationState = ref.watch(readerPaginationProvider);
     final settings = ref.watch(readerSettingsProvider);
 
+    // 关键：使用分页时保存的settings（包含响应式padding），如果没有则使用当前settings
+    final renderSettings = paginationState.paginationSettings ?? settings;
+
     if (paginationState.isLoading) {
       return _buildLoadingView(settings);
     }
@@ -1018,7 +1098,7 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
       return _buildEmptyView(settings);
     }
 
-    return _buildContentView(paginationState, settings);
+    return _buildContentView(paginationState, renderSettings);
   }
 
   Widget _buildContentView(
@@ -1107,11 +1187,10 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
             ElevatedButton.icon(
               onPressed: () {
                 // 通过祖先 widget 重新初始化分页
-                // 获取 ReaderPage 的 context 并触发重新初始化
                 final readerPageState =
                     context.findAncestorStateOfType<_ReaderPageState>();
                 if (readerPageState != null) {
-                  readerPageState._initializePagination();
+                  readerPageState.initializePagination();
                 }
               },
               icon: const Icon(Icons.refresh),
@@ -1193,36 +1272,31 @@ class _SlidePaginationViewState extends State<_SlidePaginationView> {
   }
 
   Widget _buildPageContent(BuildContext context, String pageContent) {
-    // 使用 LayoutBuilder 自适应可用空间，而不是硬编码计算高度
-    // 这样可以确保与分页器计算的空间完全一致
+    // 最简单最直接的方案：固定Container + ClipRect裁剪
+    // 分页器已经精确计算了每页应该有多少文字
+    // 这里只需要按固定尺寸显示，多余的裁剪掉
     return RepaintBoundary(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // 使用 constraints.maxHeight 作为实际可用高度
-          // 这是父组件分配给我们的真实空间
-          final availableHeight = constraints.maxHeight -
-              widget.settings.padding.top -
-              widget.settings.padding.bottom;
-
-          return ClipRect(
-            child: Container(
-              padding: widget.settings.padding,
-              alignment: Alignment.topLeft,
-              child: SizedBox(
-                height: availableHeight,
-                width: constraints.maxWidth - widget.settings.padding.left - widget.settings.padding.right,
-                child: Consumer(
-                  builder: (context, ref, child) {
-                    final ttsState = ref.watch(readerTtsProvider);
-                    return _HighlightedText(
-                      text: pageContent,
-                      style: widget.settings.textStyle,
-                      highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
-                      enableSelection: widget.settings.enableTextSelection,
-                      onTextSelection: widget.onTextSelection,
-                    );
-                  },
-                ),
+          return Container(
+            width: constraints.maxWidth,
+            height: constraints.maxHeight,
+            padding: widget.settings.padding,
+            color: widget.settings.backgroundColor,
+            // ClipRect确保超出部分被裁剪，不会显示也不会允许滚动
+            child: ClipRect(
+              clipBehavior: Clip.hardEdge,
+              child: Consumer(
+                builder: (context, ref, child) {
+                  final ttsState = ref.watch(readerTtsProvider);
+                  return _HighlightedText(
+                    text: pageContent,
+                    style: widget.settings.textStyle,
+                    highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
+                    enableSelection: widget.settings.enableTextSelection,
+                    onTextSelection: widget.onTextSelection,
+                  );
+                },
               ),
             ),
           );

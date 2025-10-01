@@ -73,12 +73,16 @@ class _LibraryPageState extends State<LibraryPage> {
     setState(() => _isLoading = true);
     try {
       final books = await _bookDao.getAllBooks();
-      setState(() {
-        _books = books;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _books = books;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
       // Handle error
     }
   }

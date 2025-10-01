@@ -11,6 +11,9 @@ class SimpleTextPaginator {
     required double fontSize,
     required double lineHeight,
     required EdgeInsets padding,
+    double letterSpacing = 0.0,
+    double paragraphSpacing = 0.0,
+    double firstLineIndent = 0.0,
   }) {
     if (text.isEmpty) return [];
 
@@ -20,32 +23,34 @@ class SimpleTextPaginator {
     text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
     final emptyLinesRemoved = originalLength - text.length;
 
-    // 1. 计算可用宽度和高度，并添加安全边距
+    // 1. 计算可用宽度和高度，并添加合理的安全边距
     final availableWidth = screenSize.width - padding.left - padding.right;
-    // 减去10px安全边距，防止边界情况下文字溢出
-    final safetyMargin = 10.0;
+    // 安全边距：防止个别页面文字超出，同时保持高空间利用率
+    // 12px字体 -> 3px边距, 18px字体 -> 4px边距, 36px字体 -> 6.5px边距
+    final safetyMargin = 3.0 + (fontSize - 12.0) * 0.15;
     final availableHeight = screenSize.height - padding.top - padding.bottom - safetyMargin;
 
-    print('📄 开始分页:');
+    print('📄 开始精确分页:');
     print('   屏幕: ${screenSize.width.toInt()}×${screenSize.height.toInt()}');
-    print('   Padding: L${padding.left} R${padding.right} T${padding.top} B${padding.bottom}');
-    print('   安全边距: ${safetyMargin.toInt()}px');
-    print('   可用: ${availableWidth.toInt()}×${availableHeight.toInt()}');
-    print('   字体: ${fontSize}px, 行高: $lineHeight');
+    print('   Padding: L${padding.left.toInt()} R${padding.right.toInt()} T${padding.top.toInt()} B${padding.bottom.toInt()}');
+    print('   安全边距: ${safetyMargin.toStringAsFixed(1)}px (自适应)');
+    print('   可用空间: ${availableWidth.toInt()}×${availableHeight.toInt()}');
+    print('   排版: 字体${fontSize}px, 行高$lineHeight, 字间距$letterSpacing');
+    print('        段落间距${paragraphSpacing}px, 首行缩进${firstLineIndent}字符');
     if (emptyLinesRemoved > 0) {
-      print('   空行处理: 移除${emptyLinesRemoved}个多余换行符');
+      print('   空行优化: 移除${emptyLinesRemoved}个多余换行符');
     }
 
     // 2. 创建TextPainter - 配置必须和实际渲染完全一致
     final textStyle = TextStyle(
       fontSize: fontSize,
       height: lineHeight,
-      letterSpacing: 0.0, // 确保没有额外间距
+      letterSpacing: letterSpacing, // 使用实际的字间距设置
     );
 
     final textPainter = TextPainter(
       textDirection: TextDirection.ltr,
-      textAlign: TextAlign.justify, // 必须和Text组件一致
+      textAlign: TextAlign.left, // 使用left对齐，确保分页和渲染一致
       maxLines: null, // 允许无限行
     );
 
@@ -57,11 +62,13 @@ class SimpleTextPaginator {
     while (currentIndex < text.length) {
       pageNum++;
 
-      // 估算起始范围 - 使用更保守的估算
+      // 估算起始范围 - 使用精确但保守的估算
       final remainingChars = text.length - currentIndex;
-      // 估算每行字符数和总行数，使用0.85的保守系数
-      final charsPerLine = (availableWidth / fontSize * 0.95).floor();
-      final linesPerPage = (availableHeight / (fontSize * lineHeight) * 0.85).floor();
+      // 高保守系数，确保不会超出屏幕
+      // 12px -> 0.98, 18px -> 0.975, 36px -> 0.955
+      final conservativeRatio = 0.98 - (fontSize - 12.0) * 0.001;
+      final charsPerLine = (availableWidth / fontSize * 0.98).floor();
+      final linesPerPage = (availableHeight / (fontSize * lineHeight) * conservativeRatio).floor();
       final estimatedCharsPerPage = (charsPerLine * linesPerPage).floor();
 
       // 二分查找最佳字符数
@@ -96,23 +103,34 @@ class SimpleTextPaginator {
       final pageContent = text.substring(currentIndex, endIndex);
       pages.add(pageContent);
 
-      // 调试输出前3页
-      if (pageNum <= 3) {
-        // 测量最终高度
-        textPainter.text = TextSpan(text: pageContent, style: textStyle);
-        textPainter.layout(maxWidth: availableWidth);
+      // 验证分页结果 - 确保不超出/不浪费空间
+      textPainter.text = TextSpan(text: pageContent, style: textStyle);
+      textPainter.layout(maxWidth: availableWidth);
+      final actualHeight = textPainter.height;
+      final heightUtilization = (actualHeight / availableHeight * 100);
 
+      // 调试输出前3页和最后1页
+      if (pageNum <= 3 || endIndex >= text.length) {
         final lastChar = pageContent.isEmpty ? '' : pageContent[pageContent.length - 1];
         final nextChar = endIndex < text.length ? text[endIndex] : '';
 
-        print('   第$pageNum页: $bestFit字符, 高度${textPainter.height.toInt()}/${availableHeight.toInt()}px');
+        print('   第$pageNum页: $bestFit字符, 高度${actualHeight.toInt()}/${availableHeight.toInt()}px (${heightUtilization.toStringAsFixed(1)}%)');
         print('        最后字符: "$lastChar" (索引${endIndex-1}) -> 下页首字符: "$nextChar" (索引$endIndex)');
+      }
+
+      // 验证警告：超出或浪费过多空间
+      if (actualHeight > availableHeight + 5) {
+        print('   ⚠️  警告: 第$pageNum页文字超出可用高度 ${(actualHeight - availableHeight).toInt()}px');
+      } else if (heightUtilization < 70.0 && endIndex < text.length) {
+        print('   ⚠️  提示: 第$pageNum页空间利用率较低 (${heightUtilization.toStringAsFixed(1)}%)');
       }
 
       currentIndex = endIndex;
     }
 
+    // 最终验证统计
     print('✅ 分页完成: ${pages.length}页');
+    print('   平均每页约 ${(text.length / pages.length).toInt()} 字符');
     return pages;
   }
 }

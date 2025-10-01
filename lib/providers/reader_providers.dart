@@ -41,7 +41,7 @@ class ReaderSettings {
     this.fontSize = 18.0,
     this.lineHeight = 1.8,
     this.letterSpacing = 0.2,
-    this.padding = const EdgeInsets.only(left: 20.0, right: 20.0, top: 70.0, bottom: 70.0),
+    this.padding = const EdgeInsets.only(left: 20.0, right: 20.0, top: 60.0, bottom: 60.0),
     this.theme = ReadingTheme.day,
     this.paginationMode = PaginationMode.slide,
     this.showPageIndicator = true,
@@ -165,6 +165,19 @@ class ReaderSettings {
         return '蓝光护眼';
     }
   }
+
+  /// 根据屏幕尺寸计算响应式padding
+  /// 上方padding稍大，防止被状态栏遮挡；下方padding较小，控制栏会覆盖
+  EdgeInsets getResponsivePadding(Size screenSize) {
+    final topPadding = screenSize.height * 0.05; // 5%屏幕高度，留出充足安全距离
+    final bottomPadding = screenSize.height * 0.02; // 2%屏幕高度，控制栏会覆盖
+    return EdgeInsets.only(
+      left: horizontalMargin,
+      right: horizontalMargin,
+      top: topPadding,
+      bottom: bottomPadding,
+    );
+  }
 }
 
 /// 阅读器分页状态
@@ -173,12 +186,14 @@ class ReaderPaginationState {
   final int currentPageIndex;
   final bool isLoading;
   final String? error;
+  final ReaderSettings? paginationSettings; // 保存分页时使用的settings（包含响应式padding）
 
   const ReaderPaginationState({
     this.pages = const [],
     this.currentPageIndex = 0,
     this.isLoading = false,
     this.error,
+    this.paginationSettings,
   });
 
   /// 复制并修改状态
@@ -187,12 +202,14 @@ class ReaderPaginationState {
     int? currentPageIndex,
     bool? isLoading,
     String? error,
+    ReaderSettings? paginationSettings,
   }) {
     return ReaderPaginationState(
       pages: pages ?? this.pages,
       currentPageIndex: currentPageIndex ?? this.currentPageIndex,
       isLoading: isLoading ?? this.isLoading,
       error: error,
+      paginationSettings: paginationSettings ?? this.paginationSettings,
     );
   }
 
@@ -377,36 +394,32 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      // 计算真实的状态栏和控制栏高度
+      // 控制栏是浮动覆盖的，不占用文字显示空间，所以不需要减去
+      // 只减去状态栏高度（如果有的话）
       final realStatusBarHeight = statusBarHeight ?? 0.0;
-      final realBottomSafeArea = bottomSafeArea ?? 0.0;
 
-      // 预留工具栏空间（120px基础 + 安全区域，但不超过30px）
-      final controlBarHeight = 120.0 + (realBottomSafeArea > 30.0 ? 30.0 : realBottomSafeArea);
-
-      // 计算实际可用的屏幕尺寸
-      // 注意：这里不减去padding，因为padding会在分页器内部处理
-      // 这里只减去状态栏、工具栏等UI占用的空间
-      final actualAvailableHeight = screenSize.height - realStatusBarHeight - controlBarHeight;
+      // 实际可用屏幕尺寸 = 完整屏幕高度 - 状态栏高度
+      final actualAvailableHeight = screenSize.height - realStatusBarHeight;
       final actualScreenSize = Size(screenSize.width, actualAvailableHeight);
 
-      debugPrint('📐 沉浸式阅读器分页参数:');
+      debugPrint('📐 精确分页参数:');
       debugPrint('  - 原始屏幕: ${screenSize.width.toInt()}x${screenSize.height.toInt()}');
       debugPrint('  - 状态栏: ${realStatusBarHeight.toInt()}px');
-      debugPrint('  - 底部安全: ${realBottomSafeArea.toInt()}px');
-      debugPrint('  - 控制栏: ${controlBarHeight.toInt()}px');
-      debugPrint('  - 实际可用: ${actualScreenSize.width.toInt()}x${actualScreenSize.height.toInt()}');
-      debugPrint('  - Padding: L${settings.padding.left} R${settings.padding.right} T${settings.padding.top} B${settings.padding.bottom}');
+      debugPrint('  - 可用空间: ${actualScreenSize.width.toInt()}x${actualScreenSize.height.toInt()}');
+      debugPrint('  - Padding: L${settings.padding.left.toInt()} R${settings.padding.right.toInt()} T${settings.padding.top.toInt()} B${settings.padding.bottom.toInt()}');
       debugPrint('  - 字体: ${settings.fontSize}px, 行高: ${settings.lineHeight}');
       debugPrint('  - 文本长度: ${text.length} 字符');
 
-      // 使用简单分页器 - 传入调整后的屏幕尺寸
+      // 使用简单分页器 - 传入调整后的屏幕尺寸和完整的排版参数
       final pages = SimpleTextPaginator.paginate(
         text: text,
         screenSize: actualScreenSize,  // 使用实际可用尺寸，而非完整屏幕
         fontSize: settings.fontSize,
         lineHeight: settings.lineHeight,
         padding: settings.padding,
+        letterSpacing: settings.letterSpacing,       // 传入字间距
+        paragraphSpacing: settings.paragraphSpacing, // 传入段落间距
+        firstLineIndent: settings.firstLineIndent,   // 传入首行缩进
       );
 
       if (pages.isEmpty) {
@@ -417,6 +430,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         pages: pages,
         currentPageIndex: 0,
         isLoading: false,
+        paginationSettings: settings, // 保存分页时使用的settings
       );
 
       debugPrint('✅ 简单分页完成: ${pages.length}页');
