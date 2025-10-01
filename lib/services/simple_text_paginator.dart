@@ -23,11 +23,11 @@ class SimpleTextPaginator {
     text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
     final emptyLinesRemoved = originalLength - text.length;
 
-    // 1. 计算可用宽度和高度，并添加合理的安全边距
+    // 1. 计算可用宽度和高度，并添加充足的安全边距
     final availableWidth = screenSize.width - padding.left - padding.right;
-    // 安全边距：防止个别页面文字超出，同时保持高空间利用率
-    // 12px字体 -> 3px边距, 18px字体 -> 4px边距, 36px字体 -> 6.5px边距
-    final safetyMargin = 3.0 + (fontSize - 12.0) * 0.15;
+    // 安全边距：字体越大，边距越大，确保绝对不超出
+    // 12px字体 -> 5px边距, 18px字体 -> 8px边距, 24px -> 11px, 30px -> 14px, 36px -> 17px
+    final safetyMargin = 5.0 + (fontSize - 12.0) * 0.5;
     final availableHeight = screenSize.height - padding.top - padding.bottom - safetyMargin;
 
     print('📄 开始精确分页:');
@@ -62,12 +62,12 @@ class SimpleTextPaginator {
     while (currentIndex < text.length) {
       pageNum++;
 
-      // 估算起始范围 - 使用精确但保守的估算
+      // 估算起始范围 - 使用非常保守的估算，确保绝对不超出
       final remainingChars = text.length - currentIndex;
-      // 高保守系数，确保不会超出屏幕
-      // 12px -> 0.98, 18px -> 0.975, 36px -> 0.955
-      final conservativeRatio = 0.98 - (fontSize - 12.0) * 0.001;
-      final charsPerLine = (availableWidth / fontSize * 0.98).floor();
+      // 非常保守的系数，字体越大越保守
+      // 12px -> 0.95, 18px -> 0.93, 24px -> 0.91, 30px -> 0.89, 36px -> 0.87
+      final conservativeRatio = 0.95 - (fontSize - 12.0) * 0.0033;
+      final charsPerLine = (availableWidth / fontSize * 0.95).floor();
       final linesPerPage = (availableHeight / (fontSize * lineHeight) * conservativeRatio).floor();
       final estimatedCharsPerPage = (charsPerLine * linesPerPage).floor();
 
