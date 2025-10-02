@@ -1,6 +1,6 @@
 ﻿import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../services/webdav/webdav_sync_service.dart';
+import '../services/sync/webdav_sync_service.dart';
 
 /// WebDAV配置对话框
 class WebDavConfigDialog extends StatefulWidget {
@@ -15,7 +15,6 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
   final _serverUrlController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _basePathController = TextEditingController(text: '/xxread/');
 
   final WebDavSyncService _syncService = WebDavSyncService();
   bool _isPasswordVisible = false;
@@ -31,7 +30,6 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
     if (_syncService.isConfigured) {
       _serverUrlController.text = _syncService.serverUrl;
       _usernameController.text = _syncService.username;
-      _basePathController.text = _syncService.basePath;
     }
   }
 
@@ -40,7 +38,6 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
     _serverUrlController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
-    _basePathController.dispose();
     super.dispose();
   }
 
@@ -158,13 +155,6 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
                 return null;
               },
             ),
-            const SizedBox(height: 16),
-            _buildTextField(
-              controller: _basePathController,
-              label: '基础路径（可选）',
-              hint: '/xxread/',
-              icon: Icons.folder,
-            ),
           ],
         ),
       ),
@@ -227,7 +217,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
       child: Column(
         children: [
           // 状态显示
-          if (_syncService.status == SyncStatus.error) ...[
+          if (_syncService.status == SyncStatus.failed) ...[
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -240,7 +230,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _syncService.errorMessage,
+                      '配置或连接失败，请检查设置',
                       style: const TextStyle(color: Colors.red, fontSize: 12),
                     ),
                   ),
@@ -344,9 +334,6 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
         serverUrl: _serverUrlController.text.trim(),
         username: _usernameController.text.trim(),
         password: password,
-        basePath: _basePathController.text.trim().isEmpty
-            ? '/xxread/'
-            : _basePathController.text.trim(),
       );
 
       if (success && mounted) {
@@ -390,9 +377,6 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
         serverUrl: _serverUrlController.text.trim(),
         username: _usernameController.text.trim(),
         password: password,
-        basePath: _basePathController.text.trim().isEmpty
-            ? '/xxread/'
-            : _basePathController.text.trim(),
       );
 
       if (success && mounted) {

@@ -1,10 +1,17 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:crypto/crypto.dart';
 import '../services/simple_text_paginator.dart';
+import '../services/progressive_paginator.dart';
+import '../services/pagination_cache_service.dart';
+import '../services/background_content_loader.dart';
+import '../services/reading_router_service.dart';
 import '../services/tts/system_tts.dart';
 import '../services/tts/base_tts.dart';
 import '../services/reader_settings_service.dart';
+import '../models/page_turning_config.dart';
 
 /// 翻页模式枚举
 enum PaginationMode {
@@ -43,7 +50,8 @@ class ReaderSettings {
     this.fontSize = 18.0,
     this.lineHeight = 1.8,
     this.letterSpacing = 0.2,
-    this.padding = const EdgeInsets.only(left: 20.0, right: 20.0, top: 60.0, bottom: 60.0),
+    this.padding =
+        const EdgeInsets.only(left: 20.0, right: 20.0, top: 60.0, bottom: 60.0),
     this.theme = ReadingTheme.day,
     this.paginationMode = PaginationMode.slide,
     this.showPageIndicator = true,
@@ -80,6 +88,11 @@ class ReaderSettings {
       firstLineIndent: firstLineIndent ?? this.firstLineIndent,
       horizontalMargin: horizontalMargin ?? this.horizontalMargin,
     );
+  }
+
+  /// 获取当前点击翻页方案（固定为默认方案）
+  TapTurningPattern get tapTurningPattern {
+    return TapTurningPattern.defaultPattern;
   }
 
   /// 获取主题对应的文本样式
@@ -202,6 +215,12 @@ class ReaderPaginationState {
   final bool isLoading;
   final String? error;
   final ReaderSettings? paginationSettings; // 保存分页时使用的settings（包含响应式padding）
+  final String? cachedText; // 缓存的文本内容
+  final String? cacheKey; // 缓存键（排版参数的哈希）
+  final bool isProgressiveLoading; // 是否正在渐进式加载
+  final String? loadingStage; // 加载阶段提示
+  final List<int>? pageCharOffsets; // 每页在原文中的字符起始位置
+  final Size? screenSize; // 保存屏幕尺寸用于后台分页
 
   const ReaderPaginationState({
     this.pages = const [],
@@ -209,6 +228,12 @@ class ReaderPaginationState {
     this.isLoading = false,
     this.error,
     this.paginationSettings,
+    this.cachedText,
+    this.cacheKey,
+    this.isProgressiveLoading = false,
+    this.loadingStage,
+    this.pageCharOffsets,
+    this.screenSize,
   });
 
   /// 复制并修改状态
@@ -218,6 +243,12 @@ class ReaderPaginationState {
     bool? isLoading,
     String? error,
     ReaderSettings? paginationSettings,
+    String? cachedText,
+    String? cacheKey,
+    bool? isProgressiveLoading,
+    String? loadingStage,
+    List<int>? pageCharOffsets,
+    Size? screenSize,
   }) {
     return ReaderPaginationState(
       pages: pages ?? this.pages,
@@ -225,6 +256,12 @@ class ReaderPaginationState {
       isLoading: isLoading ?? this.isLoading,
       error: error,
       paginationSettings: paginationSettings ?? this.paginationSettings,
+      cachedText: cachedText ?? this.cachedText,
+      cacheKey: cacheKey ?? this.cacheKey,
+      isProgressiveLoading: isProgressiveLoading ?? this.isProgressiveLoading,
+      loadingStage: loadingStage ?? this.loadingStage,
+      pageCharOffsets: pageCharOffsets ?? this.pageCharOffsets,
+      screenSize: screenSize ?? this.screenSize,
     );
   }
 
@@ -248,6 +285,19 @@ class ReaderPaginationState {
 
   /// 是否有上一页
   bool get hasPreviousPage => currentPageIndex > 0;
+
+  /// 获取当前页面的字符起始位置
+  ///
+  /// 返回当前页面在原文中的字符偏移量
+  /// 如果没有偏移量信息，返回null
+  int? get currentCharOffset {
+    if (pageCharOffsets == null ||
+        pageCharOffsets!.isEmpty ||
+        currentPageIndex >= pageCharOffsets!.length) {
+      return null;
+    }
+    return pageCharOffsets![currentPageIndex];
+  }
 }
 
 /// 工具栏显示状态
@@ -424,6 +474,13 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
     _saveSettings();
   }
 
+  /// 切换点击翻页方案（已弃用：现在固定使用默认方案）
+  @Deprecated('点击翻页方案已固定为默认的左中右模式')
+  void switchTapTurningPattern(int patternIndex) {
+    // 方法保留以保持兼容性，但不执行任何操作
+    debugPrint('switchTapTurningPattern 已弃用：现在固定使用左中右模式');
+  }
+
   /// 切换页面指示器显示
   void togglePageIndicator() {
     state = state.copyWith(showPageIndicator: !state.showPageIndicator);
@@ -439,15 +496,118 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
 
 /// 阅读器分页状态管理 - Riverpod StateNotifier
 class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
-  ReaderPaginationNotifier() : super(const ReaderPaginationState());
+  ReaderPaginationNotifier() : super(const ReaderPaginationState()) {
+    _initBackgroundLoader();
+  }
 
-  /// 初始化分页
+  StreamSubscription<BackgroundLoadResult>? _backgroundLoadSubscription;
+
+  /// 初始化后台加载监听
+  void _initBackgroundLoader() {
+    final loader = ReadingRouterService.getContentLoader();
+    _backgroundLoadSubscription = loader.resultStream.listen((result) {
+      // 只在后台加载完成（!hasRemaining）且有剩余内容时处理
+      if (!result.hasRemaining && result.remainingPart.isNotEmpty) {
+        _handleBackgroundLoadComplete(result);
+      }
+    });
+  }
+
+  /// 处理后台加载完成
+  void _handleBackgroundLoadComplete(BackgroundLoadResult result) async {
+    debugPrint('🎉 后台加载完成，准备追加分页');
+    debugPrint('   首批内容: ${result.firstPart.length} 字符');
+    debugPrint('   后台内容: ${result.remainingPart.length} 字符');
+    debugPrint('   完整内容: ${result.fullContent.length} 字符');
+
+    // 获取当前分页设置和屏幕尺寸
+    final settings = state.paginationSettings;
+    final screenSize = state.screenSize;
+
+    if (settings == null ||
+        screenSize == null ||
+        result.remainingPart.isEmpty) {
+      debugPrint('⚠️ 无法追加分页：settings=$settings, screenSize=$screenSize');
+      return;
+    }
+
+    try {
+      debugPrint('🔄 开始分页后台加载的内容...');
+      final currentPageCount = state.pages.length;
+      final currentPageIndex = state.currentPageIndex;
+
+      // 对后台加载的剩余内容进行分页
+      state = state.copyWith(loadingStage: '正在分页后台内容...');
+
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final remainingResult = SimpleTextPaginator.paginate(
+        text: result.remainingPart,
+        screenSize: screenSize,
+        fontSize: settings.fontSize,
+        lineHeight: settings.lineHeight,
+        padding: settings.padding,
+        letterSpacing: settings.letterSpacing,
+        paragraphSpacing: settings.paragraphSpacing,
+        firstLineIndent: settings.firstLineIndent,
+        devicePixelRatio: MediaQueryData.fromView(
+          WidgetsBinding.instance.platformDispatcher.views.first,
+        ).devicePixelRatio,
+      );
+
+      if (remainingResult.pages.isEmpty) {
+        debugPrint('⚠️ 后台内容分页结果为空');
+        return;
+      }
+
+      // 追加到现有页面列表
+      final allPages = [...state.pages, ...remainingResult.pages];
+
+      debugPrint('✅ 后台分页完成，追加 ${remainingResult.pages.length} 页');
+      debugPrint('   总页数: $currentPageCount → ${allPages.length}');
+
+      // 更新state
+      state = state.copyWith(
+        pages: allPages,
+        cachedText: result.fullContent,
+        currentPageIndex: currentPageIndex, // 保持当前页码
+        isProgressiveLoading: false,
+        loadingStage: '后台内容加载完成，共 ${allPages.length} 页',
+      );
+
+      // 更新持久化缓存
+      if (state.cacheKey != null) {
+        PaginationCacheService.saveCache(
+          pages: allPages,
+          cacheKey: state.cacheKey!,
+        );
+        debugPrint('💾 已更新缓存，总页数: ${allPages.length}');
+      }
+
+      debugPrint('🎊 后台加载和分页全部完成！用户可以无缝阅读到最后！');
+    } catch (e, stackTrace) {
+      debugPrint('❌ 处理后台加载内容失败: $e');
+      debugPrint('堆栈: $stackTrace');
+    }
+  }
+
+  @override
+  void dispose() {
+    _backgroundLoadSubscription?.cancel();
+    super.dispose();
+  }
+
+  /// 初始化分页（优化版：支持持久化缓存和渐进式加载）
+  ///
+  /// [initialPageIndex] 初始页码，用于恢复上次阅读位置
   Future<void> initializePagination({
     required String text,
     required Size screenSize,
     required ReaderSettings settings,
     double? statusBarHeight,
     double? bottomSafeArea,
+    double devicePixelRatio = 1.0,
+    int initialPageIndex = 0,
   }) async {
     if (text.isEmpty) {
       state = state.copyWith(
@@ -457,57 +617,294 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       return;
     }
 
-    state = state.copyWith(isLoading: true, error: null);
+    // 检查文本长度
+    final originalLength = text.length;
+    final textLengthMB = originalLength / (1024 * 1024);
+    debugPrint(
+        '📊 文本长度: $originalLength 字符 (${textLengthMB.toStringAsFixed(2)} MB)');
 
+    // 生成缓存键
+    final realStatusBarHeight = statusBarHeight ?? 0.0;
+    final actualAvailableHeight = screenSize.height - realStatusBarHeight;
+    final contentHash = _generateContentHash(text);
+
+    final cacheKey = PaginationCacheService.generateCacheKey(
+      contentHash: contentHash,
+      screenWidth: screenSize.width,
+      screenHeight: actualAvailableHeight,
+      fontSize: settings.fontSize,
+      lineHeight: settings.lineHeight,
+      letterSpacing: settings.letterSpacing,
+      paddingLeft: settings.padding.left,
+      paddingRight: settings.padding.right,
+      paddingTop: settings.padding.top,
+      paddingBottom: settings.padding.bottom,
+      paragraphSpacing: settings.paragraphSpacing,
+      firstLineIndent: settings.firstLineIndent,
+      devicePixelRatio: devicePixelRatio,
+    );
+
+    // 1. 优先检查内存缓存
+    if (state.cacheKey == cacheKey && state.pages.isNotEmpty) {
+      debugPrint('✅ 使用内存缓存，跳过分页');
+      return;
+    }
+
+    // 2. 检查持久化缓存
+    state = state.copyWith(
+      isLoading: true,
+      error: null,
+      loadingStage: '检查缓存...',
+      screenSize: Size(screenSize.width, actualAvailableHeight), // 保存屏幕尺寸
+    );
+
+    final cachedData =
+        await PaginationCacheService.loadCache(cacheKey: cacheKey);
+    if (cachedData != null && cachedData.pages.isNotEmpty) {
+      debugPrint('✅ 使用持久化缓存: ${cachedData.pages.length}页');
+      // 确保初始页码在有效范围内
+      final safeInitialPage =
+          initialPageIndex.clamp(0, cachedData.pages.length - 1);
+      debugPrint('📖 恢复到页码: $safeInitialPage');
+      state = state.copyWith(
+        pages: cachedData.pages,
+        currentPageIndex: safeInitialPage,
+        isLoading: false,
+        paginationSettings: settings,
+        cachedText: text,
+        cacheKey: cacheKey,
+        loadingStage: '加载完成',
+      );
+      return;
+    }
+
+    // 3. 无缓存，开始分页
     try {
-      // 控制栏是浮动覆盖的，不占用文字显示空间，所以不需要减去
-      // 只减去状态栏高度（如果有的话）
-      final realStatusBarHeight = statusBarHeight ?? 0.0;
-
-      // 实际可用屏幕尺寸 = 完整屏幕高度 - 状态栏高度
-      final actualAvailableHeight = screenSize.height - realStatusBarHeight;
       final actualScreenSize = Size(screenSize.width, actualAvailableHeight);
 
-      debugPrint('📐 精确分页参数:');
-      debugPrint('  - 原始屏幕: ${screenSize.width.toInt()}x${screenSize.height.toInt()}');
-      debugPrint('  - 状态栏: ${realStatusBarHeight.toInt()}px');
-      debugPrint('  - 可用空间: ${actualScreenSize.width.toInt()}x${actualScreenSize.height.toInt()}');
-      debugPrint('  - Padding: L${settings.padding.left.toInt()} R${settings.padding.right.toInt()} T${settings.padding.top.toInt()} B${settings.padding.bottom.toInt()}');
-      debugPrint('  - 字体: ${settings.fontSize}px, 行高: ${settings.lineHeight}');
-      debugPrint('  - 文本长度: ${text.length} 字符');
+      debugPrint('📐 开始分页:');
+      debugPrint('  - 文本: ${textLengthMB.toStringAsFixed(2)} MB');
+      debugPrint(
+          '  - 屏幕: ${actualScreenSize.width.toInt()}x${actualScreenSize.height.toInt()}');
 
-      // 使用简单分页器 - 传入调整后的屏幕尺寸和完整的排版参数
-      final pages = SimpleTextPaginator.paginate(
+      // 统一使用分批分页策略（带进度显示）
+      debugPrint('  - 策略: 分批分页（带进度显示）');
+      await _paginateWithProgress(
         text: text,
-        screenSize: actualScreenSize,  // 使用实际可用尺寸，而非完整屏幕
-        fontSize: settings.fontSize,
-        lineHeight: settings.lineHeight,
-        padding: settings.padding,
-        letterSpacing: settings.letterSpacing,       // 传入字间距
-        paragraphSpacing: settings.paragraphSpacing, // 传入段落间距
-        firstLineIndent: settings.firstLineIndent,   // 传入首行缩进
+        screenSize: actualScreenSize,
+        settings: settings,
+        devicePixelRatio: devicePixelRatio,
+        cacheKey: cacheKey,
+        initialPageIndex: initialPageIndex,
       );
-
-      if (pages.isEmpty) {
-        throw Exception('分页结果为空，请检查文本内容');
-      }
-
-      state = state.copyWith(
-        pages: pages,
-        currentPageIndex: 0,
-        isLoading: false,
-        paginationSettings: settings, // 保存分页时使用的settings
-      );
-
-      debugPrint('✅ 简单分页完成: ${pages.length}页');
     } catch (e, stackTrace) {
       state = state.copyWith(
         error: '分页失败: $e\n\n请尝试调整字体大小或重新打开',
         isLoading: false,
+        isProgressiveLoading: false,
       );
-      debugPrint('❌ 沉浸式阅读器分页失败: $e');
+      debugPrint('❌ 分页失败: $e');
       debugPrint('堆栈: $stackTrace');
     }
+  }
+
+  /// 渐进式分页（大文件优化）
+  /// 分批分页（带进度显示，适用于所有大小的文件）
+  Future<void> _paginateWithProgress({
+    required String text,
+    required Size screenSize,
+    required ReaderSettings settings,
+    required double devicePixelRatio,
+    required String cacheKey,
+    int initialPageIndex = 0,
+  }) async {
+    state = state.copyWith(
+      isLoading: true,
+      loadingStage: '准备分页...',
+    );
+
+    try {
+      final result = await SimpleTextPaginator.paginateWithProgress(
+        text: text,
+        screenSize: screenSize,
+        fontSize: settings.fontSize,
+        lineHeight: settings.lineHeight,
+        padding: settings.padding,
+        letterSpacing: settings.letterSpacing,
+        paragraphSpacing: settings.paragraphSpacing,
+        firstLineIndent: settings.firstLineIndent,
+        devicePixelRatio: devicePixelRatio,
+        onProgress: (currentPage, stage) {
+          // 更新进度显示
+          state = state.copyWith(
+            loadingStage: '$stage ($currentPage 页)',
+          );
+        },
+      );
+
+      if (result.pages.isEmpty) {
+        throw Exception('分页结果为空');
+      }
+
+      state = state.copyWith(
+        pages: result.pages,
+        currentPageIndex: initialPageIndex.clamp(0, result.pages.length - 1),
+        isLoading: false,
+        paginationSettings: settings,
+        cachedText: text,
+        cacheKey: cacheKey,
+        loadingStage: '加载完成，共 ${result.pages.length} 页',
+      );
+
+      // 保存到持久化缓存
+      await PaginationCacheService.saveCache(
+        pages: result.pages,
+        cacheKey: cacheKey,
+      );
+
+      debugPrint('✅ 分批分页完成: ${result.pages.length}页，已缓存到本地磁盘');
+    } catch (e, stackTrace) {
+      debugPrint('❌ 分批分页失败: $e');
+      debugPrint('堆栈: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// 旧的渐进式分页方法（已废弃，保留以防万一）
+  @Deprecated('Use _paginateWithProgress instead')
+  Future<void> _paginateProgressively({
+    required String text,
+    required Size screenSize,
+    required ReaderSettings settings,
+    required double devicePixelRatio,
+    required String cacheKey,
+    int initialPageIndex = 0,
+  }) async {
+    state = state.copyWith(
+      isProgressiveLoading: true,
+      loadingStage: '正在加载...',
+    );
+
+    final params = ProgressivePaginationParams(
+      text: text,
+      screenSize: screenSize,
+      fontSize: settings.fontSize,
+      lineHeight: settings.lineHeight,
+      padding: settings.padding,
+      letterSpacing: settings.letterSpacing,
+      paragraphSpacing: settings.paragraphSpacing,
+      firstLineIndent: settings.firstLineIndent,
+      devicePixelRatio: devicePixelRatio,
+      initialChunkSizeMB: 5,
+    );
+
+    // 标记是否是第一次接收到分页结果
+    bool isFirstProgress = true;
+
+    await ProgressivePaginator.paginateProgressively(
+      params: params,
+      onProgress: ({
+        required List<String> pages,
+        required int totalPages,
+        required bool isComplete,
+        required String stage,
+      }) {
+        // 第一次接收到分页结果时，使用initialPageIndex
+        // 后续更新保持当前页码
+        final pageIndex = isFirstProgress
+            ? initialPageIndex.clamp(0, pages.length - 1)
+            : state.currentPageIndex.clamp(0, pages.length - 1);
+
+        if (isFirstProgress && initialPageIndex > 0) {
+          debugPrint('📖 渐进式分页：恢复到页码 $pageIndex');
+          isFirstProgress = false;
+        }
+
+        state = state.copyWith(
+          pages: pages,
+          currentPageIndex: pageIndex,
+          isLoading: !isComplete,
+          isProgressiveLoading: !isComplete,
+          paginationSettings: settings,
+          cachedText: text,
+          cacheKey: cacheKey,
+          loadingStage: stage,
+        );
+
+        // 完成后保存到持久化缓存
+        if (isComplete && pages.isNotEmpty) {
+          PaginationCacheService.saveCache(
+            pages: pages,
+            cacheKey: cacheKey,
+          );
+          debugPrint('✅ 渐进式分页完成: ${pages.length}页');
+        }
+      },
+    );
+  }
+
+  /// 旧的直接分页方法（已废弃，保留以防万一）
+  @Deprecated('Use _paginateWithProgress instead')
+  Future<void> _paginateDirectly({
+    required String text,
+    required Size screenSize,
+    required ReaderSettings settings,
+    required double devicePixelRatio,
+    required String cacheKey,
+    int initialPageIndex = 0,
+  }) async {
+    state = state.copyWith(loadingStage: '正在分页...');
+
+    // 在主线程分页，使用异步避免长时间阻塞
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    final result = SimpleTextPaginator.paginate(
+      text: text,
+      screenSize: screenSize,
+      fontSize: settings.fontSize,
+      lineHeight: settings.lineHeight,
+      padding: settings.padding,
+      letterSpacing: settings.letterSpacing,
+      paragraphSpacing: settings.paragraphSpacing,
+      firstLineIndent: settings.firstLineIndent,
+      devicePixelRatio: devicePixelRatio,
+    );
+
+    if (result.pages.isEmpty) {
+      throw Exception('分页结果为空');
+    }
+
+    // 确保初始页码在有效范围内
+    final safeInitialPage = initialPageIndex.clamp(0, result.pages.length - 1);
+    if (initialPageIndex > 0) {
+      debugPrint('📖 直接分页：恢复到页码 $safeInitialPage');
+    }
+
+    state = state.copyWith(
+      pages: result.pages,
+      currentPageIndex: safeInitialPage,
+      isLoading: false,
+      paginationSettings: settings,
+      cachedText: text,
+      cacheKey: cacheKey,
+      loadingStage: '加载完成',
+    );
+
+    // 保存到持久化缓存
+    PaginationCacheService.saveCache(
+      pages: result.pages,
+      cacheKey: cacheKey,
+    );
+
+    debugPrint('✅ 直接分页完成: ${result.pages.length}页');
+  }
+
+  /// 生成内容哈希
+  String _generateContentHash(String text) {
+    final sample = text.length > 10000 ? text.substring(0, 10000) : text;
+    final bytes = utf8.encode(sample);
+    final digest = md5.convert(bytes);
+    return digest.toString();
   }
 
   /// 跳转到指定页面
@@ -539,6 +936,52 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     if (state.pages.isEmpty) return;
 
     final targetPage = (progress * state.pages.length).floor();
+    goToPage(targetPage);
+  }
+
+  /// 根据字符索引定位到对应的页面
+  ///
+  /// 参数:
+  /// - charIndex: 目标字符在原文中的位置
+  ///
+  /// 此方法会找到包含该字符的页面并跳转过去
+  /// 如果没有字符偏移量信息，则回退到使用进度百分比
+  void goToCharIndex(int charIndex) {
+    if (state.pages.isEmpty) return;
+
+    // 如果没有字符偏移量信息，回退到进度百分比方法
+    if (state.pageCharOffsets == null || state.pageCharOffsets!.isEmpty) {
+      debugPrint('⚠️ 没有字符偏移量信息，使用进度百分比定位');
+      // 估算进度百分比
+      final textLength = state.cachedText?.length ?? 0;
+      if (textLength > 0) {
+        final progress = charIndex / textLength;
+        goToProgress(progress);
+      }
+      return;
+    }
+
+    // 二分查找最接近的页面
+    // 找到第一个起始位置大于charIndex的页面，然后取前一页
+    int left = 0;
+    int right = state.pageCharOffsets!.length - 1;
+    int targetPage = 0;
+
+    while (left <= right) {
+      final mid = (left + right) ~/ 2;
+      final offset = state.pageCharOffsets![mid];
+
+      if (offset <= charIndex) {
+        // 这一页可能包含目标字符
+        targetPage = mid;
+        left = mid + 1;
+      } else {
+        // 这一页在目标字符之后
+        right = mid - 1;
+      }
+    }
+
+    debugPrint('📍 根据字符索引 $charIndex 定位到第 ${targetPage + 1} 页');
     goToPage(targetPage);
   }
 }
@@ -574,9 +1017,11 @@ class ToolbarNotifier extends StateNotifier<ToolbarState> {
 
 /// TTS状态管理 - Riverpod StateNotifier
 class ReaderTtsNotifier extends StateNotifier<ReaderTtsState> {
-  ReaderTtsNotifier() : super(const ReaderTtsState());
+  ReaderTtsNotifier()
+      : _systemTts = SystemTts(), // 立即创建SystemTts单例实例（参考anx-reader的TtsHandler）
+        super(const ReaderTtsState());
 
-  late SystemTts _systemTts;
+  final SystemTts _systemTts;
   bool _isInitialized = false;
 
   /// 初始化TTS
@@ -585,22 +1030,33 @@ class ReaderTtsNotifier extends StateNotifier<ReaderTtsState> {
     required Function getNextText,
     required Function getPrevText,
   }) async {
-    if (_isInitialized) return;
+    if (_isInitialized) {
+      debugPrint('⚠️ TTS已经初始化，跳过');
+      return;
+    }
 
     try {
-      _systemTts = SystemTts();
-      await _systemTts.init(getCurrentText, getNextText, getPrevText);
+      debugPrint('🚀 开始初始化TTS...');
 
-      // 监听TTS状态变化
+      // 先设置监听器
       _systemTts.ttsStateNotifier.addListener(_onTtsStateChanged);
-
-      // 设置句子高亮回调
       _systemTts.setSentenceHighlightCallback(_onSentenceHighlightChanged);
 
+      // 初始化TTS引擎（可能需要时间）
+      await _systemTts.init(getCurrentText, getNextText, getPrevText);
+
+      // 标记为已初始化
       _isInitialized = true;
+
       debugPrint('✅ TTS初始化完成');
-    } catch (e) {
+      debugPrint('   - 音量: ${_systemTts.volume}');
+      debugPrint('   - 音调: ${_systemTts.pitch}');
+      debugPrint('   - 语速: ${_systemTts.rate}');
+    } catch (e, stackTrace) {
       debugPrint('❌ TTS初始化失败: $e');
+      debugPrint('Stack trace: $stackTrace');
+      // 标记为已初始化（虽然失败了），避免重复初始化尝试
+      _isInitialized = true;
     }
   }
 
@@ -622,19 +1078,30 @@ class ReaderTtsNotifier extends StateNotifier<ReaderTtsState> {
 
   /// 开始播放
   Future<void> play({String? text}) async {
-    if (!_isInitialized) return;
-
     try {
-      await _systemTts.speak(content: text);
-    } catch (e) {
-      debugPrint('❌ TTS播放失败: $e');
+      debugPrint('🎵 ReaderTtsNotifier.play() 被调用');
+      debugPrint('   传入文本: ${text != null ? "有 (${text.length}字符)" : "null"}');
+
+      if (text != null && text.isNotEmpty) {
+        // 直接播放传入的文本
+        debugPrint('   ✅ 文本验证通过，准备调用 _systemTts.speak()');
+        await _systemTts.speak(content: text);
+        debugPrint('   ✅ _systemTts.speak() 返回成功');
+      } else {
+        debugPrint('   ❌ 文本验证失败: ${text == null ? "null" : "空字符串"}');
+        throw Exception('请提供要朗读的文本内容');
+      }
+
+      debugPrint('✅ ReaderTtsNotifier.play() 完成');
+    } catch (e, stack) {
+      debugPrint('❌ ReaderTtsNotifier.play() 失败: $e');
+      debugPrint('Stack: $stack');
+      rethrow;
     }
   }
 
   /// 暂停播放
   Future<void> pause() async {
-    if (!_isInitialized) return;
-
     try {
       await _systemTts.pause();
     } catch (e) {
@@ -644,8 +1111,6 @@ class ReaderTtsNotifier extends StateNotifier<ReaderTtsState> {
 
   /// 继续播放
   Future<void> resume() async {
-    if (!_isInitialized) return;
-
     try {
       await _systemTts.resume();
     } catch (e) {
@@ -655,8 +1120,6 @@ class ReaderTtsNotifier extends StateNotifier<ReaderTtsState> {
 
   /// 停止播放
   Future<void> stop() async {
-    if (!_isInitialized) return;
-
     try {
       await _systemTts.stop();
     } catch (e) {
@@ -666,8 +1129,6 @@ class ReaderTtsNotifier extends StateNotifier<ReaderTtsState> {
 
   /// 上一句
   Future<void> previous() async {
-    if (!_isInitialized) return;
-
     try {
       await _systemTts.prev();
     } catch (e) {
@@ -677,8 +1138,6 @@ class ReaderTtsNotifier extends StateNotifier<ReaderTtsState> {
 
   /// 下一句
   Future<void> next() async {
-    if (!_isInitialized) return;
-
     try {
       await _systemTts.next();
     } catch (e) {

@@ -11,14 +11,31 @@ class ImportBookPage extends StatefulWidget {
 
 class _ImportBookPageState extends State<ImportBookPage> {
   bool _isLoading = false;
+  double _progress = 0.0;
+  String _progressMessage = '';
 
+  /// 导入文件并显示进度
+  ///
+  /// 异步导入书籍，通过进度回调更新UI状态
+  /// 成功后返回上一页，失败则显示错误提示
   Future<void> _pickFile() async {
     setState(() {
       _isLoading = true;
+      _progress = 0.0;
+      _progressMessage = '准备导入...';
     });
 
     try {
-      final book = await BookImportService().importBook();
+      final book = await BookImportService().importBook(
+        progressCallback: (progress, message) {
+          if (mounted) {
+            setState(() {
+              _progress = progress;
+              _progressMessage = message;
+            });
+          }
+        },
+      );
 
       if (book != null && mounted) {
         // 直接返回上一页，让用户从书库打开
@@ -34,6 +51,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _progress = 0.0;
+          _progressMessage = '';
         });
       }
     }
@@ -104,37 +123,66 @@ class _ImportBookPageState extends State<ImportBookPage> {
                             ),
                       ),
                       const SizedBox(height: 32),
-                      ElevatedButton(
-                        onPressed: _isLoading ? null : _pickFile,
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 32,
-                            vertical: 16,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_isLoading)
-                              const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
+                      if (_isLoading) ...[
+                        // 进度条
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            children: [
+                              LinearProgressIndicator(
+                                value: _progress,
+                                minHeight: 8,
+                                borderRadius: BorderRadius.circular(4),
                               ),
-                            if (_isLoading) ...[const SizedBox(width: 8)],
-                            if (!_isLoading) ...[
-                              const Icon(Icons.folder_open),
-                              const SizedBox(width: 8),
+                              const SizedBox(height: 12),
+                              Text(
+                                _progressMessage,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                    ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '${(_progress * 100).toStringAsFixed(0)}%',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.6),
+                                    ),
+                              ),
                             ],
-                            Text(_isLoading ? '导入中...' : '选择文件'),
-                          ],
+                          ),
                         ),
-                      ),
+                      ],
+                      if (!_isLoading)
+                        ElevatedButton(
+                          onPressed: _pickFile,
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 32,
+                              vertical: 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.folder_open),
+                              SizedBox(width: 8),
+                              Text('选择文件'),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),

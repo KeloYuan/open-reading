@@ -438,11 +438,39 @@ class WebDavSyncService {
     try {
       final response = await _dio.get('xxread/progress/progress.json');
       if (response.statusCode == 200) {
-        jsonDecode(response.data);
-        debugPrint('下载进度数据（占位）');
+        final data = jsonDecode(response.data);
+        final remoteProgress =
+            (data['progress'] as List).cast<Map<String, dynamic>>();
+
+        // 合并阅读进度
+        await _mergeProgress(remoteProgress);
       }
     } catch (e) {
       debugPrint('下载阅读进度失败: $e');
+    }
+  }
+
+  /// 合并阅读进度
+  Future<void> _mergeProgress(List<Map<String, dynamic>> remoteProgress) async {
+    for (final progress in remoteProgress) {
+      try {
+        final bookId = progress['bookId'] as int;
+        final remoteCurrentPage = progress['currentPage'] as int;
+
+        final localBook = await _bookDao.getBookById(bookId);
+        if (localBook != null) {
+          // 如果远程进度更大，更新本地
+          if (remoteCurrentPage > localBook.currentPage) {
+            final updatedBook = localBook.copyWith(
+              currentPage: remoteCurrentPage,
+            );
+            await _bookDao.updateBook(updatedBook);
+            debugPrint('更新书籍 $bookId 的阅读进度: ${localBook.currentPage} -> $remoteCurrentPage');
+          }
+        }
+      } catch (e) {
+        debugPrint('合并进度失败: $e');
+      }
     }
   }
 
@@ -465,9 +493,14 @@ class WebDavSyncService {
     }
   }
 
-  /// 合并书籍数据
+  /// 合并书籍数据（以阅读进度更大的为准）
   Book _mergeBookData(Book local, Book remote) {
-    // 暂时简化处理，总是使用本地数据
+    // 使用进度更大的一方
+    if (remote.currentPage > local.currentPage) {
+      return local.copyWith(
+        currentPage: remote.currentPage,
+      );
+    }
     return local;
   }
 

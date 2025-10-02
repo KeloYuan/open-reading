@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/reader_providers.dart';
 import '../widgets/enhanced_text_selection_toolbar.dart';
+import '../widgets/tts_settings_sheet.dart';
+import '../widgets/page_turning_settings_sheet.dart';
 import '../models/book_note.dart';
 import '../services/book_dao.dart';
 import '../services/data_manager.dart';
@@ -39,10 +41,15 @@ class _HighlightedText extends StatelessWidget {
               onSelectionChanged: onTextSelection != null
                   ? (selection, cause) {
                       if (!selection.isCollapsed) {
-                        final selectedText =
-                            text.substring(selection.start, selection.end);
+                        final selectedText = text.substring(
+                          selection.start,
+                          selection.end,
+                        );
                         _calculateSelectionPosition(
-                            context, selection, selectedText);
+                          context,
+                          selection,
+                          selectedText,
+                        );
                       }
                     }
                   : null,
@@ -65,10 +72,15 @@ class _HighlightedText extends StatelessWidget {
               onSelectionChanged: onTextSelection != null
                   ? (selection, cause) {
                       if (!selection.isCollapsed) {
-                        final selectedText =
-                            text.substring(selection.start, selection.end);
+                        final selectedText = text.substring(
+                          selection.start,
+                          selection.end,
+                        );
                         _calculateSelectionPosition(
-                            context, selection, selectedText);
+                          context,
+                          selection,
+                          selectedText,
+                        );
                       }
                     }
                   : null,
@@ -87,13 +99,15 @@ class _HighlightedText extends StatelessWidget {
       final sentence = sentences[i];
       final isHighlighted = i == highlightedSentenceIndex;
 
-      spans.add(TextSpan(
-        text: sentence,
-        style: style.copyWith(
-          backgroundColor:
-              isHighlighted ? highlightColor.withValues(alpha: 0.3) : null,
+      spans.add(
+        TextSpan(
+          text: sentence,
+          style: style.copyWith(
+            backgroundColor:
+                isHighlighted ? highlightColor.withValues(alpha: 0.3) : null,
+          ),
         ),
-      ));
+      );
     }
 
     return RichText(
@@ -116,7 +130,10 @@ class _HighlightedText extends StatelessWidget {
   }
 
   void _calculateSelectionPosition(
-      BuildContext context, TextSelection selection, String selectedText) {
+    BuildContext context,
+    TextSelection selection,
+    String selectedText,
+  ) {
     // 计算选中文本的实际位置
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox != null && onTextSelection != null) {
@@ -287,51 +304,47 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       vsync: this,
     );
 
-    _toolbarOpacityAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _toolbarAnimationController,
-      curve: Curves.fastOutSlowIn, // 使用更流畅的曲线
-    ));
+    _toolbarOpacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _toolbarAnimationController,
+        curve: Curves.fastOutSlowIn, // 使用更流畅的曲线
+      ),
+    );
 
-    _topToolbarSlideAnimation = Tween<Offset>(
-      begin: const Offset(0.0, -1.0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _toolbarAnimationController,
-      curve: Curves.fastOutSlowIn, // 统一使用流畅曲线
-    ));
+    _topToolbarSlideAnimation =
+        Tween<Offset>(begin: const Offset(0.0, -1.0), end: Offset.zero).animate(
+      CurvedAnimation(
+        parent: _toolbarAnimationController,
+        curve: Curves.fastOutSlowIn, // 统一使用流畅曲线
+      ),
+    );
 
-    _bottomToolbarSlideAnimation = Tween<Offset>(
-      begin: const Offset(0.0, 1.0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _toolbarAnimationController,
-      curve: Curves.fastOutSlowIn, // 统一使用流畅曲线
-    ));
+    _bottomToolbarSlideAnimation =
+        Tween<Offset>(begin: const Offset(0.0, 1.0), end: Offset.zero).animate(
+      CurvedAnimation(
+        parent: _toolbarAnimationController,
+        curve: Curves.fastOutSlowIn, // 统一使用流畅曲线
+      ),
+    );
   }
 
   /// 初始化页面
   void _initializePage() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      initializePagination();
-      _initializeTts();
-
-      // 跳转到初始页面
-      if (widget.initialPageIndex > 0) {
-        ref
-            .read(readerPaginationProvider.notifier)
-            .goToPage(widget.initialPageIndex);
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // 初始化分页，会自动恢复到 initialPageIndex
+      await initializePagination();
+      await _initializeTts(); // 等待TTS初始化完成
     });
   }
 
   /// 初始化分页（公共方法，供子组件调用）
-  void initializePagination() {
+  ///
+  /// 返回 Future 以便调用者可以等待分页完成
+  Future<void> initializePagination() async {
     final size = MediaQuery.of(context).size;
     final statusBarHeight = MediaQuery.of(context).padding.top;
     final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+    final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
 
     // 读取当前settings
     final settings = ref.read(readerSettingsProvider);
@@ -344,26 +357,39 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
     debugPrint('🎯 初始化沉浸式阅读器分页');
     debugPrint('   - 书籍内容长度: ${widget.bookContent.length} 字符');
-    debugPrint('   - 屏幕尺寸: ${size.width.toInt()}x${size.height.toInt()}');
+    debugPrint('   - 初始页码: ${widget.initialPageIndex}');
     debugPrint(
-        '   - 响应式Padding: T${responsivePadding.top.toInt()} B${responsivePadding.bottom.toInt()} L${responsivePadding.left.toInt()} R${responsivePadding.right.toInt()}');
+      '   - 屏幕尺寸: ${size.width.toInt()}x${size.height.toInt()} (DPR: ${devicePixelRatio.toStringAsFixed(2)})',
+    );
+    debugPrint(
+      '   - 响应式Padding: T${responsivePadding.top.toInt()} B${responsivePadding.bottom.toInt()} L${responsivePadding.left.toInt()} R${responsivePadding.right.toInt()}',
+    );
 
-    ref.read(readerPaginationProvider.notifier).initializePagination(
+    await ref.read(readerPaginationProvider.notifier).initializePagination(
           text: widget.bookContent,
           screenSize: size,
           settings: settingsWithPadding,
           statusBarHeight: statusBarHeight,
           bottomSafeArea: bottomSafeArea,
+          devicePixelRatio: devicePixelRatio,
+          initialPageIndex: widget.initialPageIndex,
         );
   }
 
   /// 初始化TTS
-  void _initializeTts() {
-    ref.read(readerTtsProvider.notifier).initialize(
-          getCurrentText: _getCurrentPageText,
-          getNextText: _getNextPageText,
-          getPrevText: _getPreviousPageText,
-        );
+  Future<void> _initializeTts() async {
+    try {
+      debugPrint('📢 开始初始化TTS...');
+      await ref.read(readerTtsProvider.notifier).initialize(
+            getCurrentText: _getCurrentPageText,
+            getNextText: _getNextPageText,
+            getPrevText: _getPreviousPageText,
+          );
+      debugPrint('✅ TTS初始化成功');
+    } catch (e, stack) {
+      debugPrint('❌ TTS初始化失败: $e');
+      debugPrint('Stack: $stack');
+    }
   }
 
   /// 获取当前页面文本（用于TTS）
@@ -420,11 +446,34 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
     // 如果持续时间短（<300ms）且移动距离小（<10px），则认为是点击
     if (duration < 300 && distance < 10) {
-      _handleCenterTap();
+      _handleScreenTap(event.position);
     }
 
     _pointerDownPosition = null;
     _pointerDownTime = null;
+  }
+
+  /// 处理屏幕点击 - 左中右三分区点击逻辑
+  ///
+  /// 所有翻页模式统一使用三分区：
+  /// - 左边1/3：上一页
+  /// - 中间1/3：显示/隐藏工具栏
+  /// - 右边1/3：下一页
+  void _handleScreenTap(Offset position) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final tapX = position.dx;
+
+    // 计算点击位置所在的区域
+    if (tapX < screenWidth / 3) {
+      // 左侧区域 - 上一页
+      _handlePreviousPage();
+    } else if (tapX > screenWidth * 2 / 3) {
+      // 右侧区域 - 下一页
+      _handleNextPage();
+    } else {
+      // 中间区域 - 显示/隐藏工具栏
+      _handleCenterTap();
+    }
   }
 
   /// 处理屏幕中央点击 - 显示/隐藏工具栏
@@ -435,6 +484,34 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       _hideToolbar();
     } else {
       _showToolbar();
+    }
+  }
+
+  /// 处理上一页点击
+  void _handlePreviousPage() {
+    if (!mounted) return;
+
+    final paginationNotifier = ref.read(readerPaginationProvider.notifier);
+    final paginationState = ref.read(readerPaginationProvider);
+
+    if (paginationState.currentPageIndex > 0) {
+      paginationNotifier.previousPage();
+      HapticFeedback.lightImpact();
+      debugPrint('📖 点击左侧区域 - 上一页');
+    }
+  }
+
+  /// 处理下一页点击
+  void _handleNextPage() {
+    if (!mounted) return;
+
+    final paginationNotifier = ref.read(readerPaginationProvider.notifier);
+    final paginationState = ref.read(readerPaginationProvider);
+
+    if (paginationState.currentPageIndex < paginationState.pages.length - 1) {
+      paginationNotifier.nextPage();
+      HapticFeedback.lightImpact();
+      debugPrint('📖 点击右侧区域 - 下一页');
     }
   }
 
@@ -521,10 +598,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     } catch (e) {
       debugPrint('❌ 原生全屏失败: $e，使用降级方案');
       // 降级使用 Flutter API
-      SystemChrome.setEnabledSystemUIMode(
-        SystemUiMode.manual,
-        overlays: [],
-      );
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
     }
   }
 
@@ -562,10 +636,13 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   ///
   /// 使用 ReadingProgressService 进行防抖保存
   /// [immediate] 为 true 时立即保存，用于页面关闭等关键场景
-  Future<void> _saveReadingProgress(int pageIndex,
-      {bool immediate = false}) async {
+  Future<void> _saveReadingProgress(
+    int pageIndex, {
+    bool immediate = false,
+  }) async {
     debugPrint(
-        '🔄 正在保存阅读进度: bookId=${widget.bookId}, pageIndex=$pageIndex, immediate=$immediate');
+      '🔄 正在保存阅读进度: bookId=${widget.bookId}, pageIndex=$pageIndex, immediate=$immediate',
+    );
 
     if (widget.bookId == null) {
       debugPrint('⚠️ 书籍ID为空，无法保存阅读进度');
@@ -593,7 +670,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       );
 
       debugPrint(
-          '✅ 阅读进度已保存: bookId=${widget.bookId}, 第 ${pageIndex + 1} 页/${book.totalPages}');
+        '✅ 阅读进度已保存: bookId=${widget.bookId}, 第 ${pageIndex + 1} 页/${book.totalPages}',
+      );
     } catch (e, stackTrace) {
       debugPrint('❌ 保存阅读进度失败: $e');
       debugPrint('堆栈: $stackTrace');
@@ -606,83 +684,94 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     final toolbarState = ref.watch(toolbarProvider);
 
     // 在build方法中设置监听器（必须在build方法中）
-    ref.listen<ReaderSettings>(
-      readerSettingsProvider,
-      (previous, next) {
-        if (previous == null) return;
+    ref.listen<ReaderSettings>(readerSettingsProvider, (previous, next) {
+      if (previous == null) return;
 
-        // 检测主题变化
-        if (previous.theme != next.theme) {
-          debugPrint('🎨 主题已切换: ${previous.themeName} → ${next.themeName}');
-          // 强制重建以更新背景色
-          if (mounted) {
-            setState(() {});
-            // 主题切换后重新应用全屏模式（如果工具栏未显示）
-            if (!toolbarState.isVisible) {
-              // 使用 addPostFrameCallback 确保在UI重建完成后再应用全屏
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) {
-                  _hideSystemUI();
-                  debugPrint('🎨 主题切换完成，重新进入全屏模式');
-                }
-              });
-            }
+      // 检测主题变化
+      if (previous.theme != next.theme) {
+        debugPrint('🎨 主题已切换: ${previous.themeName} → ${next.themeName}');
+        // 强制重建以更新背景色
+        if (mounted) {
+          setState(() {});
+          // 主题切换后重新应用全屏模式（如果工具栏未显示）
+          if (!toolbarState.isVisible) {
+            // 使用 addPostFrameCallback 确保在UI重建完成后再应用全屏
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _hideSystemUI();
+                debugPrint('🎨 主题切换完成，重新进入全屏模式');
+              }
+            });
           }
         }
+      }
 
-        // 检测影响分页的设置是否变化
-        final needRepagination = previous.fontSize != next.fontSize ||
-            previous.lineHeight != next.lineHeight ||
-            previous.letterSpacing != next.letterSpacing ||
-            previous.horizontalMargin != next.horizontalMargin ||
-            previous.paragraphSpacing != next.paragraphSpacing ||
-            previous.firstLineIndent != next.firstLineIndent;
+      // 检测影响分页的设置是否变化
+      final needRepagination = previous.fontSize != next.fontSize ||
+          previous.lineHeight != next.lineHeight ||
+          previous.letterSpacing != next.letterSpacing ||
+          previous.horizontalMargin != next.horizontalMargin ||
+          previous.paragraphSpacing != next.paragraphSpacing ||
+          previous.firstLineIndent != next.firstLineIndent;
 
-        if (needRepagination) {
-          debugPrint('📝 排版设置变化，触发重新分页...');
-          debugPrint('   字体: ${previous.fontSize} → ${next.fontSize}');
+      if (needRepagination) {
+        debugPrint('📝 排版设置变化，触发重新分页...');
+        debugPrint('   字体: ${previous.fontSize} → ${next.fontSize}');
 
-          // 取消之前的防抖计时器
-          _repaginationDebounceTimer?.cancel();
+        // 取消之前的防抖计时器
+        _repaginationDebounceTimer?.cancel();
 
-          // 使用防抖延迟重新分页（200ms），避免频繁调整时卡顿
-          _repaginationDebounceTimer = Timer(const Duration(milliseconds: 200), () {
+        // 使用防抖延迟重新分页（200ms），避免频繁调整时卡顿
+        _repaginationDebounceTimer =
+            Timer(const Duration(milliseconds: 200), () {
+          if (!mounted) return;
+
+          setState(() {
+            _isRepaginating = true;
+          });
+
+          // 保存当前页面的字符位置（而不是进度百分比）
+          final paginationState = ref.read(readerPaginationProvider);
+          final currentCharOffset = paginationState.currentCharOffset;
+          final currentProgress = paginationState.progress; // 作为备用方案
+
+          debugPrint(
+              '💾 保存当前阅读位置: 字符索引 $currentCharOffset (进度 ${(currentProgress * 100).toStringAsFixed(1)}%)');
+
+          // 使用延迟确保loading状态能被显示
+          Future.delayed(const Duration(milliseconds: 50), () async {
             if (!mounted) return;
 
-            setState(() {
-              _isRepaginating = true;
-            });
+            // 重新分页（会等待完成）
+            await initializePagination();
 
-            // 保存当前阅读进度（相对位置）
-            final currentProgress = ref.read(readerPaginationProvider).progress;
+            // 重新分页完成后，恢复到相应的阅读位置
+            if (mounted) {
+              final notifier = ref.read(readerPaginationProvider.notifier);
 
-            // 使用延迟确保loading状态能被显示
-            Future.delayed(const Duration(milliseconds: 50), () {
-              if (!mounted) return;
+              // 优先使用字符索引定位，更精确
+              if (currentCharOffset != null) {
+                notifier.goToCharIndex(currentCharOffset);
+                debugPrint(
+                  '✅ 重新分页完成，已通过字符索引 $currentCharOffset 精确定位',
+                );
+              } else {
+                // 回退到进度百分比方法
+                notifier.goToProgress(currentProgress);
+                debugPrint(
+                  '✅ 重新分页完成，已恢复到 ${(currentProgress * 100).toStringAsFixed(1)}% 位置',
+                );
+              }
 
-              // 重新分页
-              initializePagination();
-
-              // 重新分页完成后，恢复到相应的阅读位置
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) {
-                  ref
-                      .read(readerPaginationProvider.notifier)
-                      .goToProgress(currentProgress);
-                  debugPrint(
-                      '✅ 重新分页完成，已恢复到 ${(currentProgress * 100).toStringAsFixed(1)}% 位置');
-
-                  // 隐藏loading
-                  setState(() {
-                    _isRepaginating = false;
-                  });
-                }
+              // 隐藏loading
+              setState(() {
+                _isRepaginating = false;
               });
-            });
+            }
           });
-        }
-      },
-    );
+        });
+      }
+    });
 
     return Scaffold(
       body: AnimatedContainer(
@@ -953,15 +1042,19 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
       top: topMargin,
       left: horizontalMargin,
       right: horizontalMargin,
-      child: Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _buildTimeDisplay(settings),
-            _buildBatteryDisplay(settings),
-          ],
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque, // 阻止点击事件穿透
+        onTap: () {}, // 吸收点击事件
+        child: Container(
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildTimeDisplay(settings),
+              _buildBatteryDisplay(settings),
+            ],
+          ),
         ),
       ),
     );
@@ -995,11 +1088,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            _getBatteryIcon(),
-            size: 16,
-            color: _getBatteryColor(settings),
-          ),
+          Icon(_getBatteryIcon(), size: 16, color: _getBatteryColor(settings)),
           const SizedBox(width: 4),
           Text(
             '$_batteryLevel%',
@@ -1030,14 +1119,18 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
       bottom: bottomMargin,
       left: horizontalMargin,
       right: horizontalMargin,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _buildPageInfo(pageInfo, settings),
-            _buildProgressInfo(progress, settings),
-          ],
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque, // 阻止点击事件穿透
+        onTap: () {}, // 吸收点击事件
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildPageInfo(pageInfo, settings),
+              _buildProgressInfo(progress, settings),
+            ],
+          ),
         ),
       ),
     );
@@ -1145,6 +1238,8 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
   PageController? _pageController;
   ScrollController? _scrollController;
   GlobalKey<_SimulationPaginationViewState>? _simulationKey;
+  int _lastPageIndex = 0;
+  bool _isDisposed = false;
 
   @override
   void initState() {
@@ -1162,24 +1257,65 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _pageController?.dispose();
+    _pageController = null;
     _scrollController?.dispose();
+    _scrollController = null;
+    _simulationKey = null;
     super.dispose();
   }
 
   void _initializeControllers() {
+    // 如果已经 disposed，不执行任何操作
+    if (_isDisposed) {
+      debugPrint('⚠️ Widget已disposed，跳过初始化');
+      return;
+    }
+
+    // 先清理旧的 controllers
     _pageController?.dispose();
     _scrollController?.dispose();
 
+    // 重置所有引用
+    _pageController = null;
+    _scrollController = null;
+    _simulationKey = null;
+
+    // 获取当前页码（用于初始化 controller）
+    final currentPageIndex = ref.read(readerPaginationProvider).currentPageIndex;
+
+    // 根据模式创建对应的 controller
     switch (widget.paginationMode) {
       case PaginationMode.slide:
-        _pageController = PageController();
+        // 使用当前页码作为初始页
+        _pageController = PageController(initialPage: currentPageIndex);
+        debugPrint('📖 PageController 初始化到第 $currentPageIndex 页');
         break;
       case PaginationMode.scroll:
         _scrollController = ScrollController();
+        // ScrollController 需要在有数据后手动跳转
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController != null && _scrollController!.hasClients) {
+            final paginationState = ref.read(readerPaginationProvider);
+            if (paginationState.pages.isNotEmpty && currentPageIndex > 0) {
+              final screenHeight = MediaQuery.of(context).size.height;
+              final targetOffset = currentPageIndex * screenHeight;
+              _scrollController!.jumpTo(targetOffset);
+              debugPrint('📖 ScrollController 跳转到第 $currentPageIndex 页');
+            }
+          }
+        });
         break;
       case PaginationMode.simulation:
         _simulationKey = GlobalKey<_SimulationPaginationViewState>();
+        // 仿真翻页需要在创建后手动跳转
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_simulationKey?.currentState != null && currentPageIndex > 0) {
+            _simulationKey!.currentState!.jumpToPage(currentPageIndex);
+            debugPrint('📖 SimulationView 跳转到第 $currentPageIndex 页');
+          }
+        });
         break;
     }
   }
@@ -1204,13 +1340,68 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
       return _buildEmptyView(settings);
     }
 
+    // 分页完成后，确保 controller 已正确初始化到当前页码
+    // 这很重要，因为分页是异步的，controller 可能在分页完成前就创建了
+    ref.listen(readerPaginationProvider, (previous, next) {
+      // 当从 loading 变为 loaded，且页码大于0时，重新初始化 controller
+      if (previous?.isLoading == true && 
+          !next.isLoading && 
+          next.pages.isNotEmpty &&
+          next.currentPageIndex > 0) {
+        debugPrint('📖 分页完成，重新初始化 controller 到第 ${next.currentPageIndex} 页');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_isDisposed) {
+            _initializeControllers();
+          }
+        });
+      }
+    });
+
+    // 监听页码变化，同步更新 PageController
+    _syncPageController(paginationState.currentPageIndex);
+
     return _buildContentView(paginationState, renderSettings);
   }
 
+  /// 同步 PageController 到当前页码
+  ///
+  /// 当通过点击翻页时，需要让 PageController 跳转到对应页面
+  void _syncPageController(int currentPageIndex) {
+    // 如果已经 disposed，不执行任何操作
+    if (_isDisposed) return;
+
+    if (_lastPageIndex == currentPageIndex) return;
+
+    // 只在左右滑动模式下同步 PageController
+    if (widget.paginationMode == PaginationMode.slide &&
+        _pageController != null &&
+        _pageController!.hasClients) {
+      // 检查是否需要跳转
+      final currentPage = _pageController!.page?.round() ?? 0;
+      if (currentPage != currentPageIndex) {
+        // 使用 animateToPage 实现平滑过渡
+        _pageController!.animateToPage(
+          currentPageIndex,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+      }
+    }
+
+    _lastPageIndex = currentPageIndex;
+  }
+
   Widget _buildContentView(
-      ReaderPaginationState paginationState, ReaderSettings settings) {
+    ReaderPaginationState paginationState,
+    ReaderSettings settings,
+  ) {
     switch (widget.paginationMode) {
       case PaginationMode.slide:
+        // 如果 controller 为 null，先初始化（防御性检查）
+        if (_pageController == null) {
+          debugPrint('⚠️ PageController is null, reinitializing...');
+          _initializeControllers();
+        }
         return _SlidePaginationView(
           pages: paginationState.pages,
           controller: _pageController!,
@@ -1220,6 +1411,11 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
           onTap: widget.onTap,
         );
       case PaginationMode.scroll:
+        // 如果 controller 为 null，先初始化（防御性检查）
+        if (_scrollController == null) {
+          debugPrint('⚠️ ScrollController is null, reinitializing...');
+          _initializeControllers();
+        }
         return _ScrollPaginationView(
           pages: paginationState.pages,
           controller: _scrollController!,
@@ -1229,6 +1425,11 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
           onTap: widget.onTap,
         );
       case PaginationMode.simulation:
+        // 如果 key 为 null，先初始化（防御性检查）
+        if (_simulationKey == null) {
+          debugPrint('⚠️ Simulation key is null, reinitializing...');
+          _initializeControllers();
+        }
         return _SimulationPaginationView(
           key: _simulationKey,
           pages: paginationState.pages,
@@ -1241,6 +1442,9 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
   }
 
   void _onPageChanged(int pageIndex) {
+    // 如果已经 disposed，不执行任何操作
+    if (_isDisposed) return;
+
     ref.read(readerPaginationProvider.notifier).goToPage(pageIndex);
     widget.onPageChanged?.call(pageIndex);
   }
@@ -1250,17 +1454,60 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
   }
 
   Widget _buildLoadingView(ReaderSettings settings) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(color: settings.textStyle.color),
-          const SizedBox(height: 16),
-          Text(
-            '正在分页处理...',
-            style: settings.textStyle.copyWith(fontSize: 16),
-          ),
-        ],
+    return Container(
+      color: settings.backgroundColor,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // 流畅的加载动画
+            SizedBox(
+              width: 80,
+              height: 80,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  settings.textStyle.color?.withValues(alpha: 0.8) ??
+                      Colors.blue,
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // 加载文本 - 带淡入动画
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: 1.0),
+              duration: const Duration(milliseconds: 600),
+              builder: (context, value, child) {
+                return Opacity(opacity: value, child: child);
+              },
+              child: Column(
+                children: [
+                  Text(
+                    '正在分页处理',
+                    style: settings.textStyle.copyWith(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '马上就好...',
+                    style: settings.textStyle.copyWith(
+                      fontSize: 14,
+                      color: settings.textStyle.color?.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 48),
+
+            // 进度提示（可选）
+            _LoadingDots(color: settings.textStyle.color),
+          ],
+        ),
       ),
     );
   }
@@ -1309,8 +1556,9 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
                   horizontal: 24,
                   vertical: 12,
                 ),
-                backgroundColor:
-                    settings.textStyle.color?.withValues(alpha: 0.1),
+                backgroundColor: settings.textStyle.color?.withValues(
+                  alpha: 0.1,
+                ),
                 foregroundColor: settings.textStyle.color,
               ),
             ),
@@ -1321,8 +1569,9 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
               icon: const Icon(Icons.arrow_back),
               label: const Text('返回'),
               style: TextButton.styleFrom(
-                foregroundColor:
-                    settings.textStyle.color?.withValues(alpha: 0.7),
+                foregroundColor: settings.textStyle.color?.withValues(
+                  alpha: 0.7,
+                ),
               ),
             ),
           ],
@@ -1375,9 +1624,7 @@ class _SlidePaginationViewState extends State<_SlidePaginationView> {
       onPageChanged: widget.onPageChanged,
       itemCount: widget.pages.length,
       // 优化滚动物理效果
-      physics: const PageScrollPhysics(
-        parent: ClampingScrollPhysics(),
-      ),
+      physics: const PageScrollPhysics(parent: ClampingScrollPhysics()),
       itemBuilder: (context, index) {
         return _buildPageContent(context, widget.pages[index]);
       },
@@ -1487,10 +1734,9 @@ class _ScrollPaginationViewState extends State<_ScrollPaginationView> {
   void _handleDragUpdate(DragUpdateDetails details) {
     // 反向拖拽（向下拖动时减少偏移，向上拖动时增加偏移）
     final newOffset = _dragStartOffset - details.primaryDelta!;
-    widget.controller.jumpTo(newOffset.clamp(
-      0.0,
-      widget.controller.position.maxScrollExtent,
-    ));
+    widget.controller.jumpTo(
+      newOffset.clamp(0.0, widget.controller.position.maxScrollExtent),
+    );
   }
 
   void _handleDragEnd(DragEndDetails details) {
@@ -1637,29 +1883,17 @@ class _SimulationPaginationViewState extends State<_SimulationPaginationView>
       vsync: this,
     );
 
-    _flipAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _flipController,
-      curve: Curves.easeOutCubic,
-    ));
+    _flipAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _flipController, curve: Curves.easeOutCubic),
+    );
 
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.98,
-    ).animate(CurvedAnimation(
-      parent: _flipController,
-      curve: Curves.easeInOut,
-    ));
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.98).animate(
+      CurvedAnimation(parent: _flipController, curve: Curves.easeInOut),
+    );
 
-    _shadowAnimation = Tween<double>(
-      begin: 0.1,
-      end: 0.3,
-    ).animate(CurvedAnimation(
-      parent: _flipController,
-      curve: Curves.easeInOut,
-    ));
+    _shadowAnimation = Tween<double>(begin: 0.1, end: 0.3).animate(
+      CurvedAnimation(parent: _flipController, curve: Curves.easeInOut),
+    );
 
     _flipController.addStatusListener(_onFlipStatusChanged);
   }
@@ -1759,9 +1993,53 @@ class _SimulationPaginationViewState extends State<_SimulationPaginationView>
     _currentDragX = 0.0;
   }
 
+  /// 处理点击翻页 - 左中右三分区
+  void _handleTapUp(TapUpDetails details) {
+    if (_isAnimating) return;
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final tapX = details.globalPosition.dx;
+
+    if (tapX < screenWidth / 3) {
+      // 左侧区域 - 上一页
+      _flipToPreviousPage();
+    } else if (tapX > screenWidth * 2 / 3) {
+      // 右侧区域 - 下一页
+      _flipToNextPage();
+    } else {
+      // 中间区域 - 触发菜单（通过回调）
+      widget.onTap?.call();
+    }
+  }
+
+  /// 翻到上一页
+  void _flipToPreviousPage() {
+    if (_currentPage > 0) {
+      setState(() {
+        _isAnimating = true;
+        _nextPage = _currentPage - 1;
+        _isForwardFlip = false;
+      });
+      _flipController.forward();
+    }
+  }
+
+  /// 翻到下一页
+  void _flipToNextPage() {
+    if (_currentPage < widget.pages.length - 1) {
+      setState(() {
+        _isAnimating = true;
+        _nextPage = _currentPage + 1;
+        _isForwardFlip = true;
+      });
+      _flipController.forward();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      onTapUp: _handleTapUp, // 添加点击处理
       onHorizontalDragStart: _handleDragStart,
       onHorizontalDragUpdate: _handleDragUpdate,
       onHorizontalDragEnd: _handleDragEnd,
@@ -1775,14 +2053,15 @@ class _SimulationPaginationViewState extends State<_SimulationPaginationView>
           AnimatedBuilder(
             animation: _flipController,
             builder: (context, child) {
+              // 修正方向：向左滑（下一页）时从右边翻过来，向右滑（上一页）时从左边翻过来
               final rotationY = _isForwardFlip
-                  ? -_flipAnimation.value * 3.14159 * 0.5
-                  : _flipAnimation.value * 3.14159 * 0.5;
+                  ? _flipAnimation.value * 3.14159 * 0.5 // 向左滑：正向旋转
+                  : -_flipAnimation.value * 3.14159 * 0.5; // 向右滑：反向旋转
 
               return Transform(
                 alignment: _isForwardFlip
-                    ? Alignment.centerRight
-                    : Alignment.centerLeft,
+                    ? Alignment.centerLeft // 向左滑：从左边旋转
+                    : Alignment.centerRight, // 向右滑：从右边旋转
                 transform: Matrix4.identity()
                   ..setEntry(3, 2, 0.002) // 透视效果
                   ..rotateY(rotationY)
@@ -1863,23 +2142,30 @@ class _ReaderToolbar extends ConsumerWidget {
   final _ToolbarPosition position;
   final VoidCallback? onInteraction;
 
-  const _ReaderToolbar({
-    required this.position,
-    this.onInteraction,
-  });
+  const _ReaderToolbar({required this.position, this.onInteraction});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(readerSettingsProvider);
 
-    return Container(
-      decoration: _buildToolbarDecoration(settings),
-      child: SafeArea(
-        top: position == _ToolbarPosition.top,
-        bottom: position == _ToolbarPosition.bottom,
-        child: position == _ToolbarPosition.top
-            ? _buildTopToolbar(context, ref, settings)
-            : _buildBottomToolbar(context, ref, settings),
+    // 使用 GestureDetector 阻止点击事件穿透到下层
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque, // 阻止事件穿透
+      onTap: () {
+        // 吸收点击事件，不做任何操作
+      },
+      onTapDown: (_) {
+        // 吸收按下事件
+      },
+      child: Container(
+        decoration: _buildToolbarDecoration(settings),
+        child: SafeArea(
+          top: position == _ToolbarPosition.top,
+          bottom: position == _ToolbarPosition.bottom,
+          child: position == _ToolbarPosition.top
+              ? _buildTopToolbar(context, ref, settings)
+              : _buildBottomToolbar(context, ref, settings),
+        ),
       ),
     );
   }
@@ -1906,7 +2192,7 @@ class _ReaderToolbar extends ConsumerWidget {
       case ReadingTheme.night:
         return const Color(0xFF2A2A2A);
       case ReadingTheme.eyeCare:
-        return const Color(0xFFF0F2E8);
+        return const Color(0xFFB8E5BE); // 护眼绿色，与阅读背景协调
       case ReadingTheme.warmPaper:
         return const Color(0xFFFFF8DC);
       case ReadingTheme.coolGray:
@@ -1921,7 +2207,10 @@ class _ReaderToolbar extends ConsumerWidget {
   }
 
   Widget _buildTopToolbar(
-      BuildContext context, WidgetRef ref, ReaderSettings settings) {
+    BuildContext context,
+    WidgetRef ref,
+    ReaderSettings settings,
+  ) {
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1995,16 +2284,16 @@ class _ReaderToolbar extends ConsumerWidget {
 
   void _handleBookmark(BuildContext context, WidgetRef ref) {
     // TODO: Implement bookmark functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('书签功能')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('书签功能')));
   }
 
   void _showTableOfContents(BuildContext context, WidgetRef ref) {
     // TODO: Implement TOC navigation
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('目录导航')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('目录导航')));
   }
 
   /// 处理分享功能
@@ -2019,7 +2308,10 @@ class _ReaderToolbar extends ConsumerWidget {
 
   /// 显示主题选择器
   void _showThemeSelector(
-      BuildContext context, WidgetRef ref, ReaderSettings settings) {
+    BuildContext context,
+    WidgetRef ref,
+    ReaderSettings settings,
+  ) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -2033,8 +2325,9 @@ class _ReaderToolbar extends ConsumerWidget {
             duration: const Duration(milliseconds: 300),
             decoration: BoxDecoration(
               color: _getToolbarBackgroundColor(currentSettings),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
             ),
             child: SafeArea(
               child: Padding(
@@ -2047,8 +2340,9 @@ class _ReaderToolbar extends ConsumerWidget {
                       width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: currentSettings.textStyle.color
-                            ?.withValues(alpha: 0.3),
+                        color: currentSettings.textStyle.color?.withValues(
+                          alpha: 0.3,
+                        ),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -2064,7 +2358,7 @@ class _ReaderToolbar extends ConsumerWidget {
                     const SizedBox(height: 24),
                     // 主题网格 - 使用SizedBox固定高度，避免主题切换时高度变化导致晃动
                     SizedBox(
-                      height: 240, // 固定高度：3行 * (80px 高度 + 16px 间距) = 240px
+                      height: 320, // 固定高度：增加高度让网格更舒适
                       child: GridView.count(
                         crossAxisCount: 3,
                         shrinkWrap: true,
@@ -2074,8 +2368,13 @@ class _ReaderToolbar extends ConsumerWidget {
                         physics: const NeverScrollableScrollPhysics(),
                         children: ReadingTheme.values.map((theme) {
                           final isSelected = currentSettings.theme == theme;
-                          return _buildThemeCard(theme, isSelected,
-                              dialogContext, ref, currentSettings);
+                          return _buildThemeCard(
+                            theme,
+                            isSelected,
+                            dialogContext,
+                            ref,
+                            currentSettings,
+                          );
                         }).toList(),
                       ),
                     ),
@@ -2158,8 +2457,9 @@ class _ReaderToolbar extends ConsumerWidget {
                 child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
-                    color: currentSettings.textStyle.color
-                        ?.withValues(alpha: 0.15),
+                    color: currentSettings.textStyle.color?.withValues(
+                      alpha: 0.15,
+                    ),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -2177,7 +2477,10 @@ class _ReaderToolbar extends ConsumerWidget {
 
   /// 显示排版设置面板
   void _showTypographyPanel(
-      BuildContext context, WidgetRef ref, ReaderSettings settings) {
+    BuildContext context,
+    WidgetRef ref,
+    ReaderSettings settings,
+  ) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -2208,8 +2511,9 @@ class _ReaderToolbar extends ConsumerWidget {
                           width: 36,
                           height: 4,
                           decoration: BoxDecoration(
-                            color: settings.textStyle.color
-                                ?.withValues(alpha: 0.3),
+                            color: settings.textStyle.color?.withValues(
+                              alpha: 0.3,
+                            ),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -2227,9 +2531,12 @@ class _ReaderToolbar extends ConsumerWidget {
                             ),
                           ),
                           IconButton(
-                            icon: Icon(Icons.close,
-                                color: settings.textStyle.color
-                                    ?.withValues(alpha: 0.6)),
+                            icon: Icon(
+                              Icons.close,
+                              color: settings.textStyle.color?.withValues(
+                                alpha: 0.6,
+                              ),
+                            ),
                             onPressed: () => Navigator.pop(context),
                           ),
                         ],
@@ -2369,9 +2676,12 @@ class _ReaderToolbar extends ConsumerWidget {
                                 .read(readerSettingsProvider.notifier)
                                 .updateHorizontalMargin(20.0);
                           },
-                          icon: Icon(Icons.refresh,
-                              color: settings.textStyle.color
-                                  ?.withValues(alpha: 0.7)),
+                          icon: Icon(
+                            Icons.refresh,
+                            color: settings.textStyle.color?.withValues(
+                              alpha: 0.7,
+                            ),
+                          ),
                           label: Text(
                             '恢复默认',
                             style: settings.textStyle.copyWith(fontSize: 15),
@@ -2433,8 +2743,9 @@ class _ReaderToolbar extends ConsumerWidget {
         SliderTheme(
           data: SliderThemeData(
             activeTrackColor: settings.textStyle.color?.withValues(alpha: 0.7),
-            inactiveTrackColor:
-                settings.textStyle.color?.withValues(alpha: 0.15),
+            inactiveTrackColor: settings.textStyle.color?.withValues(
+              alpha: 0.15,
+            ),
             thumbColor: settings.textStyle.color,
             overlayColor: settings.textStyle.color?.withValues(alpha: 0.2),
             trackHeight: 4.0,
@@ -2454,7 +2765,10 @@ class _ReaderToolbar extends ConsumerWidget {
   }
 
   void _showMoreMenu(
-      BuildContext context, WidgetRef ref, ReaderSettings settings) {
+    BuildContext context,
+    WidgetRef ref,
+    ReaderSettings settings,
+  ) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -2480,9 +2794,21 @@ class _ReaderToolbar extends ConsumerWidget {
               _buildMoreMenuItem(context, Icons.search_rounded, '搜索', settings),
               _buildMoreMenuItem(context, Icons.share_rounded, '分享', settings),
               _buildMoreMenuItem(
-                  context, Icons.brightness_6_rounded, '亮度', settings),
+                context,
+                Icons.touch_app_rounded,
+                '翻页方式',
+                settings,
+                onTap: () {
+                  Navigator.pop(context);
+                  _showPageTurningSettings(context, ref, settings);
+                },
+              ),
               _buildMoreMenuItem(
-                  context, Icons.settings_rounded, '设置', settings),
+                context,
+                Icons.settings_rounded,
+                '设置',
+                settings,
+              ),
               const SizedBox(height: 16),
             ],
           ),
@@ -2491,26 +2817,29 @@ class _ReaderToolbar extends ConsumerWidget {
     );
   }
 
-  Widget _buildMoreMenuItem(BuildContext context, IconData icon, String label,
-      ReaderSettings settings) {
+  Widget _buildMoreMenuItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    ReaderSettings settings, {
+    VoidCallback? onTap,
+  }) {
     return InkWell(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(label)),
-        );
-      },
+      onTap: onTap ??
+          () {
+            HapticFeedback.lightImpact();
+            Navigator.pop(context);
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(label)));
+          },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         child: Row(
           children: [
             Icon(icon, color: settings.textStyle.color?.withValues(alpha: 0.8)),
             const SizedBox(width: 16),
-            Text(
-              label,
-              style: settings.textStyle.copyWith(fontSize: 16),
-            ),
+            Text(label, style: settings.textStyle.copyWith(fontSize: 16)),
           ],
         ),
       ),
@@ -2518,7 +2847,10 @@ class _ReaderToolbar extends ConsumerWidget {
   }
 
   Widget _buildBottomToolbar(
-      BuildContext context, WidgetRef ref, ReaderSettings settings) {
+    BuildContext context,
+    WidgetRef ref,
+    ReaderSettings settings,
+  ) {
     final paginationState = ref.watch(readerPaginationProvider);
     final currentPage = paginationState.currentPageIndex + 1;
     final totalPages = paginationState.totalPages;
@@ -2544,15 +2876,18 @@ class _ReaderToolbar extends ConsumerWidget {
                   onChanged: (value) {
                     onInteraction?.call();
                     HapticFeedback.selectionClick();
-                    final targetPage =
-                        (value * totalPages).round().clamp(1, totalPages);
+                    final targetPage = (value * totalPages).round().clamp(
+                          1,
+                          totalPages,
+                        );
                     ref
                         .read(readerPaginationProvider.notifier)
                         .goToPage(targetPage - 1);
                   },
                   activeColor: settings.textStyle.color?.withValues(alpha: 0.8),
-                  inactiveColor:
-                      settings.textStyle.color?.withValues(alpha: 0.2),
+                  inactiveColor: settings.textStyle.color?.withValues(
+                    alpha: 0.2,
+                  ),
                 ),
               ),
               Text(
@@ -2593,7 +2928,7 @@ class _ReaderToolbar extends ConsumerWidget {
                   settings: settings,
                 ),
               ),
-              Flexible(child: _buildTtsButton(ref, settings)),
+              Flexible(child: _buildTtsButton(context, ref, settings)),
               Flexible(
                 child: _buildToolbarButton(
                   icon: Icons.format_size_rounded,
@@ -2645,6 +2980,7 @@ class _ReaderToolbar extends ConsumerWidget {
     required ReaderSettings settings,
   }) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque, // 阻止事件穿透
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -2679,15 +3015,20 @@ class _ReaderToolbar extends ConsumerWidget {
   }
 
   /// 构建TTS按钮（带状态）
-  Widget _buildTtsButton(WidgetRef ref, ReaderSettings settings) {
+  Widget _buildTtsButton(
+    BuildContext context,
+    WidgetRef ref,
+    ReaderSettings settings,
+  ) {
     final ttsState = ref.watch(readerTtsProvider);
     final isPlaying = ttsState.isPlaying;
 
     return GestureDetector(
+      behavior: HitTestBehavior.opaque, // 阻止事件穿透
       onTap: () {
         onInteraction?.call();
         HapticFeedback.lightImpact();
-        _toggleTts(ref);
+        _toggleTts(context, ref);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -2729,6 +3070,7 @@ class _ReaderToolbar extends ConsumerWidget {
     required ReaderSettings settings,
   }) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque, // 阻止事件穿透
       onTap: () {
         onInteraction?.call();
         onPressed();
@@ -2748,17 +3090,18 @@ class _ReaderToolbar extends ConsumerWidget {
     );
   }
 
-  void _toggleTts(WidgetRef ref) {
-    final ttsState = ref.read(readerTtsProvider);
-    final ttsNotifier = ref.read(readerTtsProvider.notifier);
+  void _toggleTts(BuildContext context, WidgetRef ref) {
+    // 显示 TTS 设置面板
+    showTtsSettingsSheet(context);
+  }
 
-    if (ttsState.isPlaying) {
-      ttsNotifier.pause();
-    } else {
-      final currentPageContent =
-          ref.read(readerPaginationProvider).currentPageContent;
-      ttsNotifier.play(text: currentPageContent);
-    }
+  /// 显示翻页方式设置
+  void _showPageTurningSettings(
+    BuildContext context,
+    WidgetRef ref,
+    ReaderSettings settings,
+  ) {
+    showPageTurningSettingsSheet(context);
   }
 
   IconData _getThemeIcon(ReadingTheme theme) {
@@ -2780,5 +3123,69 @@ class _ReaderToolbar extends ConsumerWidget {
       case ReadingTheme.blueLight:
         return Icons.wb_twilight;
     }
+  }
+}
+
+/// 加载点动画组件
+///
+/// 显示三个跳动的点，营造流畅的加载感
+class _LoadingDots extends StatefulWidget {
+  final Color? color;
+
+  const _LoadingDots({this.color});
+
+  @override
+  State<_LoadingDots> createState() => _LoadingDotsState();
+}
+
+class _LoadingDotsState extends State<_LoadingDots>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1400),
+      vsync: this,
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(3, (index) {
+        return AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            final delay = index * 0.2;
+            final value = (_controller.value + delay) % 1.0;
+            final scale = 0.5 + (0.5 * (1 - (2 * value - 1).abs()));
+            final opacity = 0.3 + (0.7 * scale);
+
+            return Transform.scale(
+              scale: scale,
+              child: Opacity(opacity: opacity, child: child),
+            );
+          },
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: widget.color?.withValues(alpha: 0.6) ?? Colors.blue,
+              shape: BoxShape.circle,
+            ),
+          ),
+        );
+      }),
+    );
   }
 }

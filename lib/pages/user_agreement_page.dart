@@ -75,8 +75,8 @@ class _UserAgreementPageState extends State<UserAgreementPage>
     );
     _slideAnimation =
         Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero).animate(
-          CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
-        );
+      CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
+    );
   }
 
   /// 启动动画序列
@@ -126,6 +126,8 @@ class _UserAgreementPageState extends State<UserAgreementPage>
 
   /// 构建动态背景
   Widget _buildAnimatedBackground() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return AnimatedBuilder(
       animation: _scaleAnimation,
       builder: (context, child) {
@@ -136,18 +138,70 @@ class _UserAgreementPageState extends State<UserAgreementPage>
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                stops: const [0.0, 0.3, 0.6, 1.0],
-                colors: [
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-                  Theme.of(
-                    context,
-                  ).colorScheme.secondary.withValues(alpha: 0.08),
-                  Theme.of(
-                    context,
-                  ).colorScheme.tertiary.withValues(alpha: 0.12),
-                  Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
-                ],
+                stops: const [0.0, 0.4, 0.7, 1.0],
+                colors: isDark
+                    ? [
+                        // 深色主题：优雅的深紫到深蓝渐变
+                        const Color(0xFF1a1a2e),
+                        const Color(0xFF16213e),
+                        const Color(0xFF0f3460),
+                        const Color(0xFF0a1929),
+                      ]
+                    : [
+                        // 浅色主题：温馨的粉紫到蓝色渐变
+                        const Color(0xFFe0c3fc),
+                        const Color(0xFF8ec5fc),
+                        const Color(0xFFb8d5f0),
+                        const Color(0xFFf5f7fa),
+                      ],
               ),
+            ),
+            // 添加装饰圆圈
+            child: Stack(
+              children: [
+                // 左上角装饰圆
+                Positioned(
+                  top: -100,
+                  left: -100,
+                  child: Container(
+                    width: 300,
+                    height: 300,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.2),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                // 右下角装饰圆
+                Positioned(
+                  bottom: -150,
+                  right: -150,
+                  child: Container(
+                    width: 400,
+                    height: 400,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          Theme.of(context)
+                              .colorScheme
+                              .secondary
+                              .withValues(alpha: 0.15),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -194,52 +248,97 @@ class _UserAgreementPageState extends State<UserAgreementPage>
   Widget _buildHeader() {
     return Column(
       children: [
-        // 应用图标
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Theme.of(context).colorScheme.primary,
-                Theme.of(context).colorScheme.secondary,
-              ],
-            ),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: 0.3),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
+        // 应用图标 - 增强版
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            // 发光效果背景
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.4),
+                    Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.0),
+                  ],
+                ),
               ),
-            ],
-          ),
-          child: const Icon(
-            Icons.auto_stories_rounded,
-            color: Colors.white,
-            size: 40,
-          ),
+            ),
+            // 主图标容器
+            Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    const Color(0xFF667eea),
+                    const Color(0xFF764ba2),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF667eea).withValues(alpha: 0.5),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.auto_stories_rounded,
+                color: Colors.white,
+                size: 48,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
         // 应用标题
-        Text(
-          '小元读书',
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.onSurface,
+        ShaderMask(
+          shaderCallback: (bounds) => const LinearGradient(
+            colors: [
+              Color(0xFF667eea),
+              Color(0xFF764ba2),
+            ],
+          ).createShader(bounds),
+          child: Text(
+            '小元读书',
+            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  fontSize: 32,
+                ),
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          '优雅的阅读体验',
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-            color: Theme.of(
-              context,
-            ).colorScheme.onSurface.withValues(alpha: 0.7),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          decoration: BoxDecoration(
+            color:
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color:
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+              width: 1,
+            ),
+          ),
+          child: Text(
+            '✨ 优雅的阅读体验',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w500,
+                ),
           ),
         ),
       ],
@@ -248,68 +347,126 @@ class _UserAgreementPageState extends State<UserAgreementPage>
 
   /// 构建协议内容卡片
   Widget _buildAgreementCard() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Theme.of(
-                context,
-              ).colorScheme.outline.withValues(alpha: 0.2),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.15),
+            blurRadius: 30,
+            offset: const Offset(0, 15),
           ),
-          child: Column(
-            children: [
-              // 卡片标题
-              Container(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.article_outlined,
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      '用户服务协议',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.4)
+                  : Colors.white.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.white.withValues(alpha: 0.5),
+                width: 1.5,
               ),
-              // 协议内容
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  child: _buildAgreementContent(),
+            ),
+            child: Column(
+              children: [
+                // 卡片标题 - 渐变背景
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        const Color(0xFF667eea).withValues(alpha: 0.1),
+                        const Color(0xFF764ba2).withValues(alpha: 0.05),
+                      ],
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(24),
+                      topRight: Radius.circular(24),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF667eea),
+                              Color(0xFF764ba2),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF667eea)
+                                  .withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.verified_user_rounded,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '用户服务协议',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '请仔细阅读以下内容',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.6),
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                // 协议内容
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    physics: const BouncingScrollPhysics(),
+                    child: _buildAgreementContent(),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -321,62 +478,128 @@ class _UserAgreementPageState extends State<UserAgreementPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle('欢迎使用小元读书'),
-        _buildSectionContent('该应用为开发版，不代表最终结果，仅供测试使用，无法使用的功能就是还没做好'),
-
-        /*const SizedBox(height: 20),
-        _buildSectionTitle('1. 服务描述'),
-        _buildSectionContent(
-          '小元读书是一款专业的电子书阅读应用，为您提供优雅的阅读体验。我们支持EPUB、PDF等多种格式，'
-          '并提供书签管理、阅读统计、云端同步、TTS朗读等功能。',
-        ),
-
-        const SizedBox(height: 16),
-        _buildSectionTitle('2. 隐私保护'),
-        _buildSectionContent(
-          '我们高度重视您的隐私权。除非获得您的明确同意，我们不会收集、使用或分享您的个人信息。'
-          '您的阅读数据将安全存储在本地设备上。',
-        ),
-
-        const SizedBox(height: 16),
-        _buildSectionTitle('3. 数据安全'),
-        _buildSectionContent(
-          '应用会在您的设备上存储阅读进度、书签、笔记等数据。我们采用行业标准的安全措施保护您的数据。'
-          '如您选择使用云端同步功能，数据将通过加密传输。',
-        ),
-
-        const SizedBox(height: 16),
-        _buildSectionTitle('4. 使用条款'),
-        _buildSectionContent(
-          '• 请确保您导入的书籍内容符合相关法律法规\n'
-          '• 不得将应用用于任何非法或有害活动\n'
-          '• 我们保留在必要时更新协议条款的权利\n'
-          '• 继续使用应用即表示您同意遵守这些条款',
-        ),*/
-        const SizedBox(height: 20),
+        // 欢迎信息 - 更精美的展示
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(
-              context,
-            ).colorScheme.primaryContainer.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(8),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF667eea).withValues(alpha: 0.1),
+                const Color(0xFF764ba2).withValues(alpha: 0.05),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: const Color(0xFF667eea).withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              const Text(
+                '🎉',
+                style: TextStyle(fontSize: 48),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '欢迎使用小元读书',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF667eea),
+                    ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '该应用为开发版，不代表最终结果，仅供测试使用。\n无法使用的功能正在努力开发中 💪',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      height: 1.6,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.8),
+                    ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 24),
+
+        // 功能特色列表
+        _buildFeatureItem(
+          icon: Icons.menu_book_rounded,
+          title: '多格式支持',
+          description: 'EPUB、PDF、TXT、MOBI等多种格式',
+          gradient: const [Color(0xFF667eea), Color(0xFF764ba2)],
+        ),
+        const SizedBox(height: 12),
+        _buildFeatureItem(
+          icon: Icons.palette_rounded,
+          title: '个性化阅读',
+          description: '自定义字体、颜色、排版等阅读体验',
+          gradient: const [Color(0xFFf093fb), Color(0xFff5576c)],
+        ),
+        const SizedBox(height: 12),
+        _buildFeatureItem(
+          icon: Icons.cloud_sync_rounded,
+          title: 'WebDAV同步',
+          description: '支持WebDAV云端同步，多设备阅读进度同步',
+          gradient: const [Color(0xFF4facfe), Color(0xFF00f2fe)],
+        ),
+        const SizedBox(height: 12),
+        _buildFeatureItem(
+          icon: Icons.record_voice_over_rounded,
+          title: 'TTS朗读',
+          description: '智能语音朗读，解放双眼，听书更自由',
+          gradient: const [Color(0xFF43e97b), Color(0xFF38f9d7)],
+        ),
+
+        const SizedBox(height: 24),
+
+        // 提示信息
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF667eea).withValues(alpha: 0.15),
+                const Color(0xFF764ba2).withValues(alpha: 0.1),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFF667eea).withValues(alpha: 0.3),
+              width: 1.5,
+            ),
           ),
           child: Row(
             children: [
-              Icon(
-                Icons.info_outline,
-                color: Theme.of(context).colorScheme.primary,
-                size: 20,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF667eea).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.tips_and_updates_rounded,
+                  color: Color(0xFF667eea),
+                  size: 24,
+                ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  '点击"同意并继续"即表示您已阅读并同意上述条款',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  '点击"同意并继续"即表示您已阅读并同意使用该应用',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        height: 1.5,
+                      ),
                 ),
               ),
             ],
@@ -386,27 +609,70 @@ class _UserAgreementPageState extends State<UserAgreementPage>
     );
   }
 
-  /// 构建章节标题
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.primary,
+  /// 构建功能特色项
+  Widget _buildFeatureItem({
+    required IconData icon,
+    required String title,
+    required String description,
+    required List<Color> gradient,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: gradient[0].withValues(alpha: 0.2),
+          width: 1,
         ),
       ),
-    );
-  }
-
-  /// 构建章节内容
-  Widget _buildSectionContent(String content) {
-    return Text(
-      content,
-      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-        height: 1.6,
-        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: gradient),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: gradient[0].withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Icon(
+              icon,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.7),
+                        height: 1.4,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -444,51 +710,89 @@ class _UserAgreementPageState extends State<UserAgreementPage>
     required bool isPrimary,
   }) {
     return Container(
-      height: 50,
+      height: 56,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(25),
+        borderRadius: BorderRadius.circular(28),
+        gradient: isPrimary
+            ? const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF667eea),
+                  Color(0xFF764ba2),
+                ],
+              )
+            : null,
         boxShadow: isPrimary
             ? [
                 BoxShadow(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.primary.withValues(alpha: 0.3),
-                  blurRadius: 10,
+                  color: const Color(0xFF667eea).withValues(alpha: 0.5),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+                BoxShadow(
+                  color: const Color(0xFF764ba2).withValues(alpha: 0.3),
+                  blurRadius: 15,
                   offset: const Offset(0, 4),
                 ),
               ]
             : null,
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(25),
+        borderRadius: BorderRadius.circular(28),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: ElevatedButton(
-            onPressed: onPressed,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isPrimary
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(
-                      context,
-                    ).colorScheme.surface.withValues(alpha: 0.8),
-              foregroundColor: isPrimary
-                  ? Theme.of(context).colorScheme.onPrimary
-                  : Theme.of(context).colorScheme.onSurface,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(25),
-                side: isPrimary
-                    ? BorderSide.none
-                    : BorderSide(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.outline.withValues(alpha: 0.3),
+          child: Material(
+            color: isPrimary ? Colors.transparent : Colors.transparent,
+            child: InkWell(
+              onTap: onPressed,
+              borderRadius: BorderRadius.circular(28),
+              child: Container(
+                decoration: BoxDecoration(
+                  border: isPrimary
+                      ? null
+                      : Border.all(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .outline
+                              .withValues(alpha: 0.3),
+                          width: 1.5,
+                        ),
+                  borderRadius: BorderRadius.circular(28),
+                  color: isPrimary
+                      ? Colors.transparent
+                      : Theme.of(context)
+                          .colorScheme
+                          .surface
+                          .withValues(alpha: 0.8),
+                ),
+                alignment: Alignment.center,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (isPrimary)
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        color: Colors.white,
+                        size: 22,
                       ),
+                    if (isPrimary) const SizedBox(width: 8),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 17,
+                        color: isPrimary
+                            ? Colors.white
+                            : Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
             ),
           ),
         ),

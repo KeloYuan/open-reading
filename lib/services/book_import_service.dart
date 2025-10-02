@@ -12,6 +12,9 @@ import '../models/book.dart';
 import '../models/chapter.dart';
 import 'book_dao.dart';
 import 'enhanced_txt_import_service.dart';
+import 'cover_generator.dart';
+import 'book_cover_fetcher.dart';
+import 'book_import_isolate.dart';
 
 class EnhancedBookMetadata {
   final String title;
@@ -41,11 +44,54 @@ class EnhancedBookMetadata {
   });
 }
 
+/// 导入进度回调函数类型
+typedef ImportProgressCallback = void Function(double progress, String message);
+
 class BookImportService {
   final _bookDao = BookDao();
   final _enhancedTxtService = EnhancedTxtImportService();
+  final _coverFetcher = BookCoverFetcher();
 
-  /// 计算文件的MD5哈希值
+  /// 流式复制文件，支持大文件和进度回调
+  ///
+  /// 参数 [source] 源文件
+  /// 参数 [target] 目标文件
+  /// 参数 [progressCallback] 进度回调函数，接收0.0-1.0的进度值
+  Future<void> _copyFileWithProgress(
+    File source,
+    File target, {
+    Function(double)? progressCallback,
+  }) async {
+    final fileSize = await source.length();
+    final sourceStream = source.openRead();
+    final targetSink = target.openWrite();
+
+    int bytesCopied = 0;
+
+    try {
+      await for (var chunk in sourceStream) {
+        targetSink.add(chunk);
+        bytesCopied += chunk.length;
+
+        // 每复制1MB或完成时更新进度
+        if (bytesCopied % (1024 * 1024) == 0 || bytesCopied >= fileSize) {
+          final progress = bytesCopied / fileSize;
+          progressCallback?.call(progress);
+        }
+      }
+
+      await targetSink.flush();
+      await targetSink.close();
+
+      debugPrint('文件复制完成: ${fileSize / 1024 / 1024} MB');
+    } catch (e) {
+      await targetSink.close();
+      debugPrint('文件复制失败: $e');
+      rethrow;
+    }
+  }
+
+  /// 计算文件的MD5哈希值（使用isolate优化）
   ///
   /// 参数 [filePath] 文件的完整路径
   /// 返回计算出的MD5哈希值字符串，失败返回null
@@ -57,9 +103,23 @@ class BookImportService {
         return null;
       }
 
-      final bytes = await file.readAsBytes();
-      final digest = md5.convert(bytes);
-      return digest.toString();
+      // 小文件直接在主线程处理
+      final fileSize = await file.length();
+      if (fileSize < 5 * 1024 * 1024) {
+        // 小于5MB，直接处理
+        final bytes = await file.readAsBytes();
+        final digest = md5.convert(bytes);
+        return digest.toString();
+      }
+
+      // 大文件使用isolate分块处理
+      debugPrint('使用isolate处理大文件哈希计算: ${fileSize / 1024 / 1024} MB');
+      final result = await compute(
+        calculateFileHashInIsolate,
+        HashCalculationParams(filePath: filePath),
+      );
+      debugPrint('哈希计算完成: ${result.hash}');
+      return result.hash;
     } catch (e) {
       debugPrint('Error calculating file hash: $e');
       return null;
@@ -79,8 +139,15 @@ class BookImportService {
     }
   }
 
-  Future<Book?> importBook() async {
+  /// 导入书籍，支持进度回调
+  ///
+  /// 参数 [progressCallback] 可选的进度回调函数，接收进度值(0.0-1.0)和描述信息
+  /// 返回成功导入的Book对象，失败或取消返回null
+  Future<Book?> importBook({ImportProgressCallback? progressCallback}) async {
     try {
+      progressCallback?.call(0.0, '选择文件中...');
+
+      // 使用路径模式而非数据模式，避免大文件加载到内存
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: [
@@ -97,11 +164,47 @@ class BookImportService {
           'cbz',
           'cbr',
         ],
-        withData: true,
+        withData: false, // 关键修改：使用路径模式
       );
 
       if (result != null && result.files.isNotEmpty) {
         final pickedFile = result.files.first;
+
+        // 获取原始文件路径
+        final sourcePath = pickedFile.path;
+        if (sourcePath == null) {
+          throw Exception('无法获取文件路径');
+        }
+
+        final sourceFile = File(sourcePath);
+        final fileSize = await sourceFile.length();
+        final fileSizeMB = fileSize / 1024 / 1024;
+        debugPrint(
+            '选择的文件: ${pickedFile.name}, 大小: ${fileSizeMB.toStringAsFixed(2)} MB');
+
+        // 检查文件大小，对超大文件给出警告
+        if (fileSizeMB > 100) {
+          // 超过100MB，拒绝导入
+          throw Exception('文件过大无法导入\n\n'
+              '文件大小：${fileSizeMB.toStringAsFixed(1)} MB\n'
+              '限制大小：100 MB\n\n'
+              '建议：\n'
+              '1. 将书籍分割为多个较小的文件\n'
+              '2. 或压缩文件后再导入\n'
+              '3. 使用专门的大文件阅读器');
+        } else if (fileSizeMB > 50) {
+          // 50-100MB，给出严重警告
+          debugPrint(
+              '⚠️ 警告：文件非常大 (${fileSizeMB.toStringAsFixed(1)} MB)，可能导致性能问题');
+          progressCallback?.call(
+              0.05, '文件较大 (${fileSizeMB.toStringAsFixed(0)}MB)，导入可能较慢...');
+        } else if (fileSizeMB > 30) {
+          // 30-50MB，给出警告
+          debugPrint('⚠️ 提示：文件较大 (${fileSizeMB.toStringAsFixed(1)} MB)');
+          progressCallback?.call(0.05, '准备导入大文件...');
+        } else {
+          progressCallback?.call(0.05, '准备导入...');
+        }
 
         // 1. Get application documents directory
         final documentsDir = await getApplicationDocumentsDirectory();
@@ -110,43 +213,139 @@ class BookImportService {
           await booksDir.create(recursive: true);
         }
 
-        // 2. Save the file to disk
-        final newFilePath = join(booksDir.path, pickedFile.name);
-        final file = File(newFilePath);
-        await file.writeAsBytes(pickedFile.bytes!);
+        progressCallback?.call(0.1, '检查重复...');
+
+        // 2. 先计算源文件哈希值，检查是否重复（避免覆盖已存在文件）
+        final sourceContentHash = await _calculateFileHash(sourceFile.path);
+        if (sourceContentHash != null) {
+          final existingBook = await _checkDuplicateByHash(sourceContentHash);
+          if (existingBook != null) {
+            // 检查已存在书籍的文件是否真实存在
+            final existingFile = File(existingBook.filePath);
+            final existingFileExists = await existingFile.exists();
+
+            if (!existingFileExists) {
+              // 旧文件不存在，需要复制新文件并更新数据库路径
+              debugPrint('检测到重复书籍但旧文件丢失，准备恢复: ${existingBook.title}');
+
+              progressCallback?.call(0.15, '恢复丢失的文件...');
+
+              // 继续执行复制流程，然后更新路径
+              // （不在这里return，让后续流程处理）
+            } else {
+              // 旧文件存在，这是真正的重复
+              debugPrint('Duplicate book detected: ${existingBook.title}');
+              throw Exception(
+                '该书籍已存在于书库中：《${existingBook.title}》\n'
+                '作者：${existingBook.author}\n'
+                '导入日期：${existingBook.importDate}',
+              );
+            }
+          }
+          debugPrint('File hash calculated: $sourceContentHash');
+        } else {
+          debugPrint('Warning: Failed to calculate source file hash');
+        }
+
+        progressCallback?.call(0.2, '开始复制文件...');
+
+        // 3. 生成唯一的目标文件路径（避免覆盖已存在文件）
+        String newFilePath;
+        File targetFile;
+        int counter = 0;
+
+        do {
+          if (counter == 0) {
+            newFilePath = join(booksDir.path, pickedFile.name);
+          } else {
+            // 添加数字后缀避免覆盖
+            final nameWithoutExt =
+                pickedFile.name.replaceAll(RegExp(r'\.[^.]+$'), '');
+            final ext = pickedFile.extension ?? '';
+            newFilePath =
+                join(booksDir.path, '${nameWithoutExt}_$counter.$ext');
+          }
+          targetFile = File(newFilePath);
+          counter++;
+        } while (await targetFile.exists() && counter < 1000);
+
+        // 4. 流式复制文件到目标位置（支持大文件）
+        await _copyFileWithProgress(
+          sourceFile,
+          targetFile,
+          progressCallback: (progress) {
+            // 将复制进度映射到0.2-0.45区间（占25%）
+            progressCallback?.call(
+              0.2 + progress * 0.25,
+              '复制文件 ${(progress * 100).toInt()}%',
+            );
+          },
+        );
 
         debugPrint('Book file saved to: $newFilePath');
 
-        // 2.5. Calculate file hash and check for duplicates
+        progressCallback?.call(0.5, '验证文件...');
+
+        // 5. 验证复制后的文件哈希值
         final contentHash = await _calculateFileHash(newFilePath);
         if (contentHash != null) {
           final existingBook = await _checkDuplicateByHash(contentHash);
           if (existingBook != null) {
-            // Delete the newly saved file since it's a duplicate
-            await file.delete();
-            debugPrint('Duplicate book detected: ${existingBook.title}');
-            throw Exception(
-              '该书籍已存在于书库中：《${existingBook.title}》\n'
-              '作者：${existingBook.author}\n'
-              '导入日期：${existingBook.importDate}',
-            );
+            // 再次检查（双重保险），如果是旧文件丢失的情况，更新路径
+            final existingFile = File(existingBook.filePath);
+            final existingFileExists = await existingFile.exists();
+
+            if (!existingFileExists) {
+              // 旧文件不存在，更新数据库中的文件路径到新文件
+              debugPrint(
+                  '旧文件不存在，更新文件路径: ${existingBook.filePath} -> $newFilePath');
+
+              progressCallback?.call(0.7, '更新文件路径...');
+
+              final updatedBook = existingBook.copyWith(filePath: newFilePath);
+              await _bookDao.updateBook(updatedBook);
+
+              progressCallback?.call(1.0, '文件路径已恢复！');
+
+              debugPrint('✅ 文件路径已更新，书籍已恢复访问');
+              // 直接返回更新后的书籍，不继续后续流程
+              return updatedBook;
+            }
+            // 如果走到这里说明有问题（不应该发生，因为前面已经检查过了）
+            debugPrint('⚠️ 警告：检测到重复但前面的检查没有捕获到');
           }
-          debugPrint('File hash calculated: $contentHash');
+          debugPrint('File hash verified: $contentHash');
         } else {
-          debugPrint('Warning: Failed to calculate file hash');
+          debugPrint('Warning: Failed to verify file hash');
         }
 
-        // 3. Extract enhanced metadata based on format
-        final metadata = await _extractEnhancedMetadata(pickedFile);
+        progressCallback?.call(0.55, '分析书籍信息...');
+
+        // 6. Extract enhanced metadata based on format（从文件读取而非内存）
+        final metadata = await _extractEnhancedMetadataFromFile(
+          newFilePath,
+          pickedFile.name,
+          pickedFile.extension ?? '',
+          progressCallback: (subProgress, message) {
+            // 将子进度映射到0.55-0.85区间（占30%）
+            final mappedProgress = 0.55 + (subProgress * 0.3);
+            progressCallback?.call(mappedProgress, message);
+          },
+        );
+
+        progressCallback?.call(0.80, '保存封面...');
 
         // 4. Save cover image if available
         String? coverImagePath;
         if (metadata.coverImage != null) {
+          progressCallback?.call(0.85, '保存封面图片...');
           coverImagePath = await _saveCoverImage(
             metadata.coverImage!,
             pickedFile.name,
           );
         }
+
+        progressCallback?.call(0.90, '写入数据库...');
 
         // 5. Create Book object with enhanced metadata
         final book = Book(
@@ -159,7 +358,9 @@ class BookImportService {
           contentHash: contentHash,
         );
 
-        // 6. Insert metadata into the database
+        // 7. Insert metadata into the database
+        progressCallback?.call(0.90, '保存到数据库...');
+
         final bookId = await _bookDao.insertBook(book);
         debugPrint('Enhanced book metadata inserted with ID: $bookId');
         debugPrint('Title: ${metadata.title}');
@@ -168,42 +369,114 @@ class BookImportService {
         debugPrint('Language: ${metadata.language ?? 'Unknown'}');
         debugPrint('Publisher: ${metadata.publisher ?? 'Unknown'}');
 
+        progressCallback?.call(1.0, '导入成功！');
+
         return book.copyWith(id: bookId);
       }
     } catch (e) {
       debugPrint('Enhanced import process failed: $e');
+      progressCallback?.call(0.0, '导入失败');
       rethrow;
     }
     return null;
   }
 
-  /// Extract enhanced metadata from different file formats
-  Future<EnhancedBookMetadata> _extractEnhancedMetadata(
-    PlatformFile pickedFile,
-  ) async {
-    final extension = pickedFile.extension?.toLowerCase();
-    final bytes = pickedFile.bytes!;
+  /// 从文件路径提取元数据（优化大文件处理）
+  ///
+  /// 参数 [filePath] 文件路径
+  /// 参数 [fileName] 文件名
+  /// 参数 [extension] 文件扩展名
+  /// 参数 [progressCallback] 进度回调，接收0.0-1.0的进度值和消息
+  /// 返回提取的元数据
+  Future<EnhancedBookMetadata> _extractEnhancedMetadataFromFile(
+    String filePath,
+    String fileName,
+    String extension, {
+    Function(double, String)? progressCallback,
+  }) async {
+    final ext = extension.toLowerCase();
+    final file = File(filePath);
+    final fileSize = await file.length();
 
-    switch (extension) {
-      case 'epub':
-        return await _extractEpubMetadata(bytes, pickedFile.name);
-      case 'pdf':
-        return await _extractPdfMetadata(bytes, pickedFile.name);
-      case 'txt':
-        return await _extractTxtMetadata(bytes, pickedFile.name);
-      case 'mobi':
-      case 'azw':
-      case 'azw3':
-        return await _extractMobiMetadata(bytes, pickedFile.name);
-      case 'fb2':
-        return await _extractFb2Metadata(bytes, pickedFile.name);
-      case 'cbz':
-      case 'cbr':
-        return await _extractComicMetadata(bytes, pickedFile.name);
-      case 'rtf':
-        return await _extractRtfMetadata(bytes, pickedFile.name);
-      default:
-        return _extractBasicMetadata(bytes, pickedFile.name);
+    debugPrint('📖 提取元数据: $fileName (${fileSize / 1024 / 1024} MB)');
+
+    progressCallback?.call(0.0, '读取文件...');
+
+    // 对于大文件，只读取必要的部分
+    final maxBytesForMetadata = 10 * 1024 * 1024; // 10MB
+    Uint8List bytes;
+
+    if (fileSize > maxBytesForMetadata && ext == 'txt') {
+      // TXT大文件只读取前10MB用于元数据提取
+      debugPrint('⚠️ 大型TXT文件，只读取前10MB用于元数据提取');
+      progressCallback?.call(0.1, '读取大文件...');
+
+      final stream = file.openRead(0, maxBytesForMetadata);
+      final chunks = await stream.toList();
+      final totalLength =
+          chunks.fold<int>(0, (sum, chunk) => sum + chunk.length);
+      final buffer = Uint8List(totalLength);
+      int offset = 0;
+      for (var chunk in chunks) {
+        buffer.setRange(offset, offset + chunk.length, chunk);
+        offset += chunk.length;
+      }
+      bytes = buffer;
+
+      progressCallback?.call(0.3, '分析文本内容...');
+    } else {
+      // 其他格式或小文件，完整读取
+      progressCallback?.call(0.2, '加载文件内容...');
+      bytes = await file.readAsBytes();
+      progressCallback?.call(0.4, '解析文件格式...');
+    }
+
+    try {
+      EnhancedBookMetadata metadata;
+
+      switch (ext) {
+        case 'epub':
+          progressCallback?.call(0.5, '解析EPUB格式...');
+          metadata = await _extractEpubMetadata(bytes, fileName);
+          break;
+        case 'pdf':
+          progressCallback?.call(0.5, '解析PDF格式...');
+          metadata = await _extractPdfMetadata(bytes, fileName);
+          break;
+        case 'txt':
+          progressCallback?.call(0.5, '检测文本编码...');
+          metadata = await _extractTxtMetadata(bytes, fileName);
+          break;
+        case 'mobi':
+        case 'azw':
+        case 'azw3':
+          progressCallback?.call(0.5, '解析MOBI格式...');
+          metadata = await _extractMobiMetadata(bytes, fileName);
+          break;
+        case 'fb2':
+          progressCallback?.call(0.5, '解析FB2格式...');
+          metadata = await _extractFb2Metadata(bytes, fileName);
+          break;
+        case 'cbz':
+        case 'cbr':
+          progressCallback?.call(0.5, '解析漫画格式...');
+          metadata = await _extractComicMetadata(bytes, fileName);
+          break;
+        case 'rtf':
+          progressCallback?.call(0.5, '解析RTF格式...');
+          metadata = await _extractRtfMetadata(bytes, fileName);
+          break;
+        default:
+          progressCallback?.call(0.5, '提取基本信息...');
+          metadata = _extractBasicMetadata(bytes, fileName);
+      }
+
+      progressCallback?.call(1.0, '元数据提取完成');
+      return metadata;
+    } catch (e) {
+      debugPrint('❌ 元数据提取失败: $e');
+      progressCallback?.call(0.8, '使用默认信息...');
+      return _extractBasicMetadata(bytes, fileName);
     }
   }
 
@@ -215,20 +488,65 @@ class BookImportService {
     try {
       final epubBook = await EpubReader.readBook(bytes);
 
-      // Extract cover image with enhanced logic
-      Uint8List? coverImage;
-      try {
-        coverImage = await _extractEpubCover(epubBook);
-      } catch (e) {
-        debugPrint('Cover image extraction failed: $e');
-      }
-
-      // Extract all available metadata
+      // Extract basic metadata first (needed for cover fetching)
       final title = epubBook.Title?.isNotEmpty == true
           ? epubBook.Title!
           : fileName.replaceAll(RegExp(r'\.(epub)$'), '');
       final author =
           epubBook.Author?.isNotEmpty == true ? epubBook.Author! : 'Unknown';
+
+      // Extract ISBN early (useful for cover fetching)
+      String? isbn;
+      if (epubBook.Schema?.Package?.Metadata?.Identifiers?.isNotEmpty == true) {
+        for (final identifier
+            in epubBook.Schema!.Package!.Metadata!.Identifiers!) {
+          if (identifier.Scheme?.toLowerCase().contains('isbn') == true) {
+            isbn = identifier.Identifier;
+            break;
+          }
+        }
+      }
+
+      // Extract cover image with enhanced logic
+      Uint8List? coverImage;
+      try {
+        // First try to extract from EPUB file
+        coverImage = await _extractEpubCover(epubBook);
+
+        // If no embedded cover, try fetching from network
+        if (coverImage == null) {
+          debugPrint('🌐 EPUB无内置封面，尝试从网络获取: $title');
+          coverImage = await _coverFetcher.fetchCoverQuick(
+            title: title,
+            author: author,
+            isbn: isbn,
+          );
+
+          if (coverImage != null) {
+            debugPrint('✅ 从网络成功获取EPUB封面');
+          } else {
+            debugPrint('📝 网络未找到封面，生成EPUB默认封面');
+            coverImage = await CoverGenerator.generateTextCover(
+              title: title,
+              author: author,
+              format: 'EPUB',
+            );
+          }
+        } else {
+          debugPrint('✅ 成功从EPUB文件提取内置封面');
+        }
+      } catch (e) {
+        debugPrint('⚠️ 封面处理失败: $e，生成默认封面');
+        try {
+          coverImage = await CoverGenerator.generateTextCover(
+            title: title,
+            author: author,
+            format: 'EPUB',
+          );
+        } catch (genError) {
+          debugPrint('❌ EPUB封面生成失败: $genError');
+        }
+      }
 
       // Try to extract description from available fields
       String? description;
@@ -259,18 +577,6 @@ class BookImportService {
       String? publishDate;
       if (epubBook.Schema?.Package?.Metadata?.Dates?.isNotEmpty == true) {
         publishDate = epubBook.Schema!.Package!.Metadata!.Dates!.first.Date;
-      }
-
-      // Extract ISBN
-      String? isbn;
-      if (epubBook.Schema?.Package?.Metadata?.Identifiers?.isNotEmpty == true) {
-        for (final identifier
-            in epubBook.Schema!.Package!.Metadata!.Identifiers!) {
-          if (identifier.Scheme?.toLowerCase().contains('isbn') == true) {
-            isbn = identifier.Identifier;
-            break;
-          }
-        }
       }
 
       // Extract subject tags - Subjects is likely a list of strings
@@ -318,13 +624,46 @@ class BookImportService {
 
       // Extract basic metadata - PDF metadata is often limited
       final title = fileName.replaceAll(RegExp(r'\.(pdf)$'), '');
+      final author = 'Unknown';
 
-      // 提取PDF封面
+      // 提取PDF封面（先尝试从PDF第一页，再尝试网络）
       Uint8List? coverImage;
       try {
+        // Try extracting from PDF first page
         coverImage = await _extractPdfCover(bytes);
+
+        // If no PDF cover, try network
+        if (coverImage == null) {
+          debugPrint('🌐 PDF无封面，尝试从网络获取: $title');
+          coverImage = await _coverFetcher.fetchCoverQuick(
+            title: title,
+            author: author,
+          );
+
+          if (coverImage != null) {
+            debugPrint('✅ 从网络成功获取PDF封面');
+          } else {
+            debugPrint('📝 网络未找到封面，生成PDF默认封面');
+            coverImage = await CoverGenerator.generateTextCover(
+              title: title,
+              author: author,
+              format: 'PDF',
+            );
+          }
+        } else {
+          debugPrint('✅ 成功从PDF提取封面（第一页）');
+        }
       } catch (e) {
-        debugPrint('PDF cover extraction failed: $e');
+        debugPrint('⚠️ PDF封面处理失败: $e，生成默认封面');
+        try {
+          coverImage = await CoverGenerator.generateTextCover(
+            title: title,
+            author: author,
+            format: 'PDF',
+          );
+        } catch (genError) {
+          debugPrint('❌ PDF封面生成失败: $genError');
+        }
       }
 
       await pdfDocument.close();
@@ -349,40 +688,112 @@ class BookImportService {
     }
   }
 
-  /// 使用增强服务提取TXT元数据
+  /// 使用增强服务提取TXT元数据（使用isolate优化）
   Future<EnhancedBookMetadata> _extractTxtMetadata(
     Uint8List bytes,
     String fileName,
   ) async {
     try {
-      // 使用增强的TXT导入服务
-      final content = _enhancedTxtService.detectTextEncoding(bytes);
-      final txtMetadata = _enhancedTxtService.extractTxtMetadata(
-        content,
-        fileName,
-      );
+      debugPrint('📖 开始TXT元数据提取: $fileName');
 
-      debugPrint('增强TXT元数据提取完成:');
-      debugPrint('标题: ${txtMetadata.title}');
-      debugPrint('作者: ${txtMetadata.author}');
-      debugPrint('语言: ${txtMetadata.language ?? '未知'}');
-      debugPrint('预估页数: ${txtMetadata.estimatedPages}');
-      if (txtMetadata.description != null) {
-        debugPrint(
-          '简介: ${txtMetadata.description!.substring(0, txtMetadata.description!.length.clamp(0, 100))}...',
+      // 对于大文件，使用isolate处理
+      SimpleMetadata simpleMetadata;
+      if (bytes.length > 5 * 1024 * 1024) {
+        // 大于5MB，使用isolate
+        debugPrint('使用isolate处理大TXT文件: ${bytes.length / 1024 / 1024} MB');
+        simpleMetadata = await compute(
+          extractTxtMetadataInIsolate,
+          MetadataExtractionParams(
+            bytes: bytes,
+            fileName: fileName,
+            extension: 'txt',
+          ),
+        );
+      } else {
+        // 小文件在主线程处理
+        String content;
+        try {
+          content = _enhancedTxtService.detectTextEncoding(bytes);
+          debugPrint('✅ 文本编码检测成功，内容长度: ${content.length}');
+        } catch (e, stackTrace) {
+          debugPrint('❌ 编码检测失败: $e');
+          debugPrint('Stack trace: $stackTrace');
+          content = utf8.decode(bytes, allowMalformed: true);
+          debugPrint('使用UTF-8 fallback解码');
+        }
+
+        final lines = content
+            .split('\n')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+        final title = lines.isNotEmpty
+            ? lines.first.substring(0, lines.first.length.clamp(0, 50))
+            : fileName.replaceAll(RegExp(r'\.(txt)$'), '');
+        final estimatedPages = (content.length / 1500).ceil().clamp(1, 9999);
+
+        simpleMetadata = SimpleMetadata(
+          title: title,
+          author: 'Unknown',
+          estimatedPages: estimatedPages,
+          description: content.length > 200 ? content.substring(0, 200) : null,
+          language: 'zh',
         );
       }
 
+      // 尝试从网络获取封面，失败则生成默认封面
+      Uint8List? coverImage;
+      try {
+        debugPrint('🌐 尝试从网络获取书籍封面: ${simpleMetadata.title}');
+        coverImage = await _coverFetcher.fetchCoverQuick(
+          title: simpleMetadata.title,
+          author: simpleMetadata.author,
+        );
+
+        if (coverImage != null) {
+          debugPrint('✅ 从网络成功获取封面');
+        } else {
+          debugPrint('📝 网络未找到封面，生成默认封面');
+          coverImage = await CoverGenerator.generateTextCover(
+            title: simpleMetadata.title,
+            author: simpleMetadata.author,
+            format: 'TXT',
+          );
+          debugPrint('✅ TXT默认封面生成成功');
+        }
+      } catch (e) {
+        debugPrint('封面获取失败，生成默认封面: $e');
+        try {
+          coverImage = await CoverGenerator.generateTextCover(
+            title: simpleMetadata.title,
+            author: simpleMetadata.author,
+            format: 'TXT',
+          );
+        } catch (e2) {
+          debugPrint('默认封面生成也失败: $e2');
+        }
+      }
+
+      debugPrint('✅ TXT元数据提取完成:');
+      debugPrint('   标题: ${simpleMetadata.title}');
+      debugPrint('   作者: ${simpleMetadata.author}');
+      debugPrint('   预估页数: ${simpleMetadata.estimatedPages}');
+
       return EnhancedBookMetadata(
-        title: txtMetadata.title,
-        author: txtMetadata.author,
-        description: txtMetadata.description,
-        estimatedPages: txtMetadata.estimatedPages,
-        language: txtMetadata.language,
-        additionalInfo: txtMetadata.additionalInfo,
+        title: simpleMetadata.title,
+        author: simpleMetadata.author,
+        description: simpleMetadata.description,
+        estimatedPages: simpleMetadata.estimatedPages,
+        language: simpleMetadata.language,
+        coverImage: coverImage,
+        additionalInfo: {
+          'format': 'TXT',
+          'fileSize': bytes.length,
+        },
       );
-    } catch (e) {
-      debugPrint('增强TXT元数据提取失败，回退到基础提取: $e');
+    } catch (e, stackTrace) {
+      debugPrint('❌ TXT元数据提取失败，回退到基础提取: $e');
+      debugPrint('Stack trace: $stackTrace');
       return _extractBasicMetadata(bytes, fileName);
     }
   }
@@ -558,30 +969,130 @@ class BookImportService {
     }
   }
 
-  /// Extract MOBI/AZW3 metadata using WebView parsing
+  /// Extract MOBI/AZW3 metadata using basic parsing（使用isolate优化）
   Future<EnhancedBookMetadata> _extractMobiMetadata(
     Uint8List bytes,
     String fileName,
   ) async {
     try {
-      debugPrint('MOBI/AZW3 metadata extraction - using WebView parsing');
+      debugPrint('📚 开始MOBI/AZW/AZW3元数据提取: $fileName');
 
-      // MOBI/AZW3 基础解析（不依赖 WebView）
-      debugPrint('Using basic parsing for MOBI/AZW3');
+      // 对于大文件，使用isolate处理
+      SimpleMetadata simpleMetadata;
+      if (bytes.length > 5 * 1024 * 1024) {
+        // 大于5MB，使用isolate
+        debugPrint('使用isolate处理大MOBI文件: ${bytes.length / 1024 / 1024} MB');
+        simpleMetadata = await compute(
+          extractMobiMetadataInIsolate,
+          MetadataExtractionParams(
+            bytes: bytes,
+            fileName: fileName,
+            extension: fileName.split('.').last.toLowerCase(),
+          ),
+        );
+      } else {
+        // 小文件在主线程处理
+        String title = fileName.replaceAll(
+          RegExp(r'\.(mobi|azw|azw3)$', caseSensitive: false),
+          '',
+        );
+        int estimatedPages = 100;
 
-      // 估算页数（MOBI格式基于内容长度）
-      final estimatedPages = (bytes.length / 3000).ceil().clamp(50, 1000);
+        if (bytes.length >= 68) {
+          final identifier = String.fromCharCodes(bytes.sublist(60, 68));
+          debugPrint('文件标识: $identifier');
+
+          if (identifier.contains('BOOKMOBI') ||
+              identifier.contains('TEXTREAD')) {
+            debugPrint('✅ 检测到有效的MOBI文件');
+
+            try {
+              final content = _extractMobiText(bytes);
+              if (content.isNotEmpty) {
+                final lines = content.split('\n').take(100).toList();
+                for (var line in lines) {
+                  final trimmed = line.trim();
+                  if (trimmed.isNotEmpty &&
+                      trimmed.length > 3 &&
+                      trimmed.length < 100) {
+                    if (!trimmed.contains('Chapter') &&
+                        !trimmed.contains('第') &&
+                        !trimmed.contains('章') &&
+                        !trimmed.contains('CHAPTER')) {
+                      title = trimmed;
+                      debugPrint('提取到标题: $title');
+                      break;
+                    }
+                  }
+                }
+                estimatedPages = (content.length / 1500).ceil().clamp(10, 9999);
+                debugPrint('内容长度: ${content.length}, 预估页数: $estimatedPages');
+              }
+            } catch (e) {
+              debugPrint('提取MOBI文本内容失败: $e');
+            }
+          }
+        }
+
+        if (estimatedPages == 100) {
+          estimatedPages = (bytes.length / 3000).ceil().clamp(50, 1000);
+          debugPrint('基于文件大小估算页数: $estimatedPages');
+        }
+
+        simpleMetadata = SimpleMetadata(
+          title: title,
+          author: 'Unknown',
+          estimatedPages: estimatedPages,
+        );
+      }
+
+      // 尝试从网络获取封面，失败则生成MOBI格式的默认封面
+      Uint8List? coverImage;
+      try {
+        debugPrint('🌐 尝试从网络获取书籍封面: ${simpleMetadata.title}');
+        coverImage = await _coverFetcher.fetchCoverQuick(
+          title: simpleMetadata.title,
+          author: simpleMetadata.author,
+        );
+
+        if (coverImage != null) {
+          debugPrint('✅ 从网络成功获取MOBI封面');
+        } else {
+          debugPrint('📝 网络未找到封面，生成MOBI默认封面');
+          coverImage = await CoverGenerator.generateTextCover(
+            title: simpleMetadata.title,
+            author: simpleMetadata.author,
+            format: 'MOBI',
+          );
+        }
+      } catch (e) {
+        debugPrint('⚠️ 网络获取封面失败: $e，生成默认封面');
+        try {
+          coverImage = await CoverGenerator.generateTextCover(
+            title: simpleMetadata.title,
+            author: simpleMetadata.author,
+            format: 'MOBI',
+          );
+        } catch (genError) {
+          debugPrint('❌ MOBI封面生成失败: $genError');
+        }
+      }
+
+      debugPrint('✅ MOBI元数据提取完成:');
+      debugPrint('   标题: ${simpleMetadata.title}');
+      debugPrint('   作者: ${simpleMetadata.author}');
+      debugPrint('   页数: ${simpleMetadata.estimatedPages}');
 
       return EnhancedBookMetadata(
-        title: fileName.replaceAll(RegExp(r'\.(mobi|azw|azw3)$'), ''),
-        author: '未知作者',
-        description: null,
-        language: null,
+        title: simpleMetadata.title,
+        author: simpleMetadata.author,
+        description: simpleMetadata.description,
+        language: simpleMetadata.language,
         publisher: null,
         publishDate: null,
         isbn: null,
-        coverImage: null,
-        estimatedPages: estimatedPages,
+        coverImage: coverImage,
+        estimatedPages: simpleMetadata.estimatedPages,
         tags: null,
         additionalInfo: {
           'format': 'MOBI/AZW',
@@ -590,7 +1101,6 @@ class BookImportService {
       );
     } catch (e) {
       debugPrint('MOBI/AZW3 metadata extraction failed: $e');
-      // 回退到基础解析
       return _extractBasicMobiMetadata(bytes, fileName);
     }
   }
@@ -766,6 +1276,50 @@ class BookImportService {
         .replaceAll(RegExp(r'<[^>]*>'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
+  }
+
+  /// 提取MOBI文件的文本内容（支持多种字符集）
+  String _extractMobiText(Uint8List bytes) {
+    try {
+      // MOBI文件通常包含HTML或纯文本内容
+      String content = '';
+
+      // 尝试UTF-8解码
+      try {
+        content = utf8.decode(bytes, allowMalformed: true);
+      } catch (e) {
+        // 如果UTF-8失败，尝试Latin1
+        content = latin1.decode(bytes);
+      }
+
+      // 移除HTML标签
+      content = content.replaceAll(RegExp(r'<[^>]*>'), ' ');
+
+      // 移除多余的空白字符
+      content = content.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+      // 移除控制字符，但保留常见的Unicode字符
+      final cleanContent = content.split('').where((char) {
+        final code = char.codeUnitAt(0);
+        return (code >= 32 && code <= 126) || // ASCII可打印字符
+            (code >= 0x4e00 && code <= 0x9fff) || // 中日韩统一表意文字
+            (code >= 0x3000 && code <= 0x303f) || // CJK 符号和标点
+            (code >= 0xff00 && code <= 0xffef) || // 全角ASCII、半角片假名和韩文
+            (code >= 0x3040 && code <= 0x309f) || // 平假名
+            (code >= 0x30a0 && code <= 0x30ff) || // 片假名
+            (code >= 0xac00 && code <= 0xd7af) || // 韩文音节
+            (code >= 0x0400 && code <= 0x04ff) || // 西里尔字母
+            (code >= 0x00c0 && code <= 0x00ff) || // 拉丁扩展-A
+            char == '\n' ||
+            char == '\r' ||
+            char == '\t';
+      }).join();
+
+      return cleanContent;
+    } catch (e) {
+      debugPrint('MOBI文本提取失败: $e');
+      return '';
+    }
   }
 
   String _stripXmlTags(String xml) {

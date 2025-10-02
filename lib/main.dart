@@ -91,27 +91,7 @@ void debugLog(String message) {
 }
 
 // 动态更新系统栏样式的函数 - 只设置样式，不改变UI模式
-void _updateSystemUIOverlay(bool isDarkMode) {
-  // 确保在UI线程中执行
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    // 只设置系统UI样式，不调用setEnabledSystemUIMode
-    // 让各页面（如ReaderPage）根据需要自行控制SystemUiMode
-    final systemStyle = SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
-      statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarIconBrightness:
-          isDarkMode ? Brightness.light : Brightness.dark,
-      systemNavigationBarDividerColor: Colors.transparent,
-      systemStatusBarContrastEnforced: false,
-      systemNavigationBarContrastEnforced: false,
-    );
-
-    // 立即应用样式
-    SystemChrome.setSystemUIOverlayStyle(systemStyle);
-  });
-}
+// 已移除未使用的 _updateSystemUIOverlay 方法
 
 class ThemeNotifier extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
@@ -349,17 +329,7 @@ class _XxReadAppState extends State<XxReadApp> {
     );
   }
 
-  ThemeMode _getEffectiveThemeMode(
-    BuildContext context,
-    ThemeNotifier notifier,
-  ) {
-    if (notifier.themeMode == ThemeMode.system) {
-      return MediaQuery.platformBrightnessOf(context) == Brightness.dark
-          ? ThemeMode.dark
-          : ThemeMode.light;
-    }
-    return notifier.themeMode;
-  }
+  // 已移除未使用的 _getEffectiveThemeMode 方法
 
   /// 根据协议状态决定显示哪个页面
   Widget _buildHome() {

@@ -1,14 +1,19 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:epubx/epubx.dart';
 import 'package:pdfx/pdfx.dart';
 import '../models/book.dart';
 import '../pages/reader_page.dart';
+import 'background_content_loader.dart';
 
 /// 阅读器路由服务
 ///
 /// 直接打开沉浸式阅读器
 class ReadingRouterService {
+  // 后台内容加载器（全局单例）
+  static BackgroundContentLoader? _contentLoader;
+
   /// 打开书籍（使用沉浸式阅读器）
   static Future<void> openBook(
     BuildContext context,
@@ -17,43 +22,170 @@ class ReadingRouterService {
     await _navigateToReader(context, book);
   }
 
-  /// 导航到沉浸式阅读器
+  /// 获取后台内容加载器
+  static BackgroundContentLoader getContentLoader() {
+    _contentLoader ??= BackgroundContentLoader();
+    return _contentLoader!;
+  }
+
+  /// 导航到沉浸式阅读器（带流畅加载动画，支持渐进式加载）
   static Future<void> _navigateToReader(
     BuildContext context,
     Book book,
   ) async {
-    // 使用沉浸式阅读器
-    String bookContent = book.cachedContent ?? '';
+    String? bookContent = book.cachedContent;
 
-    // 如果缓存内容为空，尝试从文件加载
-    if (bookContent.isEmpty) {
-      debugPrint('📖 沉浸式阅读器：缓存内容为空，从文件加载...');
-      debugPrint('📖 书籍格式: ${book.format}');
-      try {
-        final file = File(book.filePath);
-        if (await file.exists()) {
-          final format = book.format.toLowerCase();
+    // 如果有缓存内容，直接打开
+    if (bookContent != null && bookContent.isNotEmpty) {
+      debugPrint('📖 使用缓存内容打开书籍');
+      _openReaderPage(context, book, bookContent);
+      return;
+    }
 
-          if (format == 'txt') {
-            // TXT 格式：真实可用，直接读取
-            bookContent = await file.readAsString();
-            debugPrint('✅ 成功加载TXT文件，长度: ${bookContent.length}');
-          } else if (format == 'epub') {
-            // EPUB 格式：真实可用，解析内容
-            bookContent = await _parseEpubContent(file);
-            debugPrint('✅ 成功加载EPUB文件，长度: ${bookContent.length}');
-          } else if (format == 'pdf') {
-            // PDF 格式：真实可用，提取文本
-            bookContent = await _parsePdfContent(file);
-            debugPrint('✅ 成功加载PDF文件，长度: ${bookContent.length}');
-          } else if (['mobi', 'azw', 'azw3'].contains(format)) {
-            // MOBI/AZW 格式：真实可用，解析内容
-            bookContent = await _parseMobiContent(file);
-            debugPrint('✅ 成功加载${format.toUpperCase()}文件，长度: ${bookContent.length}');
-          } else {
-            // 其他格式：暂不支持，直接说明
-            debugPrint('⚠️ 暂不支持的格式: $format');
-            bookContent = '''抱歉，暂不支持 ${book.format.toUpperCase()} 格式
+    // 无缓存，显示加载对话框并在后台加载
+    debugPrint('📖 缓存为空，显示加载动画并异步加载书籍');
+
+    // 显示加载对话框
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => _buildLoadingDialog(book),
+    );
+
+    try {
+      // 在后台异步加载书籍内容（优化版：支持渐进式加载）
+      bookContent = await _loadBookContent(book);
+
+      // 延迟一小段时间，确保加载动画至少显示一会儿（提升体验）
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // 关闭加载对话框
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // 打开阅读页面
+      if (context.mounted) {
+        _openReaderPage(context, book, bookContent);
+      }
+    } catch (e) {
+      debugPrint('❌ 加载书籍失败: $e');
+
+      // 关闭加载对话框
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // 显示错误信息
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('加载失败: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  /// 打开阅读页面
+  static void _openReaderPage(BuildContext context, Book book, String content) {
+    final page = ReaderPage(
+      bookContent: content,
+      bookTitle: book.title,
+      initialPageIndex: book.currentPage,
+      bookId: book.id,
+    );
+
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => page,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          // 使用淡入淡出 + 缩放动画
+          const begin = 0.95;
+          const end = 1.0;
+          final tween = Tween(begin: begin, end: end);
+          final scaleAnimation = animation.drive(tween);
+
+          return FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              scale: scaleAnimation,
+              child: child,
+            ),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
+  }
+
+  /// 加载书籍内容（支持大文件优化）
+  static Future<String> _loadBookContent(Book book) async {
+    debugPrint('📖 开始加载书籍：${book.title}');
+    debugPrint('📖 书籍格式: ${book.format}');
+
+    try {
+      final file = File(book.filePath);
+      if (!await file.exists()) {
+        throw Exception('文件不存在: ${book.filePath}');
+      }
+
+      // 检查文件大小
+      final fileSize = await file.length();
+      final fileSizeMB = fileSize / (1024 * 1024);
+      debugPrint('📊 文件大小: ${fileSizeMB.toStringAsFixed(2)} MB');
+
+      final format = book.format.toLowerCase();
+      String content;
+
+      if (format == 'txt') {
+        // TXT 文件大小检查和优化处理（使用后台加载服务）
+        if (fileSizeMB > 3) {
+          // 超过3MB，使用后台渐进式加载
+          debugPrint('📖 大文件 (${fileSizeMB.toStringAsFixed(2)} MB)，启用后台渐进式加载');
+          final loader = getContentLoader();
+          final result = await loader.loadLargeFile(
+            file: file,
+            initialChunkMB: 2, // 首批加载2MB，更快显示
+          );
+          content = result.fullContent;
+
+          // 如果有后台加载任务，添加提示
+          if (result.hasRemaining) {
+            content += '''
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📖 后台加载进行中...
+
+已加载：2 MB / ${fileSizeMB.toStringAsFixed(1)} MB
+剩余内容正在后台加载，您可以继续阅读
+读到这里时，后面的内容将自动追加 ⏳
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+''';
+          }
+        } else {
+          // 小文件（≤3MB）直接读取
+          debugPrint('📖 小文件直接读取');
+          content = await file.readAsString();
+        }
+        debugPrint('✅ 成功加载TXT文件，长度: ${content.length} 字符');
+      } else if (format == 'epub') {
+        content = await _parseEpubContent(file);
+        debugPrint('✅ 成功加载EPUB文件，长度: ${content.length}');
+      } else if (format == 'pdf') {
+        content = await _parsePdfContent(file);
+        debugPrint('✅ 成功加载PDF文件，长度: ${content.length}');
+      } else if (['mobi', 'azw', 'azw3'].contains(format)) {
+        content = await _parseMobiContent(file);
+        debugPrint('✅ 成功加载${format.toUpperCase()}文件，长度: ${content.length}');
+      } else {
+        debugPrint('⚠️ 暂不支持的格式: $format');
+        content = '''抱歉，暂不支持 ${book.format.toUpperCase()} 格式
 
 《${book.title}》
 
@@ -67,25 +199,133 @@ class ReadingRouterService {
 建议将书籍转换为以上支持的格式。
 
 感谢理解！''';
-          }
-        } else {
-          bookContent = '文件不存在: ${book.filePath}';
-          debugPrint('❌ 文件不存在');
-        }
-      } catch (e) {
-        bookContent = '加载文件失败: $e';
-        debugPrint('❌ 加载文件失败: $e');
       }
+
+      return content;
+    } catch (e) {
+      debugPrint('❌ 加载文件失败: $e');
+      rethrow;
     }
+  }
 
-    final page = ReaderPage(
-      bookContent: bookContent,
-      bookTitle: book.title,
-      initialPageIndex: book.currentPage,
-      bookId: book.id,
+  /// 加载超大TXT文件（渐进式加载：先返回前N MB，后台继续加载）
+  ///
+  /// 策略：立即返回前N MB让用户开始阅读，同时在后台继续加载剩余内容
+
+  /// 构建加载对话框（带文件大小提示）
+  static Widget _buildLoadingDialog(Book book) {
+    return FutureBuilder<int>(
+      future: File(book.filePath).length(),
+      builder: (context, snapshot) {
+        final fileSize = snapshot.data;
+        final fileSizeMB = fileSize != null ? fileSize / (1024 * 1024) : null;
+
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 加载动画
+                const SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // 书籍标题
+                Text(
+                  book.title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+
+                // 加载提示
+                Text(
+                  fileSizeMB != null && fileSizeMB > 30
+                      ? '文件过大，只读取部分内容...'
+                      : fileSizeMB != null && fileSizeMB > 15
+                          ? '正在加载大文件，请稍候...'
+                          : '正在打开书籍...',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: fileSizeMB != null && fileSizeMB > 30
+                        ? Colors.orange[700]
+                        : Colors.grey[600],
+                    fontWeight: fileSizeMB != null && fileSizeMB > 30
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+                  ),
+                ),
+                const SizedBox(height: 4),
+
+                // 格式和大小信息
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      book.format.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (fileSizeMB != null) ...[
+                      Text(
+                        ' • ',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                      Text(
+                        '${fileSizeMB.toStringAsFixed(1)} MB',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: fileSizeMB > 30
+                              ? Colors.red[600]
+                              : fileSizeMB > 15
+                                  ? Colors.orange[700]
+                                  : Colors.grey[500],
+                          fontWeight: fileSizeMB > 15
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
-
-    Navigator.push(context, MaterialPageRoute(builder: (context) => page));
   }
 
   /// 解析 EPUB 内容为纯文本
@@ -197,10 +437,13 @@ class ReadingRouterService {
     if (html.isEmpty) return '';
 
     // 移除样式和脚本标签及其内容
-    var text = html.replaceAll(RegExp(r'<style[^>]*>.*?</style>',
-        caseSensitive: false, dotAll: true), '');
-    text = text.replaceAll(RegExp(r'<script[^>]*>.*?</script>',
-        caseSensitive: false, dotAll: true), '');
+    var text = html.replaceAll(
+        RegExp(r'<style[^>]*>.*?</style>', caseSensitive: false, dotAll: true),
+        '');
+    text = text.replaceAll(
+        RegExp(r'<script[^>]*>.*?</script>',
+            caseSensitive: false, dotAll: true),
+        '');
 
     // 处理常见的块级元素，添加换行
     text = text.replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n');
@@ -277,7 +520,6 @@ class ReadingRouterService {
 目前推荐格式：
 • TXT - 完美支持 ✅
 • EPUB - 完美支持 ✅''';
-
     } catch (e, stackTrace) {
       debugPrint('❌ PDF 解析失败: $e');
       debugPrint('堆栈跟踪: $stackTrace');
@@ -328,7 +570,6 @@ class ReadingRouterService {
 
       debugPrint('✅ MOBI 内容提取完成，总长度: ${content.length} 字符');
       return content;
-
     } catch (e, stackTrace) {
       debugPrint('❌ MOBI 解析失败: $e');
       debugPrint('堆栈跟踪: $stackTrace');
@@ -343,7 +584,7 @@ class ReadingRouterService {
     }
   }
 
-  /// 尝试将 MOBI 作为 PDB 格式解析
+  /// 尝试将 MOBI 作为 PDB 格式解析（支持多种编码）
   static Future<String> _parseMobiAsPdb(List<int> bytes) async {
     try {
       // MOBI 基于 PalmDoc (PDB) 格式
@@ -352,12 +593,15 @@ class ReadingRouterService {
         return '';
       }
 
-      // PDB 头部：32字节名称 + 2字节属性 + ... + 8字节创建时间等
-      final name = String.fromCharCodes(bytes.sublist(0, 32)).trim();
+      // PDB 头部：32字节名称（ASCII编码）
+      final nameBytes = bytes.sublist(0, 32);
+      final name = String.fromCharCodes(
+        nameBytes.where((b) => b != 0 && b >= 32 && b < 127),
+      ).trim();
       debugPrint('📱 MOBI 名称: $name');
 
-      // MOBI 文件包含 HTML 内容，尝试查找并提取
-      final content = String.fromCharCodes(bytes);
+      // 尝试多种编码解析内容
+      String content = _decodeWithBestEncoding(bytes);
 
       // 查找 HTML 标签
       final htmlPattern = RegExp(r'<html[\s\S]*?</html>', caseSensitive: false);
@@ -367,9 +611,11 @@ class ReadingRouterService {
         final htmlContent = match.group(0)!;
         final plainText = _stripHtmlTags(htmlContent);
 
-        if (plainText.isNotEmpty) {
+        if (plainText.isNotEmpty && plainText.length > 100) {
           final buffer = StringBuffer();
-          buffer.writeln('《$name》\n');
+          if (name.isNotEmpty) {
+            buffer.writeln('《$name》\n');
+          }
           buffer.writeln('格式：MOBI/AZW\n');
           buffer.writeln('${'=' * 50}\n\n');
           buffer.writeln(plainText);
@@ -385,35 +631,84 @@ class ReadingRouterService {
     }
   }
 
-  /// 从 MOBI 字节流中提取原始文本（降级方案）
+  /// 使用最佳编码解码字节数组
+  ///
+  /// 尝试多种编码，选择最合适的
+  static String _decodeWithBestEncoding(List<int> bytes) {
+    // 方法1: 尝试 UTF-8 解码
+    try {
+      final utf8Content = utf8.decode(bytes, allowMalformed: true);
+      // 检查是否包含有效的 HTML 或文本
+      if (utf8Content.contains('<html') ||
+          utf8Content.contains('<body') ||
+          _hasValidChineseChars(utf8Content)) {
+        debugPrint('✅ 使用 UTF-8 编码解码');
+        return utf8Content;
+      }
+    } catch (e) {
+      debugPrint('⚠️ UTF-8 解码失败: $e');
+    }
+
+    // 方法2: 尝试 Latin1 (CP1252) 解码
+    try {
+      final latin1Content = latin1.decode(bytes);
+      if (latin1Content.contains('<html') || latin1Content.contains('<body')) {
+        debugPrint('✅ 使用 Latin1 编码解码');
+        return latin1Content;
+      }
+    } catch (e) {
+      debugPrint('⚠️ Latin1 解码失败: $e');
+    }
+
+    // 方法3: 降级到 ASCII (只保留可打印字符)
+    debugPrint('⚠️ 使用 ASCII 降级解码');
+    return String.fromCharCodes(
+      bytes.where((b) => b >= 32 && b < 127),
+    );
+  }
+
+  /// 检查字符串中是否包含有效的中文字符
+  static bool _hasValidChineseChars(String text) {
+    // 检查是否包含中文字符范围 (U+4E00 到 U+9FFF)
+    final chinesePattern = RegExp(r'[\u4e00-\u9fff]');
+    final matches = chinesePattern.allMatches(text);
+    return matches.length > 10; // 至少包含10个中文字符
+  }
+
+  /// 从 MOBI 字节流中提取原始文本（降级方案，支持多种编码）
   static String _extractRawTextFromMobi(List<int> bytes) {
     try {
-      // 转换为字符串并查找可读文本
-      final content = String.fromCharCodes(bytes);
+      // 使用最佳编码解码
+      final content = _decodeWithBestEncoding(bytes);
 
       // 移除二进制数据和控制字符
       final cleanText = content
           .replaceAll(RegExp(r'[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]'), '')
-          .replaceAll(RegExp(r'[^\x20-\x7E\u4e00-\u9fa5\u3000-\u303f\uff00-\uffef\n\r]'), '');
+          .replaceAll(RegExp(r'<[^>]+>'), ' ') // 移除HTML标签
+          .replaceAll(RegExp(r'\s+'), ' '); // 合并多个空白
 
-      // 查找连续的可读文本段落（至少50个字符）
+      // 查找连续的可读文本段落
       final paragraphs = <String>[];
-      final lines = cleanText.split(RegExp(r'\r?\n'));
+      final lines = cleanText.split(RegExp(r'[.。!！?？\n]'));
 
       for (var line in lines) {
         final trimmed = line.trim();
-        if (trimmed.length >= 20 && !trimmed.startsWith('<') && !trimmed.startsWith('{')) {
+        // 放宽条件，只要有一定长度且包含字母或中文就保留
+        if (trimmed.length >= 15 &&
+            (RegExp(r'[a-zA-Z\u4e00-\u9fff]').hasMatch(trimmed))) {
           paragraphs.add(trimmed);
         }
       }
 
-      if (paragraphs.isNotEmpty) {
+      if (paragraphs.length >= 5) {
+        // 至少有5段有效内容
         final buffer = StringBuffer();
-        buffer.writeln('MOBI 文本提取（部分）\n');
-        buffer.writeln('注意：这是降级提取，内容可能不完整\n');
+        buffer.writeln('MOBI 文本内容\n');
         buffer.writeln('${'=' * 50}\n\n');
 
-        for (var para in paragraphs) {
+        // 只取前面的段落，避免包含太多垃圾数据
+        final validParagraphs = paragraphs.take(200).toList();
+        for (var para in validParagraphs) {
           buffer.writeln(para);
           buffer.writeln();
         }

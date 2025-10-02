@@ -253,12 +253,12 @@ class _SlidePaginationView extends StatelessWidget {
           ? SelectableText(
               pageContent,
               style: settings.textStyle,
-              textAlign: TextAlign.justify,
+              textAlign: TextAlign.left,
             )
           : Text(
               pageContent,
               style: settings.textStyle,
-              textAlign: TextAlign.justify,
+              textAlign: TextAlign.left,
             ),
     );
   }
@@ -303,12 +303,12 @@ class _ScrollPaginationView extends StatelessWidget {
                   ? SelectableText(
                       entry.value,
                       style: settings.textStyle,
-                      textAlign: TextAlign.justify,
+                      textAlign: TextAlign.left,
                     )
                   : Text(
                       entry.value,
                       style: settings.textStyle,
-                      textAlign: TextAlign.justify,
+                      textAlign: TextAlign.left,
                     ),
             );
           }).toList(),
@@ -376,12 +376,12 @@ class _SimulationPaginationViewState extends State<_SimulationPaginationView> {
               ? SelectableText(
                   widget.pages[index],
                   style: widget.settings.textStyle,
-                  textAlign: TextAlign.justify,
+                  textAlign: TextAlign.left,
                 )
               : Text(
                   widget.pages[index],
                   style: widget.settings.textStyle,
-                  textAlign: TextAlign.justify,
+                  textAlign: TextAlign.left,
                 ),
         );
       },

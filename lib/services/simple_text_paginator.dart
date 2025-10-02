@@ -1,11 +1,29 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
+/// 分页进度回调
+typedef PaginationProgressCallback = void Function(
+    int currentPage, String stage);
+
+/// 分页结果
+class PaginationResult {
+  /// 分页后的文本页面列表
+  final List<String> pages;
+
+  /// 每页在原文中的字符起始位置
+  final List<int> charOffsets;
+
+  const PaginationResult({
+    required this.pages,
+    required this.charOffsets,
+  });
+}
+
 /// 简单文本分页器
 /// 使用TextPainter精确测量，确保100%准确分页
 class SimpleTextPaginator {
-  /// 简单分页
-  static List<String> paginate({
+  /// 简单分页（支持进度回调）
+  static Future<PaginationResult> paginateWithProgress({
     required String text,
     required Size screenSize,
     required double fontSize,
@@ -14,8 +32,37 @@ class SimpleTextPaginator {
     double letterSpacing = 0.0,
     double paragraphSpacing = 0.0,
     double firstLineIndent = 0.0,
+    double devicePixelRatio = 1.0,
+    PaginationProgressCallback? onProgress,
+  }) async {
+    // 使用同步方法分页，但每100页让出CPU并报告进度
+    return _paginateWithYield(
+      text: text,
+      screenSize: screenSize,
+      fontSize: fontSize,
+      lineHeight: lineHeight,
+      padding: padding,
+      letterSpacing: letterSpacing,
+      paragraphSpacing: paragraphSpacing,
+      firstLineIndent: firstLineIndent,
+      devicePixelRatio: devicePixelRatio,
+      onProgress: onProgress,
+    );
+  }
+
+  /// 简单分页（同步版本，用于小文件或缓存加载）
+  static PaginationResult paginate({
+    required String text,
+    required Size screenSize,
+    required double fontSize,
+    required double lineHeight,
+    required EdgeInsets padding,
+    double letterSpacing = 0.0,
+    double paragraphSpacing = 0.0,
+    double firstLineIndent = 0.0,
+    double devicePixelRatio = 1.0,
   }) {
-    if (text.isEmpty) return [];
+    if (text.isEmpty) return const PaginationResult(pages: [], charOffsets: []);
 
     // 0. 预处理文本：规范化空行
     // 将3个或以上连续换行符替换为2个，避免过多空白
@@ -23,28 +70,37 @@ class SimpleTextPaginator {
     text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
     final emptyLinesRemoved = originalLength - text.length;
 
-    // 1. 计算可用宽度和高度，并添加充足的安全边距
+    // 1. 计算可用宽度和高度，根据屏幕特性添加动态安全边距
     final availableWidth = screenSize.width - padding.left - padding.right;
 
-    // 动态安全边距：与字体大小和行高关联，确保绝对不超出
-    // 基础边距：一行的高度作为缓冲
-    final baseMargin = fontSize * lineHeight;
-    // 行高补偿：行高越大，额外增加边距
-    final lineHeightCompensation = lineHeight > 2.0
-        ? (lineHeight - 2.0) * fontSize * 10
-        : 0.0;
-    // 字体补偿：大字体需要更多边距
-    final fontCompensation = fontSize > 24.0
-        ? (fontSize - 24.0) * 2.0
-        : 0.0;
+    // 根据屏幕密度和分辨率动态计算安全边距
+    // 高分辨率屏幕（如OPPO Find X8: 2780x1264, DPR~3.5）需要更大的安全边距
+    double safetyMarginMultiplier = 1.0;
 
-    final safetyMargin = baseMargin + lineHeightCompensation + fontCompensation;
-    final availableHeight = screenSize.height - padding.top - padding.bottom - safetyMargin;
+    // 根据屏幕高度和像素密度调整安全边距倍数
+    if (screenSize.height > 2500 || devicePixelRatio >= 3.5) {
+      // 超高分辨率屏幕（如OPPO Find X8等旗舰机）
+      safetyMarginMultiplier = 2.5;
+    } else if (screenSize.height > 2000 || devicePixelRatio >= 3.0) {
+      // 高分辨率屏幕
+      safetyMarginMultiplier = 2.0;
+    } else if (screenSize.height > 1500 || devicePixelRatio >= 2.5) {
+      // 中高分辨率屏幕
+      safetyMarginMultiplier = 1.5;
+    }
+
+    // 基础安全边距 = 一行高度 × 倍数
+    final safetyMargin = fontSize * lineHeight * safetyMarginMultiplier;
+    final availableHeight =
+        screenSize.height - padding.top - padding.bottom - safetyMargin;
 
     print('📄 开始精确分页:');
-    print('   屏幕: ${screenSize.width.toInt()}×${screenSize.height.toInt()}');
-    print('   Padding: L${padding.left.toInt()} R${padding.right.toInt()} T${padding.top.toInt()} B${padding.bottom.toInt()}');
-    print('   安全边距: ${safetyMargin.toStringAsFixed(1)}px (自适应)');
+    print(
+        '   屏幕: ${screenSize.width.toInt()}×${screenSize.height.toInt()} (DPR: ${devicePixelRatio.toStringAsFixed(2)})');
+    print(
+        '   Padding: L${padding.left.toInt()} R${padding.right.toInt()} T${padding.top.toInt()} B${padding.bottom.toInt()}');
+    print(
+        '   安全边距: ${safetyMargin.toStringAsFixed(1)}px (${safetyMarginMultiplier.toStringAsFixed(1)}x行高)');
     print('   可用空间: ${availableWidth.toInt()}×${availableHeight.toInt()}');
     print('   排版: 字体${fontSize}px, 行高$lineHeight, 字间距$letterSpacing');
     print('        段落间距${paragraphSpacing}px, 首行缩进${firstLineIndent}字符');
@@ -67,25 +123,24 @@ class SimpleTextPaginator {
 
     // 3. 逐页分页
     final pages = <String>[];
+    final charOffsets = <int>[]; // 记录每页的起始字符位置
     int currentIndex = 0;
     int pageNum = 0;
 
     while (currentIndex < text.length) {
       pageNum++;
 
-      // 估算起始范围 - 使用非常保守的估算，确保绝对不超出
+      // 估算起始范围 - 使用更激进的估算，最大化空间利用率
       final remainingChars = text.length - currentIndex;
-      // 更保守的系数：字体越大、行高越大越保守
-      // 12px+1.0行高 -> 0.88, 36px+3.0行高 -> 0.75
-      final conservativeRatio = 0.90 - (fontSize - 12.0) * 0.005 - (lineHeight - 1.0) * 0.05;
-      final charsPerLine = (availableWidth / fontSize * 0.90).floor();
-      final linesPerPage = (availableHeight / (fontSize * lineHeight) * conservativeRatio).floor();
+      // 激进的系数：接近理论最大值
+      final charsPerLine = (availableWidth / fontSize).floor();
+      final linesPerPage = (availableHeight / (fontSize * lineHeight)).floor();
       final estimatedCharsPerPage = (charsPerLine * linesPerPage).floor();
 
       // 二分查找最佳字符数
       int left = math.min(1, remainingChars);
-      // 右边界限制为估算值的1.5倍，避免过度估算
-      int right = math.min(estimatedCharsPerPage * 1.5, remainingChars).floor();
+      // 右边界限制为估算值的1.2倍
+      int right = math.min(estimatedCharsPerPage * 1.2, remainingChars).floor();
       int bestFit = left;
 
       while (left <= right) {
@@ -109,14 +164,25 @@ class SimpleTextPaginator {
         }
       }
 
-      // 添加安全缓冲：减少3-5%字符确保不超出
-      final safetyBuffer = (bestFit * 0.04).ceil(); // 4%安全缓冲
+      // 根据屏幕密度动态调整安全缓冲百分比
+      // 高分辨率屏幕需要更大的缓冲
+      double bufferPercentage = 0.02; // 默认2%
+      if (screenSize.height > 2500 || devicePixelRatio >= 3.5) {
+        bufferPercentage = 0.05; // 超高分辨率：5%
+      } else if (screenSize.height > 2000 || devicePixelRatio >= 3.0) {
+        bufferPercentage = 0.04; // 高分辨率：4%
+      } else if (screenSize.height > 1500 || devicePixelRatio >= 2.5) {
+        bufferPercentage = 0.03; // 中高分辨率：3%
+      }
+
+      final safetyBuffer = (bestFit * bufferPercentage).ceil();
       final safeBestFit = math.max(1, bestFit - safetyBuffer);
 
       // 添加这一页
       final endIndex = currentIndex + safeBestFit;
       final pageContent = text.substring(currentIndex, endIndex);
       pages.add(pageContent);
+      charOffsets.add(currentIndex); // 记录当前页的起始字符位置
 
       // 验证分页结果 - 确保不超出/不浪费空间
       textPainter.text = TextSpan(text: pageContent, style: textStyle);
@@ -126,18 +192,23 @@ class SimpleTextPaginator {
 
       // 调试输出前3页和最后1页
       if (pageNum <= 3 || endIndex >= text.length) {
-        final lastChar = pageContent.isEmpty ? '' : pageContent[pageContent.length - 1];
+        final lastChar =
+            pageContent.isEmpty ? '' : pageContent[pageContent.length - 1];
         final nextChar = endIndex < text.length ? text[endIndex] : '';
 
-        print('   第$pageNum页: $bestFit字符, 高度${actualHeight.toInt()}/${availableHeight.toInt()}px (${heightUtilization.toStringAsFixed(1)}%)');
-        print('        最后字符: "$lastChar" (索引${endIndex-1}) -> 下页首字符: "$nextChar" (索引$endIndex)');
+        print(
+            '   第$pageNum页: $bestFit字符, 高度${actualHeight.toInt()}/${availableHeight.toInt()}px (${heightUtilization.toStringAsFixed(1)}%)');
+        print(
+            '        最后字符: "$lastChar" (索引${endIndex - 1}) -> 下页首字符: "$nextChar" (索引$endIndex)');
       }
 
       // 验证警告：超出或浪费过多空间
       if (actualHeight > availableHeight + 5) {
-        print('   ⚠️  警告: 第$pageNum页文字超出可用高度 ${(actualHeight - availableHeight).toInt()}px');
+        print(
+            '   ⚠️  警告: 第$pageNum页文字超出可用高度 ${(actualHeight - availableHeight).toInt()}px');
       } else if (heightUtilization < 70.0 && endIndex < text.length) {
-        print('   ⚠️  提示: 第$pageNum页空间利用率较低 (${heightUtilization.toStringAsFixed(1)}%)');
+        print(
+            '   ⚠️  提示: 第$pageNum页空间利用率较低 (${heightUtilization.toStringAsFixed(1)}%)');
       }
 
       currentIndex = endIndex;
@@ -146,6 +217,142 @@ class SimpleTextPaginator {
     // 最终验证统计
     print('✅ 分页完成: ${pages.length}页');
     print('   平均每页约 ${(text.length / pages.length).toInt()} 字符');
-    return pages;
+
+    return PaginationResult(
+      pages: pages,
+      charOffsets: charOffsets,
+    );
+  }
+
+  /// 分批分页（异步版本，定期让出CPU并报告进度）
+  static Future<PaginationResult> _paginateWithYield({
+    required String text,
+    required Size screenSize,
+    required double fontSize,
+    required double lineHeight,
+    required EdgeInsets padding,
+    double letterSpacing = 0.0,
+    double paragraphSpacing = 0.0,
+    double firstLineIndent = 0.0,
+    double devicePixelRatio = 1.0,
+    PaginationProgressCallback? onProgress,
+  }) async {
+    if (text.isEmpty) return const PaginationResult(pages: [], charOffsets: []);
+
+    // 预处理文本
+    final originalLength = text.length;
+    text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    final emptyLinesRemoved = originalLength - text.length;
+
+    // 计算可用空间
+    final availableWidth = screenSize.width - padding.left - padding.right;
+
+    double safetyMarginMultiplier = 1.0;
+    if (screenSize.height > 2500 || devicePixelRatio >= 3.5) {
+      safetyMarginMultiplier = 2.5;
+    } else if (screenSize.height > 2000 || devicePixelRatio >= 3.0) {
+      safetyMarginMultiplier = 2.0;
+    } else if (screenSize.height > 1500 || devicePixelRatio >= 2.5) {
+      safetyMarginMultiplier = 1.5;
+    }
+
+    final safetyMargin = fontSize * lineHeight * safetyMarginMultiplier;
+    final availableHeight =
+        screenSize.height - padding.top - padding.bottom - safetyMargin;
+
+    print('📄 开始分批分页:');
+    print(
+        '   屏幕: ${screenSize.width.toInt()}×${screenSize.height.toInt()} (DPR: ${devicePixelRatio.toStringAsFixed(2)})');
+    print('   可用空间: ${availableWidth.toInt()}×${availableHeight.toInt()}');
+    print('   排版: 字体${fontSize}px, 行高$lineHeight');
+    if (emptyLinesRemoved > 0) {
+      print('   空行优化: 移除${emptyLinesRemoved}个多余换行符');
+    }
+
+    // 创建TextPainter
+    final textStyle = TextStyle(
+      fontSize: fontSize,
+      height: lineHeight,
+      letterSpacing: letterSpacing,
+      fontFamily: 'SourceHanSerifSC',
+    );
+
+    final textPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+      maxLines: null,
+    );
+
+    final List<String> pages = [];
+    final List<int> charOffsets = [];
+    int currentIndex = 0;
+    int pageNum = 0;
+    int lastYieldPage = 0;
+
+    onProgress?.call(0, '正在分页...');
+
+    while (currentIndex < text.length) {
+      pageNum++;
+
+      // 二分查找最佳字符数
+      int left = 1;
+      int right = math.min(10000, text.length - currentIndex);
+      int bestFit = left;
+
+      while (left <= right) {
+        final mid = (left + right) ~/ 2;
+        final testText = text.substring(currentIndex, currentIndex + mid);
+
+        textPainter.text = TextSpan(text: testText, style: textStyle);
+        textPainter.layout(maxWidth: availableWidth);
+
+        if (textPainter.height <= availableHeight) {
+          bestFit = mid;
+          left = mid + 1;
+        } else {
+          right = mid - 1;
+        }
+      }
+
+      // 调整到段落边界
+      int safeBestFit = bestFit;
+      final endIndex = currentIndex + bestFit;
+      if (endIndex < text.length) {
+        final remainingText =
+            text.substring(endIndex, math.min(endIndex + 100, text.length));
+        final nextNewline = remainingText.indexOf('\n');
+        if (nextNewline != -1 && nextNewline < 50) {
+          safeBestFit += nextNewline + 1;
+        }
+      }
+
+      safeBestFit = math.min(safeBestFit, text.length - currentIndex);
+
+      // 添加这一页
+      final pageContent =
+          text.substring(currentIndex, currentIndex + safeBestFit);
+      pages.add(pageContent);
+      charOffsets.add(currentIndex);
+      currentIndex += safeBestFit;
+
+      // 每50页让出一次CPU并报告进度
+      if (pageNum - lastYieldPage >= 50) {
+        await Future.delayed(const Duration(milliseconds: 10));
+        onProgress?.call(pages.length, '正在分页... ${pages.length} 页');
+        lastYieldPage = pageNum;
+      }
+
+      // 定期打印进度
+      if (pageNum % 1000 == 0 || pageNum <= 3) {
+        print(
+            '   已分页: ${pages.length} 页 (${(currentIndex / text.length * 100).toStringAsFixed(1)}%)');
+      }
+    }
+
+    final avgCharsPerPage = text.length / pages.length;
+    print('✅ 分页完成: ${pages.length}页，平均每页${avgCharsPerPage.toInt()}字符');
+
+    onProgress?.call(pages.length, '分页完成');
+
+    return PaginationResult(pages: pages, charOffsets: charOffsets);
   }
 }

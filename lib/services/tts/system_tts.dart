@@ -4,8 +4,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'base_tts.dart';
+import 'tts_preferences.dart';
 
 class SystemTts extends BaseTts {
   static final SystemTts _instance = SystemTts._internal();
@@ -49,29 +49,29 @@ class SystemTts extends BaseTts {
   bool get isWeb => kIsWeb;
 
   @override
-  double get volume => _getVolume();
+  double get volume => TtsPreferences().volume;
 
   @override
   set volume(double volume) {
-    _setVolume(volume);
+    TtsPreferences().volume = volume;
     restart();
   }
 
   @override
-  double get pitch => _getPitch();
+  double get pitch => TtsPreferences().pitch;
 
   @override
   set pitch(double pitch) {
-    _setPitch(pitch);
+    TtsPreferences().pitch = pitch;
     restart();
   }
 
   @override
-  double get rate => _getRate();
+  double get rate => TtsPreferences().rate;
 
   @override
   set rate(double rate) {
-    _setRate(rate);
+    TtsPreferences().rate = rate;
     restart();
   }
 
@@ -164,44 +164,57 @@ class SystemTts extends BaseTts {
     Function getNextText,
     Function getPrevText,
   ) async {
-    getHereFunction = getCurrentText;
-    getNextTextFunction = getNextText;
-    getPrevTextFunction = getPrevText;
+    try {
+      debugPrint('🔧 开始初始化TTS引擎...');
 
-    await setAwaitOptions();
+      // 初始化配置
+      await TtsPreferences().init();
 
-    if (isAndroid) {
-      await getDefaultEngine();
-      await getDefaultVoice();
+      getHereFunction = getCurrentText;
+      getNextTextFunction = getNextText;
+      getPrevTextFunction = getPrevText;
+
+      // 设置语言
+      await flutterTts.setLanguage(TtsPreferences().language);
+      debugPrint('   语言设置: ${TtsPreferences().language}');
+
+      // 不再预绑定TTS引擎，直接在第一次播放时初始化
+      debugPrint('   ✅ 跳过预绑定，将在首次播放时初始化');
+
+      flutterTts.setStartHandler(() async {
+        updateTtsState(TtsStateEnum.playing);
+        _startHighlightTimer(); // 开始句子高亮
+
+        if (!isAndroid) {
+          return;
+        }
+        _prevVoiceText = _currentVoiceText;
+        _currentVoiceText = await getCurrentText();
+
+        if (_currentVoiceText?.isNotEmpty ?? false) {
+          flutterTts.speak(_currentVoiceText!);
+        }
+      });
+
+      flutterTts.setCompletionHandler(() async {
+        if (!isAndroid) {
+          return;
+        }
+        updateTtsState(TtsStateEnum.playing);
+        if (_currentVoiceText?.isEmpty ?? true) {
+          _currentVoiceText = await getNextText();
+          await speak();
+        } else {
+          await getNextText();
+        }
+      });
+
+      debugPrint('✅ TTS引擎初始化完成');
+    } catch (e, stack) {
+      debugPrint('❌ TTS初始化失败: $e');
+      debugPrint('Stack: $stack');
+      rethrow;
     }
-
-    flutterTts.setStartHandler(() async {
-      updateTtsState(TtsStateEnum.playing);
-      _startHighlightTimer(); // 开始句子高亮
-
-      if (!isAndroid) {
-        return;
-      }
-      _prevVoiceText = _currentVoiceText;
-      _currentVoiceText = await getCurrentText();
-
-      if (_currentVoiceText?.isNotEmpty ?? false) {
-        flutterTts.speak(_currentVoiceText!);
-      }
-    });
-
-    flutterTts.setCompletionHandler(() async {
-      if (!isAndroid) {
-        return;
-      }
-      updateTtsState(TtsStateEnum.playing);
-      if (_currentVoiceText?.isEmpty ?? true) {
-        _currentVoiceText = await getNextText();
-        await speak();
-      } else {
-        await getNextText();
-      }
-    });
   }
 
   Future<void> setAwaitOptions() async {
@@ -224,26 +237,61 @@ class SystemTts extends BaseTts {
 
   @override
   Future<void> speak({String? content}) async {
-    await setAwaitOptions();
-    if (content != null) {
+    try {
+      debugPrint('📢 SystemTts.speak() 被调用');
+      debugPrint(
+          '   参数 content: ${content != null ? "有 (${content.length}字符)" : "null"}');
+
+      // 必须提供内容
+      if (content == null || content.isEmpty) {
+        debugPrint('   ❌ 验证失败: 文本为 ${content == null ? "null" : "空字符串"}');
+        return;
+      }
+
       _currentVoiceText = content;
-    }
-    _currentVoiceText ??= await getHereFunction();
+      debugPrint('   ✅ 验证通过，准备朗读文本，长度: ${_currentVoiceText!.length}');
+      debugPrint(
+          '   文本预览: ${_currentVoiceText!.substring(0, _currentVoiceText!.length.clamp(0, 100))}...');
 
-    // 分割当前文本为句子，用于高亮显示
-    if (_currentVoiceText?.isNotEmpty ?? false) {
+      // 分割当前文本为句子，用于高亮显示
       _currentSentences = _splitIntoSentences(_currentVoiceText!);
-    }
+      debugPrint('   ✅ 分割为 ${_currentSentences.length} 个句子');
 
-    await flutterTts.setVolume(volume);
-    await flutterTts.setSpeechRate(rate);
-    await flutterTts.setPitch(pitch);
+      // 简化设置：只设置必要参数
+      debugPrint('   设置TTS参数: 音量=$volume, 语速=$rate, 音调=$pitch');
+      await flutterTts.setVolume(volume);
+      await flutterTts.setSpeechRate(rate);
+      await flutterTts.setPitch(pitch);
 
-    await flutterTts.speak(_currentVoiceText!);
+      // 开始朗读
+      debugPrint('🎤 开始朗读: "${_currentVoiceText!.substring(0, 50)}..."');
 
-    if (!isAndroid && ttsStateNotifier.value == TtsStateEnum.playing) {
-      _currentVoiceText = await getNextTextFunction();
-      speak();
+      // 直接调用，不等待返回（Android TTS是异步的）
+      final speakFuture = flutterTts.speak(_currentVoiceText!);
+
+      debugPrint('✅ TTS speak() 已触发');
+
+      // 更新状态为播放中
+      updateTtsState(TtsStateEnum.playing);
+
+      // 可选：等待speak完成（但不阻塞）
+      speakFuture.then((result) {
+        debugPrint('✅ TTS播放完成: $result');
+      }).catchError((e) {
+        debugPrint('❌ TTS播放错误: $e');
+      });
+
+      if (!isAndroid && ttsStateNotifier.value == TtsStateEnum.playing) {
+        debugPrint('   iOS/其他平台: 准备获取下一页');
+        _currentVoiceText = await getNextTextFunction();
+        speak();
+      }
+
+      debugPrint('✅ SystemTts.speak() 完成');
+    } catch (e, stackTrace) {
+      debugPrint('❌ SystemTts.speak() 发生错误: $e');
+      debugPrint('Stack trace: $stackTrace');
+      rethrow;
     }
   }
 
@@ -312,37 +360,7 @@ class SystemTts extends BaseTts {
 
   @override
   Future<void> dispose() async {
+    _stopHighlightTimer();
     await flutterTts.stop();
-  }
-
-  // Preference helpers
-  double _getVolume() {
-    // Default to 1.0 if not set
-    return 1.0;
-  }
-
-  void _setVolume(double volume) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('tts_volume', volume);
-  }
-
-  double _getPitch() {
-    // Default to 1.0 if not set
-    return 1.0;
-  }
-
-  void _setPitch(double pitch) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('tts_pitch', pitch);
-  }
-
-  double _getRate() {
-    // Default to 0.5 if not set
-    return 0.5;
-  }
-
-  void _setRate(double rate) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('tts_rate', rate);
   }
 }

@@ -5,8 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
 import '../utils/app_themes.dart';
-import '../services/webdav/webdav_sync_service.dart';
+import '../services/sync/webdav_sync_service.dart';
 import '../services/reading_engine_coordinator.dart';
+import '../services/pagination_cache_service.dart';
 import '../widgets/webdav_config_dialog.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -472,6 +473,12 @@ class _SettingsPageState extends State<SettingsPage> {
                     icon: Icons.monitor,
                   ),
                   _buildActionSetting(
+                    title: '缓存统计',
+                    subtitle: '查看分页缓存使用情况',
+                    onTap: _viewCacheStats,
+                    icon: Icons.analytics,
+                  ),
+                  _buildActionSetting(
                     title: '清除所有缓存',
                     subtitle: '清除字体度量和分页缓存',
                     onTap: _clearAllCaches,
@@ -672,7 +679,7 @@ class _SettingsPageState extends State<SettingsPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
           return Container(
-            height: MediaQuery.of(context).size.height * 0.7,
+            height: MediaQuery.of(context).size.height * 0.65,
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surface,
               borderRadius: const BorderRadius.vertical(
@@ -683,7 +690,7 @@ class _SettingsPageState extends State<SettingsPage> {
               children: [
                 // 拖拽指示条
                 Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 20),
+                  margin: const EdgeInsets.only(top: 12, bottom: 16),
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
@@ -707,7 +714,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       Text(
                         '选择应用主题',
                         style: TextStyle(
-                          fontSize: 22,
+                          fontSize: 20,
                           fontWeight: FontWeight.w700,
                           color: Theme.of(context).colorScheme.onSurface,
                         ),
@@ -715,7 +722,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 // 主题网格
                 Expanded(
                   child: GridView.builder(
@@ -723,9 +730,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
-                      childAspectRatio: 1.2,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
+                      childAspectRatio: 1.3,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
                     ),
                     itemCount: AppThemes.allThemes.length,
                     itemBuilder: (context, index) {
@@ -764,7 +771,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Container(
-                                padding: const EdgeInsets.all(12),
+                                padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
                                   color: theme.lightColorScheme.primary
                                       .withValues(alpha: 0.1),
@@ -773,24 +780,24 @@ class _SettingsPageState extends State<SettingsPage> {
                                 child: Icon(
                                   AppThemes.getThemeIcon(theme.name),
                                   color: theme.lightColorScheme.primary,
-                                  size: 32,
+                                  size: 28,
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 8),
                               Text(
                                 theme.displayName,
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.w600,
                                   color: theme.lightColorScheme.onSurface,
                                 ),
                               ),
                               if (isSelected) ...[
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 6),
                                 Icon(
                                   Icons.check_circle,
                                   color: theme.lightColorScheme.primary,
-                                  size: 20,
+                                  size: 18,
                                 ),
                               ],
                             ],
@@ -804,16 +811,16 @@ class _SettingsPageState extends State<SettingsPage> {
                 Padding(
                   padding: EdgeInsets.fromLTRB(
                     24,
-                    16,
+                    12,
                     24,
-                    MediaQuery.of(context).padding.bottom + 16,
+                    MediaQuery.of(context).padding.bottom + 12,
                   ),
                   child: SizedBox(
                     width: double.infinity,
                     child: FilledButton(
                       onPressed: () => Navigator.pop(context),
                       style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -1372,7 +1379,7 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {});
 
     try {
-      final success = await _webdavService.syncBooks();
+      final success = await _webdavService.manualSync();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2221,8 +2228,116 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  /// 清除所有缓存
-  void _clearAllCaches() {
+  /// 查看缓存统计
+  void _viewCacheStats() async {
+    try {
+      final stats = await PaginationCacheService.getCacheStats();
+      final count = stats['count'] ?? 0;
+      final sizeMB = stats['totalSizeMB'] ?? '0.00';
+      final oldest = stats['oldestCache'] as String?;
+      final newest = stats['newestCache'] as String?;
+
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.analytics, color: Colors.blue),
+              SizedBox(width: 8),
+              Text('缓存统计'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildStatRow(Icons.file_copy, '缓存文件', '$count 个'),
+              _buildStatRow(Icons.storage, '占用空间', '$sizeMB MB'),
+              if (oldest != null)
+                _buildStatRow(
+                  Icons.access_time,
+                  '最旧缓存',
+                  _formatDateTime(oldest),
+                ),
+              if (newest != null)
+                _buildStatRow(
+                  Icons.new_releases,
+                  '最新缓存',
+                  _formatDateTime(newest),
+                ),
+              const Divider(),
+              const Text(
+                '提示：缓存会在30天后自动清理',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+            if (count > 0)
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await PaginationCacheService.clearExpiredCache();
+                  if (!mounted) return;
+                  _showInfoSnackBar('已清理过期缓存');
+                },
+                child: const Text('清理过期'),
+              ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showInfoSnackBar('获取缓存统计失败: $e');
+    }
+  }
+
+  Widget _buildStatRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: Colors.grey),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(label),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.blue,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDateTime(String isoString) {
+    try {
+      final dt = DateTime.parse(isoString);
+      return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return isoString;
+    }
+  }
+
+  /// 清除所有缓存（优化版：包含分页缓存）
+  void _clearAllCaches() async {
+    // 先获取缓存统计信息
+    final stats = await PaginationCacheService.getCacheStats();
+    final cacheCount = stats['count'] ?? 0;
+    final cacheSizeMB = stats['totalSizeMB'] ?? '0';
+
+    if (!mounted) return;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -2233,7 +2348,34 @@ class _SettingsPageState extends State<SettingsPage> {
             Text('清除缓存'),
           ],
         ),
-        content: const Text('这将清除所有分页缓存和字体度量数据，是否继续？'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('这将清除以下缓存数据：'),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.description, size: 16, color: Colors.grey),
+                const SizedBox(width: 8),
+                Text('分页缓存: $cacheCount 个文件 ($cacheSizeMB MB)'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Row(
+              children: [
+                Icon(Icons.font_download, size: 16, color: Colors.grey),
+                SizedBox(width: 8),
+                Text('字体度量数据'),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '清除后首次打开书籍会重新分页，是否继续？',
+              style: TextStyle(color: Colors.orange, fontSize: 13),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -2243,16 +2385,45 @@ class _SettingsPageState extends State<SettingsPage> {
             onPressed: () async {
               Navigator.pop(context);
               try {
+                // 显示加载提示
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Row(
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        ),
+                        SizedBox(width: 12),
+                        Text('正在清除缓存...'),
+                      ],
+                    ),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+
+                // 清除持久化分页缓存
+                await PaginationCacheService.clearAllCache();
+
+                // 清除SharedPreferences中的缓存
                 final prefs = await SharedPreferences.getInstance();
-                // 清除分页相关缓存
                 await prefs.remove('cached_font_metrics');
                 await prefs.remove('cached_page_metrics');
-                _showInfoSnackBar('缓存已清除');
+
+                if (!mounted) return;
+
+                // 显示成功消息
+                ScaffoldMessenger.of(context).clearSnackBars();
+                _showInfoSnackBar('✅ 缓存已清除 ($cacheCount 个文件, $cacheSizeMB MB)');
               } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).clearSnackBars();
                 _showInfoSnackBar('清除缓存失败: $e');
               }
             },
-            child: const Text('清除'),
+            child: const Text('清除', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
