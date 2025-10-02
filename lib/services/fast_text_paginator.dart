@@ -135,27 +135,38 @@ class FastTextPaginator {
     }
 
     // 计算每页能显示的完整行数（向下取整，零点几行留空不显示）
-    // 使用安全系数动态调整：根据行距预留安全高度，再计算行数
-    // 安全高度 = 行高 × 安全系数，行距越大，安全系数越大
-    // 1.0-1.5: 安全系数 0.8（预留0.8行高度）
-    // 1.5-2.0: 安全系数 1.2（预留1.2行高度）
-    // 2.0+:    安全系数 1.5（预留1.5行高度）
-    double safetyFactor;
+    // 使用安全系数动态调整：同时考虑行距和字体大小
+    // 基础安全系数由行距决定，字体大小作为微调因子
+
+    // 1. 根据行距选择基础安全系数
+    double baseSafetyFactor;
     if (lineSpacing < 1.5) {
-      safetyFactor = 0.8;
+      baseSafetyFactor = 0.5; // 行距小
     } else if (lineSpacing < 2.0) {
-      safetyFactor = 1.2;
+      baseSafetyFactor = 0.8; // 行距中等
     } else {
-      safetyFactor = 1.5;
+      baseSafetyFactor = 1.2; // 行距大
     }
 
+    // 2. 根据字体大小调整（字体越大，需要额外的安全边距）
+    // 小字体(12-16): 不额外增加
+    // 中等字体(17-22): 增加0.1
+    // 大字体(23+): 增加0.2
+    double fontSizeAdjustment = 0.0;
+    if (fontSize >= 23) {
+      fontSizeAdjustment = 0.2;
+    } else if (fontSize >= 17) {
+      fontSizeAdjustment = 0.1;
+    }
+
+    final safetyFactor = baseSafetyFactor + fontSizeAdjustment;
     final safetyHeight = lineHeightPx * safetyFactor;
     final adjustedHeight = availableHeight - safetyHeight;
     final maxLinesPerPage =
         math.max(1, (adjustedHeight / lineHeightPx).floor());
 
     debugPrint(
-        '   ✅ 可用高度: ${availableHeight.toInt()}px, 安全高度: ${safetyHeight.toInt()}px (${safetyFactor}×行高), 实际使用: $maxLinesPerPage 行');
+        '   ✅ 可用高度: ${availableHeight.toInt()}px, 字体: ${fontSize.toInt()}, 行距: ${lineSpacing.toStringAsFixed(1)}, 安全系数: ${safetyFactor.toStringAsFixed(2)}, 安全高度: ${safetyHeight.toInt()}px, 实际使用: $maxLinesPerPage 行');
 
     // 动态高度分页
     final List<String> pages = [];
@@ -392,16 +403,27 @@ class FastTextPaginator {
     final firstLineCharsPerLine = (firstLineAvailableWidth / charWidth).floor();
 
     // 计算每页能显示的完整行数（向下取整，零点几行留空不显示）
-    // 使用安全系数动态调整：根据行距预留安全高度，再计算行数
-    double safetyFactor;
+    // 使用安全系数动态调整：同时考虑行距和字体大小
+
+    // 1. 根据行距选择基础安全系数
+    double baseSafetyFactor;
     if (lineSpacing < 1.5) {
-      safetyFactor = 0.8;
+      baseSafetyFactor = 0.5; // 行距小
     } else if (lineSpacing < 2.0) {
-      safetyFactor = 1.2;
+      baseSafetyFactor = 0.8; // 行距中等
     } else {
-      safetyFactor = 1.5;
+      baseSafetyFactor = 1.2; // 行距大
     }
 
+    // 2. 根据字体大小调整（字体越大，需要额外的安全边距）
+    double fontSizeAdjustment = 0.0;
+    if (fontSize >= 23) {
+      fontSizeAdjustment = 0.2;
+    } else if (fontSize >= 17) {
+      fontSizeAdjustment = 0.1;
+    }
+
+    final safetyFactor = baseSafetyFactor + fontSizeAdjustment;
     final safetyHeight = lineHeightPx * safetyFactor;
     final adjustedHeight = availableHeight - safetyHeight;
     final maxLinesPerPage =

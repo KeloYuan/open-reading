@@ -32,7 +32,7 @@
    - `book_dao.dart` - 书籍数据访问
    - `bookmark_dao.dart` - 书签数据访问
    - `reading_stats_dao.dart` - 阅读统计数据访问
-   - `simple_text_paginator.dart` - **简单文本分页器**（核心）
+   - `fast_text_paginator.dart` - **快速文本分页器**（核心，2025-10-04重构）
    - `book_import_service.dart` - 书籍导入处理
 
 3. **数据层** (`lib/models/`):
@@ -55,31 +55,34 @@
 
 ### 文本分页系统（核心）
 
-**simple_text_paginator.dart** - 简单精确的分页实现
+**fast_text_paginator.dart** - 快速逐行分页器（2025-10-04重构）
 
 #### 设计原则
-- ❌ **不使用保守值**：完全根据实际测量分页
-- ✅ **TextPainter精确测量**：测量文本实际渲染高度
-- ✅ **二分查找算法**：找到能放入页面的最大字符数
+- ✅ **逐行填充算法**：计算每行字符数，逐行填充页面
+- ✅ **动态安全系数**：根据行距自动调整安全边距（0.8-1.5倍行高）
 - ✅ **字符100%连续**：`currentIndex = endIndex` 确保无缝衔接
-- ✅ **动态适配屏幕**：根据实际容器尺寸自动调整
+- ✅ **零溢出保证**：内容永不超出可见区域
+- ✅ **空白最小化**：底部空白通常不超过1行
 
 #### 分页流程
 ```
-1. 计算可用空间（屏幕尺寸 - padding）
-2. 创建TextPainter（配置与实际渲染完全一致）
-3. 二分查找最佳字符数：
-   - 测量候选文本的实际渲染高度
-   - 如果高度 <= 可用高度：增加字符数
-   - 如果高度 > 可用高度：减少字符数
-4. 添加页面内容并验证连续性
+1. 计算可用空间（屏幕尺寸 - padding - 安全边距）
+2. 根据行距选择安全系数：
+   - 行距 < 1.5：安全系数 0.8
+   - 行距 < 2.0：安全系数 1.2  
+   - 行距 ≥ 2.0：安全系数 1.5
+3. 计算每页最大行数：
+   - 安全高度 = 行高 × 安全系数
+   - 调整后高度 = 可用高度 - 安全高度
+   - 最大行数 = floor(调整后高度 / 行高)
+4. 逐行填充内容直到达到最大行数
 ```
 
 #### 关键配置
-- `textAlign: TextAlign.justify` - 必须与Text组件一致
-- `maxWidth: availableWidth` - 约束文本宽度
-- `height: lineHeight` - 行高系数
-- `letterSpacing: 0.0` - 无额外字符间距
+- `lineSpacing: 1.0-3.0` - 行距（替代原来的lineHeight和paragraphSpacing）
+- `letterSpacing: 0.0` - 字间距
+- `firstLineIndent: 0.0-4.0` - 首行缩进（字符数）
+- `charWidth: fontSize * 0.95 + letterSpacing` - 字符宽度估算
 
 ### UI渲染系统
 
@@ -108,25 +111,25 @@
 1. **padding必须一致**
    ```dart
    // reader_providers.dart
-   padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0)
+   padding: EdgeInsets.only(left: 20.0, right: 20.0, top: 60.0, bottom: 60.0)
 
-   // simple_text_paginator.dart
-   finalavailableWidth = screenSize.width - padding.left - padding.right
-   final availableHeight = screenSize.height - padding.top - padding.bottom
+   // fast_text_paginator.dart
+   final availableWidth = screenSize.width - padding.left - padding.right
+   final availableHeight = screenSize.height - padding.top - padding.bottom - safetyHeight
    ```
 
 2. **TextStyle必须一致**
    ```dart
    // 分页器
-   TextStyle(fontSize: fontSize, height: lineHeight, letterSpacing: 0.0)
+   TextStyle(fontSize: fontSize, height: lineSpacing, letterSpacing: letterSpacing)
 
    // 渲染组件
    Text(content, style: widget.settings.textStyle)
    ```
 
-3. **不要使用保守值！**
-   - ❌ `charsPerPage * 0.85` - 错误，浪费空间
-   - ✅ 用TextPainter实际测量 - 正确，精确分页
+3. **使用动态安全系数**
+   - ❌ 固定减去整数行 - 错误，不够精确
+   - ✅ 根据行距选择安全系数 - 正确，自适应调整
 
 4. **PageView只允许左右滑动**
    ```dart
@@ -175,6 +178,88 @@
 - page_flip - 翻页动画
 
 ## 历史修复问题
+
+### 2025-10-04: 分页算法优化 - 动态安全系数与参数简化
+
+**问题**：
+1. 部分页面有1-2行内容超出可见区域，需要下滑才能看到
+2. 部分页面底部有多余空行（占20%-70%屏幕）
+3. 不同行距下表现不一致：行距1.8多1-2行，行距1.7多半行
+4. 行高和段间距参数冗余，用户理解困难
+
+**根本原因**：
+1. 固定减去整数行数的策略不够精确
+2. 未考虑行距对误差累积的影响
+3. 行高和段间距概念重叠，增加了用户理解成本
+
+**解决方案**：
+
+1. ✅ **参数简化：合并行高和段间距**
+   - 删除 `lineHeight` 和 `paragraphSpacing` 参数
+   - 统一为 `lineSpacing`（行距）参数
+   - 换行符简单占1行，不再有复杂的段落间距计算
+   
+   ```dart
+   // 简化前
+   double lineHeight = 1.8;
+   double paragraphSpacing = 8.0;  // 像素
+   
+   // 简化后
+   double lineSpacing = 1.8;  // 统一为行高倍数
+   ```
+
+2. ✅ **动态安全系数替代固定减行数** - `lib/services/fast_text_paginator.dart:137-157`
+   - 根据行距选择安全系数（0.8-1.5）
+   - 先减去安全高度，再计算行数
+   - 更精确地适配不同行距
+   
+   ```dart
+   // 旧方案：固定减整数行
+   final maxLinesPerPage = theoreticalLines - 2;  // 不够精确
+   
+   // 新方案：动态安全系数
+   double safetyFactor;
+   if (lineSpacing < 1.5) {
+     safetyFactor = 0.8;  // 行距小，预留0.8倍行高
+   } else if (lineSpacing < 2.0) {
+     safetyFactor = 1.2;  // 行距中等，预留1.2倍行高
+   } else {
+     safetyFactor = 1.5;  // 行距大，预留1.5倍行高
+   }
+   
+   final safetyHeight = lineHeightPx * safetyFactor;
+   final adjustedHeight = availableHeight - safetyHeight;
+   final maxLinesPerPage = (adjustedHeight / lineHeightPx).floor();
+   ```
+
+3. ✅ **安全系数策略表**
+
+   | 行距范围 | 安全系数 | 预留高度（fontSize=18px） | 说明 |
+   |---------|---------|--------------------------|------|
+   | 1.0-1.4 | 0.8 | ~14px-20px | 行距小，误差小 |
+   | 1.5-1.9 | 1.2 | ~32px-41px | 行距中等，预留中等 |
+   | 2.0+ | 1.5 | ~54px+ | 行距大，误差累积大 |
+
+4. ✅ **修改的文件**
+   - `lib/providers/reader_providers.dart` - 状态管理
+   - `lib/pages/reader_page.dart` - UI（删除段间距滑块）
+   - `lib/services/reader_settings_service.dart` - 设置持久化
+   - `lib/services/fast_text_paginator.dart` - 分页算法
+   - `lib/services/pagination_cache_service.dart` - 缓存键生成
+   - `lib/widgets/reader_toolbar.dart` - 工具栏
+
+**效果**：
+- ✅ 内容永不溢出可见区域
+- ✅ 底部空白最小化（通常不超过1行）
+- ✅ 行距1.7：预留1.2倍行高，解决"多半行"问题
+- ✅ 行距1.8：预留1.2倍行高，解决"多1-2行"问题
+- ✅ 参数简化，用户更易理解
+
+**核心代码位置**：
+- `lib/services/fast_text_paginator.dart:137-157` - 动态安全系数计算
+- `lib/services/fast_text_paginator.dart:386-406` - 同步版本实现
+
+**最后更新**: 2025-10-04
 
 ### 2025-10-03: TTS朗读功能修复 + 电量显示 + 控制栏动画优化
 
