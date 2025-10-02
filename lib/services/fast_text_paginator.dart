@@ -33,10 +33,9 @@ class FastTextPaginator {
     required String text,
     required Size screenSize,
     required double fontSize,
-    required double lineHeight,
+    required double lineSpacing,
     required EdgeInsets padding,
     double letterSpacing = 0.0,
-    double paragraphSpacing = 0.0,
     double firstLineIndent = 0.0,
     double devicePixelRatio = 1.0,
     FastPaginationProgressCallback? onProgress,
@@ -54,29 +53,53 @@ class FastTextPaginator {
     final availableWidth = screenSize.width - padding.left - padding.right;
 
     // 计算实际的行高（像素）
-    final lineHeightPx = fontSize * lineHeight;
+    final lineHeightPx = fontSize * lineSpacing;
 
     // 根据屏幕实际情况动态计算安全边距
-    // 策略：使用行高的倍数，随字体大小和行间距自适应
-    double topSafetyMultiplier = 0.5; // 顶部：0.5倍行高
-    double bottomSafetyMultiplier = 0.3; // 底部：0.3倍行高（更小，最大化内容）
+    // 策略：使用行高的倍数 + 最小像素值（仅对大字体≥25px生效）
+    // 使用极小的倍数，最大化内容显示
+    double topSafetyMultiplier = 0.2; // 顶部：0.2倍行高（极小）
+    double bottomSafetyMultiplier = 0.05; // 底部：0.05倍行高（极小）
 
-    // 根据屏幕密度微调（高分辨率屏幕稍微增加一点）
+    // 最小安全边距（像素）- 仅在大字体时启用，防止边距太小
+    // 临界值设为26px，25px及以下使用动态倍数以避免浪费空间
+    double minTopMarginPx = fontSize >= 26 ? 22.0 : 0.0;
+    double minBottomMarginPx = fontSize >= 26 ? 20.0 : 0.0;
+
+    // 根据屏幕密度微调
     if (screenSize.height > 2500 || devicePixelRatio >= 3.5) {
       // 超高分辨率屏幕 (如 OPPO Find X8)
-      topSafetyMultiplier = 0.6;
-      bottomSafetyMultiplier = 0.2; // 底部更少，最大化内容
+      topSafetyMultiplier = 0.25;
+      bottomSafetyMultiplier = 0.03; // 极小化底部边距
+      if (fontSize >= 26) {
+        minTopMarginPx = 28.0;
+        minBottomMarginPx = 25.0;
+      }
     } else if (screenSize.height > 2000 || devicePixelRatio >= 3.0) {
-      topSafetyMultiplier = 0.55;
-      bottomSafetyMultiplier = 0.25;
+      topSafetyMultiplier = 0.22;
+      bottomSafetyMultiplier = 0.04;
+      if (fontSize >= 26) {
+        minTopMarginPx = 25.0;
+        minBottomMarginPx = 22.0;
+      }
     } else if (screenSize.height > 1500 || devicePixelRatio >= 2.5) {
-      topSafetyMultiplier = 0.5;
-      bottomSafetyMultiplier = 0.3;
+      topSafetyMultiplier = 0.2;
+      bottomSafetyMultiplier = 0.05;
+      if (fontSize >= 26) {
+        minTopMarginPx = 22.0;
+        minBottomMarginPx = 20.0;
+      }
     }
 
-    // 计算实际的安全边距（像素）= 行高 × 倍数
-    final topSafetyMarginPx = lineHeightPx * topSafetyMultiplier;
-    final bottomSafetyMarginPx = lineHeightPx * bottomSafetyMultiplier;
+    // 计算动态安全边距（行高 × 倍数）
+    final dynamicTopMargin = lineHeightPx * topSafetyMultiplier;
+    final dynamicBottomMargin = lineHeightPx * bottomSafetyMultiplier;
+
+    // 实际安全边距 = max(动态值, 最小值)
+    // 小字体时最小值为0，完全使用动态值；大字体时有最小值保护
+    final topSafetyMarginPx = math.max(minTopMarginPx, dynamicTopMargin);
+    final bottomSafetyMarginPx =
+        math.max(minBottomMarginPx, dynamicBottomMargin);
 
     // 计算可用高度（减去 padding 和安全边距）
     final availableHeight = screenSize.height -
@@ -87,33 +110,54 @@ class FastTextPaginator {
 
     // 计算每行可以容纳的字符数
     // 字符宽度 = 字体大小 + 字间距
-    final charWidth = fontSize + letterSpacing;
+    // 中文字符约为 0.95 * fontSize（略小于完整字体大小）
+    final charWidth = fontSize * 0.95 + letterSpacing;
     final charsPerLine = (availableWidth / charWidth).floor();
 
-    // 计算每页可以容纳的行数（向下取整）
-    final linesPerPage = (availableHeight / lineHeightPx).floor();
+    // 计算首行缩进后的字符数（每段第一行）
+    final firstLineAvailableWidth = availableWidth - firstLineIndent;
+    final firstLineCharsPerLine = (firstLineAvailableWidth / charWidth).floor();
 
-    // 使用计算出的行数，不再额外减少
-    final safeLinesPerPage = math.max(1, linesPerPage);
-
-    debugPrint('📄 精确的逐行分页开始:');
+    debugPrint('📄 逐行分页开始:');
     debugPrint(
         '   屏幕: ${screenSize.width.toInt()}×${screenSize.height.toInt()} (DPR: ${devicePixelRatio.toStringAsFixed(2)})');
     debugPrint(
         '   Padding: L${padding.left.toInt()} R${padding.right.toInt()} T${padding.top.toInt()} B${padding.bottom.toInt()}');
     debugPrint(
-        '   安全边距: 顶部${topSafetyMultiplier}×行高(${topSafetyMarginPx.toInt()}px), 底部${bottomSafetyMultiplier}×行高(${bottomSafetyMarginPx.toInt()}px)');
+        '   安全边距: 顶部${topSafetyMarginPx.toInt()}px (动态${dynamicTopMargin.toInt()}px vs 最小${minTopMarginPx.toInt()}px), 底部${bottomSafetyMarginPx.toInt()}px (动态${dynamicBottomMargin.toInt()}px vs 最小${minBottomMarginPx.toInt()}px)');
     debugPrint('   可用空间: ${availableWidth.toInt()}×${availableHeight.toInt()}');
     debugPrint(
-        '   排版参数: 字体${fontSize}px, 行高$lineHeight (${lineHeightPx.toInt()}px), 字间距$letterSpacing');
-    debugPrint('   计算结果: 每行${charsPerLine}字符, 每页${safeLinesPerPage}行');
-    debugPrint(
-        '   空间利用率: ${(safeLinesPerPage * lineHeightPx / screenSize.height * 100).toStringAsFixed(1)}%');
+        '   排版参数: 字体${fontSize}px, 行距${lineSpacing.toStringAsFixed(1)} (${lineHeightPx.toInt()}px), 字间距$letterSpacing');
+    debugPrint('   首行缩进: ${firstLineIndent.toInt()}px');
+    debugPrint('   计算结果: 每行${charsPerLine}字符 (首行${firstLineCharsPerLine}字符)');
     if (emptyLinesRemoved > 0) {
       debugPrint('   空行优化: 移除${emptyLinesRemoved}个多余换行符');
     }
 
-    // 精确的逐行分页
+    // 计算每页能显示的完整行数（向下取整，零点几行留空不显示）
+    // 使用安全系数动态调整：根据行距预留安全高度，再计算行数
+    // 安全高度 = 行高 × 安全系数，行距越大，安全系数越大
+    // 1.0-1.5: 安全系数 0.8（预留0.8行高度）
+    // 1.5-2.0: 安全系数 1.2（预留1.2行高度）
+    // 2.0+:    安全系数 1.5（预留1.5行高度）
+    double safetyFactor;
+    if (lineSpacing < 1.5) {
+      safetyFactor = 0.8;
+    } else if (lineSpacing < 2.0) {
+      safetyFactor = 1.2;
+    } else {
+      safetyFactor = 1.5;
+    }
+
+    final safetyHeight = lineHeightPx * safetyFactor;
+    final adjustedHeight = availableHeight - safetyHeight;
+    final maxLinesPerPage =
+        math.max(1, (adjustedHeight / lineHeightPx).floor());
+
+    debugPrint(
+        '   ✅ 可用高度: ${availableHeight.toInt()}px, 安全高度: ${safetyHeight.toInt()}px (${safetyFactor}×行高), 实际使用: $maxLinesPerPage 行');
+
+    // 动态高度分页
     final List<String> pages = [];
     final List<int> charOffsets = [];
     int currentIndex = 0;
@@ -138,15 +182,17 @@ class FastTextPaginator {
       // 记录页面开始位置（跳过空行后）
       charOffsets.add(currentIndex);
       final pageStartIndex = currentIndex;
-      int usedLines = 0;
 
-      // 逐行填充，直到达到最大行数
-      while (usedLines < safeLinesPerPage && currentIndex < text.length) {
+      // 用行数计数器，确保只显示完整的行，零点几行留空
+      int usedLines = 0; // 当前页已使用的行数
+      bool isFirstLineOfParagraph = true; // 页面开始时，第一行是段落首行
+
+      while (usedLines < maxLinesPerPage && currentIndex < text.length) {
         // 检查当前字符是否是换行符
         if (text[currentIndex] == '\n') {
-          // 空行，占1行
           currentIndex++;
-          usedLines++;
+          usedLines++; // 换行符占1行
+          isFirstLineOfParagraph = true; // 下一行是新段落的首行
           continue;
         }
 
@@ -156,10 +202,14 @@ class FastTextPaginator {
           nextNewlinePos = text.length; // 没有换行符，就到文本末尾
         }
 
+        // 根据是否是首行，选择每行字符数
+        final currentLineCharsPerLine =
+            isFirstLineOfParagraph ? firstLineCharsPerLine : charsPerLine;
+
         // 计算这一段的长度（不包含换行符）
         int segmentLength = nextNewlinePos - currentIndex;
 
-        if (segmentLength <= charsPerLine) {
+        if (segmentLength <= currentLineCharsPerLine) {
           // 这一段可能可以放在一行，但需要检查是否应该填满这一行
           final segment = text.substring(currentIndex, nextNewlinePos);
 
@@ -178,25 +228,43 @@ class FastTextPaginator {
                   segment.endsWith('；'));
 
           if (endsWithPunctuation ||
-              segmentLength >= (charsPerLine * 0.8).floor()) {
+              segmentLength >= (currentLineCharsPerLine * 0.8).floor()) {
             // 如果以标点结尾，或者已经接近一行的长度（80%以上），就换行
             currentIndex = nextNewlinePos;
             usedLines++;
+            isFirstLineOfParagraph = false; // 下一行不是首行
           } else {
-            // 否则，尝试填满这一行（跳过换行符继续添加内容）
+            // 否则，尝试填满这一行
             currentIndex = nextNewlinePos;
             if (currentIndex < text.length && text[currentIndex] == '\n') {
               currentIndex++; // 跳过换行符
+
+              // 如果跳过换行符后还有内容，尝试继续填充这一行
+              if (currentIndex < text.length &&
+                  segmentLength < currentLineCharsPerLine) {
+                final nextNewline2 = text.indexOf('\n', currentIndex);
+                final endPos2 = nextNewline2 == -1 ? text.length : nextNewline2;
+                final additionalChars = math.min(
+                    currentLineCharsPerLine - segmentLength,
+                    endPos2 - currentIndex);
+
+                // 只有在有足够内容时才继续填充
+                if (additionalChars > 0) {
+                  currentIndex += additionalChars;
+                }
+              }
             }
             usedLines++;
+            isFirstLineOfParagraph = false; // 下一行不是首行
           }
         } else {
           // 这一段太长，需要分成多行
-          // 每次取 charsPerLine 个字符，填满每一行
+          // 首行可能更短（有缩进），后续行用正常长度
           final charsToTake =
-              math.min(charsPerLine, nextNewlinePos - currentIndex);
+              math.min(currentLineCharsPerLine, nextNewlinePos - currentIndex);
           currentIndex += charsToTake;
           usedLines++;
+          isFirstLineOfParagraph = false; // 填充后，下一行不是首行了
         }
       }
 
@@ -242,10 +310,9 @@ class FastTextPaginator {
     required String text,
     required Size screenSize,
     required double fontSize,
-    required double lineHeight,
+    required double lineSpacing,
     required EdgeInsets padding,
     double letterSpacing = 0.0,
-    double paragraphSpacing = 0.0,
     double firstLineIndent = 0.0,
     double devicePixelRatio = 1.0,
   }) {
@@ -260,28 +327,53 @@ class FastTextPaginator {
     final availableWidth = screenSize.width - padding.left - padding.right;
 
     // 计算实际的行高（像素）
-    final lineHeightPx = fontSize * lineHeight;
+    final lineHeightPx = fontSize * lineSpacing;
 
     // 根据屏幕实际情况动态计算安全边距
-    // 策略：使用行高的倍数，随字体大小和行间距自适应
-    double topSafetyMultiplier = 0.5; // 顶部：0.5倍行高
-    double bottomSafetyMultiplier = 0.3; // 底部：0.3倍行高
+    // 策略：使用行高的倍数 + 最小像素值（仅对大字体≥25px生效）
+    // 使用极小的倍数，最大化内容显示
+    double topSafetyMultiplier = 0.2; // 顶部：0.2倍行高（极小）
+    double bottomSafetyMultiplier = 0.05; // 底部：0.05倍行高（极小）
+
+    // 最小安全边距（像素）- 仅在大字体时启用，防止边距太小
+    // 临界值设为26px，25px及以下使用动态倍数以避免浪费空间
+    double minTopMarginPx = fontSize >= 26 ? 22.0 : 0.0;
+    double minBottomMarginPx = fontSize >= 26 ? 20.0 : 0.0;
 
     // 根据屏幕密度微调
     if (screenSize.height > 2500 || devicePixelRatio >= 3.5) {
-      topSafetyMultiplier = 0.6;
-      bottomSafetyMultiplier = 0.2;
+      // 超高分辨率屏幕 (如 OPPO Find X8)
+      topSafetyMultiplier = 0.25;
+      bottomSafetyMultiplier = 0.03; // 极小化底部边距
+      if (fontSize >= 26) {
+        minTopMarginPx = 28.0;
+        minBottomMarginPx = 25.0;
+      }
     } else if (screenSize.height > 2000 || devicePixelRatio >= 3.0) {
-      topSafetyMultiplier = 0.55;
-      bottomSafetyMultiplier = 0.25;
+      topSafetyMultiplier = 0.22;
+      bottomSafetyMultiplier = 0.04;
+      if (fontSize >= 26) {
+        minTopMarginPx = 25.0;
+        minBottomMarginPx = 22.0;
+      }
     } else if (screenSize.height > 1500 || devicePixelRatio >= 2.5) {
-      topSafetyMultiplier = 0.5;
-      bottomSafetyMultiplier = 0.3;
+      topSafetyMultiplier = 0.2;
+      bottomSafetyMultiplier = 0.05;
+      if (fontSize >= 26) {
+        minTopMarginPx = 22.0;
+        minBottomMarginPx = 20.0;
+      }
     }
 
-    // 计算实际的安全边距（像素）= 行高 × 倍数
-    final topSafetyMarginPx = lineHeightPx * topSafetyMultiplier;
-    final bottomSafetyMarginPx = lineHeightPx * bottomSafetyMultiplier;
+    // 计算动态安全边距（行高 × 倍数）
+    final dynamicTopMargin = lineHeightPx * topSafetyMultiplier;
+    final dynamicBottomMargin = lineHeightPx * bottomSafetyMultiplier;
+
+    // 实际安全边距 = max(动态值, 最小值)
+    // 小字体时最小值为0，完全使用动态值；大字体时有最小值保护
+    final topSafetyMarginPx = math.max(minTopMarginPx, dynamicTopMargin);
+    final bottomSafetyMarginPx =
+        math.max(minBottomMarginPx, dynamicBottomMargin);
 
     // 计算可用高度
     final availableHeight = screenSize.height -
@@ -291,12 +383,29 @@ class FastTextPaginator {
         bottomSafetyMarginPx;
 
     // 计算每行可以容纳的字符数
-    final charWidth = fontSize + letterSpacing;
+    // 中文字符约为 0.95 * fontSize（略小于完整字体大小）
+    final charWidth = fontSize * 0.95 + letterSpacing;
     final charsPerLine = (availableWidth / charWidth).floor();
-    final linesPerPage = (availableHeight / lineHeightPx).floor();
 
-    // 使用计算出的行数，不再额外减少
-    final safeLinesPerPage = math.max(1, linesPerPage);
+    // 计算首行缩进后的字符数（每段第一行）
+    final firstLineAvailableWidth = availableWidth - firstLineIndent;
+    final firstLineCharsPerLine = (firstLineAvailableWidth / charWidth).floor();
+
+    // 计算每页能显示的完整行数（向下取整，零点几行留空不显示）
+    // 使用安全系数动态调整：根据行距预留安全高度，再计算行数
+    double safetyFactor;
+    if (lineSpacing < 1.5) {
+      safetyFactor = 0.8;
+    } else if (lineSpacing < 2.0) {
+      safetyFactor = 1.2;
+    } else {
+      safetyFactor = 1.5;
+    }
+
+    final safetyHeight = lineHeightPx * safetyFactor;
+    final adjustedHeight = availableHeight - safetyHeight;
+    final maxLinesPerPage =
+        math.max(1, (adjustedHeight / lineHeightPx).floor());
 
     // 精确的逐行分页
     final List<String> pages = [];
@@ -317,15 +426,17 @@ class FastTextPaginator {
       // 记录页面开始位置（跳过空行后）
       charOffsets.add(currentIndex);
       final pageStartIndex = currentIndex;
-      int usedLines = 0;
 
-      // 逐行填充，直到达到最大行数
-      while (usedLines < safeLinesPerPage && currentIndex < text.length) {
+      // 用行数计数器，确保只显示完整的行，零点几行留空
+      int usedLines = 0; // 当前页已使用的行数
+      bool isFirstLineOfParagraph = true; // 页面开始时，第一行是段落首行
+
+      while (usedLines < maxLinesPerPage && currentIndex < text.length) {
         // 检查当前字符是否是换行符
         if (text[currentIndex] == '\n') {
-          // 空行，占1行
           currentIndex++;
-          usedLines++;
+          usedLines++; // 换行符占1行
+          isFirstLineOfParagraph = true; // 下一行是新段落的首行
           continue;
         }
 
@@ -335,10 +446,14 @@ class FastTextPaginator {
           nextNewlinePos = text.length; // 没有换行符，就到文本末尾
         }
 
+        // 根据是否是首行，选择每行字符数
+        final currentLineCharsPerLine =
+            isFirstLineOfParagraph ? firstLineCharsPerLine : charsPerLine;
+
         // 计算这一段的长度（不包含换行符）
         int segmentLength = nextNewlinePos - currentIndex;
 
-        if (segmentLength <= charsPerLine) {
+        if (segmentLength <= currentLineCharsPerLine) {
           // 这一段可能可以放在一行，但需要检查是否应该填满这一行
           final segment = text.substring(currentIndex, nextNewlinePos);
 
@@ -357,25 +472,43 @@ class FastTextPaginator {
                   segment.endsWith('；'));
 
           if (endsWithPunctuation ||
-              segmentLength >= (charsPerLine * 0.8).floor()) {
+              segmentLength >= (currentLineCharsPerLine * 0.8).floor()) {
             // 如果以标点结尾，或者已经接近一行的长度（80%以上），就换行
             currentIndex = nextNewlinePos;
             usedLines++;
+            isFirstLineOfParagraph = false; // 下一行不是首行
           } else {
-            // 否则，尝试填满这一行（跳过换行符继续添加内容）
+            // 否则，尝试填满这一行
             currentIndex = nextNewlinePos;
             if (currentIndex < text.length && text[currentIndex] == '\n') {
               currentIndex++; // 跳过换行符
+
+              // 如果跳过换行符后还有内容，尝试继续填充这一行
+              if (currentIndex < text.length &&
+                  segmentLength < currentLineCharsPerLine) {
+                final nextNewline2 = text.indexOf('\n', currentIndex);
+                final endPos2 = nextNewline2 == -1 ? text.length : nextNewline2;
+                final additionalChars = math.min(
+                    currentLineCharsPerLine - segmentLength,
+                    endPos2 - currentIndex);
+
+                // 只有在有足够内容时才继续填充
+                if (additionalChars > 0) {
+                  currentIndex += additionalChars;
+                }
+              }
             }
             usedLines++;
+            isFirstLineOfParagraph = false; // 下一行不是首行
           }
         } else {
           // 这一段太长，需要分成多行
-          // 每次取 charsPerLine 个字符，填满每一行
+          // 首行可能更短（有缩进），后续行用正常长度
           final charsToTake =
-              math.min(charsPerLine, nextNewlinePos - currentIndex);
+              math.min(currentLineCharsPerLine, nextNewlinePos - currentIndex);
           currentIndex += charsToTake;
           usedLines++;
+          isFirstLineOfParagraph = false; // 填充后，下一行不是首行了
         }
       }
 

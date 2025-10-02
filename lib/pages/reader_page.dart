@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:battery_plus/battery_plus.dart';
 import '../providers/reader_providers.dart';
 import '../widgets/enhanced_text_selection_toolbar.dart';
 import '../widgets/tts_settings_sheet.dart';
@@ -10,6 +11,7 @@ import '../widgets/page_turning_settings_sheet.dart';
 import '../models/book_note.dart';
 import '../services/book_dao.dart';
 import '../services/data_manager.dart';
+import '../services/reading_stats_dao.dart';
 
 /// 支持句子高亮的文本渲染组件
 class _HighlightedText extends StatelessWidget {
@@ -233,11 +235,21 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   Timer? _repaginationDebounceTimer;
   bool _isRepaginating = false;
 
+  // 阅读时间追踪
+  final _statsDao = ReadingStatsDao();
+  DateTime? _readingStartTime;
+  int _totalReadingSeconds = 0;
+  Timer? _readingTimeTimer;
+
   @override
   void initState() {
     super.initState();
     // 注册应用生命周期监听
     WidgetsBinding.instance.addObserver(this);
+
+    // 记录阅读开始时间
+    _readingStartTime = DateTime.now();
+    debugPrint('📊 开始记录阅读时间: $_readingStartTime');
 
     _initializeAnimations();
     _initializePage();
@@ -260,15 +272,27 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      // 应用进入后台或暂停，立即保存阅读进度
+      // 应用进入后台或暂停，立即保存阅读进度和阅读时间
       if (widget.bookId != null) {
         final currentPageIndex =
             ref.read(readerPaginationProvider).currentPageIndex;
         debugPrint('📱 应用生命周期变化: $state，立即保存进度');
         _saveReadingProgress(currentPageIndex);
       }
+      // 保存阅读时间并停止定时器
+      _saveReadingTime();
+      _readingTimeTimer?.cancel();
     } else if (state == AppLifecycleState.resumed) {
-      // 应用从后台返回前台，重新确保沉浸式模式
+      // 应用从后台返回前台，重新开始计时
+      _readingStartTime = DateTime.now();
+      debugPrint('📊 应用恢复前台，重新开始计时: $_readingStartTime');
+
+      // 重新启动定时器
+      _readingTimeTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+        _saveReadingTime();
+      });
+
+      // 重新确保沉浸式模式
       // 延迟一帧执行，确保窗口状态已更新
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && !ref.read(toolbarProvider).isVisible) {
@@ -281,6 +305,9 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
   @override
   void dispose() {
+    // 保存最后一次阅读时间
+    _saveReadingTime();
+
     // 移除应用生命周期监听
     WidgetsBinding.instance.removeObserver(this);
 
@@ -288,6 +315,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     _toolbarAnimationController.dispose();
     _autoHideTimer?.cancel();
     _repaginationDebounceTimer?.cancel();
+    _readingTimeTimer?.cancel();
 
     // 退出沉浸式模式
     _exitImmersiveMode();
@@ -296,34 +324,65 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     super.dispose();
   }
 
+  /// 保存阅读时间到数据库
+  ///
+  /// 计算从上次开始时间到现在的阅读时长，并保存到数据库
+  void _saveReadingTime() {
+    if (_readingStartTime == null) return;
+
+    try {
+      final now = DateTime.now();
+      final duration = now.difference(_readingStartTime!);
+      final seconds = duration.inSeconds;
+
+      // 只保存超过5秒的阅读时间，避免记录无效数据
+      if (seconds >= 5) {
+        _totalReadingSeconds += seconds;
+        _statsDao.insertReadingTime(now, seconds);
+        debugPrint('📊 保存阅读时间: ${seconds}秒 (累计: ${_totalReadingSeconds}秒)');
+      }
+
+      // 重置开始时间
+      _readingStartTime = now;
+    } catch (e) {
+      debugPrint('❌ 保存阅读时间失败: $e');
+    }
+  }
+
   /// 初始化动画控制器
   void _initializeAnimations() {
     _toolbarAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 280), // 优化时长，提升响应性
-      reverseDuration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 400), // 🎨 呼出时间，优雅舒适
+      reverseDuration: const Duration(milliseconds: 350), // 🎨 关闭动画更流畅
       vsync: this,
     );
 
+    // 🎨 透明度动画：使用高级曲线，丝滑优雅
     _toolbarOpacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _toolbarAnimationController,
-        curve: Curves.fastOutSlowIn, // 使用更流畅的曲线
+        curve: const Cubic(0.4, 0.0, 0.2, 1.0), // Material Design 标准 easing
+        reverseCurve: const Cubic(0.0, 0.0, 0.2, 1.0), // 关闭时更丝滑的淡出
       ),
     );
 
+    // 🎨 顶部工具栏：优雅的弹性滑动
     _topToolbarSlideAnimation =
         Tween<Offset>(begin: const Offset(0.0, -1.0), end: Offset.zero).animate(
       CurvedAnimation(
         parent: _toolbarAnimationController,
-        curve: Curves.fastOutSlowIn, // 统一使用流畅曲线
+        curve: Curves.easeOutCubic, // 呼出：快速开始，缓慢停止
+        reverseCurve: const Cubic(0.4, 0.0, 1.0, 1.0), // 关闭：流畅加速离开
       ),
     );
 
+    // 🎨 底部工具栏：与顶部对称的优雅滑动
     _bottomToolbarSlideAnimation =
         Tween<Offset>(begin: const Offset(0.0, 1.0), end: Offset.zero).animate(
       CurvedAnimation(
         parent: _toolbarAnimationController,
-        curve: Curves.fastOutSlowIn, // 统一使用流畅曲线
+        curve: Curves.easeOutCubic, // 呼出：快速开始，缓慢停止
+        reverseCurve: const Cubic(0.4, 0.0, 1.0, 1.0), // 关闭：流畅加速离开
       ),
     );
   }
@@ -532,15 +591,20 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
   /// 隐藏工具栏
   void _hideToolbar() {
-    ref.read(toolbarProvider.notifier).hide();
-    _toolbarAnimationController.reverse();
+    // 先执行动画
+    _toolbarAnimationController.reverse().then((_) {
+      // 动画完成后再更新状态
+      if (mounted) {
+        ref.read(toolbarProvider.notifier).hide();
+      }
+    });
 
     // 取消自动隐藏计时器
     _cancelAutoHideTimer();
 
     // 立即进入全屏模式（只调用一次）
     _hideSystemUI();
-    debugPrint('🎯 工具栏关闭，进入全屏');
+    debugPrint('🎯 工具栏关闭动画开始，进入全屏');
   }
 
   /// 启动自动隐藏计时器
@@ -708,10 +772,9 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
       // 检测影响分页的设置是否变化
       final needRepagination = previous.fontSize != next.fontSize ||
-          previous.lineHeight != next.lineHeight ||
+          previous.lineSpacing != next.lineSpacing ||
           previous.letterSpacing != next.letterSpacing ||
           previous.horizontalMargin != next.horizontalMargin ||
-          previous.paragraphSpacing != next.paragraphSpacing ||
           previous.firstLineIndent != next.firstLineIndent;
 
       if (needRepagination) {
@@ -902,10 +965,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
   /// 构建工具栏区域
   Widget _buildToolbarArea(ToolbarState toolbarState, ReaderSettings settings) {
-    if (!toolbarState.isVisible) {
-      return const SizedBox.shrink();
-    }
-
+    // 不要根据isVisible直接返回空组件，而是始终渲染，让动画控制显示/隐藏
+    // 这样关闭动画才能正常播放
     return Stack(
       children: [
         // 顶部工具栏
@@ -974,6 +1035,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
   Timer? _timeUpdateTimer;
   String _currentTime = '';
   int _batteryLevel = 100;
+  final Battery _battery = Battery();
 
   @override
   void initState() {
@@ -1009,10 +1071,10 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
 
   Future<void> _updateBatteryLevel() async {
     try {
-      // 模拟电池电量获取
+      final level = await _battery.batteryLevel;
       if (mounted) {
         setState(() {
-          _batteryLevel = 85; // 示例值
+          _batteryLevel = level;
         });
       }
     } catch (e) {
@@ -1045,6 +1107,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque, // 阻止点击事件穿透
         onTap: () {}, // 吸收点击事件
+        onTapUp: (_) {}, // 🔧 阻止TapUp事件穿透导致翻页
         child: Container(
           height: 44,
           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1111,8 +1174,11 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     final progress = paginationState.progress;
 
     final screenSize = MediaQuery.of(context).size;
-    // 响应式计算：bottom使用屏幕高度的1%，水平边距使用屏幕宽度的8%
-    final bottomMargin = screenSize.height * 0.01;
+    final bottomSafeArea = MediaQuery.of(context).padding.bottom;
+
+    // 响应式计算：底部边距为安全区域高度 + 15px，水平边距使用屏幕宽度的8%
+    // 让进度条离底部稍远一些，避免太贴近边缘
+    final bottomMargin = bottomSafeArea > 0 ? bottomSafeArea + 15 : 16.0;
     final horizontalMargin = screenSize.width * 0.08;
 
     return Positioned(
@@ -1122,6 +1188,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque, // 阻止点击事件穿透
         onTap: () {}, // 吸收点击事件
+        onTapUp: (_) {}, // 🔧 阻止TapUp事件穿透导致翻页
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Row(
@@ -1140,7 +1207,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withValues(alpha: 0.1),
+        color: settings.textStyle.color?.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Text(
@@ -1160,7 +1227,7 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: settings.textStyle.color?.withValues(alpha: 0.1),
+        color: settings.textStyle.color?.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(15),
       ),
       child: Row(
@@ -2160,6 +2227,10 @@ class _ReaderToolbar extends ConsumerWidget {
       onTapDown: (_) {
         // 吸收按下事件
       },
+      onTapUp: (_) {
+        // 🔧 修复：吸收TapUp事件，防止穿透到下层触发翻页
+        // 因为翻页手势使用的是onTapUp，必须在这里阻止
+      },
       child: Container(
         decoration: _buildToolbarDecoration(settings),
         child: SafeArea(
@@ -2564,19 +2635,19 @@ class _ReaderToolbar extends ConsumerWidget {
                       ),
                       const SizedBox(height: 24),
 
-                      // 行高滑块
+                      // 行距滑块
                       _buildSliderSetting(
-                        label: '行高',
-                        value: settings.lineHeight,
+                        label: '行距',
+                        value: settings.lineSpacing,
                         min: 1.0,
                         max: 3.0,
                         divisions: 20,
-                        displayValue: settings.lineHeight.toStringAsFixed(1),
+                        displayValue: settings.lineSpacing.toStringAsFixed(1),
                         onChanged: (value) {
                           HapticFeedback.selectionClick();
                           ref
                               .read(readerSettingsProvider.notifier)
-                              .updateLineHeight(value);
+                              .updateLineSpacing(value);
                         },
                         settings: settings,
                       ),
@@ -2595,24 +2666,6 @@ class _ReaderToolbar extends ConsumerWidget {
                           ref
                               .read(readerSettingsProvider.notifier)
                               .updateLetterSpacing(value);
-                        },
-                        settings: settings,
-                      ),
-                      const SizedBox(height: 24),
-
-                      // 段落间距滑块
-                      _buildSliderSetting(
-                        label: '段落间距',
-                        value: settings.paragraphSpacing,
-                        min: 0.0,
-                        max: 20.0,
-                        divisions: 20,
-                        displayValue: '${settings.paragraphSpacing.toInt()}px',
-                        onChanged: (value) {
-                          HapticFeedback.selectionClick();
-                          ref
-                              .read(readerSettingsProvider.notifier)
-                              .updateParagraphSpacing(value);
                         },
                         settings: settings,
                       ),
@@ -2665,13 +2718,10 @@ class _ReaderToolbar extends ConsumerWidget {
                                 .updateFontSize(18.0);
                             ref
                                 .read(readerSettingsProvider.notifier)
-                                .updateLineHeight(1.8);
+                                .updateLineSpacing(1.8);
                             ref
                                 .read(readerSettingsProvider.notifier)
                                 .updateLetterSpacing(0.2);
-                            ref
-                                .read(readerSettingsProvider.notifier)
-                                .updateParagraphSpacing(8.0);
                             ref
                                 .read(readerSettingsProvider.notifier)
                                 .updateFirstLineIndent(2.0);
@@ -2985,6 +3035,9 @@ class _ReaderToolbar extends ConsumerWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque, // 阻止事件穿透
       onTap: onTap,
+      onTapUp: (_) {
+        // 🔧 修复：阻止TapUp事件穿透到下层触发翻页
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: Column(
@@ -3077,6 +3130,9 @@ class _ReaderToolbar extends ConsumerWidget {
       onTap: () {
         onInteraction?.call();
         onPressed();
+      },
+      onTapUp: (_) {
+        // 🔧 修复：阻止TapUp事件穿透到下层触发翻页
       },
       child: Container(
         padding: const EdgeInsets.all(8),

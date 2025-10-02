@@ -17,6 +17,9 @@ import '../utils/glass_config.dart';
 import '../utils/page_transitions.dart';
 import '../services/book_dao.dart';
 import '../services/reading_stats_dao.dart';
+import '../services/app_state_service.dart';
+import '../services/reading_router_service.dart';
+import '../models/book.dart';
 
 class HomePageResponsive extends StatefulWidget {
   const HomePageResponsive({super.key});
@@ -393,10 +396,12 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                           horizontal: 20, // 进一步减少到20px，让背景更紧凑
                         ),
                         decoration: BoxDecoration(
-                          color:
-                              Theme.of(context).colorScheme.surface.withValues(alpha: 
-                                    GlassEffectConfig.navigationBarOpacity,
-                                  ),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surface
+                              .withValues(
+                                alpha: GlassEffectConfig.navigationBarOpacity,
+                              ),
                           borderRadius: BorderRadius.circular(60), // 更大的圆角半径
                           border: Border.all(
                             color: Theme.of(
@@ -713,10 +718,12 @@ class _HomeContentWrapper extends StatefulWidget {
 class _HomeContentWrapperState extends State<_HomeContentWrapper> {
   final _statsDao = ReadingStatsDao();
   final _bookDao = BookDao();
+  final _appStateService = AppStateService();
   Map<String, int> _summaryStats = {};
   List<Map<String, dynamic>> _weeklyData = [];
   Map<String, dynamic> _achievementStats = {};
   int _bookCount = 0;
+  List<Book> _recentBooks = [];
   bool _isLoading = true;
 
   @override
@@ -725,6 +732,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
     _loadAllStats();
   }
 
+  /// 加载所有统计数据和最近阅读书籍
+  ///
+  /// 从数据库加载统计数据，并从 AppStateService 获取最近阅读的书籍列表
   Future<void> _loadAllStats() async {
     setState(() => _isLoading = true);
     try {
@@ -733,16 +743,46 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
       final achievements = await _statsDao.getAchievementStats();
       final bookCount = await _bookDao.getBooksCount();
 
+      // 获取最近阅读的书籍
+      final recentBooks = await _loadRecentBooks();
+
       setState(() {
         _summaryStats = summary;
         _weeklyData = weekly;
         _achievementStats = achievements;
         _bookCount = bookCount;
+        _recentBooks = recentBooks;
         _isLoading = false;
       });
     } catch (e) {
       setState(() => _isLoading = false);
       debugPrint('Error loading stats: $e');
+    }
+  }
+
+  /// 加载最近阅读的书籍列表
+  ///
+  /// 从 AppStateService 获取最近阅读的书籍ID列表，然后从数据库获取详细信息
+  /// 最多返回5本书
+  Future<List<Book>> _loadRecentBooks() async {
+    try {
+      await _appStateService.initialize();
+      final appState = _appStateService.currentState;
+      final recentBooksList = appState.readingState.recentBooks;
+      final books = <Book>[];
+
+      // 最多显示5本最近阅读的书籍
+      for (final recentBook in recentBooksList.take(5)) {
+        final book = await _bookDao.getBookById(recentBook.bookId);
+        if (book != null) {
+          books.add(book);
+        }
+      }
+
+      return books;
+    } catch (e) {
+      debugPrint('Error loading recent books: $e');
+      return [];
     }
   }
 
@@ -868,6 +908,14 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                         transformHitTests: false,
                         child: _buildRecentActivity(),
                       ),
+                      if (_recentBooks.isNotEmpty) ...[
+                        SizedBox(height: sectionSpacing),
+                        Transform.translate(
+                          offset: Offset(0, -recentLift),
+                          transformHitTests: false,
+                          child: _buildRecentBooksSection(),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -886,8 +934,8 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   height: MediaQuery.of(context).padding.top +
                       60, // 状态栏高度 + AppBar高度
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface.withValues(alpha: 
-                          GlassEffectConfig.appBarOpacity,
+                    color: Theme.of(context).colorScheme.surface.withValues(
+                          alpha: GlassEffectConfig.appBarOpacity,
                         ),
                     border: Border(
                       bottom: BorderSide(
@@ -1539,6 +1587,223 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
     );
   }
 
+  /// 构建最近阅读书籍区域
+  ///
+  /// 显示最近阅读的书籍列表，用户可以点击继续阅读
+  Widget _buildRecentBooksSection() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.history_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '最近阅读',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ..._recentBooks.map((book) => _buildRecentBookCard(book)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 构建单个最近阅读书籍卡片
+  ///
+  /// [book] 书籍对象
+  Widget _buildRecentBookCard(Book book) {
+    final progress = book.totalPages > 0
+        ? (book.currentPage / book.totalPages * 100).clamp(0, 100)
+        : 0.0;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _navigateToReader(book),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color:
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withValues(alpha: 0.1),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                // 书籍封面或图标
+                Container(
+                  width: 48,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: book.coverImagePath != null &&
+                          book.coverImagePath!.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(
+                            File(book.coverImagePath!),
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Icon(
+                                Icons.book,
+                                color: Theme.of(context).colorScheme.primary,
+                                size: 24,
+                              );
+                            },
+                          ),
+                        )
+                      : Icon(
+                          Icons.book,
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 24,
+                        ),
+                ),
+                const SizedBox(width: 12),
+                // 书籍信息
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        book.title,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      if (book.author.isNotEmpty)
+                        Text(
+                          book.author,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.6),
+                              ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      const SizedBox(height: 8),
+                      // 阅读进度条
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(2),
+                                  child: LinearProgressIndicator(
+                                    value: progress / 100,
+                                    backgroundColor: Theme.of(
+                                      context,
+                                    )
+                                        .colorScheme
+                                        .outline
+                                        .withValues(alpha: 0.2),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Theme.of(context).colorScheme.primary,
+                                    ),
+                                    minHeight: 4,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${progress.toStringAsFixed(0)}%',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // 继续阅读按钮
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 导航到阅读页面
+  ///
+  /// [book] 要阅读的书籍
+  Future<void> _navigateToReader(Book book) async {
+    await ReadingRouterService.openBook(context, book);
+  }
+
   // iOS设备优化的统计卡片 - 根据不同设备尺寸动态调整偏移量
 }
 
@@ -1766,8 +2031,8 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                 height:
                     MediaQuery.of(context).padding.top + 60, // 状态栏高度 + AppBar高度
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface.withValues(alpha: 
-                        GlassEffectConfig.appBarOpacity,
+                  color: Theme.of(context).colorScheme.surface.withValues(
+                        alpha: GlassEffectConfig.appBarOpacity,
                       ),
                   border: Border(
                     bottom: BorderSide(

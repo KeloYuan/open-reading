@@ -32,20 +32,19 @@ enum ReadingTheme {
 /// 阅读器设置状态
 class ReaderSettings {
   final double fontSize;
-  final double lineHeight;
+  final double lineSpacing; // 行距（1.0-3.0倍字体大小）
   final double letterSpacing;
   final EdgeInsets padding;
   final ReadingTheme theme;
   final PaginationMode paginationMode;
   final bool showPageIndicator;
   final bool enableTextSelection;
-  final double paragraphSpacing; // 段落间距（0-20px）
   final double firstLineIndent; // 首行缩进（0-4字符）
   final double horizontalMargin; // 水平页边距（10-40px）
 
   const ReaderSettings({
     this.fontSize = 18.0,
-    this.lineHeight = 1.8,
+    this.lineSpacing = 1.8,
     this.letterSpacing = 0.2,
     this.padding =
         const EdgeInsets.only(left: 20.0, right: 20.0, top: 60.0, bottom: 60.0),
@@ -53,7 +52,6 @@ class ReaderSettings {
     this.paginationMode = PaginationMode.slide,
     this.showPageIndicator = true,
     this.enableTextSelection = true,
-    this.paragraphSpacing = 8.0,
     this.firstLineIndent = 2.0,
     this.horizontalMargin = 20.0,
   });
@@ -61,27 +59,25 @@ class ReaderSettings {
   /// 复制并修改设置
   ReaderSettings copyWith({
     double? fontSize,
-    double? lineHeight,
+    double? lineSpacing,
     double? letterSpacing,
     EdgeInsets? padding,
     ReadingTheme? theme,
     PaginationMode? paginationMode,
     bool? showPageIndicator,
     bool? enableTextSelection,
-    double? paragraphSpacing,
     double? firstLineIndent,
     double? horizontalMargin,
   }) {
     return ReaderSettings(
       fontSize: fontSize ?? this.fontSize,
-      lineHeight: lineHeight ?? this.lineHeight,
+      lineSpacing: lineSpacing ?? this.lineSpacing,
       letterSpacing: letterSpacing ?? this.letterSpacing,
       padding: padding ?? this.padding,
       theme: theme ?? this.theme,
       paginationMode: paginationMode ?? this.paginationMode,
       showPageIndicator: showPageIndicator ?? this.showPageIndicator,
       enableTextSelection: enableTextSelection ?? this.enableTextSelection,
-      paragraphSpacing: paragraphSpacing ?? this.paragraphSpacing,
       firstLineIndent: firstLineIndent ?? this.firstLineIndent,
       horizontalMargin: horizontalMargin ?? this.horizontalMargin,
     );
@@ -126,7 +122,7 @@ class ReaderSettings {
 
     return TextStyle(
       fontSize: fontSize,
-      height: lineHeight,
+      height: lineSpacing,
       letterSpacing: letterSpacing,
       color: textColor,
       fontFamily: fontFamily,
@@ -415,8 +411,8 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
   }
 
   /// 更新行高（带防抖）
-  void updateLineHeight(double lineHeight) {
-    state = state.copyWith(lineHeight: lineHeight.clamp(1.0, 3.0));
+  void updateLineSpacing(double spacing) {
+    state = state.copyWith(lineSpacing: spacing.clamp(1.0, 3.0));
     _debounceSaveSettings(); // 使用防抖保存
   }
 
@@ -430,12 +426,6 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
   void updatePadding(EdgeInsets padding) {
     state = state.copyWith(padding: padding);
     _saveSettings();
-  }
-
-  /// 更新段落间距（带防抖）
-  void updateParagraphSpacing(double spacing) {
-    state = state.copyWith(paragraphSpacing: spacing.clamp(0.0, 20.0));
-    _debounceSaveSettings(); // 使用防抖保存
   }
 
   /// 更新首行缩进（带防抖）
@@ -544,13 +534,12 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       screenWidth: screenSize.width,
       screenHeight: actualAvailableHeight,
       fontSize: settings.fontSize,
-      lineHeight: settings.lineHeight,
+      lineSpacing: settings.lineSpacing,
       letterSpacing: settings.letterSpacing,
       paddingLeft: settings.padding.left,
       paddingRight: settings.padding.right,
       paddingTop: settings.padding.top,
       paddingBottom: settings.padding.bottom,
-      paragraphSpacing: settings.paragraphSpacing,
       firstLineIndent: settings.firstLineIndent,
       devicePixelRatio: devicePixelRatio,
     );
@@ -640,10 +629,9 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         text: text,
         screenSize: screenSize,
         fontSize: settings.fontSize,
-        lineHeight: settings.lineHeight,
+        lineSpacing: settings.lineSpacing,
         padding: settings.padding,
         letterSpacing: settings.letterSpacing,
-        paragraphSpacing: settings.paragraphSpacing,
         firstLineIndent: settings.firstLineIndent,
         devicePixelRatio: devicePixelRatio,
         onProgress: (currentPage, stage) {
@@ -815,19 +803,16 @@ class ReaderTtsNotifier extends StateNotifier<ReaderTtsState> {
     required Function getNextText,
     required Function getPrevText,
   }) async {
-    if (_isInitialized) {
-      debugPrint('⚠️ TTS已经初始化，跳过');
-      return;
-    }
-
     try {
       debugPrint('🚀 开始初始化TTS...');
 
-      // 先设置监听器
-      _systemTts.ttsStateNotifier.addListener(_onTtsStateChanged);
-      _systemTts.setSentenceHighlightCallback(_onSentenceHighlightChanged);
+      // 只在第一次初始化时设置监听器
+      if (!_isInitialized) {
+        _systemTts.ttsStateNotifier.addListener(_onTtsStateChanged);
+        _systemTts.setSentenceHighlightCallback(_onSentenceHighlightChanged);
+      }
 
-      // 初始化TTS引擎（可能需要时间）
+      // 初始化TTS引擎（每次都执行，确保引擎正确绑定）
       await _systemTts.init(getCurrentText, getNextText, getPrevText);
 
       // 标记为已初始化

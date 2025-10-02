@@ -48,7 +48,10 @@
       "Bash(export:*)",
       "Bash(hash -r)",
       "Bash(awk:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(adb:*)",
+      "Bash(tee:*)",
+      "Bash(xargs:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

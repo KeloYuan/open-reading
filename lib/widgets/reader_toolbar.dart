@@ -353,14 +353,14 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
         ),
         const SizedBox(height: 8),
         Slider(
-          value: settings.lineHeight,
+          value: settings.lineSpacing,
           min: 1.0,
           max: 3.0,
           divisions: 20,
-          label: settings.lineHeight.toStringAsFixed(1),
+          label: settings.lineSpacing.toStringAsFixed(1),
           onChanged: (value) {
             _onInteraction();
-            context.read<ReaderSettingsNotifier>().updateLineHeight(value);
+            context.read<ReaderSettingsNotifier>().updateLineSpacing(value);
           },
         ),
       ],

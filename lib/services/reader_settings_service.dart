@@ -7,7 +7,6 @@ class ReaderSettingsService {
   static const String _keyFontSize = 'reader_font_size';
   static const String _keyLineHeight = 'reader_line_height';
   static const String _keyLetterSpacing = 'reader_letter_spacing';
-  static const String _keyParagraphSpacing = 'reader_paragraph_spacing';
   static const String _keyFirstLineIndent = 'reader_first_line_indent';
   static const String _keyHorizontalMargin = 'reader_horizontal_margin';
   static const String _keyTheme = 'reader_theme';
@@ -21,9 +20,8 @@ class ReaderSettingsService {
 
     await Future.wait([
       prefs.setDouble(_keyFontSize, settings.fontSize),
-      prefs.setDouble(_keyLineHeight, settings.lineHeight),
+      prefs.setDouble(_keyLineHeight, settings.lineSpacing),
       prefs.setDouble(_keyLetterSpacing, settings.letterSpacing),
-      prefs.setDouble(_keyParagraphSpacing, settings.paragraphSpacing),
       prefs.setDouble(_keyFirstLineIndent, settings.firstLineIndent),
       prefs.setDouble(_keyHorizontalMargin, settings.horizontalMargin),
       prefs.setString(_keyTheme, settings.theme.name),
@@ -39,9 +37,8 @@ class ReaderSettingsService {
 
     // 加载各项设置，如果不存在则使用默认值
     final fontSize = prefs.getDouble(_keyFontSize) ?? 18.0;
-    final lineHeight = prefs.getDouble(_keyLineHeight) ?? 1.8;
+    final lineSpacing = prefs.getDouble(_keyLineHeight) ?? 1.8;
     final letterSpacing = prefs.getDouble(_keyLetterSpacing) ?? 0.2;
-    final paragraphSpacing = prefs.getDouble(_keyParagraphSpacing) ?? 8.0;
     final firstLineIndent = prefs.getDouble(_keyFirstLineIndent) ?? 2.0;
     final horizontalMargin = prefs.getDouble(_keyHorizontalMargin) ?? 20.0;
     final showPageIndicator = prefs.getBool(_keyShowPageIndicator) ?? true;
@@ -66,9 +63,8 @@ class ReaderSettingsService {
 
     return ReaderSettings(
       fontSize: fontSize,
-      lineHeight: lineHeight,
+      lineSpacing: lineSpacing,
       letterSpacing: letterSpacing,
-      paragraphSpacing: paragraphSpacing,
       firstLineIndent: firstLineIndent,
       horizontalMargin: horizontalMargin,
       theme: theme,
@@ -86,7 +82,6 @@ class ReaderSettingsService {
       prefs.remove(_keyFontSize),
       prefs.remove(_keyLineHeight),
       prefs.remove(_keyLetterSpacing),
-      prefs.remove(_keyParagraphSpacing),
       prefs.remove(_keyFirstLineIndent),
       prefs.remove(_keyHorizontalMargin),
       prefs.remove(_keyTheme),

@@ -24,6 +24,44 @@ class _TtsSettingsSheetState extends ConsumerState<TtsSettingsSheet> {
   String? _errorMessage;
 
   @override
+  void initState() {
+    super.initState();
+
+    // 参考anx-reader实现：打开TTS面板时自动开始播放
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final ttsState = ref.read(readerTtsProvider);
+
+      // 如果TTS未在播放，则自动开始播放
+      if (ttsState.ttsState != TtsStateEnum.playing) {
+        try {
+          debugPrint('═══════════════════════════════════════');
+          debugPrint('🎬 TTS面板打开，自动开始播放');
+          debugPrint('═══════════════════════════════════════');
+
+          final paginationState = ref.read(readerPaginationProvider);
+          final currentContent = paginationState.currentPageContent;
+
+          if (currentContent != null && currentContent.trim().isNotEmpty) {
+            debugPrint('✅ 当前页面内容长度: ${currentContent.length} 字符');
+            await ref.read(readerTtsProvider.notifier).play(text: currentContent);
+            debugPrint('✅ 自动播放已开始');
+          } else {
+            debugPrint('❌ 当前页面内容为空，无法播放');
+            if (mounted) {
+              setState(() => _errorMessage = '当前页面内容为空');
+            }
+          }
+        } catch (e) {
+          debugPrint('❌ 自动播放失败: $e');
+          if (mounted) {
+            setState(() => _errorMessage = '自动播放失败: $e');
+          }
+        }
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _stopTimer?.cancel();
     super.dispose();

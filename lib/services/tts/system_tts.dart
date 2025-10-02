@@ -16,12 +16,14 @@ class SystemTts extends BaseTts {
 
   SystemTts._internal();
 
-  final FlutterTts flutterTts = FlutterTts();
+  late FlutterTts flutterTts;
 
   String? _currentVoiceText;
   static String? _prevVoiceText;
 
   bool restarting = false;
+  bool _isTtsEngineReady = false; // TTS引擎是否就绪
+  final List<Function> _pendingSpeakTasks = []; // 待执行的朗读任务
 
   late Function getHereFunction;
   late Function getNextTextFunction;
@@ -174,39 +176,90 @@ class SystemTts extends BaseTts {
       getNextTextFunction = getNextText;
       getPrevTextFunction = getPrevText;
 
+      // 创建新的FlutterTts实例并等待初始化完成
+      flutterTts = FlutterTts();
+      debugPrint('   ✅ FlutterTts实例已创建');
+
+      // Android平台：给TTS引擎足够的初始化时间
+      if (isAndroid) {
+        debugPrint('   ⏳ 等待Android TTS引擎初始化（2秒）...');
+        await Future.delayed(const Duration(seconds: 2));
+        debugPrint('   ✅ TTS引擎初始化等待完成');
+      }
+
       // 设置语言
       await flutterTts.setLanguage(TtsPreferences().language);
       debugPrint('   语言设置: ${TtsPreferences().language}');
 
-      // 不再预绑定TTS引擎，直接在第一次播放时初始化
-      debugPrint('   ✅ 跳过预绑定，将在首次播放时初始化');
+      // 设置TTS基础参数
+      await flutterTts.setVolume(TtsPreferences().volume);
+      await flutterTts.setSpeechRate(TtsPreferences().rate);
+      await flutterTts.setPitch(TtsPreferences().pitch);
+      debugPrint('   TTS参数设置: 音量=${TtsPreferences().volume}, 语速=${TtsPreferences().rate}, 音调=${TtsPreferences().pitch}');
+
+      // Android平台需要特殊配置
+      if (isAndroid) {
+        await flutterTts.awaitSpeakCompletion(true);
+        await flutterTts.awaitSynthCompletion(true);
+        await flutterTts.setQueueMode(1);
+        debugPrint('   ✅ Android TTS队列模式已启用');
+      }
+
+      debugPrint('   ✅ TTS引擎配置完成');
+
+      // 标记引擎已就绪
+      _isTtsEngineReady = true;
+      debugPrint('   ✅ TTS引擎已就绪，可以开始朗读');
+
+      // 执行待处理的朗读任务
+      if (_pendingSpeakTasks.isNotEmpty) {
+        debugPrint('   🔄 执行 ${_pendingSpeakTasks.length} 个待处理的朗读任务');
+        for (final task in _pendingSpeakTasks) {
+          await task();
+        }
+        _pendingSpeakTasks.clear();
+      }
 
       flutterTts.setStartHandler(() async {
+        debugPrint('🎬 TTS开始播放回调');
         updateTtsState(TtsStateEnum.playing);
         _startHighlightTimer(); // 开始句子高亮
-
-        if (!isAndroid) {
-          return;
-        }
-        _prevVoiceText = _currentVoiceText;
-        _currentVoiceText = await getCurrentText();
-
-        if (_currentVoiceText?.isNotEmpty ?? false) {
-          flutterTts.speak(_currentVoiceText!);
-        }
       });
 
       flutterTts.setCompletionHandler(() async {
-        if (!isAndroid) {
-          return;
-        }
+        debugPrint('🏁 TTS播放完成回调');
+        _stopHighlightTimer();
+        _resetHighlightedSentence();
+
+        // 播放完成后，自动播放下一段（如果需要的话）
+        // 这里暂时停止，让用户手动控制
+        updateTtsState(TtsStateEnum.stopped);
+      });
+
+      flutterTts.setErrorHandler((msg) {
+        debugPrint('❌ TTS错误回调: $msg');
+        updateTtsState(TtsStateEnum.stopped);
+        _stopHighlightTimer();
+        _resetHighlightedSentence();
+      });
+
+      flutterTts.setCancelHandler(() {
+        debugPrint('⏸️ TTS取消回调');
+        updateTtsState(TtsStateEnum.stopped);
+        _stopHighlightTimer();
+        _resetHighlightedSentence();
+      });
+
+      flutterTts.setPauseHandler(() {
+        debugPrint('⏸️ TTS暂停回调');
+        updateTtsState(TtsStateEnum.paused);
+        _stopHighlightTimer();
+      });
+
+      flutterTts.setContinueHandler(() {
+        debugPrint('▶️ TTS继续回调');
         updateTtsState(TtsStateEnum.playing);
-        if (_currentVoiceText?.isEmpty ?? true) {
-          _currentVoiceText = await getNextText();
-          await speak();
-        } else {
-          await getNextText();
-        }
+        _startHighlightTimer();
       });
 
       debugPrint('✅ TTS引擎初始化完成');
@@ -253,6 +306,13 @@ class SystemTts extends BaseTts {
       debugPrint(
           '   文本预览: ${_currentVoiceText!.substring(0, _currentVoiceText!.length.clamp(0, 100))}...');
 
+      // 检查TTS引擎是否就绪
+      if (!_isTtsEngineReady) {
+        debugPrint('   ⏳ TTS引擎未就绪，将任务加入队列');
+        _pendingSpeakTasks.add(() => speak(content: content));
+        return;
+      }
+
       // 分割当前文本为句子，用于高亮显示
       _currentSentences = _splitIntoSentences(_currentVoiceText!);
       debugPrint('   ✅ 分割为 ${_currentSentences.length} 个句子');
@@ -264,28 +324,11 @@ class SystemTts extends BaseTts {
       await flutterTts.setPitch(pitch);
 
       // 开始朗读
-      debugPrint('🎤 开始朗读: "${_currentVoiceText!.substring(0, 50)}..."');
+      debugPrint('🎤 开始朗读: "${_currentVoiceText!.substring(0, _currentVoiceText!.length.clamp(0, 50))}..."');
 
-      // 直接调用，不等待返回（Android TTS是异步的）
-      final speakFuture = flutterTts.speak(_currentVoiceText!);
-
-      debugPrint('✅ TTS speak() 已触发');
-
-      // 更新状态为播放中
-      updateTtsState(TtsStateEnum.playing);
-
-      // 可选：等待speak完成（但不阻塞）
-      speakFuture.then((result) {
-        debugPrint('✅ TTS播放完成: $result');
-      }).catchError((e) {
-        debugPrint('❌ TTS播放错误: $e');
-      });
-
-      if (!isAndroid && ttsStateNotifier.value == TtsStateEnum.playing) {
-        debugPrint('   iOS/其他平台: 准备获取下一页');
-        _currentVoiceText = await getNextTextFunction();
-        speak();
-      }
+      // 调用TTS引擎播放
+      final result = await flutterTts.speak(_currentVoiceText!);
+      debugPrint('✅ TTS speak() 返回结果: $result');
 
       debugPrint('✅ SystemTts.speak() 完成');
     } catch (e, stackTrace) {

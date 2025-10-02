@@ -176,6 +176,93 @@
 
 ## 历史修复问题
 
+### 2025-10-03: TTS朗读功能修复 + 电量显示 + 控制栏动画优化
+
+**问题1: TTS朗读无声音**
+- 症状：点击朗读按钮后没有任何声音
+- 错误日志：
+  ```
+  W/TextToSpeech: speak failed: not bound to TTS engine
+  E/TTS: Failed to initialize TextToSpeech with status: -1
+  ```
+
+**根本原因**：
+1. FlutterTts实例在类初始化时创建（第19行），此时Android应用上下文未就绪
+2. Android TTS引擎初始化是异步的，但FlutterTts构造函数是同步的
+3. speak()在引擎绑定前被调用导致"not bound to TTS engine"错误
+
+**解决方案**：
+1. ✅ **延迟创建FlutterTts实例** - `lib/services/tts/system_tts.dart:19`
+   ```dart
+   late FlutterTts flutterTts;  // 改为late变量
+   ```
+
+2. ✅ **在init()中创建FlutterTts** - `lib/services/tts/system_tts.dart:180`
+   ```dart
+   flutterTts = FlutterTts();  // 在有应用上下文时创建
+   await Future.delayed(const Duration(seconds: 2));  // 等待引擎初始化
+   ```
+
+3. ✅ **引擎就绪检查** - `lib/services/tts/system_tts.dart:322-327`
+   ```dart
+   if (!_isTtsEngineReady) {
+     _pendingSpeakTasks.add(() => speak(content: content));
+     return;
+   }
+   ```
+
+4. ✅ **移除初始化跳过逻辑** - `lib/providers/reader_providers.dart:827`
+   ```dart
+   // 每次都执行init()确保引擎正确绑定
+   await _systemTts.init(getCurrentText, getNextText, getPrevText);
+   ```
+
+**问题2: 电量显示固定85%**
+- 症状：阅读页面右上角电量始终显示85%
+
+**解决方案**：
+- ✅ **使用battery_plus获取真实电量** - `lib/pages/reader_page.dart:1066`
+  ```dart
+  final level = await _battery.batteryLevel;
+  setState(() { _batteryLevel = level; });
+  ```
+
+**问题3: 控制栏关闭无动画**
+- 症状：点击屏幕关闭控制栏时，直接消失，没有滑动+淡出动画
+
+**根本原因**：
+1. `_hideToolbar()`先调用`hide()`更新状态，然后执行动画
+2. `_buildToolbarArea()`检测到`isVisible=false`直接返回空组件
+3. 工具栏立即消失，动画还没执行就被移除了
+
+**解决方案**：
+1. ✅ **先执行动画再更新状态** - `lib/pages/reader_page.dart:593-608`
+   ```dart
+   _toolbarAnimationController.reverse().then((_) {
+     if (mounted) {
+       ref.read(toolbarProvider.notifier).hide();
+     }
+   });
+   ```
+
+2. ✅ **移除isVisible检查** - `lib/pages/reader_page.dart:967-970`
+   ```dart
+   // 始终渲染工具栏，让动画控制显示/隐藏
+   return Stack(children: [...]);
+   ```
+
+3. ✅ **优化动画曲线** - `lib/pages/reader_page.dart:352-388`
+   - 关闭时长：350ms
+   - 透明度：`Cubic(0.0, 0.0, 0.2, 1.0)` - 丝滑淡出
+   - 滑动：`Cubic(0.4, 0.0, 1.0, 1.0)` - 流畅加速离开
+
+**代码位置**：
+- `lib/services/tts/system_tts.dart`: TTS引擎初始化
+- `lib/providers/reader_providers.dart`: TTS初始化逻辑
+- `lib/pages/reader_page.dart`: 电量显示、控制栏动画
+
+**最后更新**: 2025-10-03
+
 ### 2025-10-02: 全屏模式修复（原生 Android API）
 
 **问题**：

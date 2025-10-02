@@ -48,24 +48,22 @@ class PaginationCacheService {
     required double screenWidth,
     required double screenHeight,
     required double fontSize,
-    required double lineHeight,
+    required double lineSpacing,
     required double letterSpacing,
     required double paddingLeft,
     required double paddingRight,
     required double paddingTop,
     required double paddingBottom,
-    required double paragraphSpacing,
     required double firstLineIndent,
     required double devicePixelRatio,
   }) {
     final params = '${screenWidth.toStringAsFixed(0)}_'
         '${screenHeight.toStringAsFixed(0)}_'
         '${fontSize.toStringAsFixed(1)}_'
-        '${lineHeight.toStringAsFixed(2)}_'
+        '${lineSpacing.toStringAsFixed(2)}_'
         '${letterSpacing.toStringAsFixed(2)}_'
         '${paddingLeft.toStringAsFixed(0)}_${paddingRight.toStringAsFixed(0)}_'
         '${paddingTop.toStringAsFixed(0)}_${paddingBottom.toStringAsFixed(0)}_'
-        '${paragraphSpacing.toStringAsFixed(1)}_'
         '${firstLineIndent.toStringAsFixed(1)}_'
         '${devicePixelRatio.toStringAsFixed(2)}';
 
