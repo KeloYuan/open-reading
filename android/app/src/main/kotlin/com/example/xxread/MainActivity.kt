@@ -4,61 +4,93 @@ import io.flutter.embedding.android.FlutterActivity
 import android.os.Bundle
 import android.graphics.Color
 import android.view.View
-import android.view.Window
-import android.view.WindowManager
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.ViewCompat
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private val CHANNEL = "com.niki.xread/fullscreen"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // 设置沉浸式"小白条"效果
-        setupImmersiveMode()
-    }
-    
-    override fun onResume() {
-        super.onResume()
-        // 在Resume时重新应用沉浸式设置，防止被其他应用影响
-        setupImmersiveMode()
-    }
-    
-    private fun setupImmersiveMode() {
-        val window: Window = window
-        
-        // 强制设置窗口标志，确保沉浸式效果
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        )
-        
-        // 允许内容绘制到系统栏区域
+
+        // 启用 edge-to-edge 模式
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        
-        // 设置导航栏和状态栏为透明
+
+        // 设置透明的系统栏颜色
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
-        
-        // 使用更强制的系统UI隐藏标志
-        val flags = (View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-            or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-            or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
-        
-        window.decorView.systemUiVisibility = flags
-        
-        // 设置导航栏分割线透明
+
+        // Android 9+ (API 28+): 设置导航栏分割线透明
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
             window.navigationBarDividerColor = Color.TRANSPARENT
         }
-        
-        // 强制设置导航栏样式（Android 11+）
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            window.setDecorFitsSystemWindows(false)
+    }
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "hideSystemUI" -> {
+                    hideSystemUI()
+                    result.success(null)
+                }
+                "showSystemUI" -> {
+                    showSystemUI()
+                    result.success(null)
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
         }
-        
-        // 确保软键盘模式不影响沉浸式
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+    }
+
+    private fun hideSystemUI() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            // Android 11+ (API 30+): 使用 WindowInsetsController
+            window.insetsController?.let { controller ->
+                // 隐藏状态栏和导航栏（包括手势提示线）
+                controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+                // 使用 IMMERSIVE 模式，确保系统UI完全隐藏且不会自动弹出
+                // BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE: 从边缘滑动时系统栏会短暂显示然后自动隐藏
+                controller.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+            
+            // 额外设置：确保导航栏手势提示线也被隐藏
+            // 在某些设备上需要额外的配置来完全隐藏手势提示线
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                window.isNavigationBarContrastEnforced = false
+            }
+        } else {
+            // Android 10 及以下: 使用废弃的标志（但仍然有效）
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_FULLSCREEN
+            )
+        }
+    }
+
+    private fun showSystemUI() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            // Android 11+ (API 30+): 使用 WindowInsetsController
+            window.insetsController?.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+        } else {
+            // Android 10 及以下: 清除全屏标志
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            )
+        }
     }
 }

@@ -176,6 +176,83 @@
 
 ## 历史修复问题
 
+### 2025-10-02: 全屏模式修复（原生 Android API）
+
+**问题**：
+1. 打开书籍后状态栏和导航栏无法完全隐藏
+2. 关闭控制栏后全屏不生效
+3. InsetsController 日志显示 requestedVisibleTypes 不断切换 (-16 ↔ -9)
+4. 状态栏闪烁几次后停止，但仍然可见
+
+**根本原因**：
+1. **MainActivity 强制设置废弃的系统 UI 标志** - 与 Flutter 的 SystemChrome 冲突
+2. **main.dart 全局更新系统 UI** - 不断覆盖阅读页面的全屏设置
+3. **多次延迟调用 _hideSystemUI()** - 导致系统 UI 在显示/隐藏之间反复切换
+4. **SystemUiMode.manual/immersive 不够稳定** - 在不同 Android 版本表现不一致
+
+**解决方案**：
+
+1. ✅ **使用原生 Android API（MethodChannel）**
+   - Android 11+ (API 30+)：使用 `WindowInsetsController.hide()`
+   - Android 10 及以下：使用 `SYSTEM_UI_FLAG_IMMERSIVE_STICKY`
+   - 完全绕过 Flutter 的 SystemChrome，直接控制原生窗口
+
+2. ✅ **简化 MainActivity**
+   - 移除所有强制的系统 UI 标志
+   - 只启用 `edge-to-edge` 模式和透明颜色
+   - 通过 MethodChannel 提供 `hideSystemUI()` 和 `showSystemUI()` 方法
+
+3. ✅ **移除所有延迟调用**
+   - initState: 只调用一次 `_enterImmersiveMode()`
+   - _hideToolbar: 只调用一次 `_hideSystemUI()`
+   - didChangeAppLifecycleState: 只调用一次 `_hideSystemUI()`
+   - 避免多次设置导致的冲突
+
+4. ✅ **移除 main.dart 的系统 UI 干扰**
+   - 删除所有 `_updateSystemUIOverlay()` 调用
+   - 让各页面完全自主控制系统 UI
+
+**关键代码**：
+
+MainActivity.kt:
+```kotlin
+private fun hideSystemUI() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        // Android 11+: WindowInsetsController
+        window.insetsController?.let {
+            it.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+            it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+    } else {
+        // Android 10-: 废弃标志（但仍有效）
+        window.decorView.systemUiVisibility = (
+            SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            or SYSTEM_UI_FLAG_HIDE_NAVIGATION
+            or SYSTEM_UI_FLAG_FULLSCREEN
+        )
+    }
+}
+```
+
+reader_page.dart:
+```dart
+Future<void> _hideSystemUI() async {
+    const platform = MethodChannel('com.niki.xread/fullscreen');
+    await platform.invokeMethod('hideSystemUI');
+}
+```
+
+**为什么原生 API 更可靠**：
+- ✅ 直接控制 Android 窗口，无中间层干扰
+- ✅ 避免 Flutter 框架的版本兼容问题
+- ✅ 支持 Android 11+ 的新 API 和旧版本的降级方案
+- ✅ 不会被其他 Flutter 代码覆盖
+
+**代码位置**：
+- `android/app/src/main/kotlin/com/example/xxread/MainActivity.kt`
+- `lib/pages/reader_page.dart`: `_hideSystemUI()`, `_showSystemUI()`
+- `lib/main.dart`: 移除所有系统 UI 更新
+
 ### 2025-10-01: 阅读页面控制栏交互修复
 
 **问题**：

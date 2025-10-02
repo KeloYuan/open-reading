@@ -25,9 +25,20 @@ class SimpleTextPaginator {
 
     // 1. 计算可用宽度和高度，并添加充足的安全边距
     final availableWidth = screenSize.width - padding.left - padding.right;
-    // 安全边距：字体越大，边距越大，确保绝对不超出
-    // 12px字体 -> 5px边距, 18px字体 -> 8px边距, 24px -> 11px, 30px -> 14px, 36px -> 17px
-    final safetyMargin = 5.0 + (fontSize - 12.0) * 0.5;
+
+    // 动态安全边距：与字体大小和行高关联，确保绝对不超出
+    // 基础边距：一行的高度作为缓冲
+    final baseMargin = fontSize * lineHeight;
+    // 行高补偿：行高越大，额外增加边距
+    final lineHeightCompensation = lineHeight > 2.0
+        ? (lineHeight - 2.0) * fontSize * 10
+        : 0.0;
+    // 字体补偿：大字体需要更多边距
+    final fontCompensation = fontSize > 24.0
+        ? (fontSize - 24.0) * 2.0
+        : 0.0;
+
+    final safetyMargin = baseMargin + lineHeightCompensation + fontCompensation;
     final availableHeight = screenSize.height - padding.top - padding.bottom - safetyMargin;
 
     print('📄 开始精确分页:');
@@ -64,10 +75,10 @@ class SimpleTextPaginator {
 
       // 估算起始范围 - 使用非常保守的估算，确保绝对不超出
       final remainingChars = text.length - currentIndex;
-      // 非常保守的系数，字体越大越保守
-      // 12px -> 0.95, 18px -> 0.93, 24px -> 0.91, 30px -> 0.89, 36px -> 0.87
-      final conservativeRatio = 0.95 - (fontSize - 12.0) * 0.0033;
-      final charsPerLine = (availableWidth / fontSize * 0.95).floor();
+      // 更保守的系数：字体越大、行高越大越保守
+      // 12px+1.0行高 -> 0.88, 36px+3.0行高 -> 0.75
+      final conservativeRatio = 0.90 - (fontSize - 12.0) * 0.005 - (lineHeight - 1.0) * 0.05;
+      final charsPerLine = (availableWidth / fontSize * 0.90).floor();
       final linesPerPage = (availableHeight / (fontSize * lineHeight) * conservativeRatio).floor();
       final estimatedCharsPerPage = (charsPerLine * linesPerPage).floor();
 
@@ -98,8 +109,12 @@ class SimpleTextPaginator {
         }
       }
 
+      // 添加安全缓冲：减少3-5%字符确保不超出
+      final safetyBuffer = (bestFit * 0.04).ceil(); // 4%安全缓冲
+      final safeBestFit = math.max(1, bestFit - safetyBuffer);
+
       // 添加这一页
-      final endIndex = currentIndex + bestFit;
+      final endIndex = currentIndex + safeBestFit;
       final pageContent = text.substring(currentIndex, endIndex);
       pages.add(pageContent);
 

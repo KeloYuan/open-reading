@@ -165,8 +165,8 @@ class ThemeNotifier extends ChangeNotifier {
     _isInitialized = true;
     notifyListeners();
 
-    // 加载主题后立即更新系统UI
-    _updateSystemUIOverlayForCurrentTheme();
+    // 不在这里更新系统UI，让各页面自行控制
+    // 避免与阅读页面的全屏模式冲突
   }
 
   void toggleTheme(bool isDarkMode) async {
@@ -178,8 +178,8 @@ class ThemeNotifier extends ChangeNotifier {
     // 立即通知监听器更新UI
     notifyListeners();
 
-    // 立即更新系统栏样式
-    _updateSystemUIOverlay(isDarkMode);
+    // 不在这里更新系统栏样式，让各页面自行控制
+    // 避免与阅读页面的全屏模式冲突
 
     // 异步保存设置
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -259,8 +259,8 @@ class ThemeNotifier extends ChangeNotifier {
     _themeMode = mode;
     notifyListeners();
 
-    // 立即更新系统UI
-    _updateSystemUIOverlayForCurrentTheme();
+    // 不在这里更新系统UI，让各页面自行控制
+    // 避免与阅读页面的全屏模式冲突
 
     // 保存设置
     _saveThemeMode(mode);
@@ -275,10 +275,6 @@ class ThemeNotifier extends ChangeNotifier {
     }
   }
 
-  void _updateSystemUIOverlayForCurrentTheme() {
-    final isDarkMode = _themeMode == ThemeMode.dark;
-    _updateSystemUIOverlay(isDarkMode);
-  }
 }
 
 class XxReadApp extends StatefulWidget {
@@ -326,18 +322,8 @@ class _XxReadAppState extends State<XxReadApp> {
   Widget build(BuildContext context) {
     return provider.Consumer<ThemeNotifier>(
       builder: (context, themeNotifier, child) {
-        // 获取当前实际的主题模式
-        final effectiveThemeMode = _getEffectiveThemeMode(
-          context,
-          themeNotifier,
-        );
-        final isDarkMode = effectiveThemeMode == ThemeMode.dark;
-
-        // 只有在初始化完成后才更新系统UI
-        if (themeNotifier.isInitialized) {
-          // 立即同步系统UI样式
-          _updateSystemUIOverlay(isDarkMode);
-        }
+        // 不在这里更新系统UI，让各页面自行控制
+        // 避免与阅读页面的全屏模式冲突
 
         return MaterialApp(
           title: '小元读书',
@@ -356,15 +342,8 @@ class _XxReadAppState extends State<XxReadApp> {
           ],
           supportedLocales: const [Locale('en'), Locale('zh')],
           home: _buildHome(),
-          builder: (context, child) {
-            // 确保在每次构建时都同步系统UI
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              final currentIsDarkMode =
-                  Theme.of(context).brightness == Brightness.dark;
-              _updateSystemUIOverlay(currentIsDarkMode);
-            });
-            return child!;
-          },
+          // 移除 builder 中的系统UI更新，让各页面自行控制
+          // 避免与阅读页面的全屏模式冲突
         );
       },
     );

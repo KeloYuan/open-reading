@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/simple_text_paginator.dart';
@@ -318,9 +319,17 @@ class ReaderTtsState {
 
 /// 阅读器设置状态管理 - Riverpod StateNotifier
 class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
+  Timer? _debounceTimer;
+
   ReaderSettingsNotifier() : super(const ReaderSettings()) {
     // 初始化时从SharedPreferences加载设置
     _loadSettings();
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
   }
 
   /// 从SharedPreferences加载设置
@@ -344,22 +353,30 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
     }
   }
 
-  /// 更新字体大小
+  /// 防抖保存：多次快速调用只执行最后一次
+  void _debounceSaveSettings() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 100), () {
+      _saveSettings();
+    });
+  }
+
+  /// 更新字体大小（带防抖）
   void updateFontSize(double fontSize) {
     state = state.copyWith(fontSize: fontSize.clamp(12.0, 36.0));
-    _saveSettings();
+    _debounceSaveSettings(); // 使用防抖保存
   }
 
-  /// 更新行高
+  /// 更新行高（带防抖）
   void updateLineHeight(double lineHeight) {
     state = state.copyWith(lineHeight: lineHeight.clamp(1.0, 3.0));
-    _saveSettings();
+    _debounceSaveSettings(); // 使用防抖保存
   }
 
-  /// 更新字间距
+  /// 更新字间距（带防抖）
   void updateLetterSpacing(double letterSpacing) {
     state = state.copyWith(letterSpacing: letterSpacing.clamp(-1.0, 2.0));
-    _saveSettings();
+    _debounceSaveSettings(); // 使用防抖保存
   }
 
   /// 更新页边距
@@ -368,19 +385,19 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
     _saveSettings();
   }
 
-  /// 更新段落间距
+  /// 更新段落间距（带防抖）
   void updateParagraphSpacing(double spacing) {
     state = state.copyWith(paragraphSpacing: spacing.clamp(0.0, 20.0));
-    _saveSettings();
+    _debounceSaveSettings(); // 使用防抖保存
   }
 
-  /// 更新首行缩进
+  /// 更新首行缩进（带防抖）
   void updateFirstLineIndent(double indent) {
     state = state.copyWith(firstLineIndent: indent.clamp(0.0, 4.0));
-    _saveSettings();
+    _debounceSaveSettings(); // 使用防抖保存
   }
 
-  /// 更新水平页边距
+  /// 更新水平页边距（带防抖）
   void updateHorizontalMargin(double margin) {
     final newMargin = margin.clamp(10.0, 40.0);
     state = state.copyWith(
@@ -392,7 +409,7 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
         bottom: state.padding.bottom,
       ),
     );
-    _saveSettings();
+    _debounceSaveSettings(); // 使用防抖保存
   }
 
   /// 切换阅读主题

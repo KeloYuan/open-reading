@@ -47,7 +47,8 @@
       "Bash(where flutter)",
       "Bash(export:*)",
       "Bash(hash -r)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

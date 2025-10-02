@@ -212,6 +212,10 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   Offset? _pointerDownPosition;
   int? _pointerDownTime;
 
+  // 重新分页防抖和状态
+  Timer? _repaginationDebounceTimer;
+  bool _isRepaginating = false;
+
   @override
   void initState() {
     super.initState();
@@ -221,24 +225,11 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     _initializeAnimations();
     _initializePage();
 
-    // 立即进入沉浸式全屏模式
-    _enterImmersiveMode();
-
-    // 第一帧渲染完成后确认全屏
+    // 延迟进入沉浸式全屏模式，确保窗口已完全初始化
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _hideSystemUI();
-      }
+      _enterImmersiveMode();
+      debugPrint('📱 ReaderPage 初始化完成，已进入全屏模式');
     });
-
-    // 延迟300ms再次确认（覆盖可能的系统动画）
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        _hideSystemUI();
-      }
-    });
-
-    debugPrint('📱 ReaderPage 初始化完成，已进入全屏模式');
   }
 
   @override
@@ -261,13 +252,13 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       }
     } else if (state == AppLifecycleState.resumed) {
       // 应用从后台返回前台，重新确保沉浸式模式
-      if (!ref.read(toolbarProvider).isVisible) {
-        debugPrint('📱 应用恢复前台，重新进入沉浸式模式');
-        // 延迟200ms确保页面完全恢复后执行
-        Future.delayed(const Duration(milliseconds: 200), () {
-          if (mounted) _hideSystemUI();
-        });
-      }
+      // 延迟一帧执行，确保窗口状态已更新
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !ref.read(toolbarProvider).isVisible) {
+          debugPrint('📱 应用恢复前台，重新进入沉浸式模式');
+          _hideSystemUI();
+        }
+      });
     }
   }
 
@@ -279,13 +270,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     // 停止所有定时器
     _toolbarAnimationController.dispose();
     _autoHideTimer?.cancel();
-
-    // 立即保存当前阅读进度（关键时刻）
-    if (widget.bookId != null) {
-      final currentPageIndex =
-          ref.read(readerPaginationProvider).currentPageIndex;
-      _saveReadingProgress(currentPageIndex, immediate: true);
-    }
+    _repaginationDebounceTimer?.cancel();
 
     // 退出沉浸式模式
     _exitImmersiveMode();
@@ -476,16 +461,9 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     // 取消自动隐藏计时器
     _cancelAutoHideTimer();
 
-    // 立即进入全屏模式
+    // 立即进入全屏模式（只调用一次）
     _hideSystemUI();
-
-    // 动画完成后（250ms）再次确认全屏
-    Future.delayed(const Duration(milliseconds: 250), () {
-      if (mounted) {
-        _hideSystemUI();
-        debugPrint('🎯 工具栏动画完成，确认全屏模式');
-      }
-    });
+    debugPrint('🎯 工具栏关闭，进入全屏');
   }
 
   /// 启动自动隐藏计时器
@@ -507,91 +485,47 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   /// 进入沉浸式模式（隐藏状态栏和导航栏）
   void _enterImmersiveMode() {
     debugPrint('📱 进入沉浸式全屏模式');
-
-    // 使用 immersiveSticky 模式：完全隐藏系统UI，滑动时短暂显示后自动隐藏
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.immersiveSticky,
-      overlays: [],
-    );
-
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        systemNavigationBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      ),
-    );
+    _hideSystemUI();
   }
 
   /// 退出沉浸式模式（恢复状态栏和导航栏）
   void _exitImmersiveMode() {
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.edgeToEdge,
-      overlays: SystemUiOverlay.values,
-    );
-
-    // 恢复系统UI样式
-    SystemChrome.setSystemUIOverlayStyle(
-      SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        systemNavigationBarIconBrightness: Brightness.dark,
-        systemNavigationBarDividerColor: Colors.transparent,
-      ),
-    );
-
+    _showSystemUI();
     debugPrint('📱 退出沉浸式模式 - 恢复系统UI');
   }
 
   /// 显示系统 UI（状态栏和导航栏）- 工具栏显示时使用
-  void _showSystemUI() {
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    );
-
-    // 设置半透明的系统UI
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: Colors.black26,
-        statusBarIconBrightness: Brightness.light,
-        systemNavigationBarIconBrightness: Brightness.light,
-        systemNavigationBarDividerColor: Colors.transparent,
-      ),
-    );
-
-    debugPrint('📱 显示系统UI - 工具栏可见');
+  Future<void> _showSystemUI() async {
+    try {
+      const platform = MethodChannel('com.niki.xread/fullscreen');
+      await platform.invokeMethod('showSystemUI');
+      debugPrint('📱 显示系统UI - 工具栏可见');
+    } catch (e) {
+      debugPrint('❌ 显示系统UI失败: $e');
+      // 降级使用 Flutter API
+      SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: SystemUiOverlay.values,
+      );
+    }
   }
 
   /// 隐藏系统 UI（状态栏和导航栏）- 工具栏隐藏时使用
-  void _hideSystemUI() {
+  Future<void> _hideSystemUI() async {
     debugPrint('📱 隐藏系统UI，进入全屏');
 
-    // 使用 immersiveSticky 模式：完全隐藏系统UI
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.immersiveSticky,
-      overlays: [],
-    );
-
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        systemNavigationBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      ),
-    );
+    try {
+      const platform = MethodChannel('com.niki.xread/fullscreen');
+      await platform.invokeMethod('hideSystemUI');
+      debugPrint('✅ 原生全屏已设置');
+    } catch (e) {
+      debugPrint('❌ 原生全屏失败: $e，使用降级方案');
+      // 降级使用 Flutter API
+      SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: [],
+      );
+    }
   }
 
   /// 处理文本选择
@@ -683,9 +617,10 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
           // 强制重建以更新背景色
           if (mounted) {
             setState(() {});
-            // 主题切换后立即进入全屏（如果工具栏未显示）
+            // 主题切换后重新应用全屏模式（如果工具栏未显示）
             if (!toolbarState.isVisible) {
-              Future.delayed(const Duration(milliseconds: 100), () {
+              // 使用 addPostFrameCallback 确保在UI重建完成后再应用全屏
+              WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) {
                   _hideSystemUI();
                   debugPrint('🎨 主题切换完成，重新进入全屏模式');
@@ -707,21 +642,43 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
           debugPrint('📝 排版设置变化，触发重新分页...');
           debugPrint('   字体: ${previous.fontSize} → ${next.fontSize}');
 
-          // 保存当前阅读进度（相对位置）
-          final currentProgress = ref.read(readerPaginationProvider).progress;
+          // 取消之前的防抖计时器
+          _repaginationDebounceTimer?.cancel();
 
-          // 重新分页
-          initializePagination();
+          // 使用防抖延迟重新分页（200ms），避免频繁调整时卡顿
+          _repaginationDebounceTimer = Timer(const Duration(milliseconds: 200), () {
+            if (!mounted) return;
 
-          // 重新分页完成后，恢复到相应的阅读位置
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              ref
-                  .read(readerPaginationProvider.notifier)
-                  .goToProgress(currentProgress);
-              debugPrint(
-                  '✅ 重新分页完成，已恢复到 ${(currentProgress * 100).toStringAsFixed(1)}% 位置');
-            }
+            setState(() {
+              _isRepaginating = true;
+            });
+
+            // 保存当前阅读进度（相对位置）
+            final currentProgress = ref.read(readerPaginationProvider).progress;
+
+            // 使用延迟确保loading状态能被显示
+            Future.delayed(const Duration(milliseconds: 50), () {
+              if (!mounted) return;
+
+              // 重新分页
+              initializePagination();
+
+              // 重新分页完成后，恢复到相应的阅读位置
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  ref
+                      .read(readerPaginationProvider.notifier)
+                      .goToProgress(currentProgress);
+                  debugPrint(
+                      '✅ 重新分页完成，已恢复到 ${(currentProgress * 100).toStringAsFixed(1)}% 位置');
+
+                  // 隐藏loading
+                  setState(() {
+                    _isRepaginating = false;
+                  });
+                }
+              });
+            });
           });
         }
       },
@@ -753,6 +710,51 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
                 RepaintBoundary(
                   child: _buildToolbarArea(toolbarState, settings),
                 ),
+
+                // 重新分页加载指示器
+                if (_isRepaginating)
+                  RepaintBoundary(
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 32,
+                            vertical: 24,
+                          ),
+                          decoration: BoxDecoration(
+                            color: settings.backgroundColor,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 16,
+                                spreadRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  settings.textStyle.color ?? Colors.black,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                '重新排版中...',
+                                style: settings.textStyle.copyWith(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
 
                 // 文本选择工具栏
                 if (_showTextSelectionToolbar &&
@@ -1935,14 +1937,28 @@ class _ReaderToolbar extends ConsumerWidget {
           ),
           const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              '阅读中...',
-              style: settings.textStyle.copyWith(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            child: Consumer(
+              builder: (context, ref, child) {
+                // 从祖先 widget 获取书名
+                final readerPageState =
+                    context.findAncestorStateOfType<_ReaderPageState>();
+                final bookTitle = readerPageState?.widget.bookTitle;
+
+                // 只有当书名不为空时才显示
+                if (bookTitle == null || bookTitle.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+
+                return Text(
+                  bookTitle,
+                  style: settings.textStyle.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                );
+              },
             ),
           ),
           const SizedBox(width: 12),
