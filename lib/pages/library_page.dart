@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../models/book.dart';
 import '../services/book_dao.dart';
 import '../services/reading_router_service.dart';
+import '../services/pagination_cache_service.dart';
 import 'import_book_page.dart';
 import '../utils/responsive_helper.dart';
 import '../widgets/scrolling_text.dart';
@@ -398,107 +399,410 @@ class _LibraryPageState extends State<LibraryPage> {
   void _showBookOptions(Book book) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent, // 设置背景透明以支持毛玻璃效果
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        // 毛玻璃效果 - 底部弹窗
-        // 为操作选项弹窗创建高级的毛玻璃效果
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25), // 较强模糊创造深度感
+          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
           child: Container(
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.surface.withValues(alpha: 0.9),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
+              color:
+                  Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28)),
+              border: Border(
+                top: BorderSide(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .outline
+                      .withValues(alpha: 0.2),
+                  width: 1,
+                ),
               ),
             ),
-            child: Wrap(
-              children: [
-                // 手势拖拽指示条（仅保留白条本体，无额外纯色背景）
-                Padding(
-                  padding: const EdgeInsets.only(top: 10, bottom: 6),
-                  child: Center(
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 拖拽指示条
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12, bottom: 8),
                     child: Container(
-                      width: 44,
-                      height: 5,
+                      width: 40,
+                      height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(2.5),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
-                ),
-                // 选择阅读模式选项
-                Container(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primaryContainer.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ListTile(
-                    leading: Icon(
-                      Icons.auto_stories,
-                      color: Theme.of(context).colorScheme.primary,
+
+                  // 书籍信息头部
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                    child: Row(
+                      children: [
+                        // 书籍封面缩略图
+                        Container(
+                          width: 50,
+                          height: 70,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.8),
+                                Theme.of(context)
+                                    .colorScheme
+                                    .secondary
+                                    .withValues(alpha: 0.6),
+                              ],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.1),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: book.coverImagePath != null &&
+                                  File(book.coverImagePath!).existsSync()
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.file(
+                                    File(book.coverImagePath!),
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.menu_book,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                        ),
+                        const SizedBox(width: 16),
+                        // 书籍信息
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                book.title,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                book.author,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.6),
+                                    ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              // 阅读进度
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.auto_stories,
+                                    size: 14,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary
+                                        .withValues(alpha: 0.7),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${((book.currentPage / (book.totalPages > 0 ? book.totalPages : 1)) * 100).toStringAsFixed(1)}%',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    title: Text(
-                      '选择阅读模式',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
+                  ),
+
+                  // 分隔线
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outline
+                        .withValues(alpha: 0.15),
+                  ),
+
+                  // 操作选项
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Column(
+                      children: [
+                        // 继续阅读
+                        _buildOptionItem(
+                          context: context,
+                          icon: Icons.play_circle_outline,
+                          iconColor: Theme.of(context).colorScheme.primary,
+                          title: '继续阅读',
+                          subtitle: book.currentPage > 0
+                              ? '第 ${book.currentPage} 页'
+                              : '从头开始',
+                          backgroundColor: Theme.of(context)
+                              .colorScheme
+                              .primaryContainer
+                              .withValues(alpha: 0.15),
+                          onTap: () async {
+                            Navigator.pop(context);
+                            final fullBook =
+                                await _bookDao.getBookById(book.id!);
+                            if (fullBook != null && context.mounted) {
+                              await ReadingRouterService.openBook(
+                                  context, fullBook);
+                              _loadBooks();
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 8),
+
+                        // 书籍信息
+                        _buildOptionItem(
+                          context: context,
+                          icon: Icons.info_outline,
+                          iconColor: Theme.of(context).colorScheme.tertiary,
+                          title: '书籍信息',
+                          subtitle:
+                              '${book.format.toUpperCase()} · ${book.totalPages} 页',
+                          backgroundColor: Theme.of(context)
+                              .colorScheme
+                              .tertiaryContainer
+                              .withValues(alpha: 0.15),
+                          onTap: () {
+                            Navigator.pop(context);
+                            _showBookInfo(book);
+                          },
+                        ),
+                        const SizedBox(height: 8),
+
+                        // 删除书籍
+                        _buildOptionItem(
+                          context: context,
+                          icon: Icons.delete_outline_rounded,
+                          iconColor: Theme.of(context).colorScheme.error,
+                          title: '删除书籍',
+                          subtitle: '将永久删除此书籍',
+                          backgroundColor: Theme.of(context)
+                              .colorScheme
+                              .errorContainer
+                              .withValues(alpha: 0.15),
+                          onTap: () {
+                            Navigator.pop(context);
+                            _confirmDeleteBook(book);
+                          },
+                        ),
+                      ],
                     ),
-                    onTap: () async {
-                      Navigator.pop(context);
-                      final fullBook = await _bookDao.getBookById(book.id!);
-                      if (fullBook != null && context.mounted) {
-                        // 直接打开沉浸式阅读器
-                        await ReadingRouterService.openBook(context, fullBook);
-                        _loadBooks();
-                      }
-                    },
                   ),
-                ),
-                Container(
-                  // 毛玻璃效果 - 列表项容器
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.errorContainer.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ListTile(
-                    leading: Icon(
-                      Icons.delete_outline,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                    title: Text(
-                      '删除书籍',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                    onTap: () {
-                      Navigator.pop(context); // 先关闭底部弹窗
-                      _confirmDeleteBook(book);
-                    },
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
+
+                  const SizedBox(height: 12),
+                ],
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// 构建操作选项项
+  Widget _buildOptionItem({
+    required BuildContext context,
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required Color backgroundColor,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: iconColor.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: iconColor,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.6),
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.4),
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 显示书籍详细信息
+  void _showBookInfo(Book book) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor:
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: Row(
+          children: [
+            Icon(
+              Icons.info_outline,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            const Text('书籍信息'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildInfoRow('书名', book.title),
+            const SizedBox(height: 12),
+            _buildInfoRow('作者', book.author),
+            const SizedBox(height: 12),
+            _buildInfoRow('格式', book.format.toUpperCase()),
+            const SizedBox(height: 12),
+            _buildInfoRow('总页数', '${book.totalPages} 页'),
+            const SizedBox(height: 12),
+            _buildInfoRow('当前页', '${book.currentPage} 页'),
+            const SizedBox(height: 12),
+            _buildInfoRow(
+              '阅读进度',
+              '${((book.currentPage / (book.totalPages > 0 ? book.totalPages : 1)) * 100).toStringAsFixed(1)}%',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建信息行
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 70,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.6),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -536,10 +840,21 @@ class _LibraryPageState extends State<LibraryPage> {
                     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
                     try {
+                      // 删除书籍文件
                       final file = File(book.filePath);
                       if (await file.exists()) {
                         await file.delete();
                       }
+
+                      // 删除书籍的分页缓存
+                      if (book.contentHash != null &&
+                          book.contentHash!.isNotEmpty) {
+                        await PaginationCacheService.deleteCacheForBook(
+                          book.contentHash!,
+                        );
+                      }
+
+                      // 删除数据库记录（会级联删除笔记、书签等）
                       await _bookDao.deleteBook(book.id!);
 
                       navigator.pop();
@@ -549,6 +864,12 @@ class _LibraryPageState extends State<LibraryPage> {
                       );
                     } catch (e) {
                       // Handle error
+                      scaffoldMessenger.showSnackBar(
+                        SnackBar(
+                          content: Text('删除失败: $e'),
+                          backgroundColor: Theme.of(context).colorScheme.error,
+                        ),
+                      );
                     }
                   },
                   child: Text(

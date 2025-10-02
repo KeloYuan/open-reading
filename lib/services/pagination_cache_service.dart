@@ -212,6 +212,50 @@ class PaginationCacheService {
     }
   }
 
+  /// 删除特定书籍的所有缓存
+  ///
+  /// 根据书籍的内容哈希删除所有相关的分页缓存
+  /// 参数 [contentHash] 书籍的内容哈希值
+  static Future<void> deleteCacheForBook(String contentHash) async {
+    try {
+      final cacheDir = await _getCacheDirectory();
+
+      if (!await cacheDir.exists()) {
+        return;
+      }
+
+      final files = cacheDir.listSync().whereType<File>().toList();
+      int deletedCount = 0;
+
+      for (var file in files) {
+        // 读取缓存文件内容以检查是否属于该书籍
+        try {
+          final json = await file.readAsString();
+          final data = jsonDecode(json) as Map<String, dynamic>;
+          final cacheKey = data['cacheKey'] as String;
+
+          // 检查缓存键是否包含该书籍的哈希值
+          if (cacheKey.startsWith(contentHash)) {
+            await file.delete();
+            deletedCount++;
+            debugPrint('🗑️ 删除书籍缓存: ${file.path}');
+          }
+        } catch (e) {
+          // 如果文件读取失败，跳过该文件
+          debugPrint('⚠️ 读取缓存文件失败: ${file.path}, $e');
+        }
+      }
+
+      if (deletedCount > 0) {
+        debugPrint('✅ 已删除该书籍的${deletedCount}个缓存文件');
+      } else {
+        debugPrint('ℹ️ 未找到该书籍的缓存文件');
+      }
+    } catch (e) {
+      debugPrint('❌ 删除书籍缓存失败: $e');
+    }
+  }
+
   /// 获取缓存统计信息
   static Future<Map<String, dynamic>> getCacheStats() async {
     try {

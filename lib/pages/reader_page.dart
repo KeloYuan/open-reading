@@ -1240,11 +1240,30 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
   GlobalKey<_SimulationPaginationViewState>? _simulationKey;
   int _lastPageIndex = 0;
   bool _isDisposed = false;
+  bool _hasInitializedAfterPagination = false; // 标记是否已在分页后初始化
 
   @override
   void initState() {
     super.initState();
     _initializeControllers();
+
+    // 监听分页状态变化，当分页完成时重新初始化 controller
+    ref.listenManual(readerPaginationProvider, (previous, next) {
+      // 当从 loading 变为 loaded，且页码大于0，且还没有初始化过
+      if (!_hasInitializedAfterPagination &&
+          previous?.isLoading == true &&
+          !next.isLoading &&
+          next.pages.isNotEmpty &&
+          next.currentPageIndex > 0) {
+        debugPrint('📖 分页完成，重新初始化 controller 到第 ${next.currentPageIndex} 页');
+        _hasInitializedAfterPagination = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_isDisposed && mounted) {
+            _initializeControllers();
+          }
+        });
+      }
+    });
   }
 
   @override
@@ -1283,7 +1302,8 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
     _simulationKey = null;
 
     // 获取当前页码（用于初始化 controller）
-    final currentPageIndex = ref.read(readerPaginationProvider).currentPageIndex;
+    final currentPageIndex =
+        ref.read(readerPaginationProvider).currentPageIndex;
 
     // 根据模式创建对应的 controller
     switch (widget.paginationMode) {
@@ -1312,7 +1332,7 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
         // 仿真翻页需要在创建后手动跳转
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_simulationKey?.currentState != null && currentPageIndex > 0) {
-            _simulationKey!.currentState!.jumpToPage(currentPageIndex);
+            _simulationKey!.currentState!.goToPage(currentPageIndex);
             debugPrint('📖 SimulationView 跳转到第 $currentPageIndex 页');
           }
         });
@@ -1324,6 +1344,9 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
   Widget build(BuildContext context) {
     final paginationState = ref.watch(readerPaginationProvider);
     final settings = ref.watch(readerSettingsProvider);
+
+    // 监听页码变化，同步更新 PageController
+    _syncPageController(paginationState.currentPageIndex);
 
     // 关键：使用分页时保存的settings（包含响应式padding），如果没有则使用当前settings
     final renderSettings = paginationState.paginationSettings ?? settings;
@@ -1339,26 +1362,6 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
     if (paginationState.pages.isEmpty) {
       return _buildEmptyView(settings);
     }
-
-    // 分页完成后，确保 controller 已正确初始化到当前页码
-    // 这很重要，因为分页是异步的，controller 可能在分页完成前就创建了
-    ref.listen(readerPaginationProvider, (previous, next) {
-      // 当从 loading 变为 loaded，且页码大于0时，重新初始化 controller
-      if (previous?.isLoading == true && 
-          !next.isLoading && 
-          next.pages.isNotEmpty &&
-          next.currentPageIndex > 0) {
-        debugPrint('📖 分页完成，重新初始化 controller 到第 ${next.currentPageIndex} 页');
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!_isDisposed) {
-            _initializeControllers();
-          }
-        });
-      }
-    });
-
-    // 监听页码变化，同步更新 PageController
-    _syncPageController(paginationState.currentPageIndex);
 
     return _buildContentView(paginationState, renderSettings);
   }

@@ -3,11 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:crypto/crypto.dart';
-import '../services/simple_text_paginator.dart';
-import '../services/progressive_paginator.dart';
+import '../services/fast_text_paginator.dart';
 import '../services/pagination_cache_service.dart';
-import '../services/background_content_loader.dart';
-import '../services/reading_router_service.dart';
 import '../services/tts/system_tts.dart';
 import '../services/tts/base_tts.dart';
 import '../services/reader_settings_service.dart';
@@ -500,100 +497,14 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     _initBackgroundLoader();
   }
 
-  StreamSubscription<BackgroundLoadResult>? _backgroundLoadSubscription;
-
-  /// 初始化后台加载监听
+  /// 初始化后台加载监听（已禁用 - 统一使用一次性全部加载）
   void _initBackgroundLoader() {
-    final loader = ReadingRouterService.getContentLoader();
-    _backgroundLoadSubscription = loader.resultStream.listen((result) {
-      // 只在后台加载完成（!hasRemaining）且有剩余内容时处理
-      if (!result.hasRemaining && result.remainingPart.isNotEmpty) {
-        _handleBackgroundLoadComplete(result);
-      }
-    });
-  }
-
-  /// 处理后台加载完成
-  void _handleBackgroundLoadComplete(BackgroundLoadResult result) async {
-    debugPrint('🎉 后台加载完成，准备追加分页');
-    debugPrint('   首批内容: ${result.firstPart.length} 字符');
-    debugPrint('   后台内容: ${result.remainingPart.length} 字符');
-    debugPrint('   完整内容: ${result.fullContent.length} 字符');
-
-    // 获取当前分页设置和屏幕尺寸
-    final settings = state.paginationSettings;
-    final screenSize = state.screenSize;
-
-    if (settings == null ||
-        screenSize == null ||
-        result.remainingPart.isEmpty) {
-      debugPrint('⚠️ 无法追加分页：settings=$settings, screenSize=$screenSize');
-      return;
-    }
-
-    try {
-      debugPrint('🔄 开始分页后台加载的内容...');
-      final currentPageCount = state.pages.length;
-      final currentPageIndex = state.currentPageIndex;
-
-      // 对后台加载的剩余内容进行分页
-      state = state.copyWith(loadingStage: '正在分页后台内容...');
-
-      await Future.delayed(const Duration(milliseconds: 50));
-
-      final remainingResult = SimpleTextPaginator.paginate(
-        text: result.remainingPart,
-        screenSize: screenSize,
-        fontSize: settings.fontSize,
-        lineHeight: settings.lineHeight,
-        padding: settings.padding,
-        letterSpacing: settings.letterSpacing,
-        paragraphSpacing: settings.paragraphSpacing,
-        firstLineIndent: settings.firstLineIndent,
-        devicePixelRatio: MediaQueryData.fromView(
-          WidgetsBinding.instance.platformDispatcher.views.first,
-        ).devicePixelRatio,
-      );
-
-      if (remainingResult.pages.isEmpty) {
-        debugPrint('⚠️ 后台内容分页结果为空');
-        return;
-      }
-
-      // 追加到现有页面列表
-      final allPages = [...state.pages, ...remainingResult.pages];
-
-      debugPrint('✅ 后台分页完成，追加 ${remainingResult.pages.length} 页');
-      debugPrint('   总页数: $currentPageCount → ${allPages.length}');
-
-      // 更新state
-      state = state.copyWith(
-        pages: allPages,
-        cachedText: result.fullContent,
-        currentPageIndex: currentPageIndex, // 保持当前页码
-        isProgressiveLoading: false,
-        loadingStage: '后台内容加载完成，共 ${allPages.length} 页',
-      );
-
-      // 更新持久化缓存
-      if (state.cacheKey != null) {
-        PaginationCacheService.saveCache(
-          pages: allPages,
-          cacheKey: state.cacheKey!,
-        );
-        debugPrint('💾 已更新缓存，总页数: ${allPages.length}');
-      }
-
-      debugPrint('🎊 后台加载和分页全部完成！用户可以无缝阅读到最后！');
-    } catch (e, stackTrace) {
-      debugPrint('❌ 处理后台加载内容失败: $e');
-      debugPrint('堆栈: $stackTrace');
-    }
+    // 禁用后台渐进式加载，所有内容一次性加载完成
+    debugPrint('⚠️ 后台渐进式加载已禁用，使用一次性全部加载');
   }
 
   @override
   void dispose() {
-    _backgroundLoadSubscription?.cancel();
     super.dispose();
   }
 
@@ -687,9 +598,9 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       debugPrint(
           '  - 屏幕: ${actualScreenSize.width.toInt()}x${actualScreenSize.height.toInt()}');
 
-      // 统一使用分批分页策略（带进度显示）
-      debugPrint('  - 策略: 分批分页（带进度显示）');
-      await _paginateWithProgress(
+      // 统一使用一次性全部加载（不分批）
+      debugPrint('  - 策略: 一次性全部加载');
+      await _paginateDirectAll(
         text: text,
         screenSize: actualScreenSize,
         settings: settings,
@@ -708,9 +619,8 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     }
   }
 
-  /// 渐进式分页（大文件优化）
-  /// 分批分页（带进度显示，适用于所有大小的文件）
-  Future<void> _paginateWithProgress({
+  /// 一次性全部加载（不分批，直接加载所有内容）
+  Future<void> _paginateDirectAll({
     required String text,
     required Size screenSize,
     required ReaderSettings settings,
@@ -720,11 +630,13 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
   }) async {
     state = state.copyWith(
       isLoading: true,
-      loadingStage: '准备分页...',
+      loadingStage: '正在分页...',
     );
 
     try {
-      final result = await SimpleTextPaginator.paginateWithProgress(
+      debugPrint('📄 开始一次性分页: ${text.length} 字符');
+
+      final result = await FastTextPaginator.paginateWithProgress(
         text: text,
         screenSize: screenSize,
         fontSize: settings.fontSize,
@@ -746,6 +658,8 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         throw Exception('分页结果为空');
       }
 
+      debugPrint('✅ 分页完成: ${result.pages.length} 页');
+
       state = state.copyWith(
         pages: result.pages,
         currentPageIndex: initialPageIndex.clamp(0, result.pages.length - 1),
@@ -762,141 +676,12 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         cacheKey: cacheKey,
       );
 
-      debugPrint('✅ 分批分页完成: ${result.pages.length}页，已缓存到本地磁盘');
+      debugPrint('💾 已缓存到本地磁盘');
     } catch (e, stackTrace) {
-      debugPrint('❌ 分批分页失败: $e');
+      debugPrint('❌ 分页失败: $e');
       debugPrint('堆栈: $stackTrace');
       rethrow;
     }
-  }
-
-  /// 旧的渐进式分页方法（已废弃，保留以防万一）
-  @Deprecated('Use _paginateWithProgress instead')
-  Future<void> _paginateProgressively({
-    required String text,
-    required Size screenSize,
-    required ReaderSettings settings,
-    required double devicePixelRatio,
-    required String cacheKey,
-    int initialPageIndex = 0,
-  }) async {
-    state = state.copyWith(
-      isProgressiveLoading: true,
-      loadingStage: '正在加载...',
-    );
-
-    final params = ProgressivePaginationParams(
-      text: text,
-      screenSize: screenSize,
-      fontSize: settings.fontSize,
-      lineHeight: settings.lineHeight,
-      padding: settings.padding,
-      letterSpacing: settings.letterSpacing,
-      paragraphSpacing: settings.paragraphSpacing,
-      firstLineIndent: settings.firstLineIndent,
-      devicePixelRatio: devicePixelRatio,
-      initialChunkSizeMB: 5,
-    );
-
-    // 标记是否是第一次接收到分页结果
-    bool isFirstProgress = true;
-
-    await ProgressivePaginator.paginateProgressively(
-      params: params,
-      onProgress: ({
-        required List<String> pages,
-        required int totalPages,
-        required bool isComplete,
-        required String stage,
-      }) {
-        // 第一次接收到分页结果时，使用initialPageIndex
-        // 后续更新保持当前页码
-        final pageIndex = isFirstProgress
-            ? initialPageIndex.clamp(0, pages.length - 1)
-            : state.currentPageIndex.clamp(0, pages.length - 1);
-
-        if (isFirstProgress && initialPageIndex > 0) {
-          debugPrint('📖 渐进式分页：恢复到页码 $pageIndex');
-          isFirstProgress = false;
-        }
-
-        state = state.copyWith(
-          pages: pages,
-          currentPageIndex: pageIndex,
-          isLoading: !isComplete,
-          isProgressiveLoading: !isComplete,
-          paginationSettings: settings,
-          cachedText: text,
-          cacheKey: cacheKey,
-          loadingStage: stage,
-        );
-
-        // 完成后保存到持久化缓存
-        if (isComplete && pages.isNotEmpty) {
-          PaginationCacheService.saveCache(
-            pages: pages,
-            cacheKey: cacheKey,
-          );
-          debugPrint('✅ 渐进式分页完成: ${pages.length}页');
-        }
-      },
-    );
-  }
-
-  /// 旧的直接分页方法（已废弃，保留以防万一）
-  @Deprecated('Use _paginateWithProgress instead')
-  Future<void> _paginateDirectly({
-    required String text,
-    required Size screenSize,
-    required ReaderSettings settings,
-    required double devicePixelRatio,
-    required String cacheKey,
-    int initialPageIndex = 0,
-  }) async {
-    state = state.copyWith(loadingStage: '正在分页...');
-
-    // 在主线程分页，使用异步避免长时间阻塞
-    await Future.delayed(const Duration(milliseconds: 50));
-
-    final result = SimpleTextPaginator.paginate(
-      text: text,
-      screenSize: screenSize,
-      fontSize: settings.fontSize,
-      lineHeight: settings.lineHeight,
-      padding: settings.padding,
-      letterSpacing: settings.letterSpacing,
-      paragraphSpacing: settings.paragraphSpacing,
-      firstLineIndent: settings.firstLineIndent,
-      devicePixelRatio: devicePixelRatio,
-    );
-
-    if (result.pages.isEmpty) {
-      throw Exception('分页结果为空');
-    }
-
-    // 确保初始页码在有效范围内
-    final safeInitialPage = initialPageIndex.clamp(0, result.pages.length - 1);
-    if (initialPageIndex > 0) {
-      debugPrint('📖 直接分页：恢复到页码 $safeInitialPage');
-    }
-
-    state = state.copyWith(
-      pages: result.pages,
-      currentPageIndex: safeInitialPage,
-      isLoading: false,
-      paginationSettings: settings,
-      cachedText: text,
-      cacheKey: cacheKey,
-      loadingStage: '加载完成',
-    );
-
-    // 保存到持久化缓存
-    PaginationCacheService.saveCache(
-      pages: result.pages,
-      cacheKey: cacheKey,
-    );
-
-    debugPrint('✅ 直接分页完成: ${result.pages.length}页');
   }
 
   /// 生成内容哈希

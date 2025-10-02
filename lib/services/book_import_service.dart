@@ -402,14 +402,17 @@ class BookImportService {
 
     progressCallback?.call(0.0, '读取文件...');
 
-    // 对于大文件，只读取必要的部分
-    final maxBytesForMetadata = 10 * 1024 * 1024; // 10MB
+    // 📖 修改：TXT文件也完整读取，不再限制为10MB
+    // 这样可以确保元数据提取基于完整内容
     Uint8List bytes;
 
-    if (fileSize > maxBytesForMetadata && ext == 'txt') {
-      // TXT大文件只读取前10MB用于元数据提取
-      debugPrint('⚠️ 大型TXT文件，只读取前10MB用于元数据提取');
-      progressCallback?.call(0.1, '读取大文件...');
+    // 对于超大的非TXT文件（如大PDF），仍然限制读取大小避免内存问题
+    final maxBytesForMetadata = 10 * 1024 * 1024; // 10MB
+
+    if (fileSize > maxBytesForMetadata && ext != 'txt' && ext != 'epub') {
+      // 非TXT/EPUB的大文件只读取前10MB用于元数据提取
+      debugPrint('⚠️ 大型${ext.toUpperCase()}文件，只读取前10MB用于元数据提取');
+      progressCallback?.call(0.1, '读取大文件头部...');
 
       final stream = file.openRead(0, maxBytesForMetadata);
       final chunks = await stream.toList();
@@ -423,9 +426,14 @@ class BookImportService {
       }
       bytes = buffer;
 
-      progressCallback?.call(0.3, '分析文本内容...');
+      progressCallback?.call(0.3, '分析文件内容...');
     } else {
-      // 其他格式或小文件，完整读取
+      // TXT、EPUB或小文件，完整读取
+      final fileSizeMB = fileSize / 1024 / 1024;
+      if (fileSizeMB > 10) {
+        debugPrint(
+            '📖 完整读取${ext.toUpperCase()}文件 (${fileSizeMB.toStringAsFixed(1)} MB)');
+      }
       progressCallback?.call(0.2, '加载文件内容...');
       bytes = await file.readAsBytes();
       progressCallback?.call(0.4, '解析文件格式...');

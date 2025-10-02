@@ -5,15 +5,11 @@ import 'package:epubx/epubx.dart';
 import 'package:pdfx/pdfx.dart';
 import '../models/book.dart';
 import '../pages/reader_page.dart';
-import 'background_content_loader.dart';
 
 /// 阅读器路由服务
 ///
 /// 直接打开沉浸式阅读器
 class ReadingRouterService {
-  // 后台内容加载器（全局单例）
-  static BackgroundContentLoader? _contentLoader;
-
   /// 打开书籍（使用沉浸式阅读器）
   static Future<void> openBook(
     BuildContext context,
@@ -22,18 +18,22 @@ class ReadingRouterService {
     await _navigateToReader(context, book);
   }
 
-  /// 获取后台内容加载器
-  static BackgroundContentLoader getContentLoader() {
-    _contentLoader ??= BackgroundContentLoader();
-    return _contentLoader!;
-  }
-
-  /// 导航到沉浸式阅读器（带流畅加载动画，支持渐进式加载）
+  /// 导航到沉浸式阅读器（带流畅加载动画）
   static Future<void> _navigateToReader(
     BuildContext context,
     Book book,
   ) async {
     String? bookContent = book.cachedContent;
+
+    // 调试：检查缓存内容
+    if (bookContent != null && bookContent.isNotEmpty) {
+      final lengthMB = bookContent.length / (1024 * 1024);
+      debugPrint('📖 检测到缓存内容: ${lengthMB.toStringAsFixed(2)} MB');
+      debugPrint('   字符数: ${bookContent.length}');
+      // ⚠️ 强制禁用缓存，始终从文件重新加载
+      debugPrint('   ⚠️ 为确保加载完整内容，忽略缓存，从文件重新加载');
+      bookContent = null;
+    }
 
     // 如果有缓存内容，直接打开
     if (bookContent != null && bookContent.isNotEmpty) {
@@ -53,7 +53,7 @@ class ReadingRouterService {
     );
 
     try {
-      // 在后台异步加载书籍内容（优化版：支持渐进式加载）
+      // 在后台异步加载书籍内容（一次性全部加载）
       bookContent = await _loadBookContent(book);
 
       // 延迟一小段时间，确保加载动画至少显示一会儿（提升体验）
@@ -142,37 +142,9 @@ class ReadingRouterService {
       String content;
 
       if (format == 'txt') {
-        // TXT 文件大小检查和优化处理（使用后台加载服务）
-        if (fileSizeMB > 3) {
-          // 超过3MB，使用后台渐进式加载
-          debugPrint('📖 大文件 (${fileSizeMB.toStringAsFixed(2)} MB)，启用后台渐进式加载');
-          final loader = getContentLoader();
-          final result = await loader.loadLargeFile(
-            file: file,
-            initialChunkMB: 2, // 首批加载2MB，更快显示
-          );
-          content = result.fullContent;
-
-          // 如果有后台加载任务，添加提示
-          if (result.hasRemaining) {
-            content += '''
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📖 后台加载进行中...
-
-已加载：2 MB / ${fileSizeMB.toStringAsFixed(1)} MB
-剩余内容正在后台加载，您可以继续阅读
-读到这里时，后面的内容将自动追加 ⏳
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-''';
-          }
-        } else {
-          // 小文件（≤3MB）直接读取
-          debugPrint('📖 小文件直接读取');
-          content = await file.readAsString();
-        }
+        // TXT 文件一次性全部加载（无论大小）
+        debugPrint('📖 一次性加载TXT文件 (${fileSizeMB.toStringAsFixed(2)} MB)');
+        content = await file.readAsString();
         debugPrint('✅ 成功加载TXT文件，长度: ${content.length} 字符');
       } else if (format == 'epub') {
         content = await _parseEpubContent(file);
@@ -207,10 +179,6 @@ class ReadingRouterService {
       rethrow;
     }
   }
-
-  /// 加载超大TXT文件（渐进式加载：先返回前N MB，后台继续加载）
-  ///
-  /// 策略：立即返回前N MB让用户开始阅读，同时在后台继续加载剩余内容
 
   /// 构建加载对话框（带文件大小提示）
   static Widget _buildLoadingDialog(Book book) {
@@ -266,16 +234,20 @@ class ReadingRouterService {
 
                 // 加载提示
                 Text(
-                  fileSizeMB != null && fileSizeMB > 30
-                      ? '文件过大，只读取部分内容...'
-                      : fileSizeMB != null && fileSizeMB > 15
+                  fileSizeMB != null && fileSizeMB > 50
+                      ? '正在加载大文件，请耐心等待...'
+                      : fileSizeMB != null && fileSizeMB > 30
                           ? '正在加载大文件，请稍候...'
-                          : '正在打开书籍...',
+                          : fileSizeMB != null && fileSizeMB > 15
+                              ? '正在加载，请稍候...'
+                              : '正在打开书籍...',
                   style: TextStyle(
                     fontSize: 14,
-                    color: fileSizeMB != null && fileSizeMB > 30
-                        ? Colors.orange[700]
-                        : Colors.grey[600],
+                    color: fileSizeMB != null && fileSizeMB > 50
+                        ? Colors.orange[800]
+                        : fileSizeMB != null && fileSizeMB > 30
+                            ? Colors.orange[700]
+                            : Colors.grey[600],
                     fontWeight: fileSizeMB != null && fileSizeMB > 30
                         ? FontWeight.w600
                         : FontWeight.normal,
