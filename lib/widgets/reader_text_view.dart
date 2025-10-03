@@ -10,7 +10,9 @@ Widget buildIndentedText({
 }) {
   final paragraphs = content.split('\n');
   final List<InlineSpan> spans = [];
-  final indentText = '　' * settings.firstLineIndent.toInt(); // 全角空格
+  final indentText = settings.enableFirstLineIndent
+      ? ('　' * settings.firstLineIndent.toInt())
+      : ''; // 全角空格（如果启用缩进）
 
   for (int i = 0; i < paragraphs.length; i++) {
     final paragraph = paragraphs[i];
@@ -21,7 +23,7 @@ Widget buildIndentedText({
         spans.add(const TextSpan(text: '\n'));
       }
     } else {
-      // 有内容的段落，添加首行缩进
+      // 有内容的段落，根据开关决定是否添加首行缩进
       spans.add(TextSpan(text: indentText + paragraph));
 
       // 如果不是最后一段，添加换行

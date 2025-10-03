@@ -708,7 +708,23 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   /// - 右边1/3：下一页
   void _handleScreenTap(Offset position) {
     final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
     final tapX = position.dx;
+    final tapY = position.dy;
+
+    // 检查是否点击在控制栏区域
+    final toolbarState = ref.read(toolbarProvider);
+    if (toolbarState.isVisible) {
+      // 控制栏显示时，检测点击是否在控制栏区域内
+      const topToolbarHeight = 120.0; // 顶部工具栏高度（约）
+      const bottomToolbarHeight = 180.0; // 底部工具栏高度（约）
+
+      if (tapY < topToolbarHeight || tapY > screenHeight - bottomToolbarHeight) {
+        // 点击在控制栏区域，忽略翻页，只处理关闭控制栏
+        _hideToolbar();
+        return;
+      }
+    }
 
     // 计算点击位置所在的区域
     if (tapX < screenWidth / 3) {
@@ -2325,7 +2341,19 @@ class _SimulationPaginationViewState extends State<_SimulationPaginationView>
     if (_isAnimating) return;
 
     final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
     final tapX = details.globalPosition.dx;
+    final tapY = details.globalPosition.dy;
+
+    // 检测是否点击在控制栏区域（粗略估计）
+    const topToolbarHeight = 120.0;
+    const bottomToolbarHeight = 180.0;
+
+    if (tapY < topToolbarHeight || tapY > screenHeight - bottomToolbarHeight) {
+      // 点击在控制栏区域，只触发菜单（关闭控制栏）
+      widget.onTap?.call();
+      return;
+    }
 
     if (tapX < screenWidth / 3) {
       // 左侧区域 - 上一页

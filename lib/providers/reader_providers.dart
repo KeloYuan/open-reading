@@ -41,6 +41,7 @@ class ReaderSettings {
   final bool enableTextSelection;
   final double firstLineIndent; // 首行缩进（0-4字符）
   final double horizontalMargin; // 水平页边距（10-40px）
+  final bool enableFirstLineIndent; // 是否启用首行缩进（默认关闭）
 
   const ReaderSettings({
     this.fontSize = 18.0,
@@ -54,6 +55,7 @@ class ReaderSettings {
     this.enableTextSelection = true,
     this.firstLineIndent = 2.0,
     this.horizontalMargin = 20.0,
+    this.enableFirstLineIndent = false,
   });
 
   /// 复制并修改设置
@@ -68,6 +70,7 @@ class ReaderSettings {
     bool? enableTextSelection,
     double? firstLineIndent,
     double? horizontalMargin,
+    bool? enableFirstLineIndent,
   }) {
     return ReaderSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -80,6 +83,8 @@ class ReaderSettings {
       enableTextSelection: enableTextSelection ?? this.enableTextSelection,
       firstLineIndent: firstLineIndent ?? this.firstLineIndent,
       horizontalMargin: horizontalMargin ?? this.horizontalMargin,
+      enableFirstLineIndent:
+          enableFirstLineIndent ?? this.enableFirstLineIndent,
     );
   }
 
@@ -416,18 +421,27 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
   void updateFontSize(double fontSize) {
     state = state.copyWith(fontSize: fontSize.clamp(12.0, 36.0));
     _debounceSaveSettings(); // 使用防抖保存
+
+    // 清除字符宽度缓存（字体大小改变，宽度也会变）
+    FastTextPaginator.clearCache();
   }
 
   /// 更新行高（带防抖）
   void updateLineSpacing(double spacing) {
     state = state.copyWith(lineSpacing: spacing.clamp(1.0, 3.0));
     _debounceSaveSettings(); // 使用防抖保存
+
+    // 清除字符宽度缓存（行距改变会影响测量）
+    FastTextPaginator.clearCache();
   }
 
   /// 更新字间距（带防抖）
   void updateLetterSpacing(double letterSpacing) {
     state = state.copyWith(letterSpacing: letterSpacing.clamp(-1.0, 2.0));
     _debounceSaveSettings(); // 使用防抖保存
+
+    // 清除字符宽度缓存（字间距改变，宽度也会变）
+    FastTextPaginator.clearCache();
   }
 
   /// 更新页边距
@@ -633,7 +647,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     try {
       debugPrint('📄 开始一次性分页: ${text.length} 字符');
 
-      final result = await FastTextPaginator.paginateAccurate(
+      final result = await FastTextPaginator.paginateWithProgress(
         text: text,
         screenSize: screenSize,
         fontSize: settings.fontSize,
@@ -642,7 +656,6 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         letterSpacing: settings.letterSpacing,
         firstLineIndent: settings.firstLineIndent,
         devicePixelRatio: devicePixelRatio,
-        supportImages: true, // 启用图片支持
         onProgress: (currentPage, stage) {
           // 更新进度显示
           state = state.copyWith(
