@@ -839,30 +839,53 @@ class _LibraryPageState extends State<LibraryPage> {
                     final navigator = Navigator.of(context);
                     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
+                    // 关闭确认对话框
+                    navigator.pop();
+
+                    // 显示删除进度对话框
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => PopScope(
+                        canPop: false,
+                        child: AlertDialog(
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surface.withValues(alpha: 0.95),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          content: Row(
+                            children: [
+                              const CircularProgressIndicator(),
+                              const SizedBox(width: 20),
+                              Expanded(
+                                child: Text(
+                                  '正在删除《${book.title}》...',
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+
                     try {
-                      // 删除书籍文件
-                      final file = File(book.filePath);
-                      if (await file.exists()) {
-                        await file.delete();
-                      }
+                      // 在后台执行删除操作
+                      await _performBookDeletion(book);
 
-                      // 删除书籍的分页缓存
-                      if (book.contentHash != null &&
-                          book.contentHash!.isNotEmpty) {
-                        await PaginationCacheService.deleteCacheForBook(
-                          book.contentHash!,
-                        );
-                      }
+                      // 关闭进度对话框
+                      Navigator.of(context).pop();
 
-                      // 删除数据库记录（会级联删除笔记、书签等）
-                      await _bookDao.deleteBook(book.id!);
-
-                      navigator.pop();
                       _loadBooks();
                       scaffoldMessenger.showSnackBar(
                         SnackBar(content: Text('《${book.title}》已删除')),
                       );
                     } catch (e) {
+                      // 关闭进度对话框
+                      Navigator.of(context).pop();
+
                       // Handle error
                       scaffoldMessenger.showSnackBar(
                         SnackBar(
@@ -885,6 +908,29 @@ class _LibraryPageState extends State<LibraryPage> {
         );
       },
     );
+  }
+
+  /// 执行书籍删除操作（在后台执行）
+  Future<void> _performBookDeletion(Book book) async {
+    // 使用 Future.microtask 将操作推迟到下一个事件循环
+    // 这样可以让 UI 有机会更新（显示进度对话框）
+    await Future.microtask(() async {
+      // 删除书籍文件
+      final file = File(book.filePath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+
+      // 删除书籍的分页缓存（优化后的版本）
+      if (book.contentHash != null && book.contentHash!.isNotEmpty) {
+        await PaginationCacheService.deleteCacheForBookFast(
+          book.contentHash!,
+        );
+      }
+
+      // 删除数据库记录（会级联删除笔记、书签等）
+      await _bookDao.deleteBook(book.id!);
+    });
   }
 }
 

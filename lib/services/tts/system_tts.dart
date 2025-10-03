@@ -24,6 +24,9 @@ class SystemTts extends BaseTts {
   bool restarting = false;
   bool _isTtsEngineReady = false; // TTS引擎是否就绪
   final List<Function> _pendingSpeakTasks = []; // 待执行的朗读任务
+  bool _hasSynthesisError = false; // 是否发生合成错误
+  int _speakRetryCount = 0; // speak重试计数
+  static const int _maxSpeakRetries = 2; // 最大重试次数
 
   late Function getHereFunction;
   late Function getNextTextFunction;
@@ -199,6 +202,19 @@ class SystemTts extends BaseTts {
 
       // Android平台需要特殊配置
       if (isAndroid) {
+        // 设置TTS引擎（如果有指定）
+        final preferredEngine = TtsPreferences().ttsEngine;
+        if (preferredEngine != null && preferredEngine.isNotEmpty) {
+          try {
+            await flutterTts.setEngine(preferredEngine);
+            debugPrint('   ✅ 已设置TTS引擎: $preferredEngine');
+          } catch (e) {
+            debugPrint('   ⚠️ 设置TTS引擎失败，使用默认引擎: $e');
+          }
+        } else {
+          debugPrint('   ℹ️ 使用系统默认TTS引擎');
+        }
+
         await flutterTts.awaitSpeakCompletion(true);
         await flutterTts.awaitSynthCompletion(true);
         await flutterTts.setQueueMode(1);
@@ -222,6 +238,8 @@ class SystemTts extends BaseTts {
 
       flutterTts.setStartHandler(() async {
         debugPrint('🎬 TTS开始播放回调');
+        _hasSynthesisError = false; // 成功开始，重置错误标志
+        _speakRetryCount = 0; // 重置重试计数
         updateTtsState(TtsStateEnum.playing);
         _startHighlightTimer(); // 开始句子高亮
       });
@@ -238,9 +256,25 @@ class SystemTts extends BaseTts {
 
       flutterTts.setErrorHandler((msg) {
         debugPrint('❌ TTS错误回调: $msg');
-        updateTtsState(TtsStateEnum.stopped);
-        _stopHighlightTimer();
-        _resetHighlightedSentence();
+        _hasSynthesisError = true; // 标记发生错误
+
+        // 在OPPO等设备上，合成错误后需要重试
+        if (_speakRetryCount < _maxSpeakRetries && _currentVoiceText != null) {
+          _speakRetryCount++;
+          debugPrint('⚠️ TTS合成失败，尝试重试 (第$_speakRetryCount次)...');
+
+          // 延迟后重试
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (_currentVoiceText != null) {
+              speak(content: _currentVoiceText);
+            }
+          });
+        } else {
+          debugPrint('❌ TTS重试次数已达上限或无内容，停止播放');
+          updateTtsState(TtsStateEnum.stopped);
+          _stopHighlightTimer();
+          _resetHighlightedSentence();
+        }
       });
 
       flutterTts.setCancelHandler(() {
@@ -286,6 +320,38 @@ class SystemTts extends BaseTts {
   Future<void> getDefaultVoice() async {
     var voice = await flutterTts.getDefaultVoice;
     if (voice != null) {}
+  }
+
+  /// 获取可用的TTS引擎列表（仅Android）
+  Future<List<dynamic>> getAvailableEngines() async {
+    if (!isAndroid) {
+      return [];
+    }
+    try {
+      final engines = await flutterTts.getEngines;
+      debugPrint('📋 可用的TTS引擎: $engines');
+      return engines ?? [];
+    } catch (e) {
+      debugPrint('❌ 获取TTS引擎列表失败: $e');
+      return [];
+    }
+  }
+
+  /// 设置TTS引擎（仅Android）
+  Future<bool> setTtsEngine(String engineName) async {
+    if (!isAndroid) {
+      return false;
+    }
+    try {
+      debugPrint('🔧 正在切换TTS引擎到: $engineName');
+      await flutterTts.setEngine(engineName);
+      TtsPreferences().ttsEngine = engineName;
+      debugPrint('✅ TTS引擎切换成功');
+      return true;
+    } catch (e) {
+      debugPrint('❌ TTS引擎切换失败: $e');
+      return false;
+    }
   }
 
   @override

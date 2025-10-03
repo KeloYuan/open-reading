@@ -140,46 +140,13 @@ class _CustomSelectableTextState extends State<CustomSelectableText> {
   }
 
   /// 构建自定义上下文菜单
+  /// 返回空组件，隐藏系统默认的文字选择工具栏
   Widget _buildCustomContextMenu(
     BuildContext context,
     EditableTextState editableTextState,
   ) {
-    final selection = editableTextState.textEditingValue.selection;
-    if (selection.isCollapsed) {
-      return const SizedBox.shrink();
-    }
-
-    final selectedText = widget.text.substring(selection.start, selection.end);
-
-    return Material(
-      elevation: 8,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildMenuButton(
-              icon: Icons.content_copy,
-              label: '复制',
-              onTap: () => _copyText(selectedText),
-            ),
-            const SizedBox(width: 8),
-            _buildMenuButton(
-              icon: Icons.highlight_alt,
-              label: '高亮',
-              onTap: () => _highlightText(selectedText, selection),
-            ),
-            const SizedBox(width: 8),
-            _buildMenuButton(
-              icon: Icons.note_add,
-              label: '笔记',
-              onTap: () => _addNote(selectedText, selection),
-            ),
-          ],
-        ),
-      ),
-    );
+    // 隐藏系统工具栏，使用主页面的 EnhancedTextSelectionToolbar
+    return const SizedBox.shrink();
   }
 
   /// 构建菜单按钮

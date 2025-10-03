@@ -30,6 +30,10 @@ class TextHighlightRenderer {
         maxLines: maxLines,
         showCursor: false,
         enableInteractiveSelection: true,
+        // 隐藏系统默认的选择工具栏
+        contextMenuBuilder: (context, editableTextState) {
+          return const SizedBox.shrink();
+        },
       );
     }
 
@@ -92,6 +96,10 @@ class TextHighlightRenderer {
       maxLines: maxLines,
       showCursor: false,
       enableInteractiveSelection: true,
+      // 隐藏系统默认的选择工具栏
+      contextMenuBuilder: (context, editableTextState) {
+        return const SizedBox.shrink();
+      },
     );
   }
 

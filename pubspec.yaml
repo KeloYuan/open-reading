@@ -103,9 +103,12 @@ dependencies:
   
   # 高亮笔记功能增强
   uuid: ^4.5.1
-  
+
   # 网络检测
   connectivity_plus: ^6.1.5
+
+  # 字符编码支持（GB2312/GBK）
+  gbk_codec: ^0.4.0
 
 dev_dependencies:
   flutter_test:

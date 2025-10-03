@@ -69,6 +69,20 @@ class TtsPreferences {
     _prefs?.setBool('tts_is_system', value);
   }
 
+  /// TTS引擎名称（Android平台）
+  /// null表示使用系统默认引擎
+  String? get ttsEngine {
+    return _prefs?.getString('tts_engine');
+  }
+
+  set ttsEngine(String? value) {
+    if (value == null) {
+      _prefs?.remove('tts_engine');
+    } else {
+      _prefs?.setString('tts_engine', value);
+    }
+  }
+
   /// 清除所有TTS配置
   Future<void> clear() async {
     await _prefs?.remove('tts_volume');
@@ -76,6 +90,7 @@ class TtsPreferences {
     await _prefs?.remove('tts_rate');
     await _prefs?.remove('tts_language');
     await _prefs?.remove('tts_is_system');
+    await _prefs?.remove('tts_engine');
   }
 
   /// 重置为默认值

@@ -254,6 +254,85 @@ class PaginationCacheService {
     }
   }
 
+  /// 快速删除特定书籍的所有缓存（优化版本）
+  ///
+  /// 使用批量异步处理来提升删除性能，不阻塞主线程
+  /// 参数 [contentHash] 书籍的内容哈希值
+  static Future<void> deleteCacheForBookFast(String contentHash) async {
+    try {
+      final cacheDir = await _getCacheDirectory();
+
+      if (!await cacheDir.exists()) {
+        debugPrint('ℹ️ 缓存目录不存在，无需删除');
+        return;
+      }
+
+      // 获取所有缓存文件
+      final files = cacheDir.listSync().whereType<File>().toList();
+      int deletedCount = 0;
+
+      // 批量处理文件，每批处理 10 个，避免过多并发
+      const batchSize = 10;
+      for (int i = 0; i < files.length; i += batchSize) {
+        final end =
+            (i + batchSize < files.length) ? i + batchSize : files.length;
+        final batch = files.sublist(i, end);
+
+        // 并行处理当前批次
+        final results = await Future.wait(
+          batch.map((file) => _checkAndDeleteCacheFile(file, contentHash)),
+          eagerError: false,
+        );
+
+        deletedCount += results.where((deleted) => deleted).length;
+
+        // 让出执行权，避免长时间占用
+        await Future.delayed(Duration.zero);
+      }
+
+      if (deletedCount > 0) {
+        debugPrint('✅ 已删除该书籍的${deletedCount}个缓存文件');
+      } else {
+        debugPrint('ℹ️ 未找到该书籍的缓存文件');
+      }
+    } catch (e) {
+      debugPrint('❌ 快速删除书籍缓存失败: $e');
+      // 如果失败，降级为普通删除方式
+      await deleteCacheForBook(contentHash);
+    }
+  }
+
+  /// 检查并删除单个缓存文件
+  ///
+  /// 返回 true 表示文件已被删除
+  static Future<bool> _checkAndDeleteCacheFile(
+    File file,
+    String contentHash,
+  ) async {
+    try {
+      // 读取文件内容
+      final json = await file.readAsString();
+      final data = jsonDecode(json) as Map<String, dynamic>;
+      final cacheKey = data['cacheKey'] as String;
+
+      // 检查缓存键是否包含该书籍的哈希值
+      if (cacheKey.startsWith(contentHash)) {
+        await file.delete();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      // 读取失败，可能是损坏的文件，直接删除
+      try {
+        await file.delete();
+        debugPrint('🗑️ 删除损坏的缓存文件: ${file.path}');
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+  }
+
   /// 获取缓存统计信息
   static Future<Map<String, dynamic>> getCacheStats() async {
     try {

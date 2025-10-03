@@ -214,6 +214,8 @@ class ReaderPaginationState {
   final String? loadingStage; // 加载阶段提示
   final List<int>? pageCharOffsets; // 每页在原文中的字符起始位置
   final Size? screenSize; // 保存屏幕尺寸用于后台分页
+  final List<List<PageElement>>? pageElements; // 每页的内容元素列表（包含文本和图片）
+  final List<double>? pageExtraLineSpacing; // 每页的额外行间距（用于底部对齐）
 
   const ReaderPaginationState({
     this.pages = const [],
@@ -227,6 +229,8 @@ class ReaderPaginationState {
     this.loadingStage,
     this.pageCharOffsets,
     this.screenSize,
+    this.pageElements,
+    this.pageExtraLineSpacing,
   });
 
   /// 复制并修改状态
@@ -242,6 +246,8 @@ class ReaderPaginationState {
     String? loadingStage,
     List<int>? pageCharOffsets,
     Size? screenSize,
+    List<List<PageElement>>? pageElements,
+    List<double>? pageExtraLineSpacing,
   }) {
     return ReaderPaginationState(
       pages: pages ?? this.pages,
@@ -255,6 +261,8 @@ class ReaderPaginationState {
       loadingStage: loadingStage ?? this.loadingStage,
       pageCharOffsets: pageCharOffsets ?? this.pageCharOffsets,
       screenSize: screenSize ?? this.screenSize,
+      pageElements: pageElements ?? this.pageElements,
+      pageExtraLineSpacing: pageExtraLineSpacing ?? this.pageExtraLineSpacing,
     );
   }
 
@@ -625,7 +633,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     try {
       debugPrint('📄 开始一次性分页: ${text.length} 字符');
 
-      final result = await FastTextPaginator.paginateWithProgress(
+      final result = await FastTextPaginator.paginateAccurate(
         text: text,
         screenSize: screenSize,
         fontSize: settings.fontSize,
@@ -634,6 +642,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         letterSpacing: settings.letterSpacing,
         firstLineIndent: settings.firstLineIndent,
         devicePixelRatio: devicePixelRatio,
+        supportImages: true, // 启用图片支持
         onProgress: (currentPage, stage) {
           // 更新进度显示
           state = state.copyWith(
@@ -656,6 +665,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         cachedText: text,
         cacheKey: cacheKey,
         loadingStage: '加载完成，共 ${result.pages.length} 页',
+        pageExtraLineSpacing: result.pageExtraLineSpacing,
       );
 
       // 保存到持久化缓存

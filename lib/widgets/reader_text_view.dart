@@ -2,6 +2,56 @@
 import 'package:provider/provider.dart';
 import '../providers/reader_providers.dart';
 
+/// 构建带首行缩进的文本Widget
+Widget buildIndentedText({
+  required String content,
+  required ReaderSettings settings,
+  bool selectable = false,
+}) {
+  final paragraphs = content.split('\n');
+  final List<InlineSpan> spans = [];
+  final indentText = '　' * settings.firstLineIndent.toInt(); // 全角空格
+
+  for (int i = 0; i < paragraphs.length; i++) {
+    final paragraph = paragraphs[i];
+
+    if (paragraph.isEmpty) {
+      // 空行
+      if (i < paragraphs.length - 1) {
+        spans.add(const TextSpan(text: '\n'));
+      }
+    } else {
+      // 有内容的段落，添加首行缩进
+      spans.add(TextSpan(text: indentText + paragraph));
+
+      // 如果不是最后一段，添加换行
+      if (i < paragraphs.length - 1) {
+        spans.add(const TextSpan(text: '\n'));
+      }
+    }
+  }
+
+  if (selectable) {
+    return SelectableText.rich(
+      TextSpan(children: spans),
+      style: settings.textStyle,
+      textAlign: TextAlign.left,
+      // 隐藏系统默认的选择工具栏
+      contextMenuBuilder: (context, editableTextState) {
+        return const SizedBox.shrink();
+      },
+    );
+  } else {
+    return RichText(
+      text: TextSpan(
+        children: spans,
+        style: settings.textStyle,
+      ),
+      textAlign: TextAlign.left,
+    );
+  }
+}
+
 /// 阅读文本视图组件
 ///
 /// 根据翻页模式显示不同的文本视图：
@@ -245,21 +295,15 @@ class _SlidePaginationView extends StatelessWidget {
     );
   }
 
-  /// 构建页面内容
+  /// 构建页面内容（支持首行缩进）
   Widget _buildPageContent(BuildContext context, String pageContent) {
     return Container(
       padding: settings.padding,
-      child: settings.enableTextSelection
-          ? SelectableText(
-              pageContent,
-              style: settings.textStyle,
-              textAlign: TextAlign.left,
-            )
-          : Text(
-              pageContent,
-              style: settings.textStyle,
-              textAlign: TextAlign.left,
-            ),
+      child: buildIndentedText(
+        content: pageContent,
+        settings: settings,
+        selectable: settings.enableTextSelection,
+      ),
     );
   }
 }
@@ -299,17 +343,11 @@ class _ScrollPaginationView extends StatelessWidget {
             return Container(
               height: MediaQuery.of(context).size.height * 0.9,
               padding: settings.padding,
-              child: settings.enableTextSelection
-                  ? SelectableText(
-                      entry.value,
-                      style: settings.textStyle,
-                      textAlign: TextAlign.left,
-                    )
-                  : Text(
-                      entry.value,
-                      style: settings.textStyle,
-                      textAlign: TextAlign.left,
-                    ),
+              child: buildIndentedText(
+                content: entry.value,
+                settings: settings,
+                selectable: settings.enableTextSelection,
+              ),
             );
           }).toList(),
         ),
@@ -372,17 +410,11 @@ class _SimulationPaginationViewState extends State<_SimulationPaginationView> {
               ),
             ],
           ),
-          child: widget.settings.enableTextSelection
-              ? SelectableText(
-                  widget.pages[index],
-                  style: widget.settings.textStyle,
-                  textAlign: TextAlign.left,
-                )
-              : Text(
-                  widget.pages[index],
-                  style: widget.settings.textStyle,
-                  textAlign: TextAlign.left,
-                ),
+          child: buildIndentedText(
+            content: widget.pages[index],
+            settings: widget.settings,
+            selectable: widget.settings.enableTextSelection,
+          ),
         );
       },
     );

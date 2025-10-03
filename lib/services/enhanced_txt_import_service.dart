@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../models/chapter.dart';
 import 'txt_text_processor.dart';
+import 'package:gbk_codec/gbk_codec.dart';
 
 /// 增强的TXT文件导入服务
 ///
@@ -93,24 +94,30 @@ class EnhancedTxtImportService {
     return utf8.decode(bytes, allowMalformed: true);
   }
 
-  /// 增强的GBK解码尝试（参考anx-reader实现）
+  /// 增强的GBK解码尝试（支持GB2312和GBK编码）
   String? _decodeGbk(Uint8List bytes) {
     try {
-      // 尝试使用latin1解码后检查是否包含中文模式
-      final latin1Content = latin1.decode(bytes);
+      // 使用gbk_codec库进行解码
+      // GB2312是GBK的子集，所以GBK解码器可以处理GB2312
+      final content = gbk.decode(bytes);
 
-      // 检查是否存在GBK编码的中文字符模式
-      if (_detectGbkPattern(latin1Content)) {
-        // 这里简化处理，实际应该使用专门的GBK解码库
-        // 如 charset_converter 或 gbk_codec 包
-        debugPrint('检测到可能的GBK编码，但需要专门的解码库');
-        return null;
+      // 验证解码结果是否包含有效的中文字符
+      if (content.isNotEmpty && _containsChinese(content)) {
+        debugPrint('✅ 成功使用GBK/GB2312解码');
+        return content;
       }
 
       return null;
     } catch (e) {
+      debugPrint('❌ GBK解码失败: $e');
       return null;
     }
+  }
+
+  /// 检查字符串是否包含中文字符
+  bool _containsChinese(String text) {
+    // 中文字符范围：\u4e00-\u9fff
+    return text.contains(RegExp(r'[\u4e00-\u9fff]'));
   }
 
   /// 检测GBK编码模式

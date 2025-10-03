@@ -51,7 +51,8 @@
       "Bash(cat:*)",
       "Bash(adb:*)",
       "Bash(tee:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(/c/dev/flutter/flutter/bin/flutter analyze --no-fatal-infos)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

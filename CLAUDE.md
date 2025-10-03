@@ -179,7 +179,79 @@
 
 ## 历史修复问题
 
-### 2025-10-04: 分页算法优化 - 动态安全系数与参数简化
+### 2025-10-04: 分页算法全面重构 - 参考legado实现精确分页
+
+**背景**：
+- 旧算法基于字符宽度估算，不够精确
+- 有的页面内容溢出，有的页面底部大量空白
+- 用户反馈希望实现像legado一样的精确分页效果
+
+**解决方案**：
+
+1. ✅ **参考legado分页算法** - `F:\xxread\legado\app\src\main\java\io\legado\app\ui\book\read\page\provider\TextChapterLayout.kt`
+   - 逐段累加内容，TextPainter实时测量高度
+   - 超出可用高度时开新页
+   - 不再依赖字符宽度估算
+
+2. ✅ **首行缩进实现** - `lib/services/fast_text_paginator.dart:329-339`
+   ```dart
+   // 判断是否是段落首行
+   final isFirstLineOfParagraph = pageBuffer.isEmpty || pageBuffer.toString().endsWith('\n');
+
+   // 添加全角空格作为缩进（2个全角空格 = 2个中文字符宽度）
+   if (isFirstLineOfParagraph && paragraph.trim().isNotEmpty && firstLineIndent > 0) {
+     final indentSpaces = '　' * firstLineIndent.toInt();
+     paragraphToAdd = indentSpaces + paragraph;
+   }
+   ```
+
+3. ✅ **底部对齐算法** - `lib/services/fast_text_paginator.dart:381-417`
+   ```dart
+   // 计算剩余空间
+   final surplus = availableHeight - actualHeight;
+
+   // 如果剩余空间超过1行高度，不做调整（避免行间距过大）
+   if (surplus >= singleLineHeight) {
+     extraLineSpacing.add(0.0);
+     continue;
+   }
+
+   // 将剩余空间均匀分配到每行之间
+   final extraSpacing = surplus / (lineCount - 1);
+   ```
+
+4. ✅ **动态排版参数支持**
+   - 字体大小 `fontSize` - 任意调整，TextPainter自动适配
+   - 行距 `lineSpacing` - 1.0-3.0倍，实时重新测量
+   - 首行缩进 `firstLineIndent` - 0-4字符，全角空格实现
+   - 字间距 `letterSpacing` - TextStyle直接支持
+
+**核心改进**：
+
+| 特性 | 旧算法 | 新算法 |
+|------|--------|--------|
+| 测量方式 | 字符宽度估算 `fontSize * 0.95` | TextPainter实际测量 |
+| 分页策略 | 固定行数 × 固定字符数 | 逐段累加，超出分页 |
+| 首行缩进 | 无 | 全角空格实现 |
+| 底部对齐 | 固定安全系数 | 均匀分配剩余空间 |
+| 参数适配 | 需要手动调整安全系数 | 完全动态，TextPainter自适应 |
+
+**效果**：
+- ✅ 每页内容精确填满，不溢出不留空白
+- ✅ 首行自动缩进2字符（可配置）
+- ✅ 底部对齐，行间距自动微调
+- ✅ 所有排版参数（字体、行距、缩进）可随时调整，无需修改算法
+
+**代码位置**：
+- `lib/services/fast_text_paginator.dart:265-429` - 异步分页（含首行缩进 + 底部对齐）
+- `lib/services/fast_text_paginator.dart:435-569` - 同步分页
+- `lib/providers/reader_providers.dart:668` - 保存底部对齐数据
+
+**最后更新**: 2025-10-04
+
+---
+
+### 2025-10-04: 分页算法优化 - 动态安全系数与参数简化（已废弃）
 
 **问题**：
 1. 部分页面有1-2行内容超出可见区域，需要下滑才能看到

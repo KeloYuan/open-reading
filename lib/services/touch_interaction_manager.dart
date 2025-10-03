@@ -90,26 +90,26 @@ class TouchInteractionManager {
   /// 处理指针抬起事件
   void handlePointerUp(PointerUpEvent event) {
     if (_touchStartPosition == null || _touchStartTime == null) return;
-    
+
     final touchDuration = DateTime.now().difference(_touchStartTime!);
     final touchDistance = (event.localPosition - _touchStartPosition!).distance;
-    
-    // 判断手势类型
+
+    // 判断手势类型：提高长按时间阈值，避免误触
     if (touchDistance < 10.0) { // 点击
       if (touchDuration.inMilliseconds < 300) {
         _handleTap(event.localPosition);
-      } else if (touchDuration.inMilliseconds > 500) {
+      } else if (touchDuration.inMilliseconds > 600) {  // 从500ms提高到600ms
         _handleLongPress(event.localPosition);
       }
     }
-    
+
     // 重置状态
     if (_selectionState == SelectionState.draggingStartHandle ||
         _selectionState == SelectionState.draggingEndHandle) {
       _selectionState = SelectionState.selected;
       _updateHandlePositions();
     }
-    
+
     // _isDraggingSelection = false;
     _touchStartPosition = null;
     _touchStartTime = null;
@@ -135,17 +135,18 @@ class TouchInteractionManager {
   void _startSelectionAtPosition(Offset position) {
     final charData = _getCharacterAtPosition(position);
     if (charData == null) return;
-    
+
     _selectionState = SelectionState.selecting;
     _selection = TextSelection(
       baseOffset: charData.charIndex,
       extentOffset: charData.charIndex + 1,
     );
-    
+
     _updateSelectedChars();
     _updateHandlePositions();
-    
-    HapticFeedback.mediumImpact();
+
+    // 使用轻量级触觉反馈，避免过度触发导致系统异常
+    HapticFeedback.selectionClick();
     onSelectionChanged?.call();
   }
 

@@ -1,7 +1,11 @@
 ﻿import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../services/tts/enhanced_tts_handler.dart';
+import '../../services/tts/system_tts.dart';
+import '../../services/tts/tts_preferences.dart';
 
 /// 增强TTS朗读面板
 /// 集成anx-reader的TTS界面设计
@@ -35,6 +39,7 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
   double _rate = 0.5;
   String _selectedLanguage = 'zh-CN';
   String _selectedVoice = '';
+  String? _selectedEngine;
 
   // 界面状态
   bool _showAdvancedSettings = false;
@@ -43,6 +48,7 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
   // 可用选项
   List<String> _availableLanguages = [];
   List<Map<String, String>> _availableVoices = [];
+  List<String> _availableEngines = [];
 
   // 定时器
   Timer? _autoHideTimer;
@@ -82,6 +88,7 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
     // 获取可用选项
     _availableLanguages = await _ttsHandler.getLanguages();
     _availableVoices = await _ttsHandler.getVoices();
+    await _loadAvailableEngines();
 
     // 监听TTS状态变化
     _ttsHandler.stateNotifier.addListener(_onTtsStateChanged);
@@ -98,7 +105,22 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
       _rate = _ttsHandler.rate;
       _selectedLanguage = _ttsHandler.language;
       _selectedVoice = _ttsHandler.voice;
+      _selectedEngine = TtsPreferences().ttsEngine;
     });
+  }
+
+  Future<void> _loadAvailableEngines() async {
+    // 只在Android平台获取TTS引擎列表
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        final engines = await SystemTts().getAvailableEngines();
+        setState(() {
+          _availableEngines = engines.map((e) => e.toString()).toList();
+        });
+      } catch (e) {
+        debugPrint('获取TTS引擎列表失败: $e');
+      }
+    }
   }
 
   void _onTtsStateChanged() {
@@ -422,6 +444,49 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
 
           const SizedBox(height: 16),
 
+          // TTS引擎选择（仅Android）
+          if (_availableEngines.isNotEmpty && !kIsWeb && Platform.isAndroid)
+            Column(
+              children: [
+                _buildDropdownSetting(
+                  title: 'TTS引擎',
+                  value: _selectedEngine ?? '',
+                  items: [
+                    const DropdownMenuItem(value: '', child: Text('系统默认')),
+                    ..._availableEngines.map(
+                      (engine) => DropdownMenuItem(
+                        value: engine,
+                        child: Text(_getEngineDisplayName(engine)),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) async {
+                    if (value != null) {
+                      final engineToSet = value.isEmpty ? null : value;
+                      setState(() {
+                        _selectedEngine = engineToSet;
+                      });
+
+                      // 保存设置
+                      TtsPreferences().ttsEngine = engineToSet;
+
+                      // 提示用户需要重启TTS
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('TTS引擎已更改，请重新打开朗读面板以应用更改'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  icon: Icons.speaker,
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+
           // 语音选择
           if (_availableVoices.isNotEmpty)
             _buildDropdownSetting(
@@ -540,6 +605,28 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
       default:
         return locale;
     }
+  }
+
+  String _getEngineDisplayName(String engine) {
+    // 简化引擎包名显示
+    if (engine.contains('google')) {
+      return 'Google TTS';
+    } else if (engine.contains('samsung')) {
+      return 'Samsung TTS';
+    } else if (engine.contains('oppo') || engine.contains('coloros')) {
+      return 'OPPO TTS';
+    } else if (engine.contains('xiaomi') || engine.contains('miui')) {
+      return '小米 TTS';
+    } else if (engine.contains('huawei')) {
+      return '华为 TTS';
+    } else if (engine.contains('vivo')) {
+      return 'vivo TTS';
+    } else if (engine.contains('android')) {
+      return '系统 TTS';
+    }
+    // 提取包名最后一部分作为显示名
+    final parts = engine.split('.');
+    return parts.isNotEmpty ? parts.last : engine;
   }
 
   @override

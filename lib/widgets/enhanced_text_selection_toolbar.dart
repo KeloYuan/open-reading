@@ -71,6 +71,9 @@ class _EnhancedTextSelectionToolbarState
   @override
   void initState() {
     super.initState();
+    debugPrint('🎨 EnhancedTextSelectionToolbar 初始化');
+    debugPrint('📝 选中文本: "${widget.selectedText.substring(0, widget.selectedText.length > 30 ? 30 : widget.selectedText.length)}..."');
+
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 250),
       vsync: this,
@@ -84,7 +87,14 @@ class _EnhancedTextSelectionToolbarState
       CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
     );
 
-    _animationController.forward();
+    // 延迟启动动画，确保组件完全构建
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _animationController.forward();
+        debugPrint('✅ 工具栏动画已启动');
+      }
+    });
+
     _loadExistingNote();
   }
 
@@ -247,9 +257,16 @@ class _EnhancedTextSelectionToolbarState
   }
 
   void _close() {
-    _animationController.reverse().then((_) {
+    debugPrint('❌ 关闭文本选择工具栏');
+    if (mounted) {
+      _animationController.reverse().then((_) {
+        if (mounted) {
+          widget.onClose?.call();
+        }
+      });
+    } else {
       widget.onClose?.call();
-    });
+    }
   }
 
   @override
@@ -271,7 +288,7 @@ class _EnhancedTextSelectionToolbarState
           child: Opacity(
             opacity: _opacityAnimation.value,
             child: Container(
-              width: 370,
+              width: 420, // 从 370 增加到 420
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -319,7 +336,7 @@ class _EnhancedTextSelectionToolbarState
       borderRadius: BorderRadius.circular(16),
       color: Colors.transparent,
       child: Container(
-        height: 48,
+        height: 56, // 从 48 增加到 56
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: BorderRadius.circular(16),
@@ -412,7 +429,7 @@ class _EnhancedTextSelectionToolbarState
       borderRadius: BorderRadius.circular(16),
       color: Colors.transparent,
       child: Container(
-        height: 48,
+        height: 56, // 从 48 增加到 56，与主菜单一致
         decoration: BoxDecoration(
           color: backgroundColor,
           borderRadius: BorderRadius.circular(16),
@@ -538,10 +555,10 @@ class _EnhancedTextSelectionToolbarState
     required VoidCallback onTap,
   }) {
     return IconButton(
-      padding: const EdgeInsets.all(2),
+      padding: const EdgeInsets.all(4), // 从 2 增加到 4
       constraints: const BoxConstraints(),
       style: const ButtonStyle(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-      icon: Icon(icon, color: color, size: 20),
+      icon: Icon(icon, color: color, size: 24), // 从 20 增加到 24
       onPressed: onTap,
     );
   }

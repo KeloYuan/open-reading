@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:battery_plus/battery_plus.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../providers/reader_providers.dart';
 import '../widgets/enhanced_text_selection_toolbar.dart';
 import '../widgets/tts_settings_sheet.dart';
@@ -40,6 +41,24 @@ class _HighlightedText extends StatelessWidget {
               text,
               style: style,
               textAlign: TextAlign.left, // 改为left对齐，与分页器TextPainter一致
+              // 隐藏系统默认的选择工具栏，使用自定义工具栏
+              contextMenuBuilder: (context, editableTextState) {
+                // 从 EditableTextState 获取准确的选中位置
+                final selection = editableTextState.textEditingValue.selection;
+                if (!selection.isCollapsed && onTextSelection != null) {
+                  final selectedText = text.substring(selection.start, selection.end);
+                  // 延迟调用，确保在正确的时机
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _calculateSelectionPositionFromEditableText(
+                      context,
+                      editableTextState,
+                      selection,
+                      selectedText,
+                    );
+                  });
+                }
+                return const SizedBox.shrink(); // 返回空组件，隐藏系统工具栏
+              },
               onSelectionChanged: onTextSelection != null
                   ? (selection, cause) {
                       if (!selection.isCollapsed) {
@@ -71,6 +90,24 @@ class _HighlightedText extends StatelessWidget {
               text,
               style: style,
               textAlign: TextAlign.left, // 改为left对齐，与分页器TextPainter一致
+              // 隐藏系统默认的选择工具栏，使用自定义工具栏
+              contextMenuBuilder: (context, editableTextState) {
+                // 从 EditableTextState 获取准确的选中位置
+                final selection = editableTextState.textEditingValue.selection;
+                if (!selection.isCollapsed && onTextSelection != null) {
+                  final selectedText = text.substring(selection.start, selection.end);
+                  // 延迟调用，确保在正确的时机
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _calculateSelectionPositionFromEditableText(
+                      context,
+                      editableTextState,
+                      selection,
+                      selectedText,
+                    );
+                  });
+                }
+                return const SizedBox.shrink(); // 返回空组件，隐藏系统工具栏
+              },
               onSelectionChanged: onTextSelection != null
                   ? (selection, cause) {
                       if (!selection.isCollapsed) {
@@ -136,48 +173,192 @@ class _HighlightedText extends StatelessWidget {
     TextSelection selection,
     String selectedText,
   ) {
-    // 计算选中文本的实际位置
-    final renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox != null && onTextSelection != null) {
-      // 获取文本渲染器
-      if (renderBox is RenderParagraph) {
-        // 获取选中文本的起始位置
-        final startOffset = renderBox.getOffsetForCaret(
-          TextPosition(offset: selection.start),
-          Rect.zero,
-        );
+    if (onTextSelection == null) return;
 
-        // 获取选中文本的结束位置
-        final endOffset = renderBox.getOffsetForCaret(
-          TextPosition(offset: selection.end),
-          Rect.zero,
-        );
-
-        // 转换为全局坐标
-        final globalStart = renderBox.localToGlobal(startOffset);
-        final globalEnd = renderBox.localToGlobal(endOffset);
-
-        // 工具栏显示在选中文本上方居中位置
-        // 工具栏宽度为370px，需要居中显示
-        const toolbarWidth = 370.0;
-        final selectionCenterX = (globalStart.dx + globalEnd.dx) / 2;
-        final toolbarX = (selectionCenterX - toolbarWidth / 2).clamp(
-          10.0, // 左侧边距
-          MediaQuery.of(context).size.width - toolbarWidth - 10.0, // 右侧边距
-        );
-        final toolbarY = globalStart.dy - 80; // 80px上方，留出工具栏高度
-
-        onTextSelection!(selectedText, Offset(toolbarX, toolbarY));
-      } else {
-        // 降级处理：使用widget顶部位置
-        final position = renderBox.localToGlobal(Offset.zero);
-        const toolbarWidth = 370.0;
-        final toolbarX = (position.dx - toolbarWidth / 2).clamp(
-          10.0,
-          MediaQuery.of(context).size.width - toolbarWidth - 10.0,
-        );
-        onTextSelection!(selectedText, Offset(toolbarX, position.dy - 80));
+    try {
+      // 计算选中文本的实际位置
+      final renderBox = context.findRenderObject() as RenderBox?;
+      if (renderBox == null || !renderBox.attached) {
+        debugPrint('⚠️ RenderBox为空或未attached，使用默认位置');
+        _useDefaultToolbarPosition(context, selectedText);
+        return;
       }
+
+      // 获取屏幕尺寸
+      final screenSize = MediaQuery.of(context).size;
+      const toolbarWidth = 420.0; // 更新为新的宽度
+      const toolbarHeight = 70.0; // 从 60 增加到 70
+
+      // 尝试获取精确的文本选择位置
+      Offset? startPosition;
+      Offset? endPosition;
+
+      // 尝试从 RenderParagraph 获取精确位置
+      if (renderBox is RenderParagraph) {
+        try {
+          debugPrint('✓ RenderBox 类型: RenderParagraph');
+          // 获取选中文本的起始位置
+          final startOffset = renderBox.getOffsetForCaret(
+            TextPosition(offset: selection.start),
+            Rect.zero,
+          );
+
+          // 获取选中文本的结束位置
+          final endOffset = renderBox.getOffsetForCaret(
+            TextPosition(offset: selection.end),
+            Rect.zero,
+          );
+
+          // 转换为全局坐标
+          startPosition = renderBox.localToGlobal(startOffset);
+          endPosition = renderBox.localToGlobal(endOffset);
+
+          debugPrint('✓ 获取到文本位置: start=$startPosition, end=$endPosition');
+        } catch (e) {
+          debugPrint('⚠️ 获取文本位置失败: $e');
+        }
+      } else {
+        debugPrint('⚠️ RenderBox 类型不是 RenderParagraph: ${renderBox.runtimeType}');
+        // 尝试其他方式获取位置
+        try {
+          final boxPosition = renderBox.localToGlobal(Offset.zero);
+          final boxSize = renderBox.size;
+
+          // 估算选中文本的位置（在组件中间偏上）
+          startPosition = Offset(
+            boxPosition.dx + boxSize.width * 0.5,
+            boxPosition.dy + boxSize.height * 0.3,
+          );
+          endPosition = startPosition;
+
+          debugPrint('✓ 使用估算位置: $startPosition');
+        } catch (e) {
+          debugPrint('⚠️ 估算位置也失败: $e');
+        }
+      }
+
+      // 计算工具栏位置
+      double toolbarX;
+      double toolbarY;
+
+      if (startPosition != null && endPosition != null) {
+        // 使用精确位置或估算位置
+        final selectionCenterX = (startPosition.dx + endPosition.dx) / 2;
+
+        // 计算工具栏 X 坐标，确保不超出屏幕
+        final maxX = screenSize.width - toolbarWidth - 10.0;
+        toolbarX = (selectionCenterX - toolbarWidth / 2);
+        if (toolbarX < 10.0) {
+          toolbarX = 10.0; // 左边界
+        } else if (toolbarX > maxX) {
+          toolbarX = maxX; // 右边界
+        }
+
+        // 工具栏显示在选中文本上方，如果上方空间不足则显示在下方
+        // 减少间距，让工具栏更接近选中文字
+        if (startPosition.dy > toolbarHeight + 15) {
+          toolbarY = startPosition.dy - toolbarHeight - 5;
+        } else {
+          // 上方空间不足，显示在下方
+          toolbarY = endPosition.dy + 5;
+        }
+
+        debugPrint('✓ 使用选中文字位置: X=$toolbarX, Y=$toolbarY');
+      } else {
+        // 最终降级处理：使用屏幕中心位置
+        debugPrint('⚠️ 无法获取任何位置信息，使用屏幕中心');
+        toolbarX = (screenSize.width - toolbarWidth) / 2;
+        toolbarY = screenSize.height / 3;
+      }
+
+      // 确保工具栏 Y 坐标不超出屏幕
+      final maxY = screenSize.height - toolbarHeight - 10.0;
+      if (toolbarY < 10.0) {
+        toolbarY = 10.0; // 顶部边界
+      } else if (toolbarY > maxY) {
+        toolbarY = maxY; // 底部边界
+      }
+
+      debugPrint('📍 工具栏位置: ($toolbarX, $toolbarY)');
+      onTextSelection!(selectedText, Offset(toolbarX, toolbarY));
+    } catch (e) {
+      debugPrint('❌ 计算选择位置失败: $e');
+      _useDefaultToolbarPosition(context, selectedText);
+    }
+  }
+
+  /// 使用默认工具栏位置（屏幕中上部）
+  void _useDefaultToolbarPosition(BuildContext context, String selectedText) {
+    if (onTextSelection == null) return;
+
+    final screenSize = MediaQuery.of(context).size;
+    const toolbarWidth = 420.0; // 更新为新的宽度
+    final toolbarX = (screenSize.width - toolbarWidth) / 2;
+    final toolbarY = screenSize.height / 3;
+
+    debugPrint('📍 使用默认工具栏位置: ($toolbarX, $toolbarY)');
+    onTextSelection!(selectedText, Offset(toolbarX, toolbarY));
+  }
+
+  /// 从 EditableTextState 计算选择位置（更准确）
+  void _calculateSelectionPositionFromEditableText(
+    BuildContext context,
+    EditableTextState editableTextState,
+    TextSelection selection,
+    String selectedText,
+  ) {
+    if (onTextSelection == null) return;
+
+    try {
+      final screenSize = MediaQuery.of(context).size;
+      const toolbarWidth = 420.0;
+      const toolbarHeight = 70.0;
+
+      // 从 EditableTextState 获取选中区域的端点
+      final startPoint = editableTextState.renderEditable.getLocalRectForCaret(
+        TextPosition(offset: selection.start),
+      );
+      final endPoint = editableTextState.renderEditable.getLocalRectForCaret(
+        TextPosition(offset: selection.end),
+      );
+
+      // 转换为全局坐标
+      final renderObject = editableTextState.renderEditable;
+      final startGlobal = renderObject.localToGlobal(startPoint.topLeft);
+      final endGlobal = renderObject.localToGlobal(endPoint.topLeft);
+
+      debugPrint('📌 EditableText 选中位置: start=$startGlobal, end=$endGlobal');
+
+      // 计算工具栏位置
+      final selectionCenterX = (startGlobal.dx + endGlobal.dx) / 2;
+      final maxX = screenSize.width - toolbarWidth - 10.0;
+      double toolbarX = (selectionCenterX - toolbarWidth / 2);
+      if (toolbarX < 10.0) {
+        toolbarX = 10.0;
+      } else if (toolbarX > maxX) {
+        toolbarX = maxX;
+      }
+
+      double toolbarY;
+      if (startGlobal.dy > toolbarHeight + 15) {
+        toolbarY = startGlobal.dy - toolbarHeight - 5;
+      } else {
+        toolbarY = endGlobal.dy + 5;
+      }
+
+      // 确保不超出屏幕
+      final maxY = screenSize.height - toolbarHeight - 10.0;
+      if (toolbarY < 10.0) {
+        toolbarY = 10.0;
+      } else if (toolbarY > maxY) {
+        toolbarY = maxY;
+      }
+
+      debugPrint('✅ 最终工具栏位置: ($toolbarX, $toolbarY)');
+      onTextSelection!(selectedText, Offset(toolbarX, toolbarY));
+    } catch (e) {
+      debugPrint('❌ EditableText 位置计算失败: $e');
+      _useDefaultToolbarPosition(context, selectedText);
     }
   }
 }
@@ -226,6 +407,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   String _selectedText = '';
   bool _showTextSelectionToolbar = false;
   Offset? _selectionToolbarPosition;
+  Timer? _selectionToolbarDelayTimer; // 延迟显示工具栏的计时器
 
   // 指针事件跟踪（用于检测点击）
   Offset? _pointerDownPosition;
@@ -257,7 +439,9 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     // 延迟进入沉浸式全屏模式，确保窗口已完全初始化
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _enterImmersiveMode();
-      debugPrint('📱 ReaderPage 初始化完成，已进入全屏模式');
+      // 启用屏幕常亮，防止长按选择文字时黑屏
+      _enableWakeLock();
+      debugPrint('📱 ReaderPage 初始化完成，已进入全屏模式并启用屏幕常亮');
     });
   }
 
@@ -316,6 +500,10 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     _autoHideTimer?.cancel();
     _repaginationDebounceTimer?.cancel();
     _readingTimeTimer?.cancel();
+    _selectionToolbarDelayTimer?.cancel();
+
+    // 禁用屏幕常亮
+    _disableWakeLock();
 
     // 退出沉浸式模式
     _exitImmersiveMode();
@@ -537,6 +725,13 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
   /// 处理屏幕中央点击 - 显示/隐藏工具栏
   void _handleCenterTap() {
+    // 如果文本选择工具栏正在显示，先关闭它
+    if (_showTextSelectionToolbar) {
+      debugPrint('📍 点击中央区域，关闭文本选择工具栏');
+      _closeTextSelectionToolbar();
+      return;
+    }
+
     final toolbarState = ref.read(toolbarProvider);
 
     if (toolbarState.isVisible) {
@@ -635,6 +830,26 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     debugPrint('📱 退出沉浸式模式 - 恢复系统UI');
   }
 
+  /// 启用屏幕常亮（防止长按选择文字时黑屏）
+  Future<void> _enableWakeLock() async {
+    try {
+      await WakelockPlus.enable();
+      debugPrint('🔆 屏幕常亮已启用');
+    } catch (e) {
+      debugPrint('❌ 启用屏幕常亮失败: $e');
+    }
+  }
+
+  /// 禁用屏幕常亮
+  Future<void> _disableWakeLock() async {
+    try {
+      await WakelockPlus.disable();
+      debugPrint('🌙 屏幕常亮已禁用');
+    } catch (e) {
+      debugPrint('❌ 禁用屏幕常亮失败: $e');
+    }
+  }
+
   /// 显示系统 UI（状态栏和导航栏）- 工具栏显示时使用
   Future<void> _showSystemUI() async {
     try {
@@ -668,15 +883,49 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
   /// 处理文本选择
   void _handleTextSelection(String selectedText, Offset position) {
-    setState(() {
-      _selectedText = selectedText;
-      _selectionToolbarPosition = position;
-      _showTextSelectionToolbar = true;
+    if (!mounted) return;
+
+    debugPrint('📝 文本选择: "$selectedText" (前20字符)');
+    debugPrint('📍 工具栏位置: (${position.dx}, ${position.dy})');
+
+    // 取消之前的延迟计时器
+    _selectionToolbarDelayTimer?.cancel();
+
+    // 先保存选中的文本和位置，但不立即显示工具栏
+    _selectedText = selectedText;
+    _selectionToolbarPosition = position;
+
+    // 延迟 500ms 显示工具栏，确保用户选择稳定
+    _selectionToolbarDelayTimer = Timer(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+
+      // 检查选中的文本是否还是同一个（用户可能已经改变选择）
+      if (_selectedText == selectedText &&
+          _selectionToolbarPosition == position) {
+        debugPrint('⏰ 延迟后显示工具栏');
+
+        // 添加触觉反馈
+        HapticFeedback.selectionClick();
+
+        setState(() {
+          _showTextSelectionToolbar = true;
+        });
+
+        debugPrint('✅ 工具栏显示状态: $_showTextSelectionToolbar');
+      } else {
+        debugPrint('⚠️ 选择已改变，取消显示工具栏');
+      }
     });
   }
 
   /// 关闭文本选择工具栏
   void _closeTextSelectionToolbar() {
+    if (!mounted) return;
+
+    // 取消延迟计时器
+    _selectionToolbarDelayTimer?.cancel();
+
+    debugPrint('❌ 关闭文本选择工具栏');
     setState(() {
       _showTextSelectionToolbar = false;
       _selectedText = '';
@@ -908,14 +1157,17 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
                     ),
                   ),
 
-                // 文本选择工具栏
+                // 文本选择工具栏 - 使用Material确保正确的层级和主题
                 if (_showTextSelectionToolbar &&
-                    _selectionToolbarPosition != null)
-                  RepaintBoundary(
-                    child: Positioned(
-                      left: _selectionToolbarPosition!.dx,
-                      top: _selectionToolbarPosition!.dy,
+                    _selectionToolbarPosition != null &&
+                    _selectedText.isNotEmpty)
+                  Positioned(
+                    left: _selectionToolbarPosition!.dx,
+                    top: _selectionToolbarPosition!.dy,
+                    child: Material(
+                      type: MaterialType.transparency,
                       child: EnhancedTextSelectionToolbar(
+                        key: ValueKey('toolbar_${_selectedText.hashCode}'),
                         selectedText: _selectedText,
                         bookId: widget.bookId ?? 0,
                         pageNumber: ref
@@ -948,6 +1200,11 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       child: _ReaderTextView(
         paginationMode: settings.paginationMode,
         onPageChanged: (pageIndex) {
+          // 页面变化时关闭文本选择工具栏
+          if (_showTextSelectionToolbar) {
+            _closeTextSelectionToolbar();
+          }
+
           // 页面变化时取消自动隐藏计时器
           _cancelAutoHideTimer();
           if (ref.read(toolbarProvider).isVisible) {
