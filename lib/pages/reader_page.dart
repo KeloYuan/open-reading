@@ -13,6 +13,7 @@ import '../models/book_note.dart';
 import '../services/book_dao.dart';
 import '../services/data_manager.dart';
 import '../services/reading_stats_dao.dart';
+import 'cover_pagination_view.dart';
 
 /// 支持句子高亮的文本渲染组件
 class _HighlightedText extends StatelessWidget {
@@ -22,6 +23,7 @@ class _HighlightedText extends StatelessWidget {
   final Color highlightColor;
   final Function(String, Offset)? onTextSelection;
   final bool enableSelection;
+  final int? maxLines; // 最大行数限制
 
   const _HighlightedText({
     required this.text,
@@ -30,6 +32,7 @@ class _HighlightedText extends StatelessWidget {
     Color? highlightColor,
     this.onTextSelection,
     this.enableSelection = true,
+    this.maxLines,
   }) : highlightColor = highlightColor ?? const Color(0xFFFFEB3B);
 
   @override
@@ -46,7 +49,8 @@ class _HighlightedText extends StatelessWidget {
                 // 从 EditableTextState 获取准确的选中位置
                 final selection = editableTextState.textEditingValue.selection;
                 if (!selection.isCollapsed && onTextSelection != null) {
-                  final selectedText = text.substring(selection.start, selection.end);
+                  final selectedText =
+                      text.substring(selection.start, selection.end);
                   // 延迟调用，确保在正确的时机
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     _calculateSelectionPositionFromEditableText(
@@ -78,7 +82,9 @@ class _HighlightedText extends StatelessWidget {
           : Text(
               text,
               style: style,
-              textAlign: TextAlign.left, // 改为left对齐，与分页器TextPainter一致
+              textAlign: TextAlign.left,
+              maxLines: maxLines, // 限制最大行数
+              overflow: TextOverflow.clip, // 超出裁剪
             );
     }
 
@@ -95,7 +101,8 @@ class _HighlightedText extends StatelessWidget {
                 // 从 EditableTextState 获取准确的选中位置
                 final selection = editableTextState.textEditingValue.selection;
                 if (!selection.isCollapsed && onTextSelection != null) {
-                  final selectedText = text.substring(selection.start, selection.end);
+                  final selectedText =
+                      text.substring(selection.start, selection.end);
                   // 延迟调用，确保在正确的时机
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     _calculateSelectionPositionFromEditableText(
@@ -127,7 +134,9 @@ class _HighlightedText extends StatelessWidget {
           : Text(
               text,
               style: style,
-              textAlign: TextAlign.left, // 改为left对齐，与分页器TextPainter一致
+              textAlign: TextAlign.left,
+              maxLines: maxLines, // 限制最大行数
+              overflow: TextOverflow.clip, // 超出裁剪
             );
     }
 
@@ -218,7 +227,8 @@ class _HighlightedText extends StatelessWidget {
           debugPrint('⚠️ 获取文本位置失败: $e');
         }
       } else {
-        debugPrint('⚠️ RenderBox 类型不是 RenderParagraph: ${renderBox.runtimeType}');
+        debugPrint(
+            '⚠️ RenderBox 类型不是 RenderParagraph: ${renderBox.runtimeType}');
         // 尝试其他方式获取位置
         try {
           final boxPosition = renderBox.localToGlobal(Offset.zero);
@@ -719,7 +729,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       const topToolbarHeight = 120.0; // 顶部工具栏高度（约）
       const bottomToolbarHeight = 180.0; // 底部工具栏高度（约）
 
-      if (tapY < topToolbarHeight || tapY > screenHeight - bottomToolbarHeight) {
+      if (tapY < topToolbarHeight ||
+          tapY > screenHeight - bottomToolbarHeight) {
         // 点击在控制栏区域，忽略翻页，只处理关闭控制栏
         _hideToolbar();
         return;
@@ -1647,6 +1658,11 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
 
     // 根据模式创建对应的 controller
     switch (widget.paginationMode) {
+      case PaginationMode.cover:
+        // 覆盖翻页使用与slide相同的PageController
+        _pageController = PageController(initialPage: currentPageIndex);
+        debugPrint('📖 [覆盖翻页] PageController 初始化到第 $currentPageIndex 页');
+        break;
       case PaginationMode.slide:
         // 使用当前页码作为初始页
         _pageController = PageController(initialPage: currentPageIndex);
@@ -1715,8 +1731,9 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
 
     if (_lastPageIndex == currentPageIndex) return;
 
-    // 只在左右滑动模式下同步 PageController
-    if (widget.paginationMode == PaginationMode.slide &&
+    // 只在左右滑动模式和覆盖翻页模式下同步 PageController
+    if ((widget.paginationMode == PaginationMode.slide ||
+            widget.paginationMode == PaginationMode.cover) &&
         _pageController != null &&
         _pageController!.hasClients) {
       // 检查是否需要跳转
@@ -1739,6 +1756,20 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
     ReaderSettings settings,
   ) {
     switch (widget.paginationMode) {
+      case PaginationMode.cover:
+        // 覆盖翻页 - 新页面从侧面覆盖当前页
+        if (_pageController == null) {
+          debugPrint('⚠️ PageController is null, reinitializing...');
+          _initializeControllers();
+        }
+        return CoverPaginationView(
+          pages: paginationState.pages,
+          controller: _pageController!,
+          settings: settings,
+          onPageChanged: _onPageChanged,
+          onTextSelection: _onTextSelection,
+          onTap: widget.onTap,
+        );
       case PaginationMode.slide:
         // 如果 controller 为 null，先初始化（防御性检查）
         if (_pageController == null) {
@@ -1995,12 +2026,20 @@ class _SlidePaginationViewState extends State<_SlidePaginationView> {
                 // ClipRect确保超出部分被裁剪，不会显示也不会允许滚动
                 child: ClipRect(
                   clipBehavior: Clip.hardEdge,
-                  child: _HighlightedText(
-                    text: pageContent,
-                    style: currentSettings.textStyle,
-                    highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
-                    enableSelection: currentSettings.enableTextSelection,
-                    onTextSelection: widget.onTextSelection,
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final paginationState =
+                          ref.watch(readerPaginationProvider);
+                      return _HighlightedText(
+                        text: pageContent,
+                        style: currentSettings.textStyle,
+                        highlightedSentenceIndex:
+                            ttsState.highlightedSentenceIndex,
+                        enableSelection: currentSettings.enableTextSelection,
+                        onTextSelection: widget.onTextSelection,
+                        maxLines: paginationState.maxLinesPerPage,
+                      );
+                    },
                   ),
                 ),
               );
@@ -2149,6 +2188,7 @@ class _ScrollPaginationViewState extends State<_ScrollPaginationView> {
                 // 实时监听设置变化，确保背景色和文字颜色立即更新
                 final currentSettings = ref.watch(readerSettingsProvider);
                 final ttsState = ref.watch(readerTtsProvider);
+                final paginationState = ref.watch(readerPaginationProvider);
 
                 return Container(
                   padding: currentSettings.padding,
@@ -2159,6 +2199,7 @@ class _ScrollPaginationViewState extends State<_ScrollPaginationView> {
                     highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
                     enableSelection: currentSettings.enableTextSelection,
                     onTextSelection: widget.onTextSelection,
+                    maxLines: paginationState.maxLinesPerPage,
                   ),
                 );
               },
@@ -2442,6 +2483,7 @@ class _SimulationPaginationViewState extends State<_SimulationPaginationView>
           // 实时监听设置变化，确保背景色和文字颜色立即更新
           final currentSettings = ref.watch(readerSettingsProvider);
           final ttsState = ref.watch(readerTtsProvider);
+          final paginationState = ref.watch(readerPaginationProvider);
 
           return Container(
             decoration: BoxDecoration(
@@ -2468,6 +2510,7 @@ class _SimulationPaginationViewState extends State<_SimulationPaginationView>
                 enableSelection:
                     !isBackground && currentSettings.enableTextSelection,
                 onTextSelection: !isBackground ? widget.onTextSelection : null,
+                maxLines: paginationState.maxLinesPerPage,
               ),
             ),
           );

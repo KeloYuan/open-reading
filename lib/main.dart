@@ -17,6 +17,8 @@ import 'services/tts_service.dart';
 import 'services/share_service.dart';
 import 'services/data_manager.dart';
 import 'services/reading_engine_coordinator.dart';
+import 'services/book_image_manager.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() async {
   // 确保可以在 runApp 前安全调用 SystemChrome
@@ -67,6 +69,15 @@ void main() async {
     debugPrint('✅ 阅读引擎协调器已初始化');
   } catch (e) {
     debugPrint('❌ 阅读引擎协调器初始化失败: $e');
+  }
+
+  // 🖼️ 初始化图片管理器
+  try {
+    final appDocDir = await getApplicationDocumentsDirectory();
+    await BookImageManager().initialize(appDocDir.path);
+    debugPrint('✅ 图片管理器已初始化');
+  } catch (e) {
+    debugPrint('❌ 图片管理器初始化失败: $e');
   }
 
   runApp(
@@ -254,7 +265,6 @@ class ThemeNotifier extends ChangeNotifier {
       await prefs.setBool('isDarkMode', mode == ThemeMode.dark);
     }
   }
-
 }
 
 class XxReadApp extends StatefulWidget {

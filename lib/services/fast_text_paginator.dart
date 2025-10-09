@@ -277,7 +277,7 @@ class FastTextPaginator {
 
   /// 快速分页（异步版本，支持进度回调）
   ///
-  /// 🚀 预测量法（参考 Legado 的 paint.getTextWidths）
+  /// 🚀 预测量法（使用 paint.getTextWidths 批量测量字符宽度）
   /// 核心思想：一次性测量所有字符宽度，然后通过累加快速分页
   static Future<FastPaginationResult> paginateWithProgress({
     required String text,
@@ -317,39 +317,27 @@ class FastTextPaginator {
     textPainter.layout();
     final lineHeight = textPainter.height;
 
-    // ⭐ 不要安全边距，字体22时完美，保持原样
-    final safeVisibleHeight = visibleHeight;
-    
-    debugPrint('📖 分页: 字号${fontSize} 行距${lineSpacing} 理论${(safeVisibleHeight / lineHeight).floor()}行/页');
-
-    onProgress?.call(0, '预测量字符宽度...');
-
-    // 3️⃣ 预测量所有字符宽度（快速）
-    final styleKey = _getStyleKey(fontSize, letterSpacing, lineSpacing);
-    if (_charWidthCache[styleKey] == null) {
-      _charWidthCache[styleKey] = {};
-      _cleanCache();
-    }
-
-    final widthCache = _charWidthCache[styleKey]!;
-    final charWidths = <double>[];
-    
-    for (int i = 0; i < text.length; i++) {
-      final char = text[i];
-      if (widthCache.containsKey(char)) {
-        charWidths.add(widthCache[char]!);
-      } else {
-        textPainter.text = TextSpan(text: char, style: textStyle);
-        textPainter.layout();
-        final width = textPainter.width;
-        charWidths.add(width);
-        widthCache[char] = width;
-      }
-    }
-
     onProgress?.call(0, '正在分页...');
 
-    // 4️⃣ 使用预测量宽度快速分页
+    // ⭐ 精确测量函数
+    int _findLineBreak(String text, double maxWidth) {
+      if (text.isEmpty) return 0;
+      int left = 1, right = text.length, result = 1;
+      while (left <= right) {
+        final mid = (left + right) ~/ 2;
+        textPainter.text =
+            TextSpan(text: text.substring(0, mid), style: textStyle);
+        textPainter.layout(maxWidth: double.infinity);
+        if (textPainter.width <= maxWidth) {
+          result = mid;
+          left = mid + 1;
+        } else {
+          right = mid - 1;
+        }
+      }
+      return result;
+    }
+
     final List<String> pages = [];
     final List<int> charOffsets = [];
 
@@ -360,13 +348,11 @@ class FastTextPaginator {
     // 按行处理文本
     int currentIndex = 0;
     bool isPageStart = true; // 是否是页面开始
-    bool isParagraphStart = true; // 是否是段落开始
 
     while (currentIndex < text.length) {
       // 跳过页首空行
       if (isPageStart && text[currentIndex] == '\n') {
         currentIndex++;
-        isParagraphStart = true;
         continue;
       }
 
@@ -387,7 +373,7 @@ class FastTextPaginator {
       // 如果是空行
       if (rawLine.isEmpty) {
         // ⭐ 判断能否放下空行
-        if (durY + lineHeight > safeVisibleHeight) {
+        if (durY + lineHeight > visibleHeight) {
           // 完成当前页
           if (pageLines.isNotEmpty) {
             pages.add(pageLines.join('\n'));
@@ -396,58 +382,40 @@ class FastTextPaginator {
           pageLines.clear();
           durY = 0.0;
           isPageStart = true;
-          isParagraphStart = true;
           continue; // 不添加空行，重新开始
         }
 
         pageLines.add('');
         durY += lineHeight;
         currentIndex = lineEnd + 1;
-        isParagraphStart = true;
         continue;
       }
 
       // 处理非空行：可能需要分成多个显示行
       int lineStartInRaw = 0;
-      bool isFirstLineOfParagraph = isParagraphStart;
 
       while (lineStartInRaw < rawLine.length) {
-        final effectiveWidth = isFirstLineOfParagraph 
-            ? visibleWidth - firstLineIndent 
-            : visibleWidth;
+        // ⭐ 去掉首行缩进，所有行都用全宽
+        final effectiveWidth = visibleWidth;
 
-        // ⭐ 快速累加字符宽度
-        double currentWidth = 0.0;
-        int breakPos = 0;
-        final lineStartIdx = currentIndex + lineStartInRaw;
-
-        for (int i = 0; i < rawLine.length - lineStartInRaw; i++) {
-          final charIdx = lineStartIdx + i;
-          if (charIdx >= charWidths.length) break;
-          
-          final charWidth = charWidths[charIdx];
-          if (currentWidth + charWidth > effectiveWidth) {
-            if (i == 0) breakPos = 1; // 至少放一个字符
-            else breakPos = i;
-            break;
-          }
-          currentWidth += charWidth;
-          breakPos = i + 1;
-        }
+        // ⭐ TextPainter精确测量
+        final remainingText = rawLine.substring(lineStartInRaw);
+        final breakPos = _findLineBreak(remainingText, effectiveWidth);
 
         if (breakPos == 0) break;
 
-        final lineText = rawLine.substring(lineStartInRaw, lineStartInRaw + breakPos);
+        final lineText = remainingText.substring(0, breakPos);
 
         // 判断是否需要换页
-        if (durY + lineHeight > safeVisibleHeight) {
+        if (durY + lineHeight > visibleHeight) {
           if (pageLines.isNotEmpty) {
             pages.add(pageLines.join('\n'));
             pageCount++;
 
             if (pageCount % 50 == 0) {
               await Future.delayed(const Duration(milliseconds: 1));
-              final progress = (currentIndex / text.length * 100).toStringAsFixed(1);
+              final progress =
+                  (currentIndex / text.length * 100).toStringAsFixed(1);
               onProgress?.call(pageCount, '正在分页... $progress%');
             }
           }
@@ -459,14 +427,12 @@ class FastTextPaginator {
 
         pageLines.add(lineText);
         durY += lineHeight;
-        isFirstLineOfParagraph = false;
 
         lineStartInRaw += breakPos;
       }
 
       // 移到下一个原始行
       currentIndex = lineEnd + 1;
-      isParagraphStart = true; // 下一个原始行是新段落
     }
 
     // 完成最后一页
@@ -474,25 +440,6 @@ class FastTextPaginator {
       pages.add(pageLines.join('\n'));
     }
 
-    // ⭐ 详细的分页统计信息
-    debugPrint('✅ 分页完成: ${pages.length}页');
-    debugPrint('   平均每页: ${(text.length / pages.length).toInt()} 字符');
-    
-    // 统计每页的行数
-    if (pages.isNotEmpty) {
-      final lineCountsPerPage = pages.map((p) => p.split('\n').length).toList();
-      final minLines = lineCountsPerPage.reduce((a, b) => a < b ? a : b);
-      final maxLines = lineCountsPerPage.reduce((a, b) => a > b ? a : b);
-      final avgLines = (lineCountsPerPage.reduce((a, b) => a + b) / lineCountsPerPage.length).toStringAsFixed(1);
-      
-      debugPrint('   行数统计: 最少 $minLines 行, 最多 $maxLines 行, 平均 $avgLines 行');
-      debugPrint('   理论最大: ${(safeVisibleHeight / lineHeight).floor()} 行/页');
-      
-      if (maxLines > (safeVisibleHeight / lineHeight).floor() + 1) {
-        debugPrint('   ⚠️ 警告：某些页面超出理论行数！');
-      }
-    }
-    
     onProgress?.call(pages.length, '分页完成');
 
     return FastPaginationResult(

@@ -1,5 +1,5 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/reader_providers.dart';
 
 /// 工具栏位置枚举
@@ -13,7 +13,7 @@ enum ToolbarPosition {
 /// 提供阅读设置的交互控制：
 /// - 顶部工具栏：返回按钮、书籍标题、目录按钮
 /// - 底部工具栏：主题切换、字体设置、排版设置、TTS控制
-class ReaderToolbar extends StatefulWidget {
+class ReaderToolbar extends ConsumerStatefulWidget {
   /// 工具栏位置
   final ToolbarPosition position;
 
@@ -27,29 +27,25 @@ class ReaderToolbar extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<ReaderToolbar> createState() => _ReaderToolbarState();
+  ConsumerState<ReaderToolbar> createState() => _ReaderToolbarState();
 }
 
-class _ReaderToolbarState extends State<ReaderToolbar> {
+class _ReaderToolbarState extends ConsumerState<ReaderToolbar> {
   bool _showAdvancedSettings = false;
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ReaderSettingsNotifier>(
-      builder: (context, settingsNotifier, child) {
-        final settings = settingsNotifier.state;
+    final settings = ref.watch(readerSettingsProvider);
 
-        return Container(
-          decoration: _buildToolbarDecoration(settings),
-          child: SafeArea(
-            top: widget.position == ToolbarPosition.top,
-            bottom: widget.position == ToolbarPosition.bottom,
-            child: widget.position == ToolbarPosition.top
-                ? _buildTopToolbar(settings)
-                : _buildBottomToolbar(settings),
-          ),
-        );
-      },
+    return Container(
+      decoration: _buildToolbarDecoration(settings),
+      child: SafeArea(
+        top: widget.position == ToolbarPosition.top,
+        bottom: widget.position == ToolbarPosition.bottom,
+        child: widget.position == ToolbarPosition.top
+            ? _buildTopToolbar(settings)
+            : _buildBottomToolbar(settings),
+      ),
     );
   }
 
@@ -307,37 +303,28 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
 
   /// 构建TTS控制
   Widget _buildTtsControls() {
-    return Consumer<ReaderTtsNotifier>(
-      builder: (context, ttsNotifier, child) {
-        final ttsState = ttsNotifier.state;
+    final ttsState = ref.watch(readerTtsProvider);
+    final settings = ref.watch(readerSettingsProvider);
 
-        return GestureDetector(
-          onTap: () {
-            _onInteraction();
-            _toggleTts();
-          },
-          child: Consumer<ReaderSettingsNotifier>(
-            builder: (context, settingsNotifier, child) {
-              final settings = settingsNotifier.state;
-
-              return Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: ttsState.isPlaying
-                      ? settings.textStyle.color?.withValues(alpha: 0.2)
-                      : settings.textStyle.color?.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  ttsState.isPlaying ? Icons.pause : Icons.play_arrow,
-                  size: 20,
-                  color: settings.textStyle.color?.withValues(alpha: 0.8),
-                ),
-              );
-            },
-          ),
-        );
+    return GestureDetector(
+      onTap: () {
+        _onInteraction();
+        _toggleTts();
       },
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: ttsState.isPlaying
+              ? settings.textStyle.color?.withValues(alpha: 0.2)
+              : settings.textStyle.color?.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          ttsState.isPlaying ? Icons.pause : Icons.play_arrow,
+          size: 20,
+          color: settings.textStyle.color?.withValues(alpha: 0.8),
+        ),
+      ),
     );
   }
 
@@ -360,7 +347,7 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
           label: settings.lineSpacing.toStringAsFixed(1),
           onChanged: (value) {
             _onInteraction();
-            context.read<ReaderSettingsNotifier>().updateLineSpacing(value);
+            ref.read(readerSettingsProvider.notifier).updateLineSpacing(value);
           },
         ),
       ],
@@ -386,7 +373,9 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
           label: settings.letterSpacing.toStringAsFixed(1),
           onChanged: (value) {
             _onInteraction();
-            context.read<ReaderSettingsNotifier>().updateLetterSpacing(value);
+            ref
+                .read(readerSettingsProvider.notifier)
+                .updateLetterSpacing(value);
           },
         ),
       ],
@@ -411,8 +400,8 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
               child: GestureDetector(
                 onTap: () {
                   _onInteraction();
-                  context
-                      .read<ReaderSettingsNotifier>()
+                  ref
+                      .read(readerSettingsProvider.notifier)
                       .switchPaginationMode(mode);
                 },
                 child: Container(
@@ -471,7 +460,7 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
 
   /// 循环切换主题
   void _cycleTheme() {
-    final settings = context.read<ReaderSettingsNotifier>().state;
+    final settings = ref.read(readerSettingsProvider);
     ReadingTheme nextTheme;
 
     switch (settings.theme) {
@@ -501,31 +490,31 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
         break;
     }
 
-    context.read<ReaderSettingsNotifier>().switchTheme(nextTheme);
+    ref.read(readerSettingsProvider.notifier).switchTheme(nextTheme);
   }
 
   /// 增加字体大小
   void _increaseFontSize() {
-    final currentSize = context.read<ReaderSettingsNotifier>().state.fontSize;
-    context.read<ReaderSettingsNotifier>().updateFontSize(currentSize + 1);
+    final currentSize = ref.read(readerSettingsProvider).fontSize;
+    ref.read(readerSettingsProvider.notifier).updateFontSize(currentSize + 1);
   }
 
   /// 减少字体大小
   void _decreaseFontSize() {
-    final currentSize = context.read<ReaderSettingsNotifier>().state.fontSize;
-    context.read<ReaderSettingsNotifier>().updateFontSize(currentSize - 1);
+    final currentSize = ref.read(readerSettingsProvider).fontSize;
+    ref.read(readerSettingsProvider.notifier).updateFontSize(currentSize - 1);
   }
 
   /// 切换TTS
   void _toggleTts() {
-    final ttsState = context.read<ReaderTtsNotifier>().state;
-    final ttsNotifier = context.read<ReaderTtsNotifier>();
+    final ttsState = ref.read(readerTtsProvider);
+    final ttsNotifier = ref.read(readerTtsProvider.notifier);
 
     if (ttsState.isPlaying) {
       ttsNotifier.pause();
     } else {
       final currentPageContent =
-          context.read<ReaderPaginationNotifier>().state.currentPageContent;
+          ref.read(readerPaginationProvider).currentPageContent;
       ttsNotifier.play(text: currentPageContent);
     }
   }
@@ -593,6 +582,8 @@ class _ReaderToolbarState extends State<ReaderToolbar> {
   /// 获取翻页模式名称
   String _getPaginationModeName(PaginationMode mode) {
     switch (mode) {
+      case PaginationMode.cover:
+        return '覆盖';
       case PaginationMode.slide:
         return '滑动';
       case PaginationMode.scroll:

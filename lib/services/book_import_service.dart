@@ -15,6 +15,8 @@ import 'enhanced_txt_import_service.dart';
 import 'cover_generator.dart';
 import 'book_cover_fetcher.dart';
 import 'book_import_isolate.dart';
+import 'epub_image_extractor.dart';
+import '../utils/encoding_detector_helper.dart';
 
 class EnhancedBookMetadata {
   final String title;
@@ -51,6 +53,7 @@ class BookImportService {
   final _bookDao = BookDao();
   final _enhancedTxtService = EnhancedTxtImportService();
   final _coverFetcher = BookCoverFetcher();
+  final _imageExtractor = EpubImageExtractor();
 
   /// 流式复制文件，支持大文件和进度回调
   ///
@@ -503,6 +506,19 @@ class BookImportService {
       final author =
           epubBook.Author?.isNotEmpty == true ? epubBook.Author! : 'Unknown';
 
+      // 🖼️ 提取图片（生成临时bookId）
+      final tempBookId = DateTime.now().millisecondsSinceEpoch.toString();
+      debugPrint('🖼️ 开始提取EPUB图片...');
+      try {
+        final imageMap = await _imageExtractor.extractImagesFromEpubBook(
+          epubBook,
+          tempBookId,
+        );
+        debugPrint('✅ 图片提取完成: ${imageMap.length} 张');
+      } catch (e) {
+        debugPrint('⚠️ 图片提取失败: $e，继续导入流程');
+      }
+
       // Extract ISBN early (useful for cover fetching)
       String? isbn;
       if (epubBook.Schema?.Package?.Metadata?.Identifiers?.isNotEmpty == true) {
@@ -704,6 +720,14 @@ class BookImportService {
     try {
       debugPrint('📖 开始TXT元数据提取: $fileName');
 
+      // 先进行编码分析（快速检测）
+      debugPrint('🔍 分析文件编码特征...');
+      final analysis = EncodingDetectorHelper.analyzeEncoding(bytes);
+
+      // 打印详细的编码分析报告
+      final report = EncodingDetectorHelper.generateReport(analysis);
+      EncodingDetectorHelper.debugPrintReport(report);
+
       // 对于大文件，使用isolate处理
       SimpleMetadata simpleMetadata;
       if (bytes.length > 5 * 1024 * 1024) {
@@ -721,6 +745,7 @@ class BookImportService {
         // 小文件在主线程处理
         String content;
         try {
+          debugPrint('🔄 开始智能编码检测...');
           content = _enhancedTxtService.detectTextEncoding(bytes);
           debugPrint('✅ 文本编码检测成功，内容长度: ${content.length}');
         } catch (e, stackTrace) {

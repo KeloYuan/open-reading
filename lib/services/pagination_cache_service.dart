@@ -219,38 +219,41 @@ class PaginationCacheService {
       final cacheDir = await _getCacheDirectory();
 
       if (!await cacheDir.exists()) {
+        debugPrint('ℹ️ 缓存目录不存在，无需删除');
         return;
       }
 
-      final files = cacheDir.listSync().whereType<File>().toList();
+      // 使用异步方式获取文件列表，避免阻塞主线程
+      final files = <File>[];
+      await for (var entity in cacheDir.list()) {
+        if (entity is File) {
+          files.add(entity);
+        }
+      }
+
       int deletedCount = 0;
 
+      // 🚀 使用优化后的快速检测方法
       for (var file in files) {
-        // 读取缓存文件内容以检查是否属于该书籍
         try {
-          final json = await file.readAsString();
-          final data = jsonDecode(json) as Map<String, dynamic>;
-          final cacheKey = data['cacheKey'] as String;
-
-          // 检查缓存键是否包含该书籍的哈希值
-          if (cacheKey.startsWith(contentHash)) {
-            await file.delete();
+          if (await _checkAndDeleteCacheFile(file, contentHash)) {
             deletedCount++;
             debugPrint('🗑️ 删除书籍缓存: ${file.path}');
           }
         } catch (e) {
-          // 如果文件读取失败，跳过该文件
-          debugPrint('⚠️ 读取缓存文件失败: ${file.path}, $e');
+          // 如果文件检测失败，跳过该文件
+          debugPrint('⚠️ 检测缓存文件失败: ${file.path}, $e');
         }
       }
 
       if (deletedCount > 0) {
-        debugPrint('✅ 已删除该书籍的${deletedCount}个缓存文件');
+        debugPrint('✅ 已删除该书籍的 ${deletedCount} 个缓存文件');
       } else {
         debugPrint('ℹ️ 未找到该书籍的缓存文件');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('❌ 删除书籍缓存失败: $e');
+      debugPrint('堆栈跟踪: $stackTrace');
     }
   }
 
@@ -267,12 +270,25 @@ class PaginationCacheService {
         return;
       }
 
-      // 获取所有缓存文件
-      final files = cacheDir.listSync().whereType<File>().toList();
+      // 使用异步方式获取所有缓存文件，避免阻塞主线程
+      final files = <File>[];
+      await for (var entity in cacheDir.list()) {
+        if (entity is File) {
+          files.add(entity);
+        }
+      }
+
+      if (files.isEmpty) {
+        debugPrint('ℹ️ 缓存目录为空，无需删除');
+        return;
+      }
+
+      debugPrint('🔍 扫描到 ${files.length} 个缓存文件');
+      final startTime = DateTime.now();
       int deletedCount = 0;
 
-      // 批量处理文件，每批处理 10 个，避免过多并发
-      const batchSize = 10;
+      // 🚀 批量处理文件，增加批次大小到30（因为现在只读取头部，速度快很多）
+      const batchSize = 30;
       for (int i = 0; i < files.length; i += batchSize) {
         final end =
             (i + batchSize < files.length) ? i + batchSize : files.length;
@@ -286,37 +302,49 @@ class PaginationCacheService {
 
         deletedCount += results.where((deleted) => deleted).length;
 
-        // 让出执行权，避免长时间占用
-        await Future.delayed(Duration.zero);
+        // 每处理一批输出进度日志
+        if (files.length > 50) {
+          final progress = ((end / files.length) * 100).toInt();
+          debugPrint('📊 删除进度: $progress% ($end/${files.length})');
+        }
       }
 
+      final duration = DateTime.now().difference(startTime).inMilliseconds;
       if (deletedCount > 0) {
-        debugPrint('✅ 已删除该书籍的${deletedCount}个缓存文件');
+        debugPrint('✅ 已删除该书籍的 ${deletedCount} 个缓存文件 (耗时: ${duration}ms)');
       } else {
-        debugPrint('ℹ️ 未找到该书籍的缓存文件');
+        debugPrint('ℹ️ 未找到该书籍的缓存文件 (耗时: ${duration}ms)');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('❌ 快速删除书籍缓存失败: $e');
+      debugPrint('堆栈跟踪: $stackTrace');
       // 如果失败，降级为普通删除方式
-      await deleteCacheForBook(contentHash);
+      try {
+        await deleteCacheForBook(contentHash);
+      } catch (e2) {
+        debugPrint('❌ 降级删除方式也失败: $e2');
+        rethrow;
+      }
     }
   }
 
-  /// 检查并删除单个缓存文件
+  /// 检查并删除单个缓存文件（超高性能版）
   ///
+  /// 只读取文件头部512字节进行快速检测，避免读取整个文件
   /// 返回 true 表示文件已被删除
   static Future<bool> _checkAndDeleteCacheFile(
     File file,
     String contentHash,
   ) async {
     try {
-      // 读取文件内容
-      final json = await file.readAsString();
-      final data = jsonDecode(json) as Map<String, dynamic>;
-      final cacheKey = data['cacheKey'] as String;
+      // 🚀 性能优化：只读取文件头部512字节，而非整个文件
+      // 缓存文件的cacheKey通常在前面，不需要读取全部内容
+      final bytes = await file.openRead(0, 512).first;
+      final content = utf8.decode(bytes, allowMalformed: true);
 
-      // 检查缓存键是否包含该书籍的哈希值
-      if (cacheKey.startsWith(contentHash)) {
+      // 快速字符串匹配检查（比JSON解析快得多）
+      // cacheKey格式: "cacheKey":"contentHash_params"
+      if (content.contains('"cacheKey":"$contentHash')) {
         await file.delete();
         return true;
       }

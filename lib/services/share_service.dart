@@ -20,7 +20,7 @@ class ShareService extends ChangeNotifier {
         totalPages: totalPages,
       );
 
-      await Share.share(formattedContent);
+      await SharePlus.instance.share(ShareParams(text: formattedContent));
 
       debugPrint('分享页面内容成功');
     } catch (e) {
@@ -41,7 +41,7 @@ class ShareService extends ChangeNotifier {
         author: author,
       );
 
-      await Share.share(formattedContent);
+      await SharePlus.instance.share(ShareParams(text: formattedContent));
 
       debugPrint('分享选中文本成功');
     } catch (e) {
@@ -68,7 +68,7 @@ class ShareService extends ChangeNotifier {
         readingTime: readingTime,
       );
 
-      await Share.share(formattedContent);
+      await SharePlus.instance.share(ShareParams(text: formattedContent));
 
       debugPrint('分享阅读进度成功');
     } catch (e) {
@@ -91,7 +91,7 @@ class ShareService extends ChangeNotifier {
         rating: rating,
       );
 
-      await Share.share(formattedContent);
+      await SharePlus.instance.share(ShareParams(text: formattedContent));
 
       debugPrint('分享书籍推荐成功');
     } catch (e) {
@@ -114,7 +114,7 @@ class ShareService extends ChangeNotifier {
         createTime: createTime,
       );
 
-      await Share.share(formattedContent);
+      await SharePlus.instance.share(ShareParams(text: formattedContent));
 
       debugPrint('分享笔记成功');
     } catch (e) {
@@ -137,7 +137,7 @@ class ShareService extends ChangeNotifier {
         favoriteGenre: favoriteGenre,
       );
 
-      await Share.share(formattedContent);
+      await SharePlus.instance.share(ShareParams(text: formattedContent));
 
       debugPrint('分享阅读统计成功');
     } catch (e) {

@@ -35,7 +35,6 @@ class EnhancedTtsHandler extends BaseAudioHandler
   String _voice = '';
 
   // 状态管理
-  int _currentPosition = 0;
   bool _isInitialized = false;
   Timer? _progressTimer;
 
@@ -101,7 +100,6 @@ class EnhancedTtsHandler extends BaseAudioHandler
       int endOffset,
       String word,
     ) {
-      _currentPosition = startOffset;
       // 更新播放进度
       _updatePlaybackState();
     });
@@ -213,7 +211,6 @@ class EnhancedTtsHandler extends BaseAudioHandler
 
     try {
       await _flutterTts.stop();
-      _currentPosition = 0;
 
       await _flutterTts.speak(text);
 

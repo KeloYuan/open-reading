@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:gbk_codec/gbk_codec.dart';
 
 /// Isolate工作参数
 class HashCalculationParams {
@@ -93,14 +95,8 @@ Future<SimpleMetadata> extractTxtMetadataInIsolate(
         ? params.bytes.sublist(0, maxBytesForMetadata)
         : params.bytes;
 
-    // 尝试检测编码
-    String content;
-    try {
-      content = utf8.decode(bytesToAnalyze, allowMalformed: true);
-    } catch (e) {
-      // 如果UTF-8失败，尝试GBK（简化处理）
-      content = latin1.decode(bytesToAnalyze);
-    }
+    // 智能检测编码（支持 GB2312/GBK/UTF-8）
+    String content = _detectAndDecodeText(bytesToAnalyze);
 
     // 提取标题（从前几行）
     final lines = content
@@ -177,7 +173,8 @@ Future<SimpleMetadata> extractMobiMetadataInIsolate(
             : params.bytes;
 
         try {
-          String content = utf8.decode(bytesToAnalyze, allowMalformed: true);
+          // 使用智能编码检测
+          String content = _detectAndDecodeText(bytesToAnalyze);
           content = content.replaceAll(RegExp(r'<[^>]*>'), ' ');
           content = content.replaceAll(RegExp(r'\s+'), ' ').trim();
 
@@ -217,4 +214,187 @@ Future<SimpleMetadata> extractMobiMetadataInIsolate(
       estimatedPages: (params.bytes.length / 3000).ceil().clamp(50, 1000),
     );
   }
+}
+
+/// 智能检测并解码文本（支持 GB2312/GBK/UTF-8）
+///
+/// 在 isolate 中使用的简化版编码检测
+/// 参数 [bytes] 要解码的字节数组
+/// 返回解码后的文本内容
+String _detectAndDecodeText(Uint8List bytes) {
+  debugPrint('🔍 [Isolate] 开始编码检测，文件大小: ${bytes.length} 字节');
+
+  // 1. 检测 BOM
+  if (bytes.length >= 3 &&
+      bytes[0] == 0xEF &&
+      bytes[1] == 0xBB &&
+      bytes[2] == 0xBF) {
+    debugPrint('✅ [Isolate] UTF-8 BOM');
+    return utf8.decode(bytes.sublist(3));
+  }
+
+  if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) {
+    debugPrint('✅ [Isolate] UTF-16 LE BOM');
+    return _decodeUtf16LE(bytes.sublist(2));
+  }
+
+  if (bytes.length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) {
+    debugPrint('✅ [Isolate] UTF-16 BE BOM');
+    return _decodeUtf16BE(bytes.sublist(2));
+  }
+
+  // 2. 尝试 UTF-8 严格模式
+  debugPrint('📊 [Isolate] 步骤1: UTF-8 严格模式...');
+  try {
+    final content = utf8.decode(bytes, allowMalformed: false);
+    if (_isValidUtf8Content(content)) {
+      debugPrint('✅ [Isolate] UTF-8 解码成功 (${content.length} 字符)');
+      return content;
+    }
+    debugPrint('⚠️ [Isolate] UTF-8 内容验证失败');
+  } catch (e) {
+    debugPrint('⚠️ [Isolate] UTF-8 严格模式失败');
+  }
+
+  // 3. 检测 GBK 特征
+  debugPrint('📊 [Isolate] 步骤2: GBK 特征检测...');
+  final gbkScore = _calculateGbkScore(bytes);
+  debugPrint('   GBK 评分: ${gbkScore.toStringAsFixed(2)}');
+
+  if (gbkScore > 0.3) {
+    try {
+      final content = gbk.decode(bytes);
+      if (content.isNotEmpty && _isValidGbkContent(content)) {
+        debugPrint('✅ [Isolate] GBK 解码成功 (${content.length} 字符)');
+        return content;
+      }
+      debugPrint('⚠️ [Isolate] GBK 内容验证失败');
+    } catch (e) {
+      debugPrint('❌ [Isolate] GBK 解码失败: $e');
+    }
+  }
+
+  // 4. UTF-8 宽松模式
+  debugPrint('📊 [Isolate] 步骤3: UTF-8 宽松模式...');
+  try {
+    final content = utf8.decode(bytes, allowMalformed: true);
+    if (content.isNotEmpty && !_hasExcessiveReplacementChars(content)) {
+      debugPrint('✅ [Isolate] UTF-8 宽松模式成功 (${content.length} 字符)');
+      return content;
+    }
+    debugPrint('⚠️ [Isolate] UTF-8 宽松模式替换字符过多');
+  } catch (e) {
+    debugPrint('❌ [Isolate] UTF-8 宽松模式失败: $e');
+  }
+
+  // 5. 强制 GBK
+  debugPrint('📊 [Isolate] 步骤4: 强制 GBK...');
+  try {
+    final content = gbk.decode(bytes);
+    if (content.isNotEmpty) {
+      debugPrint('⚠️ [Isolate] 强制 GBK (${content.length} 字符)');
+      return content;
+    }
+  } catch (e) {
+    debugPrint('❌ [Isolate] 强制 GBK 失败: $e');
+  }
+
+  // 6. 最终降级
+  debugPrint('⚠️ [Isolate] 最终降级：UTF-8 宽松');
+  return utf8.decode(bytes, allowMalformed: true);
+}
+
+/// UTF-16 LE 解码
+String _decodeUtf16LE(Uint8List bytes) {
+  final buffer = StringBuffer();
+  for (int i = 0; i < bytes.length - 1; i += 2) {
+    final codeUnit = bytes[i] | (bytes[i + 1] << 8);
+    buffer.writeCharCode(codeUnit);
+  }
+  return buffer.toString();
+}
+
+/// UTF-16 BE 解码
+String _decodeUtf16BE(Uint8List bytes) {
+  final buffer = StringBuffer();
+  for (int i = 0; i < bytes.length - 1; i += 2) {
+    final codeUnit = (bytes[i] << 8) | bytes[i + 1];
+    buffer.writeCharCode(codeUnit);
+  }
+  return buffer.toString();
+}
+
+/// 计算 GBK 特征评分
+double _calculateGbkScore(Uint8List bytes) {
+  if (bytes.length < 100) return 0.0;
+
+  int gbkPairCount = 0;
+  int totalPairs = 0;
+  int validPairs = 0;
+
+  final checkLength = math.min(bytes.length, 2000);
+
+  for (int i = 0; i < checkLength - 1; i++) {
+    final byte1 = bytes[i];
+
+    if (byte1 >= 0x81 && byte1 <= 0xFE) {
+      totalPairs++;
+      final byte2 = bytes[i + 1];
+
+      if (byte2 >= 0x40 && byte2 <= 0xFE && byte2 != 0x7F) {
+        gbkPairCount++;
+
+        // GB2312 常用汉字区域
+        if (byte1 >= 0xB0 && byte1 <= 0xF7 && byte2 >= 0xA1 && byte2 <= 0xFE) {
+          validPairs++;
+        }
+
+        i++;
+      }
+    }
+  }
+
+  if (totalPairs == 0) return 0.0;
+
+  final matchRatio = gbkPairCount / totalPairs;
+  final validRatio = validPairs > 0 ? validPairs / gbkPairCount : 0.0;
+
+  return matchRatio * 0.7 + validRatio * 0.3;
+}
+
+/// 验证 UTF-8 内容
+bool _isValidUtf8Content(String content) {
+  if (content.isEmpty) return false;
+
+  final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
+  if (replacementCount > content.length * 0.01) return false;
+
+  final controlCount = content.codeUnits.where((c) {
+    return c < 32 && c != 9 && c != 10 && c != 13;
+  }).length;
+
+  return controlCount < content.length * 0.05;
+}
+
+/// 验证 GBK 内容
+bool _isValidGbkContent(String content) {
+  if (content.isEmpty) return false;
+
+  final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
+  if (replacementCount > content.length * 0.05) return false;
+
+  final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length;
+  if (chineseCount > 0) return true;
+
+  final printableCount = content.codeUnits.where((c) {
+    return (c >= 32 && c <= 126) || c == 9 || c == 10 || c == 13;
+  }).length;
+
+  return printableCount > content.length * 0.8;
+}
+
+/// 检查是否有过多替换字符
+bool _hasExcessiveReplacementChars(String content) {
+  final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
+  return replacementCount > content.length * 0.1;
 }

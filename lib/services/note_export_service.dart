@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:flutter/foundation.dart';
 import '../models/highlight.dart';
 import '../models/note.dart';
 import '../models/book.dart';
@@ -234,10 +234,11 @@ class NoteExportService {
 
       final file = await saveToFile(content, fileName);
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        subject: '《${book.title}》的阅读笔记',
-        text: '这是我在阅读《${book.title}》时记录的高亮和笔记',
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          text: '《${book.title}》的阅读笔记',
+        ),
       );
 
       debugPrint('笔记分享成功: $fileName');

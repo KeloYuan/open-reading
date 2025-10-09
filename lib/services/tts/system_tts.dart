@@ -24,7 +24,6 @@ class SystemTts extends BaseTts {
   bool restarting = false;
   bool _isTtsEngineReady = false; // TTS引擎是否就绪
   final List<Function> _pendingSpeakTasks = []; // 待执行的朗读任务
-  bool _hasSynthesisError = false; // 是否发生合成错误
   int _speakRetryCount = 0; // speak重试计数
   static const int _maxSpeakRetries = 2; // 最大重试次数
 
@@ -238,7 +237,6 @@ class SystemTts extends BaseTts {
 
       flutterTts.setStartHandler(() async {
         debugPrint('🎬 TTS开始播放回调');
-        _hasSynthesisError = false; // 成功开始，重置错误标志
         _speakRetryCount = 0; // 重置重试计数
         updateTtsState(TtsStateEnum.playing);
         _startHighlightTimer(); // 开始句子高亮
@@ -256,7 +254,6 @@ class SystemTts extends BaseTts {
 
       flutterTts.setErrorHandler((msg) {
         debugPrint('❌ TTS错误回调: $msg');
-        _hasSynthesisError = true; // 标记发生错误
 
         // 在OPPO等设备上，合成错误后需要重试
         if (_speakRetryCount < _maxSpeakRetries && _currentVoiceText != null) {

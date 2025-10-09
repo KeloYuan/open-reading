@@ -149,29 +149,6 @@ class _CustomSelectableTextState extends State<CustomSelectableText> {
     return const SizedBox.shrink();
   }
 
-  /// 构建菜单按钮
-  Widget _buildMenuButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 18),
-            const SizedBox(height: 2),
-            Text(label, style: const TextStyle(fontSize: 10)),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// 显示选择工具栏
   void _showSelectionToolbar(TextSelection selection) {
     _hideSelectionToolbar();

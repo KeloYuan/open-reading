@@ -163,6 +163,10 @@ class PageTurningSettingsSheet extends ConsumerWidget {
     String label;
 
     switch (mode) {
+      case PaginationMode.cover:
+        icon = Icons.layers_rounded;
+        label = '覆盖翻页';
+        break;
       case PaginationMode.slide:
         icon = Icons.swipe_rounded;
         label = '左右滑动';

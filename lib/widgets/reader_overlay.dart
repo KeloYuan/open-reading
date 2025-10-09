@@ -1,6 +1,6 @@
 ﻿import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:battery_plus/battery_plus.dart';
 import '../providers/reader_providers.dart';
 
@@ -85,9 +85,9 @@ class _ReaderOverlayState extends State<ReaderOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ReaderSettingsNotifier>(
-      builder: (context, settingsNotifier, child) {
-        final settings = settingsNotifier.state;
+    return Consumer(
+      builder: (context, ref, child) {
+        final settings = ref.watch(readerSettingsProvider);
 
         return Stack(
           children: [
@@ -199,9 +199,9 @@ class _ReaderOverlayState extends State<ReaderOverlay> {
 
   /// 构建底部进度栏
   Widget _buildBottomProgressBar(ReaderSettings settings) {
-    return Consumer<ReaderPaginationNotifier>(
-      builder: (context, paginationNotifier, child) {
-        final paginationState = paginationNotifier.state;
+    return Consumer(
+      builder: (context, ref, child) {
+        final paginationState = ref.watch(readerPaginationProvider);
         final pageInfo = paginationState.pages.isEmpty
             ? '0/0'
             : '${paginationState.currentPageIndex + 1}/${paginationState.totalPages}';

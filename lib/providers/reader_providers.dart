@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:crypto/crypto.dart';
 import '../services/fast_text_paginator.dart';
+import '../services/precise_paginator_adapter.dart';
 import '../services/pagination_cache_service.dart';
 import '../services/tts/system_tts.dart';
 import '../services/tts/base_tts.dart';
@@ -12,6 +13,7 @@ import '../models/page_turning_config.dart';
 
 /// 翻页模式枚举
 enum PaginationMode {
+  cover, // 覆盖翻页
   slide, // 左右滑动
   scroll, // 上下滚动
   simulation, // 仿真翻页
@@ -42,6 +44,7 @@ class ReaderSettings {
   final double firstLineIndent; // 首行缩进（0-4字符）
   final double horizontalMargin; // 水平页边距（10-40px）
   final bool enableFirstLineIndent; // 是否启用首行缩进（默认关闭）
+  final bool usePrecisePaginator; // 是否使用精确分页器（默认true）
 
   const ReaderSettings({
     this.fontSize = 18.0,
@@ -56,6 +59,7 @@ class ReaderSettings {
     this.firstLineIndent = 2.0,
     this.horizontalMargin = 20.0,
     this.enableFirstLineIndent = false,
+    this.usePrecisePaginator = true, // 默认使用精确分页器
   });
 
   /// 复制并修改设置
@@ -71,6 +75,7 @@ class ReaderSettings {
     double? firstLineIndent,
     double? horizontalMargin,
     bool? enableFirstLineIndent,
+    bool? usePrecisePaginator,
   }) {
     return ReaderSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -85,6 +90,7 @@ class ReaderSettings {
       horizontalMargin: horizontalMargin ?? this.horizontalMargin,
       enableFirstLineIndent:
           enableFirstLineIndent ?? this.enableFirstLineIndent,
+      usePrecisePaginator: usePrecisePaginator ?? this.usePrecisePaginator,
     );
   }
 
@@ -221,6 +227,7 @@ class ReaderPaginationState {
   final Size? screenSize; // 保存屏幕尺寸用于后台分页
   final List<List<PageElement>>? pageElements; // 每页的内容元素列表（包含文本和图片）
   final List<double>? pageExtraLineSpacing; // 每页的额外行间距（用于底部对齐）
+  final int? maxLinesPerPage; // 每页最大行数（用于精确分页器）
 
   const ReaderPaginationState({
     this.pages = const [],
@@ -236,6 +243,7 @@ class ReaderPaginationState {
     this.screenSize,
     this.pageElements,
     this.pageExtraLineSpacing,
+    this.maxLinesPerPage,
   });
 
   /// 复制并修改状态
@@ -253,6 +261,7 @@ class ReaderPaginationState {
     Size? screenSize,
     List<List<PageElement>>? pageElements,
     List<double>? pageExtraLineSpacing,
+    int? maxLinesPerPage,
   }) {
     return ReaderPaginationState(
       pages: pages ?? this.pages,
@@ -268,6 +277,7 @@ class ReaderPaginationState {
       screenSize: screenSize ?? this.screenSize,
       pageElements: pageElements ?? this.pageElements,
       pageExtraLineSpacing: pageExtraLineSpacing ?? this.pageExtraLineSpacing,
+      maxLinesPerPage: maxLinesPerPage ?? this.maxLinesPerPage,
     );
   }
 
@@ -376,6 +386,10 @@ class ReaderTtsState {
 /// 阅读器设置状态管理 - Riverpod StateNotifier
 class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
   Timer? _debounceTimer;
+  Timer? _repaginateTimer; // 🔧 分页防抖计时器
+
+  // 🔧 新增：设置变化回调，用于通知重新分页
+  void Function()? onSettingsChanged;
 
   ReaderSettingsNotifier() : super(const ReaderSettings()) {
     // 初始化时从SharedPreferences加载设置
@@ -385,6 +399,7 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _repaginateTimer?.cancel(); // 🔧 取消分页防抖
     super.dispose();
   }
 
@@ -417,31 +432,41 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
     });
   }
 
+  /// 🔧 清除所有缓存并通知重新分页（带防抖）
+  void _invalidateAndRefresh() {
+    // 清除所有分页缓存
+    FastTextPaginator.clearCache();
+    PrecisePaginatorAdapter.reset();
+
+    debugPrint('🔄 [设置变化] 已清除缓存');
+
+    // 🚀 防抖通知重新分页：500ms内多次调用只执行最后一次
+    _repaginateTimer?.cancel();
+    _repaginateTimer = Timer(const Duration(milliseconds: 500), () {
+      debugPrint('🔄 [设置变化] 触发重新分页');
+      onSettingsChanged?.call();
+    });
+  }
+
   /// 更新字体大小（带防抖）
   void updateFontSize(double fontSize) {
     state = state.copyWith(fontSize: fontSize.clamp(12.0, 36.0));
     _debounceSaveSettings(); // 使用防抖保存
-
-    // 清除字符宽度缓存（字体大小改变，宽度也会变）
-    FastTextPaginator.clearCache();
+    _invalidateAndRefresh(); // 🔧 立即清除缓存并通知重新分页
   }
 
   /// 更新行高（带防抖）
   void updateLineSpacing(double spacing) {
     state = state.copyWith(lineSpacing: spacing.clamp(1.0, 3.0));
     _debounceSaveSettings(); // 使用防抖保存
-
-    // 清除字符宽度缓存（行距改变会影响测量）
-    FastTextPaginator.clearCache();
+    _invalidateAndRefresh(); // 🔧 立即清除缓存并通知重新分页
   }
 
   /// 更新字间距（带防抖）
   void updateLetterSpacing(double letterSpacing) {
     state = state.copyWith(letterSpacing: letterSpacing.clamp(-1.0, 2.0));
     _debounceSaveSettings(); // 使用防抖保存
-
-    // 清除字符宽度缓存（字间距改变，宽度也会变）
-    FastTextPaginator.clearCache();
+    _invalidateAndRefresh(); // 🔧 立即清除缓存并通知重新分页
   }
 
   /// 更新页边距
@@ -566,38 +591,47 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       devicePixelRatio: devicePixelRatio,
     );
 
-    // 1. 优先检查内存缓存
-    if (state.cacheKey == cacheKey && state.pages.isNotEmpty) {
+    // 1. 检查内存缓存（🔧 修复：cacheKey变化时强制重新分页）
+    final cacheKeyChanged =
+        state.cacheKey != null && state.cacheKey != cacheKey;
+    if (cacheKeyChanged) {
+      debugPrint('🔄 [参数变化] cacheKey变化，清除所有缓存');
+      // 清除持久化缓存
+      await PaginationCacheService.clearAllCache();
+    } else if (state.cacheKey == cacheKey && state.pages.isNotEmpty) {
       debugPrint('✅ 使用内存缓存，跳过分页');
       return;
     }
 
-    // 2. 检查持久化缓存
+    // 2. 检查持久化缓存（如果参数没变化）
     state = state.copyWith(
       isLoading: true,
       error: null,
-      loadingStage: '检查缓存...',
+      loadingStage: cacheKeyChanged ? '参数变化，重新分页...' : '检查缓存...',
       screenSize: Size(screenSize.width, actualAvailableHeight), // 保存屏幕尺寸
     );
 
-    final cachedData =
-        await PaginationCacheService.loadCache(cacheKey: cacheKey);
-    if (cachedData != null && cachedData.pages.isNotEmpty) {
-      debugPrint('✅ 使用持久化缓存: ${cachedData.pages.length}页');
-      // 确保初始页码在有效范围内
-      final safeInitialPage =
-          initialPageIndex.clamp(0, cachedData.pages.length - 1);
-      debugPrint('📖 恢复到页码: $safeInitialPage');
-      state = state.copyWith(
-        pages: cachedData.pages,
-        currentPageIndex: safeInitialPage,
-        isLoading: false,
-        paginationSettings: settings,
-        cachedText: text,
-        cacheKey: cacheKey,
-        loadingStage: '加载完成',
-      );
-      return;
+    // 如果cacheKey变化，跳过缓存检查，直接重新分页
+    if (!cacheKeyChanged) {
+      final cachedData =
+          await PaginationCacheService.loadCache(cacheKey: cacheKey);
+      if (cachedData != null && cachedData.pages.isNotEmpty) {
+        debugPrint('✅ 使用持久化缓存: ${cachedData.pages.length}页');
+        // 确保初始页码在有效范围内
+        final safeInitialPage =
+            initialPageIndex.clamp(0, cachedData.pages.length - 1);
+        debugPrint('📖 恢复到页码: $safeInitialPage');
+        state = state.copyWith(
+          pages: cachedData.pages,
+          currentPageIndex: safeInitialPage,
+          isLoading: false,
+          paginationSettings: settings,
+          cachedText: text,
+          cacheKey: cacheKey,
+          loadingStage: '加载完成',
+        );
+        return;
+      }
     }
 
     // 3. 无缓存，开始分页
@@ -646,44 +680,75 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
 
     try {
       debugPrint('📄 开始一次性分页: ${text.length} 字符');
+      debugPrint(
+          '   分页器: ${settings.usePrecisePaginator ? "精确分页" : "FastText分页"}');
 
-      final result = await FastTextPaginator.paginateWithProgress(
-        text: text,
-        screenSize: screenSize,
-        fontSize: settings.fontSize,
-        lineSpacing: settings.lineSpacing,
-        padding: settings.padding,
-        letterSpacing: settings.letterSpacing,
-        firstLineIndent: settings.firstLineIndent,
-        devicePixelRatio: devicePixelRatio,
-        onProgress: (currentPage, stage) {
-          // 更新进度显示
-          state = state.copyWith(
-            loadingStage: '$stage ($currentPage 页)',
-          );
-        },
-      );
+      List<String> pages;
+      List<double>? pageExtraLineSpacing;
+      int? maxLinesPerPage;
 
-      if (result.pages.isEmpty) {
+      if (settings.usePrecisePaginator) {
+        // 使用精确分页器
+        state = state.copyWith(loadingStage: '精确分页中...');
+
+        final result = await PrecisePaginatorAdapter.paginateToStrings(
+          text: text,
+          screenSize: screenSize,
+          textStyle: settings.textStyle,
+          padding: settings.padding,
+          firstLineIndent:
+              settings.enableFirstLineIndent ? settings.firstLineIndent : 0.0,
+          paragraphSpacing: 0.5, // 段落间距
+        );
+
+        pages = result.pages;
+        maxLinesPerPage = result.maxLinesPerPage;
+
+        debugPrint('✅ 精确分页完成: ${pages.length} 页, 每页$maxLinesPerPage行');
+      } else {
+        // 使用原有的FastText分页器
+        final result = await FastTextPaginator.paginateWithProgress(
+          text: text,
+          screenSize: screenSize,
+          fontSize: settings.fontSize,
+          lineSpacing: settings.lineSpacing,
+          padding: settings.padding,
+          letterSpacing: settings.letterSpacing,
+          firstLineIndent: settings.firstLineIndent,
+          devicePixelRatio: devicePixelRatio,
+          onProgress: (currentPage, stage) {
+            // 更新进度显示
+            state = state.copyWith(
+              loadingStage: '$stage ($currentPage 页)',
+            );
+          },
+        );
+
+        pages = result.pages;
+        pageExtraLineSpacing = result.pageExtraLineSpacing;
+
+        debugPrint('✅ FastText分页完成: ${pages.length} 页');
+      }
+
+      if (pages.isEmpty) {
         throw Exception('分页结果为空');
       }
 
-      debugPrint('✅ 分页完成: ${result.pages.length} 页');
-
       state = state.copyWith(
-        pages: result.pages,
-        currentPageIndex: initialPageIndex.clamp(0, result.pages.length - 1),
+        pages: pages,
+        currentPageIndex: initialPageIndex.clamp(0, pages.length - 1),
         isLoading: false,
         paginationSettings: settings,
         cachedText: text,
         cacheKey: cacheKey,
-        loadingStage: '加载完成，共 ${result.pages.length} 页',
-        pageExtraLineSpacing: result.pageExtraLineSpacing,
+        loadingStage: '加载完成，共 ${pages.length} 页',
+        pageExtraLineSpacing: pageExtraLineSpacing,
+        maxLinesPerPage: maxLinesPerPage,
       );
 
       // 保存到持久化缓存
       await PaginationCacheService.saveCache(
-        pages: result.pages,
+        pages: pages,
         cacheKey: cacheKey,
       );
 

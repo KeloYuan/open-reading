@@ -5,12 +5,14 @@ allprojects {
     }
 }
 
-val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build").get()
-rootProject.layout.buildDirectory.value(newBuildDir)
-
+// 仅为主项目设置构建目录，避免跨驱动器问题
 subprojects {
-    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
-    project.layout.buildDirectory.value(newSubprojectBuildDir)
+    // 只为 app 模块设置自定义构建目录
+    if (project.name == "app") {
+        val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build/app").get()
+        project.layout.buildDirectory.value(newBuildDir)
+    }
+    // 其他子项目（包括插件）使用默认构建目录
 }
 subprojects {
     project.evaluationDependsOn(":app")

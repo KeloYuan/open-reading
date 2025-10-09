@@ -52,7 +52,11 @@
       "Bash(adb:*)",
       "Bash(tee:*)",
       "Bash(xargs:*)",
-      "Bash(/c/dev/flutter/flutter/bin/flutter analyze --no-fatal-infos)"
+      "Bash(/c/dev/flutter/flutter/bin/flutter analyze --no-fatal-infos)",
+      "Bash(del \"f:\\xxread\\lib\\widgets\\precise_page_renderer.dart\")",
+      "Bash(/c/dev/flutter/flutter/bin/flutter analyze --no-fatal-infos lib/)",
+      "mcp__ide__getDiagnostics",
+      "Bash(/c/dev/flutter/flutter/bin/flutter analyze --no-fatal-infos lib/services/enhanced_txt_import_service.dart)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

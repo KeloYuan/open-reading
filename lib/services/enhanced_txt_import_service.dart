@@ -19,146 +19,244 @@ class EnhancedTxtImportService {
 
   /// 智能检测文本编码
   ///
-  /// 支持多种中文编码格式：UTF-8、GBK、GB2312、UTF-16等
+  /// 支持主流中文编码格式：UTF-8、GBK/GB2312、UTF-16
   ///
   /// [bytes] 原始文件字节数据
   /// Returns: 解码后的文本内容
-  /// Throws: [UnsupportedError] 当无法识别编码时
   ///
-  /// 使用示例：
-  /// ```dart
-  /// final service = EnhancedTxtImportService();
-  /// final content = await service.detectTextEncoding(fileBytes);
-  /// ```
+  /// 编码检测策略：
+  /// 1. BOM检测（最可靠）
+  /// 2. UTF-8严格模式（现代标准）
+  /// 3. GBK/GB2312特征检测（中文旧文件）
+  /// 4. UTF-8宽松模式（降级方案）
   String detectTextEncoding(Uint8List bytes) {
-    // 1. 检测UTF-8 BOM标记
+    debugPrint('🔍 开始编码检测，文件大小: ${bytes.length} 字节');
+
+    // 显示前16个字节的十六进制值，用于调试
+    if (bytes.length >= 16) {
+      final hexPreview = bytes
+          .take(16)
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join(' ');
+      debugPrint('📋 文件头: $hexPreview');
+    }
+
+    // 1. 检测 BOM (Byte Order Mark)
+    // UTF-8 BOM: EF BB BF
     if (bytes.length >= 3 &&
         bytes[0] == 0xEF &&
         bytes[1] == 0xBB &&
         bytes[2] == 0xBF) {
-      debugPrint('检测到UTF-8 BOM编码');
+      debugPrint('✅ 检测到 UTF-8 BOM');
       return utf8.decode(bytes.sublist(3));
     }
 
-    // 2. 检测UTF-16 BOM标记
-    if (bytes.length >= 2) {
-      if (bytes[0] == 0xFF && bytes[1] == 0xFE) {
-        debugPrint('检测到UTF-16 LE编码');
-        // 简化实现：跳过UTF-16，直接尝试其他编码
-        // 实际项目中可以使用专门的UTF-16解码库
-        debugPrint('UTF-16编码跳过，尝试其他编码');
-      }
-      if (bytes[0] == 0xFE && bytes[1] == 0xFF) {
-        debugPrint('检测到UTF-16 BE编码');
-        // 简化实现：跳过UTF-16，直接尝试其他编码
-        debugPrint('UTF-16编码跳过，尝试其他编码');
-      }
+    // UTF-16 LE BOM: FF FE
+    if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) {
+      debugPrint('✅ 检测到 UTF-16 LE BOM');
+      return _decodeUtf16LE(bytes.sublist(2));
     }
 
-    // 3. 尝试UTF-8解码（最常见）
+    // UTF-16 BE BOM: FE FF
+    if (bytes.length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) {
+      debugPrint('✅ 检测到 UTF-16 BE BOM');
+      return _decodeUtf16BE(bytes.sublist(2));
+    }
+
+    // 2. 尝试 UTF-8 严格解码（优先，因为是现代标准）
+    debugPrint('📊 步骤1: 尝试 UTF-8 严格模式...');
     try {
       final content = utf8.decode(bytes, allowMalformed: false);
-      // 验证解码是否成功：检查是否包含有效字符
+      // 验证解码质量
       if (_isValidUtf8Content(content)) {
-        debugPrint('成功使用UTF-8解码');
+        debugPrint('✅ UTF-8 解码成功 (${content.length} 字符)');
         return content;
       }
+      debugPrint('⚠️ UTF-8 解码通过，但内容验证失败');
     } catch (e) {
-      debugPrint('UTF-8解码失败: $e');
+      debugPrint('⚠️ UTF-8 严格模式失败: ${e.toString().substring(0, 100)}');
     }
 
-    // 4. 尝试GBK编码（中文书籍常用）
+    // 3. 检测 GBK/GB2312 特征（中文旧文件常用）
+    debugPrint('📊 步骤2: 检测 GBK/GB2312 特征...');
+    final gbkScore = _calculateGbkScore(bytes);
+    debugPrint('   GBK 特征评分: ${gbkScore.toStringAsFixed(2)}');
+
+    if (gbkScore > 0.3) {
+      // 评分>0.3表示很可能是GBK编码
+      try {
+        final content = gbk.decode(bytes);
+        if (content.isNotEmpty && _isValidGbkContent(content)) {
+          debugPrint('✅ GBK/GB2312 解码成功 (${content.length} 字符)');
+          return content;
+        }
+        debugPrint('⚠️ GBK 解码通过，但内容验证失败');
+      } catch (e) {
+        debugPrint('❌ GBK 解码失败: $e');
+      }
+    }
+
+    // 4. UTF-8 宽松模式降级
+    debugPrint('📊 步骤3: UTF-8 宽松模式...');
     try {
-      final content = _decodeGbk(bytes);
-      if (content != null && _isValidChineseContent(content)) {
-        debugPrint('成功使用GBK解码');
+      final content = utf8.decode(bytes, allowMalformed: true);
+      if (content.isNotEmpty && !_hasExcessiveReplacementChars(content)) {
+        debugPrint('✅ UTF-8 宽松模式成功 (${content.length} 字符)');
         return content;
       }
+      debugPrint('⚠️ UTF-8 宽松模式替换字符过多');
     } catch (e) {
-      debugPrint('GBK解码失败: $e');
+      debugPrint('❌ UTF-8 宽松模式失败: $e');
     }
 
-    // 5. 尝试Latin1编码（作为最后备选）
+    // 5. 强制尝试 GBK（最后的降级方案）
+    debugPrint('📊 步骤4: 强制 GBK 解码...');
     try {
-      final content = latin1.decode(bytes);
-      if (_isValidTextContent(content)) {
-        debugPrint('使用Latin1解码');
+      final content = gbk.decode(bytes);
+      if (content.isNotEmpty) {
+        debugPrint('⚠️ 强制使用 GBK 解码 (${content.length} 字符)');
         return content;
       }
     } catch (e) {
-      debugPrint('Latin1解码失败: $e');
+      debugPrint('❌ 强制 GBK 失败: $e');
     }
 
-    // 6. 降级处理：使用UTF-8宽松解码
-    debugPrint('所有编码尝试失败，使用UTF-8宽松解码');
+    // 6. 最终降级：UTF-8 宽松 + 允许所有错误
+    debugPrint('⚠️ 最终降级：UTF-8 宽松模式（允许所有错误）');
     return utf8.decode(bytes, allowMalformed: true);
   }
 
-  /// 增强的GBK解码尝试（支持GB2312和GBK编码）
-  String? _decodeGbk(Uint8List bytes) {
-    try {
-      // 使用gbk_codec库进行解码
-      // GB2312是GBK的子集，所以GBK解码器可以处理GB2312
-      final content = gbk.decode(bytes);
-
-      // 验证解码结果是否包含有效的中文字符
-      if (content.isNotEmpty && _containsChinese(content)) {
-        debugPrint('✅ 成功使用GBK/GB2312解码');
-        return content;
-      }
-
-      return null;
-    } catch (e) {
-      debugPrint('❌ GBK解码失败: $e');
-      return null;
+  /// UTF-16 LE 解码
+  String _decodeUtf16LE(Uint8List bytes) {
+    final buffer = StringBuffer();
+    for (int i = 0; i < bytes.length - 1; i += 2) {
+      final codeUnit = bytes[i] | (bytes[i + 1] << 8);
+      buffer.writeCharCode(codeUnit);
     }
+    return buffer.toString();
   }
 
-  /// 检查字符串是否包含中文字符
-  bool _containsChinese(String text) {
-    // 中文字符范围：\u4e00-\u9fff
-    return text.contains(RegExp(r'[\u4e00-\u9fff]'));
+  /// UTF-16 BE 解码
+  String _decodeUtf16BE(Uint8List bytes) {
+    final buffer = StringBuffer();
+    for (int i = 0; i < bytes.length - 1; i += 2) {
+      final codeUnit = (bytes[i] << 8) | bytes[i + 1];
+      buffer.writeCharCode(codeUnit);
+    }
+    return buffer.toString();
   }
 
-  /// 检测GBK编码模式
-  bool _detectGbkPattern(String content) {
-    // 检查是否包含GBK编码的中文字符特征
-    // GBK编码的中文通常在0x81-0xFE范围内
-    final gbkPattern = RegExp(r'[\x81-\xFE]');
-    return gbkPattern.hasMatch(content);
+  /// 计算 GBK 特征评分 (0.0 - 1.0)
+  ///
+  /// 返回值越高，越可能是 GBK 编码
+  double _calculateGbkScore(Uint8List bytes) {
+    if (bytes.length < 100) return 0.0;
+
+    int gbkPairCount = 0;
+    int totalPairs = 0;
+    int validPairs = 0;
+
+    // 检查前 2000 字节
+    final checkLength = math.min(bytes.length, 2000);
+
+    for (int i = 0; i < checkLength - 1; i++) {
+      final byte1 = bytes[i];
+
+      // GBK 第一字节范围: 0x81-0xFE
+      if (byte1 >= 0x81 && byte1 <= 0xFE) {
+        totalPairs++;
+        final byte2 = bytes[i + 1];
+
+        // GBK 第二字节范围: 0x40-0xFE (除了 0x7F)
+        if (byte2 >= 0x40 && byte2 <= 0xFE && byte2 != 0x7F) {
+          gbkPairCount++;
+
+          // GB2312 核心区域 (常用汉字): 0xB0-0xF7, 0xA1-0xFE
+          if (byte1 >= 0xB0 &&
+              byte1 <= 0xF7 &&
+              byte2 >= 0xA1 &&
+              byte2 <= 0xFE) {
+            validPairs++;
+          }
+
+          i++; // 跳过第二个字节
+        }
+      }
+    }
+
+    if (totalPairs == 0) return 0.0;
+
+    // 计算匹配率
+    final matchRatio = gbkPairCount / totalPairs;
+
+    // 如果有常用汉字区域的字节对，增加权重
+    final validRatio = validPairs > 0 ? validPairs / gbkPairCount : 0.0;
+
+    // 综合评分
+    final score = matchRatio * 0.7 + validRatio * 0.3;
+
+    debugPrint(
+        '   - GBK 字节对: $gbkPairCount/$totalPairs (${(matchRatio * 100).toStringAsFixed(1)}%)');
+    debugPrint(
+        '   - 常用汉字对: $validPairs (${(validRatio * 100).toStringAsFixed(1)}%)');
+
+    return score;
   }
 
-  /// 验证UTF-8内容是否有效
+  /// 验证 UTF-8 内容是否有效
   bool _isValidUtf8Content(String content) {
-    // 检查是否包含过多控制字符或乱码
-    final controlCharCount = content.split('').where((char) {
-      final code = char.codeUnitAt(0);
-      return code < 32 && code != 9 && code != 10 && code != 13; // 排除tab、换行、回车
+    if (content.isEmpty) return false;
+
+    // 检查替换字符比例
+    final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
+    if (replacementCount > content.length * 0.01) {
+      debugPrint('   UTF-8 替换字符过多: $replacementCount/${content.length}');
+      return false;
+    }
+
+    // 检查控制字符比例（排除常见的空白字符）
+    final controlCount = content.codeUnits.where((c) {
+      return c < 32 && c != 9 && c != 10 && c != 13;
     }).length;
 
-    // 如果控制字符超过5%，可能是编码错误
-    return controlCharCount < content.length * 0.05;
+    if (controlCount > content.length * 0.05) {
+      debugPrint('   UTF-8 控制字符过多: $controlCount/${content.length}');
+      return false;
+    }
+
+    return true;
   }
 
-  /// 验证中文内容
-  bool _isValidChineseContent(String content) {
+  /// 验证 GBK 解码后的内容是否有效
+  bool _isValidGbkContent(String content) {
+    if (content.isEmpty) return false;
+
+    // 检查替换字符
+    final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
+    if (replacementCount > content.length * 0.05) {
+      debugPrint('   GBK 替换字符过多: $replacementCount/${content.length}');
+      return false;
+    }
+
+    // 检查中文字符
     final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length;
-    return chineseCount > content.length * 0.1; // 至少10%中文字符
-  }
+    if (chineseCount > 0) {
+      debugPrint('   包含中文字符: $chineseCount');
+      return true;
+    }
 
-  /// 验证文本内容的基本有效性
-  bool _isValidTextContent(String content) {
-    // 基本验证：不能全是控制字符或特殊符号
-    final validCharCount = content.split('').where((char) {
-      final code = char.codeUnitAt(0);
-      return (code >= 32 && code <= 126) || // ASCII可打印字符
-          (code >= 0x4e00 && code <= 0x9fff) || // 中文字符
-          char == '\n' ||
-          char == '\r' ||
-          char == '\t'; // 换行符等
+    // 即使没有中文，如果内容看起来正常也接受
+    final printableCount = content.codeUnits.where((c) {
+      return (c >= 32 && c <= 126) || c == 9 || c == 10 || c == 13;
     }).length;
 
-    return validCharCount > content.length * 0.8; // 至少80%有效字符
+    return printableCount > content.length * 0.8;
+  }
+
+  /// 检查是否有过多的替换字符
+  bool _hasExcessiveReplacementChars(String content) {
+    final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
+    return replacementCount > content.length * 0.1;
   }
 
   /// 增强的TXT元数据提取

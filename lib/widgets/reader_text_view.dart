@@ -1,5 +1,5 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/reader_providers.dart';
 
 /// 构建带首行缩进的文本Widget
@@ -60,7 +60,7 @@ Widget buildIndentedText({
 /// - 左右滑动：PageView翻页
 /// - 上下滚动：ScrollView滚动
 /// - 仿真翻页：PageFlip动画翻页
-class ReaderTextView extends StatefulWidget {
+class ReaderTextView extends ConsumerStatefulWidget {
   /// 翻页模式
   final PaginationMode paginationMode;
 
@@ -74,10 +74,10 @@ class ReaderTextView extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<ReaderTextView> createState() => _ReaderTextViewState();
+  ConsumerState<ReaderTextView> createState() => _ReaderTextViewState();
 }
 
-class _ReaderTextViewState extends State<ReaderTextView> {
+class _ReaderTextViewState extends ConsumerState<ReaderTextView> {
   PageController? _pageController;
   ScrollController? _scrollController;
   GlobalKey<_SimulationPaginationViewState>? _simulationKey;
@@ -111,6 +111,9 @@ class _ReaderTextViewState extends State<ReaderTextView> {
     _scrollController?.dispose();
 
     switch (widget.paginationMode) {
+      case PaginationMode.cover:
+        _pageController = PageController();
+        break;
       case PaginationMode.slide:
         _pageController = PageController();
         break;
@@ -125,32 +128,35 @@ class _ReaderTextViewState extends State<ReaderTextView> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<ReaderPaginationNotifier, ReaderSettingsNotifier>(
-      builder: (context, paginationNotifier, settingsNotifier, child) {
-        final paginationState = paginationNotifier.state;
-        final settings = settingsNotifier.state;
+    final paginationState = ref.watch(readerPaginationProvider);
+    final settings = ref.watch(readerSettingsProvider);
 
-        if (paginationState.isLoading) {
-          return _buildLoadingView(settings);
-        }
+    if (paginationState.isLoading) {
+      return _buildLoadingView(settings);
+    }
 
-        if (paginationState.error != null) {
-          return _buildErrorView(paginationState.error!, settings);
-        }
+    if (paginationState.error != null) {
+      return _buildErrorView(paginationState.error!, settings);
+    }
 
-        if (paginationState.pages.isEmpty) {
-          return _buildEmptyView(settings);
-        }
+    if (paginationState.pages.isEmpty) {
+      return _buildEmptyView(settings);
+    }
 
-        return _buildContentView(paginationState, settings);
-      },
-    );
+    return _buildContentView(paginationState, settings);
   }
 
   /// 构建内容视图
   Widget _buildContentView(
       ReaderPaginationState paginationState, ReaderSettings settings) {
     switch (widget.paginationMode) {
+      case PaginationMode.cover:
+        return _SlidePaginationView(
+          pages: paginationState.pages,
+          controller: _pageController!,
+          settings: settings,
+          onPageChanged: _onPageChanged,
+        );
       case PaginationMode.slide:
         return _SlidePaginationView(
           pages: paginationState.pages,
@@ -177,8 +183,8 @@ class _ReaderTextViewState extends State<ReaderTextView> {
 
   /// 页面变化处理
   void _onPageChanged(int pageIndex) {
-    final paginationNotifier = context.read<ReaderPaginationNotifier>();
-    final currentIndex = paginationNotifier.state.currentPageIndex;
+    final paginationNotifier = ref.read(readerPaginationProvider.notifier);
+    final currentIndex = ref.read(readerPaginationProvider).currentPageIndex;
 
     if (pageIndex != currentIndex) {
       paginationNotifier.goToPage(pageIndex);
@@ -234,22 +240,26 @@ class _ReaderTextViewState extends State<ReaderTextView> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                // 重新分页
-                final size = MediaQuery.of(context).size;
-                final settings = context.read<ReaderSettingsNotifier>().state;
-                final paginationNotifier =
-                    context.read<ReaderPaginationNotifier>();
+            Consumer(
+              builder: (context, ref, child) {
+                return ElevatedButton(
+                  onPressed: () {
+                    // 重新分页
+                    final size = MediaQuery.of(context).size;
+                    final settings = ref.read(readerSettingsProvider);
+                    final paginationNotifier =
+                        ref.read(readerPaginationProvider.notifier);
 
-                // 这里需要获取原始文本，暂时使用空字符串
-                paginationNotifier.initializePagination(
-                  text: '',
-                  screenSize: size,
-                  settings: settings,
+                    // 这里需要获取原始文本，暂时使用空字符串
+                    paginationNotifier.initializePagination(
+                      text: '',
+                      screenSize: size,
+                      settings: settings,
+                    );
+                  },
+                  child: const Text('重试'),
                 );
               },
-              child: const Text('重试'),
             ),
           ],
         ),

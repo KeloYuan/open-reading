@@ -911,26 +911,64 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   /// 执行书籍删除操作（在后台执行）
-  Future<void> _performBookDeletion(Book book) async {
-    // 使用 Future.microtask 将操作推迟到下一个事件循环
-    // 这样可以让 UI 有机会更新（显示进度对话框）
-    await Future.microtask(() async {
-      // 删除书籍文件
+  ///
+  /// 彻底删除书籍及其所有相关文件和缓存：
+  /// 1. 删除书籍原文件
+  /// 2. 删除封面图片文件
+  /// 3. 删除分页缓存文件
+  /// 4. 删除数据库记录（会级联删除笔记、书签等）
+  ///
+  /// 参数 [onProgress] 进度回调，用于更新UI提示信息
+  Future<void> _performBookDeletion(
+    Book book, {
+    void Function(String message)? onProgress,
+  }) async {
+    debugPrint('🗑️ 开始删除书籍: ${book.title}');
+    final startTime = DateTime.now();
+
+    try {
+      // 1. 删除书籍文件
+      onProgress?.call('删除书籍文件...');
       final file = File(book.filePath);
       if (await file.exists()) {
         await file.delete();
+        debugPrint('✅ 已删除书籍文件: ${book.filePath}');
+      } else {
+        debugPrint('⚠️ 书籍文件不存在: ${book.filePath}');
       }
 
-      // 删除书籍的分页缓存（优化后的版本）
+      // 2. 删除封面图片文件
+      onProgress?.call('删除封面图片...');
+      if (book.coverImagePath != null && book.coverImagePath!.isNotEmpty) {
+        final coverFile = File(book.coverImagePath!);
+        if (await coverFile.exists()) {
+          await coverFile.delete();
+          debugPrint('✅ 已删除封面图片: ${book.coverImagePath}');
+        }
+      }
+
+      // 3. 删除书籍的分页缓存（优化后的超高性能版本）
+      onProgress?.call('清理分页缓存...');
       if (book.contentHash != null && book.contentHash!.isNotEmpty) {
         await PaginationCacheService.deleteCacheForBookFast(
           book.contentHash!,
         );
+        debugPrint('✅ 已删除分页缓存');
       }
 
-      // 删除数据库记录（会级联删除笔记、书签等）
+      // 4. 删除数据库记录（会级联删除笔记、书签等）
+      onProgress?.call('清理数据库记录...');
       await _bookDao.deleteBook(book.id!);
-    });
+      debugPrint('✅ 已删除数据库记录');
+
+      final duration = DateTime.now().difference(startTime).inMilliseconds;
+      debugPrint('🎉 书籍删除完成: ${book.title} (总耗时: ${duration}ms)');
+      onProgress?.call('删除完成');
+    } catch (e, stackTrace) {
+      debugPrint('❌ 删除书籍失败: $e');
+      debugPrint('堆栈跟踪: $stackTrace');
+      rethrow;
+    }
   }
 }
 
