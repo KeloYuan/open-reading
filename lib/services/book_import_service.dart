@@ -506,18 +506,21 @@ class BookImportService {
       final author =
           epubBook.Author?.isNotEmpty == true ? epubBook.Author! : 'Unknown';
 
-      // 🖼️ 提取图片（生成临时bookId）
+      // 🖼️ 异步提取图片（不阻塞导入流程）
       final tempBookId = DateTime.now().millisecondsSinceEpoch.toString();
-      debugPrint('🖼️ 开始提取EPUB图片...');
-      try {
-        final imageMap = await _imageExtractor.extractImagesFromEpubBook(
-          epubBook,
-          tempBookId,
-        );
-        debugPrint('✅ 图片提取完成: ${imageMap.length} 张');
-      } catch (e) {
-        debugPrint('⚠️ 图片提取失败: $e，继续导入流程');
-      }
+      debugPrint('🖼️ 异步提取EPUB图片（不阻塞）...');
+      // 使用Future.delayed让图片提取在后台运行
+      Future.delayed(Duration.zero, () async {
+        try {
+          final imageMap = await _imageExtractor.extractImagesFromEpubBook(
+            epubBook,
+            tempBookId,
+          );
+          debugPrint('✅ 图片提取完成: ${imageMap.length} 张');
+        } catch (e) {
+          debugPrint('⚠️ 图片提取失败: $e');
+        }
+      });
 
       // Extract ISBN early (useful for cover fetching)
       String? isbn;

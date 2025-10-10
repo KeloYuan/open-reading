@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:crypto/crypto.dart';
 import '../services/fast_text_paginator.dart';
-import '../services/precise_paginator_adapter.dart';
 import '../services/pagination_cache_service.dart';
 import '../services/tts/system_tts.dart';
 import '../services/tts/base_tts.dart';
@@ -44,7 +43,6 @@ class ReaderSettings {
   final double firstLineIndent; // 首行缩进（0-4字符）
   final double horizontalMargin; // 水平页边距（10-40px）
   final bool enableFirstLineIndent; // 是否启用首行缩进（默认关闭）
-  final bool usePrecisePaginator; // 是否使用精确分页器（默认true）
 
   const ReaderSettings({
     this.fontSize = 18.0,
@@ -59,7 +57,6 @@ class ReaderSettings {
     this.firstLineIndent = 2.0,
     this.horizontalMargin = 20.0,
     this.enableFirstLineIndent = false,
-    this.usePrecisePaginator = true, // 默认使用精确分页器
   });
 
   /// 复制并修改设置
@@ -75,7 +72,6 @@ class ReaderSettings {
     double? firstLineIndent,
     double? horizontalMargin,
     bool? enableFirstLineIndent,
-    bool? usePrecisePaginator,
   }) {
     return ReaderSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -90,7 +86,6 @@ class ReaderSettings {
       horizontalMargin: horizontalMargin ?? this.horizontalMargin,
       enableFirstLineIndent:
           enableFirstLineIndent ?? this.enableFirstLineIndent,
-      usePrecisePaginator: usePrecisePaginator ?? this.usePrecisePaginator,
     );
   }
 
@@ -436,7 +431,6 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
   void _invalidateAndRefresh() {
     // 清除所有分页缓存
     FastTextPaginator.clearCache();
-    PrecisePaginatorAdapter.reset();
 
     debugPrint('🔄 [设置变化] 已清除缓存');
 
@@ -680,55 +674,33 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
 
     try {
       debugPrint('📄 开始一次性分页: ${text.length} 字符');
-      debugPrint(
-          '   分页器: ${settings.usePrecisePaginator ? "精确分页" : "FastText分页"}');
+      debugPrint('   分页器: FastText分页');
 
       List<String> pages;
       List<double>? pageExtraLineSpacing;
-      int? maxLinesPerPage;
 
-      if (settings.usePrecisePaginator) {
-        // 使用精确分页器
-        state = state.copyWith(loadingStage: '精确分页中...');
+      // 使用FastText分页器
+      final result = await FastTextPaginator.paginateWithProgress(
+        text: text,
+        screenSize: screenSize,
+        fontSize: settings.fontSize,
+        lineSpacing: settings.lineSpacing,
+        padding: settings.padding,
+        letterSpacing: settings.letterSpacing,
+        firstLineIndent: settings.firstLineIndent,
+        devicePixelRatio: devicePixelRatio,
+        onProgress: (currentPage, stage) {
+          // 更新进度显示
+          state = state.copyWith(
+            loadingStage: '$stage ($currentPage 页)',
+          );
+        },
+      );
 
-        final result = await PrecisePaginatorAdapter.paginateToStrings(
-          text: text,
-          screenSize: screenSize,
-          textStyle: settings.textStyle,
-          padding: settings.padding,
-          firstLineIndent:
-              settings.enableFirstLineIndent ? settings.firstLineIndent : 0.0,
-          paragraphSpacing: 0.5, // 段落间距
-        );
+      pages = result.pages;
+      pageExtraLineSpacing = result.pageExtraLineSpacing;
 
-        pages = result.pages;
-        maxLinesPerPage = result.maxLinesPerPage;
-
-        debugPrint('✅ 精确分页完成: ${pages.length} 页, 每页$maxLinesPerPage行');
-      } else {
-        // 使用原有的FastText分页器
-        final result = await FastTextPaginator.paginateWithProgress(
-          text: text,
-          screenSize: screenSize,
-          fontSize: settings.fontSize,
-          lineSpacing: settings.lineSpacing,
-          padding: settings.padding,
-          letterSpacing: settings.letterSpacing,
-          firstLineIndent: settings.firstLineIndent,
-          devicePixelRatio: devicePixelRatio,
-          onProgress: (currentPage, stage) {
-            // 更新进度显示
-            state = state.copyWith(
-              loadingStage: '$stage ($currentPage 页)',
-            );
-          },
-        );
-
-        pages = result.pages;
-        pageExtraLineSpacing = result.pageExtraLineSpacing;
-
-        debugPrint('✅ FastText分页完成: ${pages.length} 页');
-      }
+      debugPrint('✅ FastText分页完成: ${pages.length} 页');
 
       if (pages.isEmpty) {
         throw Exception('分页结果为空');
@@ -743,7 +715,6 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         cacheKey: cacheKey,
         loadingStage: '加载完成，共 ${pages.length} 页',
         pageExtraLineSpacing: pageExtraLineSpacing,
-        maxLinesPerPage: maxLinesPerPage,
       );
 
       // 保存到持久化缓存
