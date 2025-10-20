@@ -8,6 +8,8 @@ import '../models/book.dart';
 import '../pages/reader_page.dart';
 import 'enhanced_txt_import_service.dart';
 import 'epub_image_extractor.dart';
+import 'book_image_map_service.dart';
+// import 'debug_image_files.dart'; // 已删除
 
 /// 阅读器路由服务
 ///
@@ -57,7 +59,7 @@ class ReadingRouterService {
 
     try {
       // 在后台异步加载书籍内容（一次性全部加载）
-      bookContent = await _loadBookContent(book);
+      bookContent = await _loadBookContent(book, book.id ?? 0);
 
       // 延迟一小段时间，确保加载动画至少显示一会儿（提升体验）
       await Future.delayed(const Duration(milliseconds: 300));
@@ -126,7 +128,7 @@ class ReadingRouterService {
   }
 
   /// 加载书籍内容（支持大文件优化）
-  static Future<String> _loadBookContent(Book book) async {
+  static Future<String> _loadBookContent(Book book, int bookId) async {
     debugPrint('📖 开始加载书籍：${book.title}');
     debugPrint('📖 书籍格式: ${book.format}');
 
@@ -155,7 +157,7 @@ class ReadingRouterService {
 
         debugPrint('✅ 成功加载TXT文件，长度: ${content.length} 字符');
       } else if (format == 'epub') {
-        content = await _parseEpubContent(file);
+        content = await _parseEpubContent(file, bookId);
         debugPrint('✅ 成功加载EPUB文件，长度: ${content.length}');
       } else if (format == 'pdf') {
         content = await _parsePdfContent(file);
@@ -309,7 +311,7 @@ class ReadingRouterService {
   }
 
   /// 解析 EPUB 内容为纯文本
-  static Future<String> _parseEpubContent(File file) async {
+  static Future<String> _parseEpubContent(File file, int bookId) async {
     try {
       // 读取 EPUB 文件
       final bytes = await file.readAsBytes();
@@ -320,28 +322,54 @@ class ReadingRouterService {
       debugPrint('   作者: ${epubBook.Author}');
       debugPrint('   章节数: ${epubBook.Chapters?.length ?? 0}');
 
-      // 🖼️ 提取图片并建立路径映射
-      final bookId = file.path.hashCode.toString();
-      final imageExtractor = EpubImageExtractor();
+      // 🖼️ 加载或提取图片映射
+      final imageMapService = BookImageMapService();
+      final bookIdStr = bookId.toString();
       Map<String, String> imagePathMap = {};
 
       try {
-        debugPrint('🖼️ 开始提取EPUB图片并建立路径映射...');
-        imagePathMap = await imageExtractor.extractImagesFromEpubBook(
-          epubBook,
-          bookId,
-        );
-        debugPrint('✅ 图片映射完成: ${imagePathMap.length} 张');
+        // 先尝试从数据库加载
+        debugPrint('🖼️ 尝试从数据库加载图片映射...');
+        debugPrint('   BookId: $bookId, BookIdStr: $bookIdStr');
+        imagePathMap = await imageMapService.loadImageMap(bookId);
 
-        // 调试：打印前3个映射
-        int count = 0;
-        for (var entry in imagePathMap.entries) {
-          if (count++ < 3) {
-            debugPrint('   ${entry.key} -> ${path.basename(entry.value)}');
+        if (imagePathMap.isNotEmpty) {
+          debugPrint('✅ 从数据库加载图片映射: ${imagePathMap.length} 张');
+        } else {
+          // 如果数据库没有，重新提取并保存
+          debugPrint('🖼️ 数据库无映射，开始提取EPUB图片...');
+          final imageExtractor = EpubImageExtractor();
+          imagePathMap = await imageExtractor.extractImagesFromEpubBook(
+            epubBook,
+            bookIdStr,
+          );
+
+          if (imagePathMap.isNotEmpty) {
+            debugPrint('✅ 图片提取完成: ${imagePathMap.length} 张');
+            // 保存到数据库
+            await imageMapService.saveImageMap(bookId, imagePathMap);
+            debugPrint('✅ 图片映射已保存到数据库');
+          } else {
+            debugPrint('⚠️ 未提取到任何图片');
           }
         }
-      } catch (e) {
-        debugPrint('⚠️ 图片提取失败: $e，继续处理文本');
+
+        // 调试：打印所有映射
+        debugPrint('📊 图片映射详情 (共${imagePathMap.length}张):');
+        for (var entry in imagePathMap.entries) {
+          debugPrint('   ${entry.key} -> ${entry.value}');
+        }
+
+        // 🔍 调试功能已删除
+        // debugPrint('🔍 开始检查实际图片文件...');
+        // await DebugImageFiles.listAllImageFiles();
+        // if (imagePathMap.isNotEmpty) {
+        //   final firstImage = imagePathMap.values.first;
+        //   await DebugImageFiles.checkImageFileExists(firstImage);
+        // }
+      } catch (e, stackTrace) {
+        debugPrint('⚠️ 图片处理失败: $e');
+        debugPrint('   堆栈: $stackTrace');
       }
 
       final buffer = StringBuffer();
@@ -359,7 +387,7 @@ class ReadingRouterService {
       if (epubBook.Chapters != null && epubBook.Chapters!.isNotEmpty) {
         for (var chapter in epubBook.Chapters!) {
           await _extractChapterContent(
-              chapter, buffer, 0, imagePathMap, bookId);
+              chapter, buffer, 0, imagePathMap, bookIdStr);
         }
       } else {
         // 如果没有章节结构，尝试直接读取 HTML 内容
@@ -367,7 +395,8 @@ class ReadingRouterService {
         if (epubBook.Content?.Html != null) {
           for (var htmlFile in epubBook.Content!.Html!.values) {
             final htmlContent = htmlFile.Content ?? '';
-            final plainText = _stripHtmlTags(htmlContent, imagePathMap, bookId);
+            final plainText =
+                _stripHtmlTags(htmlContent, imagePathMap, bookIdStr);
             if (plainText.trim().isNotEmpty) {
               buffer.writeln(plainText);
               buffer.writeln('\n');
@@ -380,7 +409,7 @@ class ReadingRouterService {
 
       // 🖼️ 最后再做一次全局路径替换（以防有遗漏）
       if (imagePathMap.isNotEmpty) {
-        content = _replaceImagePaths(content, imagePathMap, bookId);
+        content = _replaceImagePaths(content, imagePathMap, bookIdStr);
       }
 
       if (content.trim().isEmpty || content.length < 100) {
@@ -499,49 +528,16 @@ class ReadingRouterService {
     text = text.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
     text = text.replaceAll(RegExp(r'</h[1-6]>', caseSensitive: false), '\n\n');
 
-    // 🖼️ 保留图片标签（转换为简化格式，并替换路径）
-    // 将复杂的img标签转换为简单的 <img src="..."/> 格式
+    // 🖼️ 将图片标签替换为占位符（简化处理，提升性能）
     text = text.replaceAllMapped(
       RegExp(r'''<img[^>]+src=["']([^"']+)["'][^>]*>''', caseSensitive: false),
       (match) {
-        var src = match.group(1);
-
-        // 如果提供了图片路径映射，尝试替换为缓存路径
-        if (imagePathMap != null && bookId != null && src != null) {
-          final fileName = path.basename(Uri.decodeFull(src));
-          final imageKey = '${bookId}_$fileName';
-
-          if (imagePathMap.containsKey(imageKey)) {
-            src = imagePathMap[imageKey];
-            debugPrint('🖼️ 替换图片路径: $fileName -> ${path.basename(src!)}');
-          }
-        }
-
-        return '<img src="$src"/>';
+        return '[图片]'; // 简单的文本占位符
       },
     );
 
-    // 移除其他 HTML 标签（但保留 img）
-    // 使用更简单的方法：先标记img标签，移除所有标签，再恢复img标签
-    final imgPlaceholder = '___IMG_PLACEHOLDER___';
-    final imgMatches = <String>[];
-
-    // 保存所有img标签
-    text = text.replaceAllMapped(
-      RegExp(r'''<img[^>]+>''', caseSensitive: false),
-      (match) {
-        imgMatches.add(match.group(0)!);
-        return '$imgPlaceholder${imgMatches.length - 1}$imgPlaceholder';
-      },
-    );
-
-    // 移除所有HTML标签
+    // 移除所有其他 HTML 标签
     text = text.replaceAll(RegExp(r'<[^>]+>'), '');
-
-    // 恢复img标签
-    for (int i = 0; i < imgMatches.length; i++) {
-      text = text.replaceAll('$imgPlaceholder$i$imgPlaceholder', imgMatches[i]);
-    }
 
     // 解码 HTML 实体
     text = text

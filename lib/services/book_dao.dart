@@ -1,5 +1,8 @@
+import 'package:flutter/material.dart';
 import '../models/book.dart';
 import 'database_service.dart';
+import 'book_image_map_service.dart';
+import 'pagination_cache_service.dart';
 
 class BookDao {
   final _dbService = DatabaseService();
@@ -113,6 +116,11 @@ class BookDao {
   Future<void> deleteBook(int bookId) async {
     try {
       final db = await _dbService.database;
+
+      // 🗑️ 删除相关缓存
+      await _deleteBookCaches(bookId);
+
+      // 删除数据库记录
       final result = await db.delete(
         'books',
         where: 'id = ?',
@@ -121,9 +129,44 @@ class BookDao {
       if (result == 0) {
         throw Exception('书籍不存在或已被删除');
       }
+
+      debugPrint('✅ 书籍已删除: $bookId（包括所有相关缓存）');
     } catch (e) {
       throw Exception('删除书籍失败: $e');
     }
+  }
+
+  /// 删除书籍相关的所有缓存
+  ///
+  /// 包括：
+  /// - 分页缓存（所有排版参数组合）
+  /// - 图片映射文件
+  Future<void> _deleteBookCaches(int bookId) async {
+    debugPrint('🗑️ 开始清除书籍缓存: $bookId');
+
+    try {
+      // 1. 删除图片映射
+      final imageMapService = BookImageMapService();
+      await imageMapService.deleteImageMap(bookId);
+      debugPrint('  ✅ 图片映射已删除');
+    } catch (e) {
+      debugPrint('  ⚠️ 删除图片映射失败: $e');
+    }
+
+    try {
+      // 2. 删除分页缓存（使用高性能方法）
+      final book = await getBookById(bookId);
+      if (book != null && book.contentHash != null) {
+        // 🚀 使用 PaginationCacheService 的高性能删除方法
+        // 只读取文件头部 512 字节，批量并行处理
+        await PaginationCacheService.deleteCacheForBookFast(book.contentHash!);
+        debugPrint('  ✅ 分页缓存已删除');
+      }
+    } catch (e) {
+      debugPrint('  ⚠️ 删除分页缓存失败: $e');
+    }
+
+    debugPrint('🗑️ 缓存清除完成');
   }
 
   // 更新书籍文件路径 - 用于处理iOS沙盒路径变更

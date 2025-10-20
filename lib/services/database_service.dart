@@ -11,7 +11,7 @@ class DatabaseService {
 
   static Database? _database;
   static const String _dbName = 'xxread_v2.db';
-  static const int _dbVersion = 8;
+  static const int _dbVersion = 9;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -225,6 +225,13 @@ class DatabaseService {
     if (oldVersion < 8) {
       await _createBookSourcesTable(db);
     }
+
+    // Version 9: Add indexes to books and reading_stats tables for performance
+    if (oldVersion < 9) {
+      await _createBooksTableIndexes(db);
+      await _createReadingStatsIndexes(db);
+      await _createBookNotesIndexes(db);
+    }
   }
 
   Future<void> _createTables(Database db) async {
@@ -287,6 +294,11 @@ class DatabaseService {
 
     // Create book_sources table for advanced book source system
     await _createBookSourcesTable(db);
+
+    // Create indexes for performance
+    await _createBooksTableIndexes(db);
+    await _createReadingStatsIndexes(db);
+    await _createBookNotesIndexes(db);
   }
 
   /// 创建书源表
@@ -335,7 +347,46 @@ class DatabaseService {
     );
   }
 
-  /// 将整数颜色值转换为十六进制字符串（不含#前缀）
+  /// 创建books表索引
+  Future<void> _createBooksTableIndexes(Database db) async {
+    // 为content_hash创建索引，用于快速检测重复书籍
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_books_content_hash ON books (content_hash)',
+    );
+    // 为importDate创建索引，用于按导入时间排序
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_books_import_date ON books (importDate DESC)',
+    );
+    // 为title和author创建索引，用于搜索功能
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_books_title ON books (title)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_books_author ON books (author)',
+    );
+  }
+
+  /// 创建reading_stats表索引
+  Future<void> _createReadingStatsIndexes(Database db) async {
+    // 为date创建索引，用于快速查询日期范围
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_reading_stats_date ON reading_stats (date DESC)',
+    );
+  }
+
+  /// 创建book_notes表索引
+  Future<void> _createBookNotesIndexes(Database db) async {
+    // 为book_id创建索引，用于快速查询某本书的所有笔记
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_book_notes_book_id ON book_notes (book_id)',
+    );
+    // 为type创建索引，用于快速筛选笔记类型
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_book_notes_type ON book_notes (type)',
+    );
+  }
+
+  /// 将整数颜色值转换为十六进制字符串(不含#前缀)
   String _intToHexColor(int colorValue) {
     return colorValue
         .toRadixString(16)

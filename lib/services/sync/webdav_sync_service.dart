@@ -316,6 +316,7 @@ class WebDavSyncService {
       'xxread/bookmarks/',
       'xxread/progress/',
       'xxread/notes/',
+      'xxread/files/', // 书籍文件目录
     ];
 
     for (final dir in directories) {
@@ -335,20 +336,35 @@ class WebDavSyncService {
     await _uploadBooks();
     await _uploadBookmarks();
     await _uploadProgress();
+    await _uploadBookFiles(); // 上传书籍文件
   }
 
-  /// 上传书籍列表
+  /// 上传书籍列表（使用差异化同步）
   Future<void> _uploadBooks() async {
     try {
       final books = await _bookDao.getAllBooks();
+
+      // 生成书籍元数据（不包含大字段）
+      final booksMetadata = books.map((book) {
+        final map = book.toMap();
+        // 移除大字段以减少上传数据量
+        map.remove('cached_content');
+        map.remove('cached_pages');
+        map.remove('table_of_contents');
+        return map;
+      }).toList();
+
       final booksData = {
-        'version': 1,
+        'version': 2, // 版本2支持差异化同步
         'timestamp': DateTime.now().toIso8601String(),
-        'books': books.map((book) => book.toMap()).toList(),
+        'books': booksMetadata,
+        'book_count': books.length,
       };
 
       final jsonData = jsonEncode(booksData);
       await _dio.put('xxread/books/books.json', data: jsonData);
+
+      debugPrint('已上传 ${books.length} 本书籍的元数据');
     } catch (e) {
       debugPrint('上传书籍列表失败: $e');
     }
@@ -393,6 +409,67 @@ class WebDavSyncService {
       await _dio.put('xxread/progress/progress.json', data: jsonData);
     } catch (e) {
       debugPrint('上传阅读进度失败: $e');
+    }
+  }
+
+  /// 上传书籍文件（仅上传用户导入的书籍）
+  Future<void> _uploadBookFiles() async {
+    try {
+      final books = await _bookDao.getAllBooks();
+      int uploadedCount = 0;
+      int skippedCount = 0;
+
+      for (final book in books) {
+        // 检查书籍文件是否存在
+        final bookFile = File(book.filePath);
+        if (!await bookFile.exists()) {
+          debugPrint('跳过不存在的文件: ${book.filePath}');
+          skippedCount++;
+          continue;
+        }
+
+        // 获取文件大小，避免上传过大的文件
+        final fileSize = await bookFile.length();
+        const maxFileSize = 100 * 1024 * 1024; // 100MB限制
+        if (fileSize > maxFileSize) {
+          debugPrint('跳过过大文件 (${(fileSize / 1024 / 1024).toStringAsFixed(1)}MB): ${book.title}');
+          skippedCount++;
+          continue;
+        }
+
+        // 生成远程文件路径
+        final fileName = book.contentHash ?? 'book_${book.id}.${book.format}';
+        final remotePath = 'xxread/files/$fileName';
+
+        try {
+          // 检查远程是否已存在
+          final headResponse = await _dio.head(remotePath);
+          if (headResponse.statusCode == 200) {
+            debugPrint('文件已存在，跳过: ${book.title}');
+            skippedCount++;
+            continue;
+          }
+        } catch (e) {
+          // 文件不存在，继续上传
+        }
+
+        // 上传文件
+        final fileBytes = await bookFile.readAsBytes();
+        await _dio.put(
+          remotePath,
+          data: fileBytes,
+          options: Options(
+            headers: {'Content-Type': 'application/octet-stream'},
+          ),
+        );
+
+        uploadedCount++;
+        debugPrint('已上传书籍: ${book.title} (${(fileSize / 1024).toStringAsFixed(1)}KB)');
+      }
+
+      debugPrint('书籍文件上传完成: 上传 $uploadedCount 个, 跳过 $skippedCount 个');
+    } catch (e) {
+      debugPrint('上传书籍文件失败: $e');
     }
   }
 

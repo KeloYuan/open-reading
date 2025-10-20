@@ -1,4 +1,5 @@
 ﻿import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +15,49 @@ import '../services/book_dao.dart';
 import '../services/data_manager.dart';
 import '../services/reading_stats_dao.dart';
 import 'cover_pagination_view.dart';
+
+/// 混合内容元素（文本或图片）
+class _ContentElement {
+  final bool isImage;
+  final String content; // 如果是文本就是文本内容，如果是图片就是文件路径
+
+  const _ContentElement({required this.isImage, required this.content});
+}
+
+/// 解析混合内容（文本+图片）
+List<_ContentElement> _parseMixedContent(String content) {
+  final elements = <_ContentElement>[];
+  final imgPattern = RegExp(r'<img src="([^"]+)"\s*/?>');
+
+  int lastIndex = 0;
+  for (var match in imgPattern.allMatches(content)) {
+    // 添加图片前的文本
+    if (match.start > lastIndex) {
+      final textContent = content.substring(lastIndex, match.start);
+      if (textContent.isNotEmpty) {
+        elements.add(_ContentElement(isImage: false, content: textContent));
+      }
+    }
+
+    // 添加图片
+    final imagePath = match.group(1);
+    if (imagePath != null && imagePath.isNotEmpty) {
+      elements.add(_ContentElement(isImage: true, content: imagePath));
+    }
+
+    lastIndex = match.end;
+  }
+
+  // 添加最后剩余的文本
+  if (lastIndex < content.length) {
+    final textContent = content.substring(lastIndex);
+    if (textContent.isNotEmpty) {
+      elements.add(_ContentElement(isImage: false, content: textContent));
+    }
+  }
+
+  return elements;
+}
 
 /// 支持句子高亮的文本渲染组件
 class _HighlightedText extends StatelessWidget {
@@ -37,6 +81,14 @@ class _HighlightedText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 🖼️ 检查是否包含图片标签
+    final hasImages = text.contains(RegExp(r'<img\s+src="[^"]+"\s*/?>'));
+
+    if (hasImages) {
+      // 包含图片，使用混合内容渲染
+      return _buildMixedContent(context);
+    }
+
     if (highlightedSentenceIndex == null || highlightedSentenceIndex! <= -1) {
       // 没有高亮句子，直接返回普通文本
       return enableSelection
@@ -161,6 +213,93 @@ class _HighlightedText extends StatelessWidget {
     return RichText(
       text: TextSpan(children: spans),
       textAlign: TextAlign.left, // 改为left对齐，与分页器TextPainter一致
+    );
+  }
+
+  /// 构建混合内容（文本+图片）
+  Widget _buildMixedContent(BuildContext context) {
+    final elements = _parseMixedContent(text);
+
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(), // 禁止滚动，由外层分页控制
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: elements.map((element) {
+          if (element.isImage) {
+            // 渲染图片
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: _buildImage(element.content),
+            );
+          } else {
+            // 渲染文本
+            return Text(
+              element.content,
+              style: style,
+              textAlign: TextAlign.left,
+            );
+          }
+        }).toList(),
+      ),
+    );
+  }
+
+  /// 构建图片组件
+  Widget _buildImage(String imagePath) {
+    debugPrint('🖼️ 尝试加载图片: $imagePath');
+
+    final file = File(imagePath);
+
+    return Image.file(
+      file,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) {
+        debugPrint('❌ 图片加载错误: $imagePath');
+        debugPrint('   错误: $error');
+        debugPrint('   堆栈: $stackTrace');
+
+        // 检查文件是否存在
+        final exists = file.existsSync();
+        debugPrint('   文件是否存在: $exists');
+
+        return Container(
+          padding: const EdgeInsets.all(8),
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey[300],
+            border: Border.all(color: Colors.red, width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '❌ 图片加载失败',
+                style: TextStyle(
+                  color: Colors.red[700],
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '路径: $imagePath',
+                style: TextStyle(color: Colors.grey[700], fontSize: 11),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '文件存在: ${exists ? "是" : "否"}',
+                style: TextStyle(color: Colors.grey[700], fontSize: 11),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '错误: $error',
+                style: TextStyle(color: Colors.grey[700], fontSize: 11),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -606,8 +745,14 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     // 读取当前settings
     final settings = ref.read(readerSettingsProvider);
 
-    // 计算响应式padding（不修改state，避免触发监听器）
-    final responsivePadding = settings.getResponsivePadding(size);
+    // ✅ 计算真实可用高度（考虑所有UI元素）
+    // 沉浸式模式下：全屏高度 - 状态栏
+    // 注意：reader_page是全屏的，没有AppBar和BottomBar
+    final realAvailableHeight = size.height - statusBarHeight;
+    final adjustedSize = Size(size.width, realAvailableHeight);
+
+    // 计算响应式padding（基于实际可用尺寸）
+    final responsivePadding = settings.getResponsivePadding(adjustedSize);
 
     // 创建临时settings，带有响应式padding
     final settingsWithPadding = settings.copyWith(padding: responsivePadding);
@@ -619,12 +764,15 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       '   - 屏幕尺寸: ${size.width.toInt()}x${size.height.toInt()} (DPR: ${devicePixelRatio.toStringAsFixed(2)})',
     );
     debugPrint(
+      '   - 实际可用高度: ${realAvailableHeight.toInt()} (已减去状态栏 ${statusBarHeight.toInt()})',
+    );
+    debugPrint(
       '   - 响应式Padding: T${responsivePadding.top.toInt()} B${responsivePadding.bottom.toInt()} L${responsivePadding.left.toInt()} R${responsivePadding.right.toInt()}',
     );
 
     await ref.read(readerPaginationProvider.notifier).initializePagination(
           text: widget.bookContent,
-          screenSize: size,
+          screenSize: adjustedSize, // ✅ 使用调整后的尺寸
           settings: settingsWithPadding,
           statusBarHeight: statusBarHeight,
           bottomSafeArea: bottomSafeArea,

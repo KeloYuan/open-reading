@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../models/chapter.dart';
 import 'txt_text_processor.dart';
+import 'text_preprocessor.dart';
 import 'package:gbk_codec/gbk_codec.dart';
 
 /// 增强的TXT文件导入服务
@@ -16,6 +17,7 @@ import 'package:gbk_codec/gbk_codec.dart';
 /// - [optimizedPageEstimation] 优化分页估算
 class EnhancedTxtImportService {
   final _textProcessor = TxtTextProcessor();
+  final _preprocessor = TextPreprocessor();
 
   /// 智能检测文本编码
   ///
@@ -74,7 +76,9 @@ class EnhancedTxtImportService {
       }
       debugPrint('⚠️ UTF-8 解码通过，但内容验证失败');
     } catch (e) {
-      debugPrint('⚠️ UTF-8 严格模式失败: ${e.toString().substring(0, 100)}');
+      final errorMsg = e.toString();
+      debugPrint(
+          '⚠️ UTF-8 严格模式失败: ${errorMsg.length > 100 ? errorMsg.substring(0, 100) : errorMsg}');
     }
 
     // 3. 检测 GBK/GB2312 特征（中文旧文件常用）
@@ -86,6 +90,13 @@ class EnhancedTxtImportService {
       // 评分>0.3表示很可能是GBK编码
       try {
         final content = gbk.decode(bytes);
+        // 如果评分很高(>0.8)，直接接受，不做严格验证
+        if (gbkScore > 0.8) {
+          debugPrint(
+              '✅ GBK/GB2312 解码成功 (高评分: ${gbkScore.toStringAsFixed(2)}, ${content.length} 字符)');
+          return content;
+        }
+        // 评分中等时才做验证
         if (content.isNotEmpty && _isValidGbkContent(content)) {
           debugPrint('✅ GBK/GB2312 解码成功 (${content.length} 字符)');
           return content;
@@ -229,19 +240,30 @@ class EnhancedTxtImportService {
 
   /// 验证 GBK 解码后的内容是否有效
   bool _isValidGbkContent(String content) {
-    if (content.isEmpty) return false;
+    if (content.isEmpty) {
+      debugPrint('   GBK 内容为空');
+      return false;
+    }
 
     // 检查替换字符
     final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
-    if (replacementCount > content.length * 0.05) {
-      debugPrint('   GBK 替换字符过多: $replacementCount/${content.length}');
+    final replacementRatio = replacementCount / content.length;
+    debugPrint(
+        '   GBK 替换字符: $replacementCount/${content.length} (${(replacementRatio * 100).toStringAsFixed(2)}%)');
+
+    if (replacementRatio > 0.05) {
+      debugPrint('   ❌ GBK 替换字符过多');
       return false;
     }
 
     // 检查中文字符
     final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length;
+    final chineseRatio = chineseCount / content.length;
+    debugPrint(
+        '   GBK 中文字符: $chineseCount/${content.length} (${(chineseRatio * 100).toStringAsFixed(2)}%)');
+
     if (chineseCount > 0) {
-      debugPrint('   包含中文字符: $chineseCount');
+      debugPrint('   ✅ 包含中文字符，验证通过');
       return true;
     }
 
@@ -249,8 +271,17 @@ class EnhancedTxtImportService {
     final printableCount = content.codeUnits.where((c) {
       return (c >= 32 && c <= 126) || c == 9 || c == 10 || c == 13;
     }).length;
+    final printableRatio = printableCount / content.length;
+    debugPrint(
+        '   GBK 可打印字符: $printableCount/${content.length} (${(printableRatio * 100).toStringAsFixed(2)}%)');
 
-    return printableCount > content.length * 0.8;
+    if (printableRatio > 0.8) {
+      debugPrint('   ✅ 可打印字符足够，验证通过');
+      return true;
+    }
+
+    debugPrint('   ❌ 验证失败');
+    return false;
   }
 
   /// 检查是否有过多的替换字符
@@ -266,16 +297,25 @@ class EnhancedTxtImportService {
   /// [content] 解码后的文本内容
   /// [fileName] 原始文件名
   /// [processText] 是否预处理文本（默认true）
+  /// [indentSize] 段首缩进字符数（0-4，默认2）
+  /// [compressEmptyLines] 是否压缩空行（默认true）
   /// Returns: 增强的书籍元数据
   TxtMetadata extractTxtMetadata(
     String content,
     String fileName, {
     bool processText = true,
+    int indentSize = 2,
+    bool compressEmptyLines = true,
   }) {
-    // 1. 文本预处理（可选）
+    // 1. 文本预处理（使用新的TextPreprocessor）
     String processedContent = content;
     if (processText) {
-      processedContent = _textProcessor.preprocessText(content);
+      processedContent = _preprocessor.process(
+        content,
+        indentSize: indentSize,
+        indentDialogue: true,
+        compressEmptyLines: compressEmptyLines,
+      );
     }
 
     final lines =

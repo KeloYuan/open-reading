@@ -264,6 +264,13 @@ String _detectAndDecodeText(Uint8List bytes) {
   if (gbkScore > 0.3) {
     try {
       final content = gbk.decode(bytes);
+      // 如果评分很高(>0.8)，直接接受
+      if (gbkScore > 0.8) {
+        debugPrint(
+            '✅ [Isolate] GBK 解码成功 (高评分: ${gbkScore.toStringAsFixed(2)}, ${content.length} 字符)');
+        return content;
+      }
+      // 评分中等时才验证
       if (content.isNotEmpty && _isValidGbkContent(content)) {
         debugPrint('✅ [Isolate] GBK 解码成功 (${content.length} 字符)');
         return content;
@@ -378,19 +385,37 @@ bool _isValidUtf8Content(String content) {
 
 /// 验证 GBK 内容
 bool _isValidGbkContent(String content) {
-  if (content.isEmpty) return false;
+  if (content.isEmpty) {
+    debugPrint('   [Isolate] GBK 内容为空');
+    return false;
+  }
 
   final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
-  if (replacementCount > content.length * 0.05) return false;
+  final replacementRatio = replacementCount / content.length;
+  debugPrint(
+      '   [Isolate] GBK 替换字符: $replacementCount/${content.length} (${(replacementRatio * 100).toStringAsFixed(2)}%)');
+
+  if (replacementRatio > 0.05) {
+    debugPrint('   [Isolate] ❌ GBK 替换字符过多');
+    return false;
+  }
 
   final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length;
-  if (chineseCount > 0) return true;
+  debugPrint('   [Isolate] GBK 中文字符: $chineseCount/${content.length}');
+
+  if (chineseCount > 0) {
+    debugPrint('   [Isolate] ✅ 包含中文字符');
+    return true;
+  }
 
   final printableCount = content.codeUnits.where((c) {
     return (c >= 32 && c <= 126) || c == 9 || c == 10 || c == 13;
   }).length;
+  final printableRatio = printableCount / content.length;
+  debugPrint(
+      '   [Isolate] GBK 可打印字符: ${(printableRatio * 100).toStringAsFixed(2)}%');
 
-  return printableCount > content.length * 0.8;
+  return printableRatio > 0.8;
 }
 
 /// 检查是否有过多替换字符

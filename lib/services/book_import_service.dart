@@ -12,10 +12,13 @@ import '../models/book.dart';
 import '../models/chapter.dart';
 import 'book_dao.dart';
 import 'enhanced_txt_import_service.dart';
+import 'text_preprocessor.dart';
 import 'cover_generator.dart';
 import 'book_cover_fetcher.dart';
 import 'book_import_isolate.dart';
 import 'epub_image_extractor.dart';
+import 'book_image_map_service.dart';
+import 'pagination_cache_service.dart';
 import '../utils/encoding_detector_helper.dart';
 
 class EnhancedBookMetadata {
@@ -52,8 +55,10 @@ typedef ImportProgressCallback = void Function(double progress, String message);
 class BookImportService {
   final _bookDao = BookDao();
   final _enhancedTxtService = EnhancedTxtImportService();
+  final _preprocessor = TextPreprocessor();
   final _coverFetcher = BookCoverFetcher();
   final _imageExtractor = EpubImageExtractor();
+  final _imageMapService = BookImageMapService();
 
   /// 流式复制文件，支持大文件和进度回调
   ///
@@ -372,6 +377,55 @@ class BookImportService {
         debugPrint('Language: ${metadata.language ?? 'Unknown'}');
         debugPrint('Publisher: ${metadata.publisher ?? 'Unknown'}');
 
+        // 🖼️ 如果是EPUB格式，保存图片映射
+        if (pickedFile.extension?.toLowerCase() == 'epub' &&
+            metadata.additionalInfo?['imageMap'] != null) {
+          final oldImageMap =
+              metadata.additionalInfo!['imageMap'] as Map<String, String>;
+          if (oldImageMap.isNotEmpty) {
+            progressCallback?.call(0.95, '保存图片映射...');
+
+            // 🔧 修复键名：将临时bookId替换为真正的bookId
+            final newImageMap = <String, String>{};
+            final bookIdStr = bookId.toString();
+
+            for (var entry in oldImageMap.entries) {
+              // 提取文件名部分（去掉临时bookId前缀）
+              final parts = entry.key.split('_');
+              if (parts.length >= 2) {
+                // 重建键名：真实bookId_文件名
+                final fileName = parts.sublist(1).join('_');
+                final newKey = '${bookIdStr}_$fileName';
+                // 🔧 清理路径：移除所有换行符和多余空白
+                final cleanPath =
+                    entry.value.replaceAll(RegExp(r'[\r\n\t]'), '').trim();
+                newImageMap[newKey] = cleanPath;
+                debugPrint('🔧 修复映射键: ${entry.key} -> $newKey');
+              } else {
+                // 保持原样（以防万一）
+                final cleanPath =
+                    entry.value.replaceAll(RegExp(r'[\r\n\t]'), '').trim();
+                newImageMap[entry.key] = cleanPath;
+              }
+            }
+
+            await _imageMapService.saveImageMap(bookId, newImageMap);
+            debugPrint('✅ 图片映射已保存: ${newImageMap.length} 张');
+
+            // 🗑️ 清除旧的分页缓存（因为图片路径已变化）
+            try {
+              final book = await _bookDao.getBookById(bookId);
+              if (book != null && book.contentHash != null) {
+                await PaginationCacheService.deleteCacheForBookFast(
+                    book.contentHash!);
+                debugPrint('🗑️ 已清除旧分页缓存（图片路径已更新）');
+              }
+            } catch (e) {
+              debugPrint('⚠️ 清除旧缓存失败: $e');
+            }
+          }
+        }
+
         progressCallback?.call(1.0, '导入成功！');
 
         return book.copyWith(id: bookId);
@@ -506,21 +560,20 @@ class BookImportService {
       final author =
           epubBook.Author?.isNotEmpty == true ? epubBook.Author! : 'Unknown';
 
-      // 🖼️ 异步提取图片（不阻塞导入流程）
+      // 🖼️ 提取图片（恢复为同步，确保图片可用）
+      // 注意：虽然是同步，但图片数量通常不多（<10张），影响很小
       final tempBookId = DateTime.now().millisecondsSinceEpoch.toString();
-      debugPrint('🖼️ 异步提取EPUB图片（不阻塞）...');
-      // 使用Future.delayed让图片提取在后台运行
-      Future.delayed(Duration.zero, () async {
-        try {
-          final imageMap = await _imageExtractor.extractImagesFromEpubBook(
-            epubBook,
-            tempBookId,
-          );
-          debugPrint('✅ 图片提取完成: ${imageMap.length} 张');
-        } catch (e) {
-          debugPrint('⚠️ 图片提取失败: $e');
-        }
-      });
+      debugPrint('🖼️ 开始提取EPUB图片...');
+      Map<String, String> imageMap = {};
+      try {
+        imageMap = await _imageExtractor.extractImagesFromEpubBook(
+          epubBook,
+          tempBookId,
+        );
+        debugPrint('✅ 图片提取完成: ${imageMap.length} 张');
+      } catch (e) {
+        debugPrint('⚠️ 图片提取失败: $e，继续导入流程');
+      }
 
       // Extract ISBN early (useful for cover fetching)
       String? isbn;
@@ -632,6 +685,7 @@ class BookImportService {
           'format': 'EPUB',
           'hasImages': epubBook.Content?.Images?.isNotEmpty == true,
           'chapterCount': epubBook.Chapters?.length ?? 0,
+          'imageMap': imageMap, // 🖼️ 添加图片映射，用于阅读器渲染
         },
       );
     } catch (e) {
@@ -757,6 +811,15 @@ class BookImportService {
           content = utf8.decode(bytes, allowMalformed: true);
           debugPrint('使用UTF-8 fallback解码');
         }
+
+        // ✅ 文本预处理：压缩空行、添加缩进
+        content = _preprocessor.process(
+          content,
+          indentSize: 2,
+          indentDialogue: true,
+          compressEmptyLines: true,
+        );
+        debugPrint('✅ 文本预处理完成：压缩空行、添加缩进');
 
         final lines = content
             .split('\n')

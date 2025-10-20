@@ -9,6 +9,7 @@ import '../services/sync/webdav_sync_service.dart';
 import '../services/reading_engine_coordinator.dart';
 import '../services/pagination_cache_service.dart';
 import '../widgets/webdav_config_dialog.dart';
+// import 'stable_reader_test_page.dart'; // 已删除
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -490,6 +491,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     onTap: _resetEngineSettings,
                     icon: Icons.restore,
                   ),
+                  const Divider(height: 32),
+                  // 测试页面已删除
+                  // _buildActionSetting(
+                  //   title: '🧪 测试稳定分页器',
+                  //   onTap: () {},
+                  //   icon: Icons.science,
+                  // ),
                 ],
               ],
             ),

@@ -1,4 +1,5 @@
-﻿import 'dart:ui';
+import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../services/reading_stats_dao.dart';
@@ -540,29 +541,29 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
         'title': '总阅读时长',
         'value': '${_overallStats['totalReadingTime'] ?? 0}',
         'unit': '分钟',
-        'icon': Icons.access_time,
-        'color': Colors.blue,
+        'icon': Icons.schedule_rounded,
+        'gradient': [const Color(0xFF667EEA), const Color(0xFF764BA2)], // 紫蓝渐变
       },
       {
         'title': '总阅读页数',
         'value': '${_overallStats['totalPages'] ?? 0}',
         'unit': '页',
-        'icon': Icons.menu_book,
-        'color': Colors.green,
+        'icon': Icons.auto_stories_rounded,
+        'gradient': [const Color(0xFF06B6D4), const Color(0xFF3B82F6)], // 青蓝渐变
       },
       {
         'title': '阅读书籍数',
         'value': '${_overallStats['totalBooks'] ?? 0}',
         'unit': '本',
-        'icon': Icons.library_books,
-        'color': Colors.orange,
+        'icon': Icons.library_books_rounded,
+        'gradient': [const Color(0xFFF59E0B), const Color(0xFFEF4444)], // 橙红渐变
       },
       {
         'title': '连续阅读',
         'value': '${_overallStats['streak'] ?? 0}',
         'unit': '天',
-        'icon': Icons.local_fire_department,
-        'color': Colors.red,
+        'icon': Icons.local_fire_department_rounded,
+        'gradient': [const Color(0xFFEC4899), const Color(0xFF8B5CF6)], // 粉紫渐变
       },
     ];
 
@@ -583,86 +584,109 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     );
   }
 
-  // 统计卡片
+  // 统计卡片 - 现代化重新设计
   Widget _buildStatCard(Map<String, dynamic> stat) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(
-          sigmaX: GlassEffectConfig.cardBlur,
-          sigmaY: GlassEffectConfig.cardBlur,
+    final gradient = stat['gradient'] as List<Color>;
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: gradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(
-                  alpha: GlassEffectConfig.cardOpacity,
-                ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Theme.of(
-                context,
-              ).colorScheme.outline.withValues(alpha: 0.2),
-              width: 1,
-            ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: gradient[0].withValues(alpha: 0.4),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16), // 减少内边距
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.2),
+                width: 1.5,
+              ),
+            ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min, // 确保列不会溢出
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 图标容器 - 使用发光效果
                 Container(
-                  padding: const EdgeInsets.all(10), // 减少图标容器内边距
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: (stat['color'] as Color).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
+                    color: Colors.white.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                        spreadRadius: 0,
+                      ),
+                    ],
                   ),
                   child: Icon(
                     stat['icon'] as IconData,
-                    size: 20, // 稍微减小图标大小
-                    color: stat['color'] as Color,
+                    size: 32,
+                    color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 8), // 减少间距
-                Flexible(
-                  // 使用Flexible防止溢出
-                  child: Text(
-                    stat['value'] as String,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          // 减小字体大小
-                          fontWeight: FontWeight.bold,
-                          color: stat['color'] as Color,
-                        ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                const Spacer(),
+                // 数值 - 大字体显示
+                Text(
+                  stat['value'] as String,
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    height: 1.0,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black26,
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                Flexible(
-                  // 使用Flexible防止溢出
-                  child: Text(
-                    stat['unit'] as String,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.7),
+                const SizedBox(height: 4),
+                // 单位和标题组合
+                Row(
+                  children: [
+                    Text(
+                      stat['unit'] as String,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        stat['title'] as String,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withValues(alpha: 0.75),
+                          fontWeight: FontWeight.w400,
                         ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(height: 2), // 减少间距
-                Flexible(
-                  // 使用Flexible防止溢出
-                  child: Text(
-                    stat['title'] as String,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          // 减小字体大小
-                          fontWeight: FontWeight.w500,
-                        ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2, // 允许两行
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -722,17 +746,24 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF667EEA).withValues(alpha: 0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: Icon(
-                      Icons.today,
-                      color: Theme.of(context).colorScheme.primary,
-                      size: 20,
+                    child: const Icon(
+                      Icons.today_rounded,
+                      color: Colors.white,
+                      size: 24,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -860,17 +891,24 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.secondary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF06B6D4), Color(0xFF3B82F6)],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF06B6D4).withValues(alpha: 0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: Icon(
-                      Icons.history,
-                      color: Theme.of(context).colorScheme.secondary,
-                      size: 20,
+                    child: const Icon(
+                      Icons.history_rounded,
+                      color: Colors.white,
+                      size: 24,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -899,21 +937,8 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                   ),
                   child: Row(
                     children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Icons.menu_book,
-                          color: Theme.of(context).colorScheme.primary,
-                          size: 20,
-                        ),
-                      ),
+                      // 显示真实封面或默认图标
+                      _buildBookCoverWidget(book, 40, 56),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -989,17 +1014,24 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.tertiary.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFF59E0B), Color(0xFFEF4444)],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: Icon(
-                      Icons.psychology,
-                      color: Theme.of(context).colorScheme.tertiary,
-                      size: 20,
+                    child: const Icon(
+                      Icons.psychology_rounded,
+                      color: Colors.white,
+                      size: 24,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -1198,33 +1230,85 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   }
 
   LineChartData _buildLineChartData() {
-    final spots = _dailyStats.asMap().entries.map((entry) {
+    // 使用窗口化的每日数据
+    final windowedData = _windowedDailyStats;
+
+    if (windowedData.isEmpty) {
+      return LineChartData(
+        lineBarsData: [],
+        titlesData: const FlTitlesData(show: false),
+      );
+    }
+
+    final spots = windowedData.asMap().entries.map((entry) {
       final index = entry.key.toDouble();
       final data = entry.value;
       double value = 0;
       switch (_selectedStatType) {
         case 0:
-          value = (data['readingTime'] ?? 0).toDouble();
+          value = (data['duration'] ?? 0).toDouble() / 60; // 转换为分钟
           break;
         case 1:
-          value = (data['pagesRead'] ?? 0).toDouble();
+          value = (data['pages'] ?? 0).toDouble();
           break;
         case 2:
-          value = (data['booksRead'] ?? 0).toDouble();
+          value = (data['books_read'] ?? 0).toDouble();
           break;
       }
       return FlSpot(index, value);
     }).toList();
 
+    // 计算最大值和合适的间隔
+    final maxValue = spots.isNotEmpty
+        ? spots.map((e) => e.y).reduce((a, b) => a > b ? a : b)
+        : 10.0;
+    final roundedMax = (maxValue * 1.2).ceilToDouble();
+
+    // 计算Y轴间隔
+    double yInterval;
+    if (roundedMax <= 10) {
+      yInterval = 2;
+    } else if (roundedMax <= 50) {
+      yInterval = 10;
+    } else if (roundedMax <= 100) {
+      yInterval = 20;
+    } else if (roundedMax <= 500) {
+      yInterval = 50;
+    } else {
+      yInterval = 100;
+    }
+
+    // 计算X轴间隔 - 根据数据点数量
+    int xInterval;
+    if (windowedData.length <= 7) {
+      xInterval = 1;
+    } else if (windowedData.length <= 30) {
+      xInterval = 5;
+    } else if (windowedData.length <= 90) {
+      xInterval = 15;
+    } else {
+      xInterval = 30;
+    }
+
     return LineChartData(
       gridData: FlGridData(
         show: true,
-        drawVerticalLine: false,
-        horizontalInterval: 1,
+        drawVerticalLine: true,
+        horizontalInterval: yInterval,
+        verticalInterval: xInterval.toDouble(),
         getDrawingHorizontalLine: (value) {
+          return FlLine(
+            color:
+                Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+            strokeWidth: 1,
+            dashArray: [5, 5],
+          );
+        },
+        getDrawingVerticalLine: (value) {
           return FlLine(
             color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
             strokeWidth: 1,
+            dashArray: [5, 5],
           );
         },
       ),
@@ -1234,59 +1318,127 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           sideTitles: SideTitles(showTitles: false),
         ),
         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        // 底部横轴 - 显示日期
         bottomTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            reservedSize: 30,
-            interval: 5,
+            reservedSize: 35,
+            interval: xInterval.toDouble(),
             getTitlesWidget: (double value, TitleMeta meta) {
-              return Text(
-                '${value.toInt()}',
-                style: Theme.of(context).textTheme.bodySmall,
-              );
+              final index = value.toInt();
+              if (index < 0 || index >= windowedData.length) {
+                return const SizedBox.shrink();
+              }
+
+              // 从日期字符串提取月/日
+              final dateStr = windowedData[index]['date'] as String;
+              final parts = dateStr.split('-');
+              if (parts.length >= 3) {
+                final month = int.parse(parts[1]);
+                final day = int.parse(parts[2]);
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    '$month/$day',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontSize: 10,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.6),
+                        ),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
             },
           ),
         ),
+        // 左侧纵轴 - 显示数值
         leftTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            interval: null,
+            interval: yInterval,
             getTitlesWidget: (double value, TitleMeta meta) {
-              return Text(
-                '${value.toInt()}',
-                style: Theme.of(context).textTheme.bodySmall,
+              if (value == meta.max || value == meta.min) {
+                return const SizedBox.shrink();
+              }
+
+              String label;
+              if (_selectedStatType == 0) {
+                // 阅读时长 - 分钟
+                label = '${value.toInt()}分';
+              } else if (_selectedStatType == 1) {
+                // 阅读页数
+                label = '${value.toInt()}页';
+              } else {
+                // 书籍数量
+                label = '${value.toInt()}本';
+              }
+
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: 10,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.6),
+                      ),
+                  textAlign: TextAlign.right,
+                ),
               );
             },
-            reservedSize: 42,
+            reservedSize: 48,
           ),
         ),
       ),
-      borderData: FlBorderData(show: false),
+      borderData: FlBorderData(
+        show: true,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+            width: 1,
+          ),
+          left: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+      ),
       minX: 0,
-      maxX: spots.length.toDouble() - 1,
+      maxX: (windowedData.length - 1).toDouble(),
       minY: 0,
-      maxY: spots.isNotEmpty
-          ? spots.map((e) => e.y).reduce((a, b) => a > b ? a : b) * 1.2
-          : 10,
+      maxY: roundedMax,
       lineBarsData: [
         LineChartBarData(
           spots: spots,
           isCurved: true,
-          gradient: LinearGradient(
-            colors: [
-              Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
-              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.8),
-            ],
+          curveSmoothness: 0.35,
+          gradient: const LinearGradient(
+            colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
           ),
-          barWidth: 3,
+          barWidth: 4,
           isStrokeCapRound: true,
-          dotData: const FlDotData(show: false),
+          dotData: FlDotData(
+            show: true,
+            getDotPainter: (spot, percent, barData, index) {
+              return FlDotCirclePainter(
+                radius: 3,
+                color: Colors.white,
+                strokeWidth: 2,
+                strokeColor: const Color(0xFF667EEA),
+              );
+            },
+          ),
           belowBarData: BarAreaData(
             show: true,
             gradient: LinearGradient(
               colors: [
-                Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
-                Theme.of(context).colorScheme.secondary.withValues(alpha: 0.1),
+                const Color(0xFF667EEA).withValues(alpha: 0.3),
+                const Color(0xFF764BA2).withValues(alpha: 0.1),
               ],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -1345,50 +1497,166 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
       return (_hourlyDistribution[hour] ?? 0).toDouble();
     });
 
+    // 计算最大值和合适的Y轴范围
+    final maxValue = hourlyData.reduce((a, b) => a > b ? a : b);
+    final roundedMax = maxValue > 0 ? (maxValue * 1.3).ceilToDouble() : 10.0;
+
+    // 计算Y轴间隔
+    double yInterval;
+    if (roundedMax <= 10) {
+      yInterval = 2;
+    } else if (roundedMax <= 50) {
+      yInterval = 10;
+    } else if (roundedMax <= 100) {
+      yInterval = 20;
+    } else {
+      yInterval = 50;
+    }
+
     return BarChartData(
       alignment: BarChartAlignment.spaceAround,
-      maxY: hourlyData.reduce((a, b) => a > b ? a : b) * 1.2,
-      barTouchData: BarTouchData(enabled: false),
+      maxY: roundedMax,
+      minY: 0,
+      barTouchData: BarTouchData(
+        enabled: true,
+        touchTooltipData: BarTouchTooltipData(
+          getTooltipColor: (group) =>
+              const Color(0xFF667EEA).withValues(alpha: 0.9),
+          tooltipRoundedRadius: 8,
+          getTooltipItem: (group, groupIndex, rod, rodIndex) {
+            return BarTooltipItem(
+              '${group.x}:00\n${rod.toY.toInt()}分钟',
+              const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            );
+          },
+        ),
+      ),
+      gridData: FlGridData(
+        show: true,
+        drawVerticalLine: false,
+        horizontalInterval: yInterval,
+        getDrawingHorizontalLine: (value) {
+          return FlLine(
+            color:
+                Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+            strokeWidth: 1,
+            dashArray: [5, 5],
+          );
+        },
+      ),
       titlesData: FlTitlesData(
         show: true,
         rightTitles: const AxisTitles(
           sideTitles: SideTitles(showTitles: false),
         ),
         topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        // 底部横轴 - 显示时间
         bottomTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
             getTitlesWidget: (double value, TitleMeta meta) {
-              return Text(
-                '${value.toInt()}',
-                style: Theme.of(context).textTheme.bodySmall,
+              final hour = value.toInt();
+              // 每3小时显示一次标签
+              if (hour % 3 != 0) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '$hour时',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: 10,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.6),
+                      ),
+                ),
               );
             },
-            reservedSize: 30,
-            interval: 4,
+            reservedSize: 32,
+            interval: 1,
           ),
         ),
-        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        // 左侧纵轴 - 显示分钟数
+        leftTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            interval: yInterval,
+            getTitlesWidget: (double value, TitleMeta meta) {
+              if (value == meta.max || value == 0) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Text(
+                  '${value.toInt()}分',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontSize: 10,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.6),
+                      ),
+                  textAlign: TextAlign.right,
+                ),
+              );
+            },
+            reservedSize: 42,
+          ),
+        ),
       ),
-      borderData: FlBorderData(show: false),
+      borderData: FlBorderData(
+        show: true,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+            width: 1,
+          ),
+          left: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+      ),
       barGroups: hourlyData.asMap().entries.map((entry) {
+        final hour = entry.key;
+        final value = entry.value;
+
+        // 根据时间段选择不同的渐变色
+        List<Color> gradient;
+        if (hour >= 6 && hour < 12) {
+          // 早晨 - 橙黄色
+          gradient = [const Color(0xFFFBBF24), const Color(0xFFF59E0B)];
+        } else if (hour >= 12 && hour < 18) {
+          // 下午 - 蓝色
+          gradient = [const Color(0xFF3B82F6), const Color(0xFF2563EB)];
+        } else if (hour >= 18 && hour < 24) {
+          // 晚上 - 紫色
+          gradient = [const Color(0xFF8B5CF6), const Color(0xFF7C3AED)];
+        } else {
+          // 深夜 - 深蓝色
+          gradient = [const Color(0xFF1E3A8A), const Color(0xFF1E40AF)];
+        }
+
         return BarChartGroupData(
-          x: entry.key,
+          x: hour,
           barRods: [
             BarChartRodData(
-              toY: entry.value,
+              toY: value > 0 ? value : 0,
               gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).colorScheme.primary,
-                  Theme.of(context).colorScheme.secondary,
-                ],
+                colors: gradient,
                 begin: Alignment.bottomCenter,
                 end: Alignment.topCenter,
               ),
-              width: 8,
+              width: 10,
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(4),
-                topRight: Radius.circular(4),
+                topLeft: Radius.circular(5),
+                topRight: Radius.circular(5),
               ),
             ),
           ],
@@ -1598,26 +1866,46 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     IconData icon,
     Color color,
   ) {
+    // 根据颜色生成渐变
+    final gradient = color == Colors.green
+        ? [const Color(0xFF10B981), const Color(0xFF059669)]
+        : color == Colors.orange
+            ? [const Color(0xFFF59E0B), const Color(0xFFD97706)]
+            : [const Color(0xFF3B82F6), const Color(0xFF2563EB)];
+
     return Expanded(
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
+              gradient: LinearGradient(colors: gradient),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: gradient[0].withValues(alpha: 0.4),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
+              ],
             ),
-            child: Icon(icon, color: color, size: 24),
+            child: Icon(icon, color: Colors.white, size: 28),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Text(
             '$value',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: color,
+                  color: gradient[0],
                 ),
           ),
-          Text(title, style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+          ),
         ],
       ),
     );
@@ -1719,22 +2007,8 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           ),
           const SizedBox(width: 12),
 
-          // 书籍图标
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              Icons.menu_book,
-              color: Theme.of(context).colorScheme.primary,
-              size: 20,
-            ),
-          ),
+          // 书籍封面或图标
+          _buildBookCoverWidget(book, 40, 56),
           const SizedBox(width: 12),
 
           // 书籍信息
@@ -1869,17 +2143,24 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(16),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFEC4899), Color(0xFF8B5CF6)],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFEC4899).withValues(alpha: 0.5),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
                 ),
-                child: Icon(
-                  Icons.emoji_events,
-                  color: Theme.of(context).colorScheme.primary,
-                  size: 32,
+                child: const Icon(
+                  Icons.emoji_events_rounded,
+                  color: Colors.white,
+                  size: 40,
                 ),
               ),
               const SizedBox(width: 20),
@@ -1933,64 +2214,64 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
       {
         'title': '初次阅读',
         'description': '完成第一次阅读记录',
-        'icon': Icons.auto_stories,
-        'color': Colors.blue,
+        'icon': Icons.auto_stories_rounded,
+        'gradient': [const Color(0xFF3B82F6), const Color(0xFF2563EB)], // 蓝色
         'achieved': totalReadingMinutes > 0,
         'progress': totalReadingMinutes > 0 ? 1.0 : 0.0,
       },
       {
         'title': '阅读新手',
         'description': '累计阅读时长达到10小时',
-        'icon': Icons.timer,
-        'color': Colors.green,
+        'icon': Icons.timer_rounded,
+        'gradient': [const Color(0xFF10B981), const Color(0xFF059669)], // 绿色
         'achieved': totalReadingMinutes >= 600,
         'progress': (totalReadingMinutes / 600).clamp(0.0, 1.0),
       },
       {
         'title': '书虫',
         'description': '累计阅读时长达到100小时',
-        'icon': Icons.local_fire_department,
-        'color': Colors.orange,
+        'icon': Icons.local_fire_department_rounded,
+        'gradient': [const Color(0xFFF59E0B), const Color(0xFFD97706)], // 橙色
         'achieved': totalReadingMinutes >= 6000,
         'progress': (totalReadingMinutes / 6000).clamp(0.0, 1.0),
       },
       {
         'title': '阅读达人',
         'description': '连续阅读7天',
-        'icon': Icons.calendar_today,
-        'color': Colors.purple,
+        'icon': Icons.calendar_month_rounded,
+        'gradient': [const Color(0xFF8B5CF6), const Color(0xFF7C3AED)], // 紫色
         'achieved': streak >= 7,
         'progress': (streak / 7).clamp(0.0, 1.0),
       },
       {
         'title': '知识海洋',
         'description': '阅读页数达到10000页',
-        'icon': Icons.waves,
-        'color': Colors.cyan,
+        'icon': Icons.waves_rounded,
+        'gradient': [const Color(0xFF06B6D4), const Color(0xFF0891B2)], // 青色
         'achieved': totalPages >= 10000,
         'progress': (totalPages / 10000).clamp(0.0, 1.0),
       },
       {
         'title': '博学者',
         'description': '阅读10本不同的书籍',
-        'icon': Icons.school,
-        'color': Colors.brown,
+        'icon': Icons.school_rounded,
+        'gradient': [const Color(0xFF78716C), const Color(0xFF57534E)], // 棕色
         'achieved': totalBooks >= 10,
         'progress': (totalBooks / 10).clamp(0.0, 1.0),
       },
       {
         'title': '阅读马拉松',
         'description': '连续阅读30天',
-        'icon': Icons.trending_up,
-        'color': Colors.indigo,
+        'icon': Icons.trending_up_rounded,
+        'gradient': [const Color(0xFF6366F1), const Color(0xFF4F46E5)], // 靛蓝
         'achieved': streak >= 30,
         'progress': (streak / 30).clamp(0.0, 1.0),
       },
       {
         'title': '专注达人',
         'description': '累计阅读时长达到500小时',
-        'icon': Icons.center_focus_strong,
-        'color': Colors.red,
+        'icon': Icons.center_focus_strong_rounded,
+        'gradient': [const Color(0xFFEF4444), const Color(0xFFDC2626)], // 红色
         'achieved': totalReadingMinutes >= 30000,
         'progress': (totalReadingMinutes / 30000).clamp(0.0, 1.0),
       },
@@ -2018,7 +2299,8 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: achievement['achieved'] as bool
-                        ? (achievement['color'] as Color).withValues(alpha: 0.3)
+                        ? (achievement['gradient'] as List<Color>)[0]
+                            .withValues(alpha: 0.3)
                         : Theme.of(
                             context,
                           ).colorScheme.outline.withValues(alpha: 0.2),
@@ -2028,18 +2310,33 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 child: Row(
                   children: [
                     Container(
-                      width: 60,
-                      height: 60,
+                      width: 68,
+                      height: 68,
                       decoration: BoxDecoration(
-                        color: (achievement['color'] as Color).withValues(
-                          alpha: achievement['achieved'] as bool ? 0.2 : 0.1,
+                        gradient: LinearGradient(
+                          colors: achievement['gradient'] as List<Color>,
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: achievement['achieved'] as bool
+                            ? [
+                                BoxShadow(
+                                  color: (achievement['gradient']
+                                          as List<Color>)[0]
+                                      .withValues(alpha: 0.5),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ]
+                            : [],
                       ),
                       child: Icon(
                         achievement['icon'] as IconData,
-                        color: achievement['color'] as Color,
-                        size: 28,
+                        color: achievement['achieved'] as bool
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.5),
+                        size: 32,
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -2068,10 +2365,20 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                               ),
                               if (achievement['achieved'] as bool) ...[
                                 const SizedBox(width: 8),
-                                Icon(
-                                  Icons.check_circle,
-                                  color: achievement['color'] as Color,
-                                  size: 20,
+                                Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: achievement['gradient']
+                                          as List<Color>,
+                                    ),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.check_rounded,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
                                 ),
                               ],
                             ],
@@ -2091,13 +2398,17 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                           ),
                           if (!(achievement['achieved'] as bool)) ...[
                             const SizedBox(height: 8),
-                            LinearProgressIndicator(
-                              value: achievement['progress'] as double,
-                              backgroundColor: Theme.of(
-                                context,
-                              ).colorScheme.outline.withValues(alpha: 0.2),
-                              valueColor: AlwaysStoppedAnimation(
-                                achievement['color'] as Color,
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: achievement['progress'] as double,
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.outline.withValues(alpha: 0.2),
+                                valueColor: AlwaysStoppedAnimation(
+                                  (achievement['gradient'] as List<Color>)[0],
+                                ),
+                                minHeight: 6,
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -2107,7 +2418,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                                   .textTheme
                                   .bodySmall
                                   ?.copyWith(
-                                    color: achievement['color'] as Color,
+                                    color: (achievement['gradient']
+                                        as List<Color>)[0],
+                                    fontWeight: FontWeight.w600,
                                   ),
                             ),
                           ],
@@ -2615,5 +2928,47 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     final dateStr = targetDate.toIso8601String().split('T').first;
 
     return _heatmapData[dateStr] ?? 0.0;
+  }
+
+  /// 构建书籍封面组件，优先显示真实封面，否则显示默认图标
+  Widget _buildBookCoverWidget(Book book, double width, double height) {
+    if (book.coverImagePath != null &&
+        book.coverImagePath!.isNotEmpty &&
+        book.coverImagePath != 'null') {
+      // 尝试显示真实封面
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.file(
+          File(book.coverImagePath!),
+          width: width,
+          height: height,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            // 如果加载失败，显示默认图标
+            return _buildDefaultBookIcon(width, height);
+          },
+        ),
+      );
+    } else {
+      // 没有封面路径，显示默认图标
+      return _buildDefaultBookIcon(width, height);
+    }
+  }
+
+  /// 构建默认的书籍图标
+  Widget _buildDefaultBookIcon(double width, double height) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(
+        Icons.menu_book,
+        color: Theme.of(context).colorScheme.primary,
+        size: width * 0.5,
+      ),
+    );
   }
 }

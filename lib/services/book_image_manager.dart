@@ -52,8 +52,26 @@ class BookImageManager {
     final filePath = path.join(_cacheDir, fileName);
     final file = File(filePath);
 
+    debugPrint('💾 准备保存图片:');
+    debugPrint('   imageKey: $imageKey');
+    debugPrint('   fileName: $fileName');
+    debugPrint('   完整路径: $filePath');
+    debugPrint('   数据大小: ${imageData.length} 字节');
+    debugPrint('   缓存目录: $_cacheDir');
+
     await file.writeAsBytes(imageData);
-    debugPrint('💾 图片已保存: $imageKey -> $fileName');
+
+    // 验证文件是否真的被保存
+    final exists = await file.exists();
+    final savedSize = exists ? await file.length() : 0;
+
+    if (exists) {
+      debugPrint('✅ 图片已保存: $imageKey -> $fileName');
+      debugPrint('   文件大小: $savedSize 字节');
+      debugPrint('   文件存在: $exists');
+    } else {
+      debugPrint('❌ 图片保存失败: 文件不存在！');
+    }
 
     return filePath;
   }

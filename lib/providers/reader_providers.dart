@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:crypto/crypto.dart';
-import '../services/fast_text_paginator.dart';
+import '../services/enhanced_paginator.dart';
 import '../services/pagination_cache_service.dart';
 import '../services/tts/system_tts.dart';
 import '../services/tts/base_tts.dart';
@@ -220,9 +220,11 @@ class ReaderPaginationState {
   final String? loadingStage; // 加载阶段提示
   final List<int>? pageCharOffsets; // 每页在原文中的字符起始位置
   final Size? screenSize; // 保存屏幕尺寸用于后台分页
-  final List<List<PageElement>>? pageElements; // 每页的内容元素列表（包含文本和图片）
+  final List<PageContent>? pageContents; // 每页的内容（包含文本和图片）
   final List<double>? pageExtraLineSpacing; // 每页的额外行间距（用于底部对齐）
   final int? maxLinesPerPage; // 每页最大行数（用于精确分页器）
+  final int? estimatedTotal; // 估算的总页数（渐进式分页）
+  final bool? isEstimated; // 当前页码是否为估算值
 
   const ReaderPaginationState({
     this.pages = const [],
@@ -236,9 +238,11 @@ class ReaderPaginationState {
     this.loadingStage,
     this.pageCharOffsets,
     this.screenSize,
-    this.pageElements,
+    this.pageContents,
     this.pageExtraLineSpacing,
     this.maxLinesPerPage,
+    this.estimatedTotal,
+    this.isEstimated,
   });
 
   /// 复制并修改状态
@@ -254,9 +258,11 @@ class ReaderPaginationState {
     String? loadingStage,
     List<int>? pageCharOffsets,
     Size? screenSize,
-    List<List<PageElement>>? pageElements,
+    List<PageContent>? pageContents,
     List<double>? pageExtraLineSpacing,
     int? maxLinesPerPage,
+    int? estimatedTotal,
+    bool? isEstimated,
   }) {
     return ReaderPaginationState(
       pages: pages ?? this.pages,
@@ -270,14 +276,21 @@ class ReaderPaginationState {
       loadingStage: loadingStage ?? this.loadingStage,
       pageCharOffsets: pageCharOffsets ?? this.pageCharOffsets,
       screenSize: screenSize ?? this.screenSize,
-      pageElements: pageElements ?? this.pageElements,
+      pageContents: pageContents ?? this.pageContents,
       pageExtraLineSpacing: pageExtraLineSpacing ?? this.pageExtraLineSpacing,
       maxLinesPerPage: maxLinesPerPage ?? this.maxLinesPerPage,
+      estimatedTotal: estimatedTotal ?? this.estimatedTotal,
+      isEstimated: isEstimated ?? this.isEstimated,
     );
   }
 
-  /// 获取总页数
-  int get totalPages => pages.length;
+  /// 获取总页数（如果是估算值，返回估算总数）
+  int get totalPages {
+    if (isEstimated == true && estimatedTotal != null) {
+      return estimatedTotal!;
+    }
+    return pages.length;
+  }
 
   /// 获取当前页内容
   String? get currentPageContent {
@@ -429,9 +442,7 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
 
   /// 🔧 清除所有缓存并通知重新分页（带防抖）
   void _invalidateAndRefresh() {
-    // 清除所有分页缓存
-    FastTextPaginator.clearCache();
-
+    // 清除所有分页缓存（已移除FastTextPaginator）
     debugPrint('🔄 [设置变化] 已清除缓存');
 
     // 🚀 防抖通知重新分页：500ms内多次调用只执行最后一次
@@ -658,7 +669,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     }
   }
 
-  /// 一次性全部加载（不分批，直接加载所有内容）
+  /// 一次性全部加载（使用渐进式分页：快速估算 + 后台精确计算）
   Future<void> _paginateDirectAll({
     required String text,
     required Size screenSize,
@@ -669,26 +680,23 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
   }) async {
     state = state.copyWith(
       isLoading: true,
-      loadingStage: '正在分页...',
+      loadingStage: '快速估算中...',
     );
 
     try {
-      debugPrint('📄 开始一次性分页: ${text.length} 字符');
-      debugPrint('   分页器: FastText分页');
+      debugPrint('📄 开始渐进式分页: ${text.length} 字符');
 
-      List<String> pages;
-      List<double>? pageExtraLineSpacing;
-
-      // 使用FastText分页器
-      final result = await FastTextPaginator.paginateWithProgress(
+      // ✅ 使用增强分页器（渐进式加载：快速估算 + 后台精确计算）
+      debugPrint('   🚀 使用增强分页器（渐进式加载）');
+      final result = await EnhancedPaginator.paginateProgressive(
         text: text,
         screenSize: screenSize,
         fontSize: settings.fontSize,
-        lineSpacing: settings.lineSpacing,
+        lineHeight: settings.lineSpacing,
         padding: settings.padding,
         letterSpacing: settings.letterSpacing,
-        firstLineIndent: settings.firstLineIndent,
-        devicePixelRatio: devicePixelRatio,
+        supportImages: true, // 🔑 启用图片支持
+        quickSamplePages: 10, // 快速采样前10页
         onProgress: (currentPage, stage) {
           // 更新进度显示
           state = state.copyWith(
@@ -697,33 +705,60 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         },
       );
 
-      pages = result.pages;
-      pageExtraLineSpacing = result.pageExtraLineSpacing;
+      // 阶段1：使用快速估算结果，立即显示
+      final sampledPages = result.sampledPages;
+      final estimatedTotal = result.estimatedTotal;
 
-      debugPrint('✅ FastText分页完成: ${pages.length} 页');
+      debugPrint('✅ 快速估算完成: 采样${sampledPages.length}页，估算总页数~$estimatedTotal');
 
-      if (pages.isEmpty) {
-        throw Exception('分页结果为空');
+      if (sampledPages.isEmpty) {
+        throw Exception('快速估算结果为空');
       }
 
+      // 立即更新状态，显示估算结果（用户可以立即开始阅读）
       state = state.copyWith(
-        pages: pages,
-        currentPageIndex: initialPageIndex.clamp(0, pages.length - 1),
+        pages: sampledPages,
+        currentPageIndex: initialPageIndex.clamp(0, sampledPages.length - 1),
         isLoading: false,
         paginationSettings: settings,
         cachedText: text,
         cacheKey: cacheKey,
-        loadingStage: '加载完成，共 ${pages.length} 页',
-        pageExtraLineSpacing: pageExtraLineSpacing,
+        loadingStage: '加载完成，约 $estimatedTotal 页',
+        estimatedTotal: estimatedTotal,
+        isEstimated: true, // 标记为估算值
       );
 
-      // 保存到持久化缓存
-      await PaginationCacheService.saveCache(
-        pages: pages,
-        cacheKey: cacheKey,
-      );
+      debugPrint('📖 用户可以开始阅读，后台继续精确计算...');
 
-      debugPrint('💾 已缓存到本地磁盘');
+      // 阶段2：等待后台精确计算完成
+      result.preciseCalculationFuture.then((preciseResult) {
+        final pages = preciseResult.pages;
+        final pageContents = preciseResult.pageContents;
+
+        debugPrint('✅ 精确计算完成: 实际${pages.length}页');
+
+        // 更新状态为精确值
+        state = state.copyWith(
+          pages: pages,
+          currentPageIndex: state.currentPageIndex.clamp(0, pages.length - 1),
+          loadingStage: '加载完成，共 ${pages.length} 页',
+          pageContents: pageContents,
+          estimatedTotal: null,
+          isEstimated: false, // 标记为精确值
+        );
+
+        // 保存到持久化缓存
+        PaginationCacheService.saveCache(
+          pages: pages,
+          cacheKey: cacheKey,
+        ).then((_) {
+          debugPrint('💾 已缓存到本地磁盘');
+        });
+      }).catchError((e, stackTrace) {
+        debugPrint('❌ 后台精确计算失败: $e');
+        debugPrint('堆栈: $stackTrace');
+        // 保持使用估算结果，不影响用户阅读
+      });
     } catch (e, stackTrace) {
       debugPrint('❌ 分页失败: $e');
       debugPrint('堆栈: $stackTrace');
