@@ -812,19 +812,20 @@ class BookImportService {
           debugPrint('使用UTF-8 fallback解码');
         }
 
-        // ✅ 文本预处理：压缩空行、添加缩进
+        // ✅ 文本预处理：压缩空行、添加缩进、段落间距
         content = _preprocessor.process(
           content,
           indentSize: 2,
           indentDialogue: true,
           compressEmptyLines: true,
+          paragraphSpacing: 0, // 默认0行空行（段落紧密排列）
         );
-        debugPrint('✅ 文本预处理完成：压缩空行、添加缩进');
+        debugPrint('✅ 文本预处理完成：压缩空行、添加缩进、段落间距');
 
+        // 🔧 不要使用 trim()，否则会移除段首缩进！
         final lines = content
             .split('\n')
-            .map((e) => e.trim())
-            .where((e) => e.isNotEmpty)
+            .where((e) => e.trim().isNotEmpty)
             .toList();
         final title = lines.isNotEmpty
             ? lines.first.substring(0, lines.first.length.clamp(0, 50))

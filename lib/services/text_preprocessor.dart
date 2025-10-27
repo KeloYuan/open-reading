@@ -23,6 +23,7 @@ class TextPreprocessor {
     int indentSize = 2,
     bool indentDialogue = true,
     bool compressEmptyLines = true,
+    int paragraphSpacing = 0, // 段落间距（0-2行空行）
   }) {
     if (rawText.isEmpty) return rawText;
 
@@ -32,6 +33,7 @@ class TextPreprocessor {
     debugPrint('   - 缩进大小: $indentSize 字符');
     debugPrint('   - 对话缩进: $indentDialogue');
     debugPrint('   - 压缩空行: $compressEmptyLines');
+    debugPrint('   - 段落间距: $paragraphSpacing 行');
 
     String processed = rawText;
 
@@ -53,6 +55,11 @@ class TextPreprocessor {
         indentSize: indentSize,
         indentDialogue: indentDialogue,
       );
+    }
+
+    // 步骤5: 添加段落间距
+    if (paragraphSpacing > 0) {
+      processed = _addParagraphSpacing(processed, paragraphSpacing);
     }
 
     final endTime = DateTime.now();
@@ -98,13 +105,23 @@ class TextPreprocessor {
 
   /// 压缩多余空行
   ///
-  /// 将多个连续空行（2个以上\n）压缩为1个空行（2个\n）
+  /// 将多个连续换行符压缩为单个换行符
+  /// 同时移除段落之间的空行，让段落紧密排列（通过缩进区分段落）
   ///
   /// 例如:
-  /// "段落1\n\n\n\n段落2" → "段落1\n\n段落2"
+  /// "段落1\n\n\n\n段落2" → "段落1\n段落2"
+  /// "  行1  \n  \n行2" → "行1\n行2" (移除空白行)
   String _compressEmptyLines(String text) {
-    // 使用正则表达式：3个或以上连续\n 替换为 2个\n
-    return text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    // 步骤1: 移除每行首尾的空白字符
+    final lines = text.split('\n');
+    final trimmedLines = lines.map((line) => line.trim()).toList();
+
+    // 步骤2: 移除空行并合并
+    final nonEmptyLines =
+        trimmedLines.where((line) => line.isNotEmpty).toList();
+
+    // 步骤3: 用单个换行符连接所有非空行（彻底去除段落间空行）
+    return nonEmptyLines.join('\n');
   }
 
   /// 添加段首缩进
@@ -216,6 +233,24 @@ class TextPreprocessor {
     ];
 
     return dialogueMarkers.contains(firstChar);
+  }
+
+  /// 添加段落间距
+  ///
+  /// 在每个段落（换行符）之间添加指定数量的空行
+  ///
+  /// [text] 输入文本（已经过段首缩进处理）
+  /// [spacing] 段落间距（0-2行）
+  ///
+  /// 例如：
+  /// spacing=1: "段落1\n段落2" → "段落1\n\n段落2"
+  /// spacing=2: "段落1\n段落2" → "段落1\n\n\n段落2"
+  String _addParagraphSpacing(String text, int spacing) {
+    if (spacing <= 0 || spacing > 2) return text;
+
+    // 将每个 \n 替换为 spacing+1 个 \n
+    final replacement = '\n' * (spacing + 1);
+    return text.replaceAll('\n', replacement);
   }
 
   /// 快速预处理（用于性能敏感场景）

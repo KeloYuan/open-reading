@@ -43,6 +43,7 @@ class ReaderSettings {
   final double firstLineIndent; // 首行缩进（0-4字符）
   final double horizontalMargin; // 水平页边距（10-40px）
   final bool enableFirstLineIndent; // 是否启用首行缩进（默认关闭）
+  final int paragraphSpacing; // 段落间距（0-2行空行）
 
   const ReaderSettings({
     this.fontSize = 18.0,
@@ -57,6 +58,7 @@ class ReaderSettings {
     this.firstLineIndent = 2.0,
     this.horizontalMargin = 20.0,
     this.enableFirstLineIndent = false,
+    this.paragraphSpacing = 0, // 默认0行空行（段落紧密排列）
   });
 
   /// 复制并修改设置
@@ -72,6 +74,7 @@ class ReaderSettings {
     double? firstLineIndent,
     double? horizontalMargin,
     bool? enableFirstLineIndent,
+    int? paragraphSpacing,
   }) {
     return ReaderSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -86,6 +89,7 @@ class ReaderSettings {
       horizontalMargin: horizontalMargin ?? this.horizontalMargin,
       enableFirstLineIndent:
           enableFirstLineIndent ?? this.enableFirstLineIndent,
+      paragraphSpacing: paragraphSpacing ?? this.paragraphSpacing,
     );
   }
 
@@ -686,6 +690,11 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     try {
       debugPrint('📄 开始渐进式分页: ${text.length} 字符');
 
+      // 🔧 计算响应式padding（与渲染时保持一致）
+      final responsivePadding = settings.getResponsivePadding(screenSize);
+      debugPrint(
+          '   📐 响应式padding: L${responsivePadding.left} R${responsivePadding.right} T${responsivePadding.top} B${responsivePadding.bottom}');
+
       // ✅ 使用增强分页器（渐进式加载：快速估算 + 后台精确计算）
       debugPrint('   🚀 使用增强分页器（渐进式加载）');
       final result = await EnhancedPaginator.paginateProgressive(
@@ -693,7 +702,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         screenSize: screenSize,
         fontSize: settings.fontSize,
         lineHeight: settings.lineSpacing,
-        padding: settings.padding,
+        padding: responsivePadding, // 🔧 使用响应式padding
         letterSpacing: settings.letterSpacing,
         supportImages: true, // 🔑 启用图片支持
         quickSamplePages: 10, // 快速采样前10页
@@ -716,11 +725,13 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       }
 
       // 立即更新状态，显示估算结果（用户可以立即开始阅读）
+      // 🔧 保存使用响应式padding的settings，确保渲染时padding一致
+      final paginationSettings = settings.copyWith(padding: responsivePadding);
       state = state.copyWith(
         pages: sampledPages,
         currentPageIndex: initialPageIndex.clamp(0, sampledPages.length - 1),
         isLoading: false,
-        paginationSettings: settings,
+        paginationSettings: paginationSettings, // 🔧 保存带响应式padding的settings
         cachedText: text,
         cacheKey: cacheKey,
         loadingStage: '加载完成，约 $estimatedTotal 页',
@@ -738,11 +749,15 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         debugPrint('✅ 精确计算完成: 实际${pages.length}页');
 
         // 更新状态为精确值
+        // 🔧 保持使用响应式padding的settings
+        final paginationSettings =
+            settings.copyWith(padding: responsivePadding);
         state = state.copyWith(
           pages: pages,
           currentPageIndex: state.currentPageIndex.clamp(0, pages.length - 1),
           loadingStage: '加载完成，共 ${pages.length} 页',
           pageContents: pageContents,
+          paginationSettings: paginationSettings, // 🔧 确保精确计算后也使用相同padding
           estimatedTotal: null,
           isEstimated: false, // 标记为精确值
         );

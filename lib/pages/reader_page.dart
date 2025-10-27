@@ -135,6 +135,7 @@ class _HighlightedText extends StatelessWidget {
               text,
               style: style,
               textAlign: TextAlign.left,
+              softWrap: true, // 启用自动换行
               maxLines: maxLines, // 限制最大行数
               overflow: TextOverflow.clip, // 超出裁剪
             );
@@ -187,6 +188,7 @@ class _HighlightedText extends StatelessWidget {
               text,
               style: style,
               textAlign: TextAlign.left,
+              softWrap: true, // 启用自动换行
               maxLines: maxLines, // 限制最大行数
               overflow: TextOverflow.clip, // 超出裁剪
             );
@@ -1600,9 +1602,13 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
 
   Widget _buildBottomProgressBar(ReaderSettings settings) {
     final paginationState = ref.watch(readerPaginationProvider);
+
+    // 📊 支持估算页码显示："1/约850页" 或 "1/856页"
     final pageInfo = paginationState.pages.isEmpty
         ? '0/0'
-        : '${paginationState.currentPageIndex + 1}/${paginationState.totalPages}';
+        : paginationState.isEstimated == true
+            ? '${paginationState.currentPageIndex + 1}/约${paginationState.totalPages}'
+            : '${paginationState.currentPageIndex + 1}/${paginationState.totalPages}';
     final progress = paginationState.progress;
 
     final screenSize = MediaQuery.of(context).size;
@@ -3384,6 +3390,10 @@ class _ReaderToolbar extends ConsumerWidget {
     final currentPage = paginationState.currentPageIndex + 1;
     final totalPages = paginationState.totalPages;
 
+    // 📊 支持估算页码显示："约850" 或 "856"
+    final totalPagesText =
+        paginationState.isEstimated == true ? '约$totalPages' : '$totalPages';
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Column(
@@ -3420,7 +3430,7 @@ class _ReaderToolbar extends ConsumerWidget {
                 ),
               ),
               Text(
-                '$totalPages',
+                totalPagesText,
                 style: settings.textStyle.copyWith(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,

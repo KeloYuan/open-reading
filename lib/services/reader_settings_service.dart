@@ -13,6 +13,7 @@ class ReaderSettingsService {
   static const String _keyPaginationMode = 'reader_pagination_mode';
   static const String _keyShowPageIndicator = 'reader_show_page_indicator';
   static const String _keyEnableTextSelection = 'reader_enable_text_selection';
+  static const String _keyParagraphSpacing = 'reader_paragraph_spacing';
 
   /// 保存设置到SharedPreferences
   static Future<void> saveSettings(ReaderSettings settings) async {
@@ -28,6 +29,7 @@ class ReaderSettingsService {
       prefs.setString(_keyPaginationMode, settings.paginationMode.name),
       prefs.setBool(_keyShowPageIndicator, settings.showPageIndicator),
       prefs.setBool(_keyEnableTextSelection, settings.enableTextSelection),
+      prefs.setInt(_keyParagraphSpacing, settings.paragraphSpacing),
     ]);
   }
 
@@ -43,6 +45,7 @@ class ReaderSettingsService {
     final horizontalMargin = prefs.getDouble(_keyHorizontalMargin) ?? 20.0;
     final showPageIndicator = prefs.getBool(_keyShowPageIndicator) ?? true;
     final enableTextSelection = prefs.getBool(_keyEnableTextSelection) ?? true;
+    final paragraphSpacing = prefs.getInt(_keyParagraphSpacing) ?? 0;
 
     // 解析枚举类型
     final themeStr = prefs.getString(_keyTheme);
@@ -71,6 +74,7 @@ class ReaderSettingsService {
       paginationMode: paginationMode,
       showPageIndicator: showPageIndicator,
       enableTextSelection: enableTextSelection,
+      paragraphSpacing: paragraphSpacing,
     );
   }
 
@@ -88,6 +92,7 @@ class ReaderSettingsService {
       prefs.remove(_keyPaginationMode),
       prefs.remove(_keyShowPageIndicator),
       prefs.remove(_keyEnableTextSelection),
+      prefs.remove(_keyParagraphSpacing),
     ]);
   }
 }

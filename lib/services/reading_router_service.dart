@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import '../models/book.dart';
 import '../pages/reader_page.dart';
 import 'enhanced_txt_import_service.dart';
+import 'text_preprocessor.dart'; // 🔧 导入文本预处理器
 import 'epub_image_extractor.dart';
 import 'book_image_map_service.dart';
 // import 'debug_image_files.dart'; // 已删除
@@ -156,6 +157,18 @@ class ReadingRouterService {
         content = txtService.detectTextEncoding(bytes);
 
         debugPrint('✅ 成功加载TXT文件，长度: ${content.length} 字符');
+
+        // 🔧 文本预处理：压缩空行、添加段首缩进
+        debugPrint('📝 开始文本预处理（压缩空行、添加缩进）...');
+        final preprocessor = TextPreprocessor();
+        content = preprocessor.process(
+          content,
+          indentSize: 2, // 段首缩进2个字符
+          indentDialogue: true, // 对话也缩进
+          compressEmptyLines: true, // 压缩多余空行
+          paragraphSpacing: 0, // 段落间距0行（紧密排列）
+        );
+        debugPrint('✅ 文本预处理完成，处理后长度: ${content.length} 字符');
       } else if (format == 'epub') {
         content = await _parseEpubContent(file, bookId);
         debugPrint('✅ 成功加载EPUB文件，长度: ${content.length}');
@@ -528,16 +541,25 @@ class ReadingRouterService {
     text = text.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
     text = text.replaceAll(RegExp(r'</h[1-6]>', caseSensitive: false), '\n\n');
 
-    // 🖼️ 将图片标签替换为占位符（简化处理，提升性能）
+    // 🖼️ 保留图片标签（用于图片混排支持）
+    // 将图片标签规范化为统一格式：<img src="path"/>
     text = text.replaceAllMapped(
       RegExp(r'''<img[^>]+src=["']([^"']+)["'][^>]*>''', caseSensitive: false),
       (match) {
-        return '[图片]'; // 简单的文本占位符
+        final src = match.group(1);
+        if (src != null && src.isNotEmpty) {
+          // 规范化为统一格式，方便分页器解析
+          return '<img src="$src"/>';
+        }
+        return ''; // 无效的图片标签，删除
       },
     );
 
-    // 移除所有其他 HTML 标签
-    text = text.replaceAll(RegExp(r'<[^>]+>'), '');
+    // 移除所有其他 HTML 标签（但保留 img 标签）
+    text = text.replaceAllMapped(
+      RegExp(r'<(?!img\s)([^>]+)>'),
+      (match) => '',
+    );
 
     // 解码 HTML 实体
     text = text
