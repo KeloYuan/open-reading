@@ -1,0 +1,155 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 800">
+  <!-- 背景 -->
+  <rect width="1000" height="800" fill="#f8f9fa"/>
+  
+  <!-- 标题 -->
+  <text x="500" y="35" text-anchor="middle" font-size="26" font-weight="bold" fill="#333">
+    用户交互流程图
+  </text>
+  
+  <!-- 用户层 -->
+  <g id="user-layer">
+    <ellipse cx="500" cy="100" rx="100" ry="45" fill="#E74C3C" stroke="#C0392B" stroke-width="3"/>
+    <text x="500" y="108" text-anchor="middle" font-size="18" font-weight="bold" fill="white">
+      用户
+    </text>
+  </g>
+  
+  <!-- 主要操作区域 -->
+  <!-- 浏览书库 -->
+  <g id="browse-books">
+    <rect x="50" y="180" width="180" height="120" fill="#3498DB" stroke="#2874A6" stroke-width="2" rx="10"/>
+    <text x="140" y="210" text-anchor="middle" font-size="16" font-weight="bold" fill="white">
+      浏览书库
+    </text>
+    <text x="140" y="235" text-anchor="middle" font-size="12" fill="white">网格/列表视图</text>
+    <text x="140" y="255" text-anchor="middle" font-size="12" fill="white">搜索/排序</text>
+    <text x="140" y="275" text-anchor="middle" font-size="12" fill="white">查看详情</text>
+  </g>
+  
+  <!-- 导入书籍 -->
+  <g id="import-book">
+    <rect x="270" y="180" width="180" height="120" fill="#9B59B6" stroke="#7D3C98" stroke-width="2" rx="10"/>
+    <text x="360" y="210" text-anchor="middle" font-size="16" font-weight="bold" fill="white">
+      导入书籍
+    </text>
+    <text x="360" y="235" text-anchor="middle" font-size="12" fill="white">选择文件</text>
+    <text x="360" y="255" text-anchor="middle" font-size="12" fill="white">自动解析</text>
+    <text x="360" y="275" text-anchor="middle" font-size="12" fill="white">添加到书库</text>
+  </g>
+  
+  <!-- 开始阅读 -->
+  <g id="start-reading">
+    <rect x="490" y="180" width="180" height="120" fill="#27AE60" stroke="#1E8449" stroke-width="2" rx="10"/>
+    <text x="580" y="210" text-anchor="middle" font-size="16" font-weight="bold" fill="white">
+      开始阅读
+    </text>
+    <text x="580" y="235" text-anchor="middle" font-size="12" fill="white">加载内容</text>
+    <text x="580" y="255" text-anchor="middle" font-size="12" fill="white">智能分页</text>
+    <text x="580" y="275" text-anchor="middle" font-size="12" fill="white">显示文本</text>
+  </g>
+  
+  <!-- 设置调节 -->
+  <g id="settings">
+    <rect x="710" y="180" width="180" height="120" fill="#F39C12" stroke="#CA6F1E" stroke-width="2" rx="10"/>
+    <text x="800" y="210" text-anchor="middle" font-size="16" font-weight="bold" fill="white">
+      设置调节
+    </text>
+    <text x="800" y="235" text-anchor="middle" font-size="12" fill="white">主题切换</text>
+    <text x="800" y="255" text-anchor="middle" font-size="12" fill="white">字体调节</text>
+    <text x="800" y="275" text-anchor="middle" font-size="12" fill="white">亮度控制</text>
+  </g>
+  
+  <!-- 阅读中操作 -->
+  <!-- 翻页 -->
+  <g id="page-turn">
+    <rect x="100" y="360" width="150" height="90" fill="#16A085" stroke="#138D75" stroke-width="2" rx="8"/>
+    <text x="175" y="385" text-anchor="middle" font-size="14" font-weight="bold" fill="white">
+      翻页操作
+    </text>
+    <text x="175" y="410" text-anchor="middle" font-size="11" fill="white">点击翻页</text>
+    <text x="175" y="428" text-anchor="middle" font-size="11" fill="white">滑动翻页</text>
+    <text x="175" y="446" text-anchor="middle" font-size="11" fill="white">音量键翻页</text>
+  </g>
+  
+  <!-- 添加笔记 -->
+  <g id="add-note">
+    <rect x="280" y="360" width="150" height="90" fill="#E67E22" stroke="#CA6F1E" stroke-width="2" rx="8"/>
+    <text x="355" y="385" text-anchor="middle" font-size="14" font-weight="bold" fill="white">
+      笔记标注
+    </text>
+    <text x="355" y="410" text-anchor="middle" font-size="11" fill="white">长按选择</text>
+    <text x="355" y="428" text-anchor="middle" font-size="11" fill="white">高亮/书签</text>
+    <text x="355" y="446" text-anchor="middle" font-size="11" fill="white">添加笔记</text>
+  </g>
+  
+  <!-- 目录导航 -->
+  <g id="toc">
+    <rect x="460" y="360" width="150" height="90" fill="#8E44AD" stroke="#6C3483" stroke-width="2" rx="8"/>
+    <text x="535" y="385" text-anchor="middle" font-size="14" font-weight="bold" fill="white">
+      目录导航
+    </text>
+    <text x="535" y="410" text-anchor="middle" font-size="11" fill="white">查看章节</text>
+    <text x="535" y="428" text-anchor="middle" font-size="11" fill="white">快速跳转</text>
+    <text x="535" y="446" text-anchor="middle" font-size="11" fill="white">进度追踪</text>
+  </g>
+  
+  <!-- 搜索 -->
+  <g id="search">
+    <rect x="640" y="360" width="150" height="90" fill="#C0392B" stroke="#922B21" stroke-width="2" rx="8"/>
+    <text x="715" y="385" text-anchor="middle" font-size="14" font-weight="bold" fill="white">
+      搜索功能
+    </text>
+    <text x="715" y="410" text-anchor="middle" font-size="11" fill="white">书内搜索</text>
+    <text x="715" y="428" text-anchor="middle" font-size="11" fill="white">结果定位</text>
+    <text x="715" y="446" text-anchor="middle" font-size="11" fill="white">高亮显示</text>
+  </g>
+  
+  <!-- 数据层 -->
+  <rect x="100" y="500" width="700" height="90" fill="#34495E" stroke="#2C3E50" stroke-width="2" rx="10"/>
+  <text x="450" y="530" text-anchor="middle" font-size="16" font-weight="bold" fill="white">
+    数据持久化层
+  </text>
+  <text x="200" y="560" font-size="13" fill="white">• 阅读进度</text>
+  <text x="350" y="560" font-size="13" fill="white">• 笔记高亮</text>
+  <text x="500" y="560" font-size="13" fill="white">• 书签数据</text>
+  <text x="650" y="560" font-size="13" fill="white">• 统计信息</text>
+  
+  <!-- 统计分析 -->
+  <g id="statistics">
+    <rect x="270" y="640" width="360" height="110" fill="#2980B9" stroke="#1F618D" stroke-width="2" rx="10"/>
+    <text x="450" y="670" text-anchor="middle" font-size="16" font-weight="bold" fill="white">
+      阅读统计分析
+    </text>
+    <text x="340" y="700" font-size="12" fill="white">• 阅读时长记录</text>
+    <text x="340" y="720" font-size="12" fill="white">• 进度追踪</text>
+    <text x="550" y="700" font-size="12" fill="white">• 数据可视化</text>
+    <text x="550" y="720" font-size="12" fill="white">• 阅读报告</text>
+  </g>
+  
+  <!-- 连接线 -->
+  <defs>
+    <marker id="arrow-user" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+    </marker>
+  </defs>
+  
+  <!-- 从用户到主要操作 -->
+  <line x1="430" y1="130" x2="140" y2="180" stroke="#666" stroke-width="2" marker-end="url(#arrow-user)"/>
+  <line x1="470" y1="130" x2="360" y2="180" stroke="#666" stroke-width="2" marker-end="url(#arrow-user)"/>
+  <line x1="500" y1="145" x2="580" y2="180" stroke="#666" stroke-width="2" marker-end="url(#arrow-user)"/>
+  <line x1="570" y1="130" x2="800" y2="180" stroke="#666" stroke-width="2" marker-end="url(#arrow-user)"/>
+  
+  <!-- 从开始阅读到阅读操作 -->
+  <line x1="510" y1="300" x2="250" y2="360" stroke="#666" stroke-width="2" marker-end="url(#arrow-user)" stroke-dasharray="4,4"/>
+  <line x1="540" y1="300" x2="355" y2="360" stroke="#666" stroke-width="2" marker-end="url(#arrow-user)" stroke-dasharray="4,4"/>
+  <line x1="580" y1="300" x2="535" y2="360" stroke="#666" stroke-width="2" marker-end="url(#arrow-user)" stroke-dasharray="4,4"/>
+  <line x1="620" y1="300" x2="715" y2="360" stroke="#666" stroke-width="2" marker-end="url(#arrow-user)" stroke-dasharray="4,4"/>
+  
+  <!-- 到数据层 -->
+  <line x1="250" y1="450" x2="350" y2="500" stroke="#666" stroke-width="2" marker-end="url(#arrow-user)"/>
+  <line x1="535" y1="450" x2="500" y2="500" stroke="#666" stroke-width="2" marker-end="url(#arrow-user)"/>
+  
+  <!-- 到统计 -->
+  <line x1="450" y1="590" x2="450" y2="640" stroke="#666" stroke-width="2" marker-end="url(#arrow-user)"/>
+</svg>

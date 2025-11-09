@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:path/path.dart' as path;
 import '../providers/reader_providers.dart';
 import '../widgets/enhanced_text_selection_toolbar.dart';
 import '../widgets/tts_settings_sheet.dart';
@@ -248,21 +249,14 @@ class _HighlightedText extends StatelessWidget {
 
   /// 构建图片组件
   Widget _buildImage(String imagePath) {
-    debugPrint('🖼️ 尝试加载图片: $imagePath');
-
     final file = File(imagePath);
-
+    
     return Image.file(
       file,
       fit: BoxFit.contain,
       errorBuilder: (context, error, stackTrace) {
-        debugPrint('❌ 图片加载错误: $imagePath');
-        debugPrint('   错误: $error');
-        debugPrint('   堆栈: $stackTrace');
-
-        // 检查文件是否存在
         final exists = file.existsSync();
-        debugPrint('   文件是否存在: $exists');
+        debugPrint('❌ 图片加载失败: ${path.basename(imagePath)}, 存在:$exists');
 
         return Container(
           padding: const EdgeInsets.all(8),
