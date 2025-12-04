@@ -250,7 +250,7 @@ class _HighlightedText extends StatelessWidget {
   /// 构建图片组件
   Widget _buildImage(String imagePath) {
     final file = File(imagePath);
-    
+
     return Image.file(
       file,
       fit: BoxFit.contain,
@@ -1606,12 +1606,10 @@ class _ReaderOverlayState extends ConsumerState<_ReaderOverlay> {
     final progress = paginationState.progress;
 
     final screenSize = MediaQuery.of(context).size;
-    final bottomSafeArea = MediaQuery.of(context).padding.bottom;
 
-    // 响应式计算：底部边距为安全区域高度 + 15px，水平边距使用屏幕宽度的8%
-    // 让进度条离底部稍远一些，避免太贴近边缘
-    final bottomMargin = bottomSafeArea > 0 ? bottomSafeArea + 15 : 16.0;
-    final horizontalMargin = screenSize.width * 0.08;
+    // 响应式计算：底部边距为1%屏高，水平边距为10%屏宽
+    final bottomMargin = screenSize.height * 0.01;
+    final horizontalMargin = screenSize.width * 0.10;
 
     return Positioned(
       bottom: bottomMargin,
@@ -2160,34 +2158,68 @@ class _SlidePaginationViewState extends State<_SlidePaginationView> {
     return RepaintBoundary(
       child: LayoutBuilder(
         builder: (context, constraints) {
+          // 🔑 关键：使用 LayoutBuilder 获取完整的页面尺寸
+          final fullWidth = constraints.maxWidth;
+          final fullHeight = constraints.maxHeight;
+
           return Consumer(
             builder: (context, ref, child) {
               // 实时监听设置变化，确保背景色和文字颜色立即更新
               final currentSettings = ref.watch(readerSettingsProvider);
               final ttsState = ref.watch(readerTtsProvider);
+              final paginationState = ref.watch(readerPaginationProvider);
+
+              // 分页时保存的 padding（计算文字区域时用的）
+              final basePadding = paginationState.paginationSettings?.padding ??
+                  currentSettings.padding;
+
+              // 🔧 计算实际使用的文字高度（maxLines × lineHeight）
+              final maxLines = paginationState.maxLinesPerPage ?? 20;
+              final lineHeight =
+                  currentSettings.fontSize * currentSettings.lineSpacing;
+              final actualTextHeight = maxLines * lineHeight;
+
+              // 🔧 计算顶部 padding
+              // 沉浸式模式下，只需避开灵动岛区域（约35px）
+              // 不需要加整个状态栏高度
+              const dynamicIslandHeight = 35.0;
+
+              // 🔧 计算调整后的 padding
+              // 顶部：basePadding.top + 灵动岛高度
+              // 底部：fullHeight - topPadding - actualTextHeight（限制最大50px）
+              final adjustedTopPadding = basePadding.top + dynamicIslandHeight;
+              final rawBottomPadding =
+                  fullHeight - adjustedTopPadding - actualTextHeight;
+              // 🔧 限制底部 padding 最大为 20px，减少底部空白
+              final adjustedBottomPadding = rawBottomPadding.clamp(0.0, 20.0);
+
+              final adjustedPadding = EdgeInsets.only(
+                left: basePadding.left,
+                right: basePadding.right,
+                top: adjustedTopPadding,
+                bottom: adjustedBottomPadding,
+              );
 
               return Container(
-                width: constraints.maxWidth,
-                height: constraints.maxHeight,
-                padding: currentSettings.padding,
+                width: fullWidth,
+                height: fullHeight,
+                padding: adjustedPadding,
                 color: currentSettings.backgroundColor,
                 // ClipRect确保超出部分被裁剪，不会显示也不会允许滚动
                 child: ClipRect(
                   clipBehavior: Clip.hardEdge,
-                  child: Consumer(
-                    builder: (context, ref, _) {
-                      final paginationState =
-                          ref.watch(readerPaginationProvider);
-                      return _HighlightedText(
-                        text: pageContent,
-                        style: currentSettings.textStyle,
-                        highlightedSentenceIndex:
-                            ttsState.highlightedSentenceIndex,
-                        enableSelection: currentSettings.enableTextSelection,
-                        onTextSelection: widget.onTextSelection,
-                        maxLines: paginationState.maxLinesPerPage,
-                      );
-                    },
+                  // 🔧 用 Align 确保文字从顶部开始
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: _HighlightedText(
+                      text: pageContent,
+                      style: currentSettings.textStyle,
+                      highlightedSentenceIndex:
+                          ttsState.highlightedSentenceIndex,
+                      enableSelection: currentSettings.enableTextSelection,
+                      onTextSelection: widget.onTextSelection,
+                      maxLines: maxLines,
+                    ),
                   ),
                 ),
               );

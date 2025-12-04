@@ -185,22 +185,15 @@ class ReaderSettings {
   }
 
   /// 根据屏幕尺寸计算响应式padding
-  /// 上方padding稍大，防止被状态栏遮挡；下方padding根据屏幕高度动态调整
+  /// 确保文字区域避开四角状态UI，不重叠
+  /// 顶部状态UI：top=1%屏高 + 时间/电池区域
+  /// 底部状态UI：bottom=1%屏高 + 页码/进度区域
   EdgeInsets getResponsivePadding(Size screenSize) {
-    final topPadding = screenSize.height * 0.05; // 5%屏幕高度，留出充足安全距离
+    // 顶部：1%屏高 + 32px（避开时间/电池即可，状态栏在渲染时单独处理）
+    final topPadding = screenSize.height * 0.01;
 
-    // 底部padding根据屏幕高度动态调整，确保高分辨率屏幕有足够安全区
-    // 标准屏幕(~800px): 2%, 高分辨率屏幕(~1000px): 2.5%, 超高分辨率(>1200px): 3%
-    double bottomPaddingRatio;
-    if (screenSize.height >= 1200) {
-      bottomPaddingRatio = 0.03; // 3% - 超高分辨率屏幕（如 Find X8）
-    } else if (screenSize.height >= 1000) {
-      bottomPaddingRatio = 0.025; // 2.5% - 高分辨率屏幕
-    } else {
-      bottomPaddingRatio = 0.02; // 2% - 标准屏幕
-    }
-
-    final bottomPadding = screenSize.height * bottomPaddingRatio;
+    // 底部：1%屏高 + 24px（给页码/进度留空间）
+    final bottomPadding = screenSize.height * 0.01;
 
     return EdgeInsets.only(
       left: horizontalMargin,
@@ -727,6 +720,13 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       // 立即更新状态，显示估算结果（用户可以立即开始阅读）
       // 🔧 保存使用响应式padding的settings，确保渲染时padding一致
       final paginationSettings = settings.copyWith(padding: responsivePadding);
+
+      // 🔧 计算每页最大行数（与分页器保持一致）
+      final lineHeightPx = settings.fontSize * settings.lineSpacing;
+      final availableHeight =
+          screenSize.height - responsivePadding.top - responsivePadding.bottom;
+      final maxLinesPerPage = (availableHeight / lineHeightPx).floor();
+
       state = state.copyWith(
         pages: sampledPages,
         currentPageIndex: initialPageIndex.clamp(0, sampledPages.length - 1),
@@ -737,6 +737,8 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         loadingStage: '加载完成，约 $estimatedTotal 页',
         estimatedTotal: estimatedTotal,
         isEstimated: true, // 标记为估算值
+        screenSize: screenSize, // 🔧 保存屏幕尺寸
+        maxLinesPerPage: maxLinesPerPage, // 🔧 保存每页最大行数
       );
 
       debugPrint('📖 用户可以开始阅读，后台继续精确计算...');
@@ -760,6 +762,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
           paginationSettings: paginationSettings, // 🔧 确保精确计算后也使用相同padding
           estimatedTotal: null,
           isEstimated: false, // 标记为精确值
+          // 🔧 保持 screenSize 和 maxLinesPerPage（不覆盖为 null）
         );
 
         // 保存到持久化缓存

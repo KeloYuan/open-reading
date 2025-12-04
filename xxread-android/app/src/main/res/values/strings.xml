@@ -1,3 +1,44 @@
 <resources>
-    <string name="app_name">xxread-android</string>
+    <string name="app_name">小元读书</string>
+    <string name="app_description">优雅的电子书阅读器</string>
+    
+    <!-- 导航 -->
+    <string name="nav_home">首页</string>
+    <string name="nav_library">书库</string>
+    <string name="nav_settings">设置</string>
+    
+    <!-- 通用 -->
+    <string name="cancel">取消</string>
+    <string name="confirm">确定</string>
+    <string name="delete">删除</string>
+    <string name="save">保存</string>
+    <string name="search">搜索</string>
+    <string name="back">返回</string>
+    
+    <!-- 书库 -->
+    <string name="import_book">导入书籍</string>
+    <string name="empty_library">书库是空的</string>
+    <string name="import_hint">导入 EPUB、PDF 或 TXT 格式的电子书</string>
+    <string name="delete_book">删除书籍</string>
+    <string name="delete_book_confirm">确定要删除《%s》吗？此操作不可撤销。</string>
+    
+    <!-- 阅读器 -->
+    <string name="table_of_contents">目录</string>
+    <string name="bookmarks">书签</string>
+    <string name="highlights">划线</string>
+    <string name="reader_settings">阅读设置</string>
+    <string name="tts_read">朗读</string>
+    
+    <!-- 设置 -->
+    <string name="appearance">外观</string>
+    <string name="dark_mode">深色模式</string>
+    <string name="dynamic_color">动态颜色</string>
+    <string name="reading">阅读</string>
+    <string name="font_size">字体大小</string>
+    <string name="line_height">行高</string>
+    <string name="page_animation">翻页动画</string>
+    <string name="volume_key_turn">音量键翻页</string>
+    <string name="keep_screen_on">屏幕常亮</string>
+    <string name="about">关于</string>
+    <string name="version">版本</string>
 </resources>

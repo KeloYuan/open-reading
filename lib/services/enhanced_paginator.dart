@@ -1,11 +1,16 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
-/// 增强分页器 - 批量测量 + 精确填充 + 图片支持
+/// 🚀 增强分页器 v2.0 - 高性能版本
+///
+/// 优化策略：
+/// 1. 纯二分法分页（不逐字符测量）
+/// 2. 向下取整行数，确保不溢出
+/// 3. 图片独占一页
 class EnhancedPaginator {
   static void Function(int currentPage, String stage)? _onProgress;
 
-  /// 渐进式分页
+  /// 渐进式分页（快速）
   static Future<ProgressivePaginationResult> paginateProgressive({
     required String text,
     required Size screenSize,
@@ -19,13 +24,12 @@ class EnhancedPaginator {
   }) async {
     _onProgress = onProgress;
 
-    debugPrint('\n📖 ===== 开始快速分页 =====');
+    final startTime = DateTime.now();
+    debugPrint('\n📖 ===== 开始高性能分页 v2.0 =====');
     debugPrint('   文本长度: ${text.length} 字符');
 
-    final startTime = DateTime.now();
-
-    // 直接使用批量分页（快速）
-    final result = await _batchPaginate(
+    // 直接使用高性能分页
+    final result = await _fastPaginate(
       text: text,
       screenSize: screenSize,
       fontSize: fontSize,
@@ -33,31 +37,34 @@ class EnhancedPaginator {
       padding: padding,
       letterSpacing: letterSpacing,
       supportImages: supportImages,
-      sampleSize: quickSamplePages,
     );
 
     final duration = DateTime.now().difference(startTime);
+    final speed = duration.inMilliseconds > 0
+        ? (text.length / duration.inMilliseconds * 1000).toInt()
+        : text.length;
+
     debugPrint('✅ 分页完成: ${result.pages.length}页');
     debugPrint('   耗时: ${duration.inMilliseconds}ms');
-    debugPrint(
-        '   速度: ${(text.length / duration.inMilliseconds * 1000).toInt()} 字符/秒');
+    debugPrint('   速度: $speed 字符/秒');
 
-    // 快速估算：使用采样页
+    // 返回结果
     final sampledPages = result.pages.take(quickSamplePages).toList();
-    final avgCharsPerPage =
-        sampledPages.fold<int>(0, (sum, page) => sum + page.length) /
-            sampledPages.length;
+    final avgCharsPerPage = sampledPages.isNotEmpty
+        ? sampledPages.fold<int>(0, (sum, page) => sum + page.length) /
+            sampledPages.length
+        : 500;
     final estimatedTotal = (text.length / avgCharsPerPage).ceil();
 
     return ProgressivePaginationResult(
-      sampledPages: sampledPages,
+      sampledPages: result.pages, // 返回所有页（已经很快了）
       estimatedTotal: estimatedTotal,
       preciseCalculationFuture: Future.value(result),
     );
   }
 
-  /// 批量分页（高性能 + 图片支持）
-  static Future<PreciseCalculationResult> _batchPaginate({
+  /// 🚀 高性能分页（纯二分法）
+  static Future<PreciseCalculationResult> _fastPaginate({
     required String text,
     required Size screenSize,
     required double fontSize,
@@ -65,10 +72,19 @@ class EnhancedPaginator {
     required EdgeInsets padding,
     required double letterSpacing,
     required bool supportImages,
-    int sampleSize = 10,
   }) async {
     final availableWidth = screenSize.width - padding.horizontal;
     final availableHeight = screenSize.height - padding.vertical;
+
+    // 🔑 向下取整行数，确保不溢出
+    final lineHeightPx = fontSize * lineHeight;
+    final maxLines = (availableHeight / lineHeightPx).floor();
+    final actualAvailableHeight = maxLines * lineHeightPx;
+
+    debugPrint(
+        '   可用空间: ${availableWidth.toInt()} × ${availableHeight.toInt()}');
+    debugPrint('   行高: ${lineHeightPx.toStringAsFixed(1)}px, 最大行数: $maxLines');
+    debugPrint('   实际可用高度: ${actualAvailableHeight.toStringAsFixed(1)}');
 
     final textStyle = TextStyle(
       fontSize: fontSize,
@@ -78,110 +94,48 @@ class EnhancedPaginator {
 
     final textPainter = TextPainter(
       textDirection: TextDirection.ltr,
-      textAlign: TextAlign.left, // 关键：与渲染一致
+      textAlign: TextAlign.left,
+      strutStyle: StrutStyle(
+        fontSize: fontSize,
+        height: lineHeight,
+        forceStrutHeight: true,
+      ),
     );
 
     final pages = <String>[];
     final pageContents = <PageContent>[];
 
-    // 🖼️ 解析内容元素（文本和图片）
+    // 解析内容元素
     final contentElements = supportImages
         ? _parseContentElements(text)
         : [ContentElement(isImage: false, content: text)];
 
-    debugPrint('📋 解析内容: ${contentElements.length} 个元素');
-
-    // 分页处理每个内容元素
     for (final element in contentElements) {
-      if (pages.length % 10 == 0) {
-        _reportProgress(pages.length, '分页中...');
-      }
-
       if (element.isImage) {
-        // 🖼️ 图片独占一页
-        debugPrint('🖼️ 处理图片: ${element.content}');
-        pages.add(''); // 空文本内容
+        // 图片独占一页
+        pages.add('<img src="${element.content}"/>');
         pageContents.add(PageContent(
           textContent: '',
           images: [
             ImageElement(
-              path: element.content,
-              width: availableWidth,
-              height: availableHeight,
-            )
+                path: element.content,
+                width: availableWidth,
+                height: actualAvailableHeight)
           ],
         ));
         continue;
       }
 
-      // 📝 处理纯文本分页
-      final textContent = element.content;
-      int startIndex = 0;
-      int batchSize = 500; // 每次测量500字符
-
-      while (startIndex < textContent.length) {
-        // 批量测试：先测试一大块
-        int endIndex = (startIndex + batchSize).clamp(0, textContent.length);
-        String testText = textContent.substring(startIndex, endIndex);
-
-        textPainter.text = TextSpan(text: testText, style: textStyle);
-        textPainter.layout(maxWidth: availableWidth);
-
-        if (textPainter.height <= availableHeight) {
-          // 放得下，继续加字符
-          while (endIndex < textContent.length) {
-            final nextChar = textContent[endIndex];
-            final newText = testText + nextChar;
-
-            textPainter.text = TextSpan(text: newText, style: textStyle);
-            textPainter.layout(maxWidth: availableWidth);
-
-            if (textPainter.height > availableHeight) {
-              // 超出了，停止
-              break;
-            }
-
-            testText = newText;
-            endIndex++;
-          }
-
-          // 保存这一页
-          pages.add(testText);
-          pageContents.add(PageContent(textContent: testText, images: []));
-          startIndex = endIndex;
-        } else {
-          // 放不下，缩小范围（二分查找）
-          int left = startIndex;
-          int right = endIndex;
-
-          while (left < right) {
-            int mid = (left + right + 1) ~/ 2;
-            testText = textContent.substring(startIndex, mid);
-
-            textPainter.text = TextSpan(text: testText, style: textStyle);
-            textPainter.layout(maxWidth: availableWidth);
-
-            if (textPainter.height <= availableHeight) {
-              left = mid;
-            } else {
-              right = mid - 1;
-            }
-          }
-
-          if (left > startIndex) {
-            testText = textContent.substring(startIndex, left);
-            pages.add(testText);
-            pageContents.add(PageContent(textContent: testText, images: []));
-            startIndex = left;
-          } else {
-            // 至少放一个字符（极端情况）
-            testText = textContent.substring(startIndex, startIndex + 1);
-            pages.add(testText);
-            pageContents.add(PageContent(textContent: testText, images: []));
-            startIndex++;
-          }
-        }
-      }
+      // 🚀 纯二分法分页
+      await _paginateTextFast(
+        text: element.content,
+        availableWidth: availableWidth,
+        availableHeight: actualAvailableHeight,
+        textStyle: textStyle,
+        textPainter: textPainter,
+        pages: pages,
+        pageContents: pageContents,
+      );
     }
 
     textPainter.dispose();
@@ -192,23 +146,124 @@ class EnhancedPaginator {
     );
   }
 
+  /// 🚀 纯二分法文本分页（不逐字符）
+  static Future<void> _paginateTextFast({
+    required String text,
+    required double availableWidth,
+    required double availableHeight,
+    required TextStyle textStyle,
+    required TextPainter textPainter,
+    required List<String> pages,
+    required List<PageContent> pageContents,
+  }) async {
+    if (text.isEmpty) return;
+
+    int startIndex = 0;
+    int pageCount = 0;
+
+    // 估算每页字符数（用于初始猜测）
+    final charsPerLine = (availableWidth / textStyle.fontSize!).floor();
+    final linesPerPage =
+        (availableHeight / (textStyle.fontSize! * (textStyle.height ?? 1.5)))
+            .floor();
+    final estimatedCharsPerPage = charsPerLine * linesPerPage;
+
+    while (startIndex < text.length) {
+      // 二分法找断点
+      final endIndex = _binarySearchBreakpoint(
+        text: text,
+        startIndex: startIndex,
+        estimatedCharsPerPage: estimatedCharsPerPage,
+        availableWidth: availableWidth,
+        availableHeight: availableHeight,
+        textStyle: textStyle,
+        textPainter: textPainter,
+      );
+
+      final pageText = text.substring(startIndex, endIndex);
+      pages.add(pageText);
+      pageContents.add(PageContent(textContent: pageText, images: []));
+
+      startIndex = endIndex;
+      pageCount++;
+
+      // 每50页让出CPU
+      if (pageCount % 50 == 0) {
+        _reportProgress(pages.length, '分页中...');
+        await Future.delayed(Duration.zero);
+      }
+    }
+  }
+
+  /// 🚀 二分查找断点
+  static int _binarySearchBreakpoint({
+    required String text,
+    required int startIndex,
+    required int estimatedCharsPerPage,
+    required double availableWidth,
+    required double availableHeight,
+    required TextStyle textStyle,
+    required TextPainter textPainter,
+  }) {
+    final remaining = text.length - startIndex;
+    if (remaining <= 0) return text.length;
+
+    // 初始范围
+    int low = startIndex;
+    int high =
+        (startIndex + estimatedCharsPerPage * 2).clamp(startIndex, text.length);
+    if (high <= low) high = (low + 1).clamp(low, text.length);
+
+    int bestBreakpoint = low + 1;
+
+    // 二分查找
+    while (low < high) {
+      final mid = (low + high + 1) ~/ 2;
+      final testText = text.substring(startIndex, mid);
+
+      textPainter.text = TextSpan(text: testText, style: textStyle);
+      textPainter.layout(maxWidth: availableWidth);
+
+      if (textPainter.height <= availableHeight) {
+        bestBreakpoint = mid;
+        low = mid;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    // 智能断行
+    return _adjustBreakpoint(text, startIndex, bestBreakpoint);
+  }
+
+  /// 智能断行
+  static int _adjustBreakpoint(String text, int startIndex, int breakpoint) {
+    if (breakpoint >= text.length) return text.length;
+    if (breakpoint <= startIndex) return (startIndex + 1).clamp(0, text.length);
+
+    final searchStart = (breakpoint - 15).clamp(startIndex, breakpoint);
+    for (int i = breakpoint - 1; i >= searchStart; i--) {
+      final char = text[i];
+      if ('。！？.!?；;，,、：:）)】」』"\'"\n\r '.contains(char)) {
+        return i + 1;
+      }
+    }
+    return breakpoint;
+  }
+
   static void _reportProgress(int currentPage, String stage) {
-    if (_onProgress != null && currentPage % 10 == 0) {
+    if (_onProgress != null) {
       _onProgress!(currentPage, stage);
     }
   }
 
-  /// 解析内容元素（提取文本和图片）
-  ///
-  /// 将文本中的图片标签解析为独立元素
-  /// 图片标签格式：<img src="path"/>
+  /// 解析内容元素
   static List<ContentElement> _parseContentElements(String text) {
     final elements = <ContentElement>[];
     final imgPattern = RegExp(r'<img\s+src="([^"]+)"\s*/?>');
 
     int lastIndex = 0;
     for (final match in imgPattern.allMatches(text)) {
-      // 添加图片前的文本
       if (match.start > lastIndex) {
         final textContent = text.substring(lastIndex, match.start);
         if (textContent.isNotEmpty) {
@@ -216,17 +271,13 @@ class EnhancedPaginator {
         }
       }
 
-      // 添加图片
       final imagePath = match.group(1);
       if (imagePath != null && imagePath.isNotEmpty) {
         elements.add(ContentElement(isImage: true, content: imagePath));
-        debugPrint('   📸 发现图片: $imagePath');
       }
-
       lastIndex = match.end;
     }
 
-    // 添加最后的文本
     if (lastIndex < text.length) {
       final textContent = text.substring(lastIndex);
       if (textContent.isNotEmpty) {
