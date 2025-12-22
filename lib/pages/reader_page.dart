@@ -2152,78 +2152,51 @@ class _SlidePaginationViewState extends State<_SlidePaginationView> {
   }
 
   Widget _buildPageContent(BuildContext context, String pageContent) {
-    // 最简单最直接的方案：固定Container + ClipRect裁剪
     // 分页器已经精确计算了每页应该有多少文字
-    // 这里只需要按固定尺寸显示，多余的裁剪掉
+    // 渲染时需要确保尺寸和分页一致
     return RepaintBoundary(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // 🔑 关键：使用 LayoutBuilder 获取完整的页面尺寸
-          final fullWidth = constraints.maxWidth;
-          final fullHeight = constraints.maxHeight;
+      child: Consumer(
+        builder: (context, ref, child) {
+          final currentSettings = ref.watch(readerSettingsProvider);
+          final ttsState = ref.watch(readerTtsProvider);
+          final paginationState = ref.watch(readerPaginationProvider);
 
-          return Consumer(
-            builder: (context, ref, child) {
-              // 实时监听设置变化，确保背景色和文字颜色立即更新
-              final currentSettings = ref.watch(readerSettingsProvider);
-              final ttsState = ref.watch(readerTtsProvider);
-              final paginationState = ref.watch(readerPaginationProvider);
+          // 获取屏幕尺寸
+          final screenSize = MediaQuery.of(context).size;
+          final statusBarHeight = MediaQuery.of(context).padding.top;
 
-              // 分页时保存的 padding（计算文字区域时用的）
-              final basePadding = paginationState.paginationSettings?.padding ??
-                  currentSettings.padding;
+          // 分页时保存的 padding 和 maxLines
+          final basePadding = paginationState.paginationSettings?.padding ??
+              currentSettings.padding;
+          final maxLines = paginationState.maxLinesPerPage ?? 20;
 
-              // 🔧 计算实际使用的文字高度（maxLines × lineHeight）
-              final maxLines = paginationState.maxLinesPerPage ?? 20;
-              final lineHeight =
-                  currentSettings.fontSize * currentSettings.lineSpacing;
-              final actualTextHeight = maxLines * lineHeight;
+          // 🔧 渲染时的 padding：
+          // - 顶部需要加上状态栏高度（分页时的屏幕尺寸已减去状态栏）
+          // - 左右底部保持和分页一致
+          final renderPadding = EdgeInsets.only(
+            left: basePadding.left,
+            right: basePadding.right,
+            top: basePadding.top + statusBarHeight, // 加上状态栏高度
+            bottom: basePadding.bottom,
+          );
 
-              // 🔧 计算顶部 padding
-              // 沉浸式模式下，只需避开灵动岛区域（约35px）
-              // 不需要加整个状态栏高度
-              const dynamicIslandHeight = 35.0;
-
-              // 🔧 计算调整后的 padding
-              // 顶部：basePadding.top + 灵动岛高度
-              // 底部：fullHeight - topPadding - actualTextHeight（限制最大50px）
-              final adjustedTopPadding = basePadding.top + dynamicIslandHeight;
-              final rawBottomPadding =
-                  fullHeight - adjustedTopPadding - actualTextHeight;
-              // 🔧 限制底部 padding 最大为 20px，减少底部空白
-              final adjustedBottomPadding = rawBottomPadding.clamp(0.0, 20.0);
-
-              final adjustedPadding = EdgeInsets.only(
-                left: basePadding.left,
-                right: basePadding.right,
-                top: adjustedTopPadding,
-                bottom: adjustedBottomPadding,
-              );
-
-              return Container(
-                width: fullWidth,
-                height: fullHeight,
-                padding: adjustedPadding,
-                color: currentSettings.backgroundColor,
-                // ClipRect确保超出部分被裁剪，不会显示也不会允许滚动
-                child: ClipRect(
-                  clipBehavior: Clip.hardEdge,
-                  // 🔧 用 Align 确保文字从顶部开始
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: _HighlightedText(
-                      text: pageContent,
-                      style: currentSettings.textStyle,
-                      highlightedSentenceIndex:
-                          ttsState.highlightedSentenceIndex,
-                      enableSelection: currentSettings.enableTextSelection,
-                      onTextSelection: widget.onTextSelection,
-                      maxLines: maxLines,
-                    ),
-                  ),
-                ),
-              );
-            },
+          return Container(
+            width: screenSize.width,
+            height: screenSize.height, // 使用完整屏幕高度
+            padding: renderPadding,
+            color: currentSettings.backgroundColor,
+            // ClipRect确保超出部分被裁剪
+            child: ClipRect(
+              clipBehavior: Clip.hardEdge,
+              child: _HighlightedText(
+                text: pageContent,
+                style: currentSettings.textStyle,
+                highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
+                enableSelection: currentSettings.enableTextSelection,
+                onTextSelection: widget.onTextSelection,
+                maxLines: maxLines,
+              ),
+            ),
           );
         },
       ),

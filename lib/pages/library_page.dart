@@ -6,6 +6,7 @@ import '../models/book.dart';
 import '../services/book_dao.dart';
 import '../services/reading_router_service.dart';
 import '../services/pagination_cache_service.dart';
+import '../services/reading_progress_service.dart';
 import 'import_book_page.dart';
 import '../utils/responsive_helper.dart';
 import '../widgets/scrolling_text.dart';
@@ -956,7 +957,13 @@ class _LibraryPageState extends State<LibraryPage> {
         debugPrint('✅ 已删除分页缓存');
       }
 
-      // 4. 删除数据库记录（会级联删除笔记、书签等）
+      // 4. 清理阅读进度缓存
+      onProgress?.call('清理阅读进度...');
+      final progressService = ReadingProgressService();
+      await progressService.clearProgress(book.id!.toString());
+      debugPrint('✅ 已删除阅读进度缓存');
+
+      // 5. 删除数据库记录（会级联删除笔记、书签等）
       onProgress?.call('清理数据库记录...');
       await _bookDao.deleteBook(book.id!);
       debugPrint('✅ 已删除数据库记录');

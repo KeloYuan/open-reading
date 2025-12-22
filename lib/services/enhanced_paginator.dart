@@ -76,9 +76,11 @@ class EnhancedPaginator {
     final availableWidth = screenSize.width - padding.horizontal;
     final availableHeight = screenSize.height - padding.vertical;
 
-    // 🔑 向下取整行数，确保不溢出
+    // 🔑 向下取整行数，并预留安全裕度确保不溢出
     final lineHeightPx = fontSize * lineHeight;
-    final maxLines = (availableHeight / lineHeightPx).floor();
+    // 🔧 修复：减去 2px 安全裕度，避免浮点精度问题导致最后一行只显示一个字
+    final safeHeight = availableHeight - 2.0;
+    final maxLines = (safeHeight / lineHeightPx).floor();
     final actualAvailableHeight = maxLines * lineHeightPx;
 
     debugPrint(
@@ -195,7 +197,7 @@ class EnhancedPaginator {
     }
   }
 
-  /// 🚀 二分查找断点
+  /// 🚀 二分查找断点（优化版）
   static int _binarySearchBreakpoint({
     required String text,
     required int startIndex,
@@ -208,46 +210,57 @@ class EnhancedPaginator {
     final remaining = text.length - startIndex;
     if (remaining <= 0) return text.length;
 
-    // 初始范围
-    int low = startIndex;
-    int high =
-        (startIndex + estimatedCharsPerPage * 2).clamp(startIndex, text.length);
-    if (high <= low) high = (low + 1).clamp(low, text.length);
+    // 🔧 修复1: 扩大初始搜索范围，避免估算不准导致过早终止
+    int low = startIndex + 1; // 至少要有1个字符
+    int high = (startIndex + estimatedCharsPerPage * 3)
+        .clamp(startIndex + 1, text.length);
 
-    int bestBreakpoint = low + 1;
+    // 如果剩余字符很少，直接检查能否全部放下
+    if (remaining <= estimatedCharsPerPage) {
+      final testText = text.substring(startIndex);
+      textPainter.text = TextSpan(text: testText, style: textStyle);
+      textPainter.layout(maxWidth: availableWidth);
+      if (textPainter.height <= availableHeight) {
+        return text.length; // 全部放下
+      }
+    }
 
-    // 二分查找
-    while (low < high) {
-      final mid = (low + high + 1) ~/ 2;
+    int bestBreakpoint = low;
+
+    // 🔧 修复2: 标准二分查找，找到最大可容纳的字符数
+    while (low <= high) {
+      final mid = (low + high) ~/ 2;
       final testText = text.substring(startIndex, mid);
 
       textPainter.text = TextSpan(text: testText, style: textStyle);
       textPainter.layout(maxWidth: availableWidth);
 
+      // 🔧 修复3: 去掉容差，使用严格比较（安全裕度已在高度计算时处理）
       if (textPainter.height <= availableHeight) {
+        // 还能放得下，尝试放更多
         bestBreakpoint = mid;
-        low = mid;
+        low = mid + 1;
       } else {
+        // 放不下了，减少字符
         high = mid - 1;
       }
+    }
+
+    // 确保至少返回一个有效的断点
+    if (bestBreakpoint <= startIndex) {
+      bestBreakpoint = (startIndex + 1).clamp(startIndex, text.length);
     }
 
     // 智能断行
     return _adjustBreakpoint(text, startIndex, bestBreakpoint);
   }
 
-  /// 智能断行
+  /// 智能断行（已禁用：直接返回二分法断点，不寻找标点符号）
   static int _adjustBreakpoint(String text, int startIndex, int breakpoint) {
     if (breakpoint >= text.length) return text.length;
     if (breakpoint <= startIndex) return (startIndex + 1).clamp(0, text.length);
 
-    final searchStart = (breakpoint - 15).clamp(startIndex, breakpoint);
-    for (int i = breakpoint - 1; i >= searchStart; i--) {
-      final char = text[i];
-      if ('。！？.!?；;，,、：:）)】」』"\'"\n\r '.contains(char)) {
-        return i + 1;
-      }
-    }
+    // 🔧 直接返回断点，不再寻找标点符号
     return breakpoint;
   }
 
