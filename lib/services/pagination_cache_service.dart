@@ -9,11 +9,13 @@ class PaginationCacheData {
   final List<String> pages;
   final String cacheKey;
   final DateTime createdAt;
+  final List<int>? pageCharOffsets;
 
   const PaginationCacheData({
     required this.pages,
     required this.cacheKey,
     required this.createdAt,
+    this.pageCharOffsets,
   });
 
   Map<String, dynamic> toJson() {
@@ -21,6 +23,7 @@ class PaginationCacheData {
       'pages': pages,
       'cacheKey': cacheKey,
       'createdAt': createdAt.toIso8601String(),
+      'pageCharOffsets': pageCharOffsets,
     };
   }
 
@@ -29,6 +32,9 @@ class PaginationCacheData {
       pages: List<String>.from(json['pages'] as List),
       cacheKey: json['cacheKey'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      pageCharOffsets: (json['pageCharOffsets'] as List?)
+          ?.map((value) => value as int)
+          .toList(),
     );
   }
 }
@@ -98,6 +104,7 @@ class PaginationCacheService {
   static Future<void> saveCache({
     required List<String> pages,
     required String cacheKey,
+    List<int>? pageCharOffsets,
   }) async {
     try {
       final filePath = await _getCacheFilePath(cacheKey);
@@ -107,6 +114,7 @@ class PaginationCacheService {
         pages: pages,
         cacheKey: cacheKey,
         createdAt: DateTime.now(),
+        pageCharOffsets: pageCharOffsets,
       );
 
       final json = jsonEncode(cacheData.toJson());

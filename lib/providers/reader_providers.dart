@@ -622,6 +622,12 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         // 确保初始页码在有效范围内
         final safeInitialPage =
             initialPageIndex.clamp(0, cachedData.pages.length - 1);
+        final cachedOffsets = cachedData.pageCharOffsets;
+        final safeOffsets =
+            (cachedOffsets != null &&
+                    cachedOffsets.length == cachedData.pages.length)
+                ? cachedOffsets
+                : null;
         debugPrint('📖 恢复到页码: $safeInitialPage');
         state = state.copyWith(
           pages: cachedData.pages,
@@ -631,6 +637,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
           cachedText: text,
           cacheKey: cacheKey,
           loadingStage: '加载完成',
+          pageCharOffsets: safeOffsets,
         );
         return;
       }
@@ -710,6 +717,10 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       // 阶段1：使用快速估算结果，立即显示
       final sampledPages = result.sampledPages;
       final estimatedTotal = result.estimatedTotal;
+      final pageCharOffsets =
+          result.pageCharOffsets.length == sampledPages.length
+              ? result.pageCharOffsets
+              : null;
 
       debugPrint('✅ 快速估算完成: 采样${sampledPages.length}页，估算总页数~$estimatedTotal');
 
@@ -739,6 +750,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         isEstimated: true, // 标记为估算值
         screenSize: screenSize, // 🔧 保存屏幕尺寸
         maxLinesPerPage: maxLinesPerPage, // 🔧 保存每页最大行数
+        pageCharOffsets: pageCharOffsets,
       );
 
       debugPrint('📖 用户可以开始阅读，后台继续精确计算...');
@@ -747,6 +759,10 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       result.preciseCalculationFuture.then((preciseResult) {
         final pages = preciseResult.pages;
         final pageContents = preciseResult.pageContents;
+        final pageCharOffsets =
+            preciseResult.pageCharOffsets.length == pages.length
+                ? preciseResult.pageCharOffsets
+                : null;
 
         debugPrint('✅ 精确计算完成: 实际${pages.length}页');
 
@@ -762,6 +778,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
           paginationSettings: paginationSettings, // 🔧 确保精确计算后也使用相同padding
           estimatedTotal: null,
           isEstimated: false, // 标记为精确值
+          pageCharOffsets: pageCharOffsets,
           // 🔧 保持 screenSize 和 maxLinesPerPage（不覆盖为 null）
         );
 
@@ -769,6 +786,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         PaginationCacheService.saveCache(
           pages: pages,
           cacheKey: cacheKey,
+          pageCharOffsets: pageCharOffsets,
         ).then((_) {
           debugPrint('💾 已缓存到本地磁盘');
         });

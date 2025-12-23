@@ -130,6 +130,19 @@ class _ReaderTextViewState extends ConsumerState<ReaderTextView> {
   Widget build(BuildContext context) {
     final paginationState = ref.watch(readerPaginationProvider);
     final settings = ref.watch(readerSettingsProvider);
+    final paginationSettings = paginationState.paginationSettings;
+    final viewSettings = paginationSettings == null
+        ? settings
+        : settings.copyWith(
+            fontSize: paginationSettings.fontSize,
+            lineSpacing: paginationSettings.lineSpacing,
+            letterSpacing: paginationSettings.letterSpacing,
+            padding: paginationSettings.padding,
+            firstLineIndent: paginationSettings.firstLineIndent,
+            horizontalMargin: paginationSettings.horizontalMargin,
+            enableFirstLineIndent: paginationSettings.enableFirstLineIndent,
+            paragraphSpacing: paginationSettings.paragraphSpacing,
+          );
 
     if (paginationState.isLoading) {
       return _buildLoadingView(settings);
@@ -143,7 +156,7 @@ class _ReaderTextViewState extends ConsumerState<ReaderTextView> {
       return _buildEmptyView(settings);
     }
 
-    return _buildContentView(paginationState, settings);
+    return _buildContentView(paginationState, viewSettings);
   }
 
   /// 构建内容视图

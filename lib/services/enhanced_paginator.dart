@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 /// 🚀 增强分页器 v2.0 - 高性能版本
 ///
 /// 优化策略：
-/// 1. 纯二分法分页（不逐字符测量）
+/// 1. 按最大行数分页，避免每页多次二分测量
 /// 2. 向下取整行数，确保不溢出
 /// 3. 图片独占一页
 class EnhancedPaginator {
@@ -59,11 +59,12 @@ class EnhancedPaginator {
     return ProgressivePaginationResult(
       sampledPages: result.pages, // 返回所有页（已经很快了）
       estimatedTotal: estimatedTotal,
+      pageCharOffsets: result.pageCharOffsets,
       preciseCalculationFuture: Future.value(result),
     );
   }
 
-  /// 🚀 高性能分页（纯二分法）
+  /// 🚀 高性能分页（逐页布局）
   static Future<PreciseCalculationResult> _fastPaginate({
     required String text,
     required Size screenSize,
@@ -80,7 +81,7 @@ class EnhancedPaginator {
     final lineHeightPx = fontSize * lineHeight;
     // 🔧 修复：减去 2px 安全裕度，避免浮点精度问题导致最后一行只显示一个字
     final safeHeight = availableHeight - 2.0;
-    final maxLines = (safeHeight / lineHeightPx).floor();
+    final maxLines = (safeHeight / lineHeightPx).floor().clamp(1, 9999);
     final actualAvailableHeight = maxLines * lineHeightPx;
 
     debugPrint(
@@ -97,20 +98,16 @@ class EnhancedPaginator {
     final textPainter = TextPainter(
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.left,
-      strutStyle: StrutStyle(
-        fontSize: fontSize,
-        height: lineHeight,
-        forceStrutHeight: true,
-      ),
     );
 
     final pages = <String>[];
     final pageContents = <PageContent>[];
+    final pageCharOffsets = <int>[];
 
     // 解析内容元素
     final contentElements = supportImages
         ? _parseContentElements(text)
-        : [ContentElement(isImage: false, content: text)];
+        : [ContentElement(isImage: false, content: text, startIndex: 0)];
 
     for (final element in contentElements) {
       if (element.isImage) {
@@ -125,18 +122,22 @@ class EnhancedPaginator {
                 height: actualAvailableHeight)
           ],
         ));
+        pageCharOffsets.add(element.startIndex);
         continue;
       }
 
-      // 🚀 纯二分法分页
+      // 🚀 逐页布局分页（单次布局求断点）
       await _paginateTextFast(
         text: element.content,
         availableWidth: availableWidth,
         availableHeight: actualAvailableHeight,
         textStyle: textStyle,
         textPainter: textPainter,
+        maxLines: maxLines,
         pages: pages,
         pageContents: pageContents,
+        pageCharOffsets: pageCharOffsets,
+        baseOffset: element.startIndex,
       );
     }
 
@@ -145,18 +146,22 @@ class EnhancedPaginator {
     return PreciseCalculationResult(
       pages: pages,
       pageContents: pageContents,
+      pageCharOffsets: pageCharOffsets,
     );
   }
 
-  /// 🚀 纯二分法文本分页（不逐字符）
+  /// 🚀 逐页布局文本分页（每页仅一次布局）
   static Future<void> _paginateTextFast({
     required String text,
     required double availableWidth,
     required double availableHeight,
     required TextStyle textStyle,
     required TextPainter textPainter,
+    required int maxLines,
     required List<String> pages,
     required List<PageContent> pageContents,
+    required List<int> pageCharOffsets,
+    required int baseOffset,
   }) async {
     if (text.isEmpty) return;
 
@@ -171,13 +176,14 @@ class EnhancedPaginator {
     final estimatedCharsPerPage = charsPerLine * linesPerPage;
 
     while (startIndex < text.length) {
-      // 二分法找断点
-      final endIndex = _binarySearchBreakpoint(
+      // 单次布局找断点
+      final endIndex = _findPageEnd(
         text: text,
         startIndex: startIndex,
         estimatedCharsPerPage: estimatedCharsPerPage,
         availableWidth: availableWidth,
         availableHeight: availableHeight,
+        maxLines: maxLines,
         textStyle: textStyle,
         textPainter: textPainter,
       );
@@ -185,6 +191,7 @@ class EnhancedPaginator {
       final pageText = text.substring(startIndex, endIndex);
       pages.add(pageText);
       pageContents.add(PageContent(textContent: pageText, images: []));
+      pageCharOffsets.add(baseOffset + startIndex);
 
       startIndex = endIndex;
       pageCount++;
@@ -197,65 +204,77 @@ class EnhancedPaginator {
     }
   }
 
-  /// 🚀 二分查找断点（优化版）
-  static int _binarySearchBreakpoint({
+  /// 🚀 单次布局找断点（减少重复测量）
+  static int _findPageEnd({
     required String text,
     required int startIndex,
     required int estimatedCharsPerPage,
     required double availableWidth,
     required double availableHeight,
+    required int maxLines,
     required TextStyle textStyle,
     required TextPainter textPainter,
   }) {
     final remaining = text.length - startIndex;
     if (remaining <= 0) return text.length;
 
-    // 🔧 修复1: 扩大初始搜索范围，避免估算不准导致过早终止
-    int low = startIndex + 1; // 至少要有1个字符
-    int high = (startIndex + estimatedCharsPerPage * 3)
-        .clamp(startIndex + 1, text.length);
+    // 控制切片大小，避免每页都布局超长文本
+    int windowChars = estimatedCharsPerPage * 3;
+    if (windowChars < 512) {
+      windowChars = 512;
+    }
+    int sliceEnd = startIndex + windowChars;
+    if (sliceEnd < startIndex + 1) {
+      sliceEnd = startIndex + 1;
+    }
+    if (sliceEnd > text.length) {
+      sliceEnd = text.length;
+    }
 
-    // 如果剩余字符很少，直接检查能否全部放下
-    if (remaining <= estimatedCharsPerPage) {
-      final testText = text.substring(startIndex);
-      textPainter.text = TextSpan(text: testText, style: textStyle);
+    String slice = text.substring(startIndex, sliceEnd);
+    textPainter
+      ..text = TextSpan(text: slice, style: textStyle)
+      ..maxLines = maxLines
+      ..ellipsis = null;
+    textPainter.layout(maxWidth: availableWidth);
+
+    // 切片过短，无法填满页面时，扩展到剩余文本再布局一次
+    if (!textPainter.didExceedMaxLines && sliceEnd < text.length) {
+      sliceEnd = text.length;
+      slice = text.substring(startIndex, sliceEnd);
+      textPainter.text = TextSpan(text: slice, style: textStyle);
       textPainter.layout(maxWidth: availableWidth);
-      if (textPainter.height <= availableHeight) {
-        return text.length; // 全部放下
-      }
     }
 
-    int bestBreakpoint = low;
-
-    // 🔧 修复2: 标准二分查找，找到最大可容纳的字符数
-    while (low <= high) {
-      final mid = (low + high) ~/ 2;
-      final testText = text.substring(startIndex, mid);
-
-      textPainter.text = TextSpan(text: testText, style: textStyle);
-      textPainter.layout(maxWidth: availableWidth);
-
-      // 🔧 修复3: 去掉容差，使用严格比较（安全裕度已在高度计算时处理）
-      if (textPainter.height <= availableHeight) {
-        // 还能放得下，尝试放更多
-        bestBreakpoint = mid;
-        low = mid + 1;
-      } else {
-        // 放不下了，减少字符
-        high = mid - 1;
-      }
+    if (!textPainter.didExceedMaxLines) {
+      return text.length;
     }
 
-    // 确保至少返回一个有效的断点
-    if (bestBreakpoint <= startIndex) {
-      bestBreakpoint = (startIndex + 1).clamp(startIndex, text.length);
+    final double layoutHeight = textPainter.height;
+    final double offsetHeight =
+        (layoutHeight - 1).clamp(0.0, availableHeight);
+    final position =
+        textPainter.getPositionForOffset(Offset(availableWidth, offsetHeight));
+    final lineBoundary = textPainter.getLineBoundary(position);
+    int endIndex = lineBoundary.end;
+
+    if (endIndex <= 0 || endIndex > slice.length) {
+      endIndex = position.offset;
     }
+    if (endIndex <= 0) {
+      endIndex = 1;
+    }
+
+    final absoluteEnd = (startIndex + endIndex).clamp(
+      startIndex + 1,
+      text.length,
+    );
 
     // 智能断行
-    return _adjustBreakpoint(text, startIndex, bestBreakpoint);
+    return _adjustBreakpoint(text, startIndex, absoluteEnd);
   }
 
-  /// 智能断行（已禁用：直接返回二分法断点，不寻找标点符号）
+  /// 智能断行（已禁用：直接返回断点，不寻找标点符号）
   static int _adjustBreakpoint(String text, int startIndex, int breakpoint) {
     if (breakpoint >= text.length) return text.length;
     if (breakpoint <= startIndex) return (startIndex + 1).clamp(0, text.length);
@@ -280,13 +299,21 @@ class EnhancedPaginator {
       if (match.start > lastIndex) {
         final textContent = text.substring(lastIndex, match.start);
         if (textContent.isNotEmpty) {
-          elements.add(ContentElement(isImage: false, content: textContent));
+          elements.add(ContentElement(
+            isImage: false,
+            content: textContent,
+            startIndex: lastIndex,
+          ));
         }
       }
 
       final imagePath = match.group(1);
       if (imagePath != null && imagePath.isNotEmpty) {
-        elements.add(ContentElement(isImage: true, content: imagePath));
+        elements.add(ContentElement(
+          isImage: true,
+          content: imagePath,
+          startIndex: match.start,
+        ));
       }
       lastIndex = match.end;
     }
@@ -294,12 +321,16 @@ class EnhancedPaginator {
     if (lastIndex < text.length) {
       final textContent = text.substring(lastIndex);
       if (textContent.isNotEmpty) {
-        elements.add(ContentElement(isImage: false, content: textContent));
+        elements.add(ContentElement(
+          isImage: false,
+          content: textContent,
+          startIndex: lastIndex,
+        ));
       }
     }
 
     return elements.isEmpty
-        ? [ContentElement(isImage: false, content: text)]
+        ? [ContentElement(isImage: false, content: text, startIndex: 0)]
         : elements;
   }
 }
@@ -307,7 +338,12 @@ class EnhancedPaginator {
 class ContentElement {
   final bool isImage;
   final String content;
-  ContentElement({required this.isImage, required this.content});
+  final int startIndex;
+  ContentElement({
+    required this.isImage,
+    required this.content,
+    required this.startIndex,
+  });
 }
 
 class ImageElement {
@@ -339,16 +375,23 @@ class QuickEstimateResult {
 class PreciseCalculationResult {
   final List<String> pages;
   final List<PageContent> pageContents;
-  PreciseCalculationResult({required this.pages, required this.pageContents});
+  final List<int> pageCharOffsets;
+  PreciseCalculationResult({
+    required this.pages,
+    required this.pageContents,
+    required this.pageCharOffsets,
+  });
 }
 
 class ProgressivePaginationResult {
   final List<String> sampledPages;
   final int estimatedTotal;
+  final List<int> pageCharOffsets;
   final Future<PreciseCalculationResult> preciseCalculationFuture;
   ProgressivePaginationResult({
     required this.sampledPages,
     required this.estimatedTotal,
+    required this.pageCharOffsets,
     required this.preciseCalculationFuture,
   });
 }

@@ -46,6 +46,8 @@ void main() async {
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark, // iOS: 状态栏图标为深色(适合白色背景)
+      statusBarBrightness: Brightness.light, // iOS: 状态栏背景为浅色
       systemNavigationBarColor: Colors.transparent,
       systemNavigationBarDividerColor: Colors.transparent,
       systemStatusBarContrastEnforced: false,

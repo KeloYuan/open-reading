@@ -1,146 +1,213 @@
-# Claude AI 协作指南
+# CLAUDE.md
 
-## 重要原则：决策前必须询问
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**在做出任何重要决定之前，Claude AI 必须先向用户询问并获得确认。**
+## 项目概述
 
-### 需要询问的决策类型
+**小元读书 (xxread)** - 优雅的 Flutter 跨平台电子书阅读器，支持多种书籍格式（EPUB、PDF、TXT），提供舒适的阅读体验。
 
-1. **架构变更**
-   - 添加或删除核心功能模块
-   - 修改项目结构
-   - 更换技术方案或第三方库
+**技术栈：** Flutter 3.4+ / Dart 3.4+ / SQLite / Riverpod
 
-2. **功能实现方案**
-   - 多种实现方式的选择
-   - 性能优化策略的选择
-   - UI/UX 设计方案
+## 常用命令
 
-3. **文件操作**
-   - 删除现有代码文件（除非明确是临时测试文件）
-   - 重命名核心文件
-   - 大规模重构
+```bash
+# 开发流程
+flutter pub get                    # 安装依赖
+flutter run                        # 运行调试版本
+flutter run --release              # 运行发布版本
 
-4. **配置修改**
-   - 修改构建配置
-   - 更改依赖版本
-   - 调整环境配置
+# 代码质量
+flutter analyze --no-fatal-infos   # 静态分析
+dart format .                      # 代码格式化
+flutter test                       # 运行测试
 
-### 可以直接执行的操作
+# 构建打包
+flutter build apk                  # Android APK
+flutter build ios                  # iOS
+flutter build windows              # Windows
+flutter build macos                # macOS
 
-1. **明确的 Bug 修复**
-   - 修复编译错误
-   - 修复运行时错误
-   - 修复逻辑错误
+# 清理缓存
+flutter clean                      # 清理构建缓存
+```
 
-2. **代码优化**
-   - 性能优化（在不改变功能的前提下）
-   - 代码格式化
-   - 添加注释和文档
+## 核心架构
 
-3. **测试相关**
-   - 编写单元测试
-   - 修复失败的测试
+### 分层结构
 
-## 项目核心架构
+```
+lib/
+├── models/           # 数据模型 (Book, Chapter, Bookmark, Note, Highlight)
+├── providers/        # 状态管理 (Riverpod - reader_providers.dart)
+├── pages/            # 页面组件 (reader_page.dart, home_page_responsive.dart)
+├── services/         # 业务逻辑层
+│   ├── enhanced_paginator.dart        # 核心分页器 v2.0
+│   ├── pagination_cache_service.dart  # 分页缓存
+│   ├── reading_router_service.dart    # 阅读路由
+│   ├── text_preprocessor.dart         # 文本预处理
+│   ├── book_import_service.dart       # 书籍导入
+│   ├── database_service.dart          # 数据库服务
+│   ├── tts_service.dart               # TTS 朗读
+│   └── *_dao.dart                     # 数据访问对象
+├── utils/            # 工具类
+└── widgets/          # 自定义组件
+```
 
-### 分页系统
+### 阅读器核心架构 (reader_page.dart + reader_providers.dart)
 
-**当前使用的分页器：**
-- `lib/services/optimized_stable_paginator.dart` - 主要分页器
-- `lib/services/pagination_cache_service.dart` - 分页缓存服务
+**重要约束：** `reader_page.dart` 必须使用 Riverpod 状态管理。可使用 `ConsumerStatefulWidget` 作为壳组件（用于 `AnimationController`），但业务状态必须集中在 `StateNotifier`/`Notifier` 中。
 
-**分页器特性：**
-- 字符级精确分页，可在任意位置断开
-- 支持图片（通过 `<img src="path" />` 标签）
-- 图片默认独占一页
-- 支持分页结果缓存
+**状态管理流程：**
+```
+ReadingRouterService.openBook()
+    → ReaderPage (ConsumerStatefulWidget 壳)
+        → ReaderPaginationNotifier (StateNotifier)
+            → EnhancedPaginator.paginateProgressive()
+                → PaginationCacheService (磁盘缓存)
+```
 
-**已删除的分页器（不再使用）：**
-- fast_text_paginator.dart
-- precise_paginator_with_images.dart
-- stable_text_paginator.dart
-- streaming_paginator.dart
-- 等其他测试性质的分页器
+**分页策略：**
+- **EnhancedPaginator** (`lib/services/enhanced_paginator.dart`) - 主要分页器，使用纯二分法实现高性能分页
+- 支持渐进式分页：快速采样前10页 → 后台精确计算全部
+- 图片独占一页，通过 `<img src="绝对路径" />` 标记
+- 分页结果通过 `PaginationCacheService` 缓存到本地磁盘
 
-### 图片支持
+**阅读设置 (ReaderSettings)：**
+- 字体大小、行距、字间距、页边距
+- 阅读主题（8种预设）
+- 翻页模式（cover/slide/scroll/simulation）
+- 首行缩进、段落间距
 
-**当前状态：**
-- 分页器层面：支持解析 `<img src="path" />` 标签
-- 渲染层面：`reader_page.dart` 中已实现图片渲染逻辑
-- 存储层面：使用 `BookImageManager` 管理图片
+### 数据库架构
 
-**图片处理流程：**
-1. 导入书籍时，提取图片并保存到应用目录
-2. 在内容中使用 `<img src="绝对路径" />` 标记
-3. 分页时，图片独占一页
-4. 渲染时，使用 `Image.file()` 加载本地图片
+**核心表：**
+- `books` - 书籍信息（含封面、缓存内容、分页数据）
+- `bookmarks` - 书签
+- `book_notes` - 笔记/高亮统一系统
+- `reading_stats` - 阅读统计
+- `book_sources` - 书源系统
 
-## 开发约定
+**数据访问层 (DAO)：**
+- `BookDao`, `BookmarkDao`, `BookNoteDao`, `HighlightDao`, `ReadingStatsDao`
+- 所有数据库操作通过 DAO 层进行
+- 数据库版本管理：`DatabaseService`
+
+### 书籍导入流程
+
+```
+BookImportService.importBook()
+    ├── TXT → EnhancedTxtImportService → TextPreprocessor (格式化)
+    ├── EPUB → EpubImageExtractor (提取图片) + BookImageMapService (路径映射)
+    └── PDF  → Pdfx (直接渲染)
+```
+
+**图片处理：**
+- EPUB 图片在导入时提取到 `app_flutter/book_images/`
+- 使用 `BookImageMapService` 管理图片路径映射
+- 分页时图片标记为 `<img src="/path/to/image" />`
+
+### TTS 朗读系统
+
+- 基类：`BaseTts` (lib/services/tts/base_tts.dart)
+- 实现：`SystemTts` (lib/services/tts/system_tts.dart)
+- 朗读时根据当前页内句子高亮显示
+
+### WebDAV 同步
+
+- `lib/services/sync/webdav_sync_service.dart`
+- 支持书籍元数据、书签、进度、笔记、书籍文件同步
+- 差异化同步：移除大字段，减少传输量
+
+## 开发规范
+
+### 决策前必须询问
+
+**需要用户确认的操作：**
+1. 架构变更（添加/删除模块、修改项目结构）
+2. 功能实现方案选择（多种实现方式）
+3. 删除现有代码文件（除非明确是临时测试文件）
+4. 配置修改（构建配置、依赖版本）
+
+**可直接执行的操作：**
+1. 明确的 Bug 修复（编译错误、运行时错误、逻辑错误）
+2. 性能优化（不改变功能前提下）
+3. 代码格式化、添加注释
 
 ### 代码风格
 
-- 使用中文注释
-- 关键操作添加 emoji 标记（📖 📄 ✅ ❌ 等）
-- 重要的状态变化使用 debugPrint 输出日志
+- **注释：** 使用中文，关键操作添加 emoji 标记（📖 📄 ✅ ❌）
+- **日志：** 重要状态变化使用 `debugPrint` 输出
+- **命名：** 不使用其他项目名称（如 Legado），使用简洁明了的命名
 
-### Git 提交
+### UI/UX 约束
 
-- 提交前必须询问用户
-- 提交信息使用中文
-- 提交信息末尾添加：
-  ```
-  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+- **禁止随意修改 UI 风格**，未经用户允许不得更改设计、布局、颜色
+- **禁止删除或简化功能**，不能通过删除代码来"解决"问题
+- **保持设计一致性**，维护项目现有的设计语言
 
-  Co-Authored-By: Claude <noreply@anthropic.com>
-  ```
+### Reader Page 构建约束
 
-### 文档管理
+- 必须使用 Riverpod 进行状态管理
+- 阅读分页复用 `EnhancedPaginator` 和 `PaginationCacheService`
+- UI 分层：根组件 `ReaderPage` 负责组合子组件；复杂组件独立成私有类
+- 工具栏动画使用 `AnimationController` + `FadeTransition`/`SlideTransition`，禁止使用隐式动画
+- 每种翻页模式封装为独立 widget：`_SlidePaginationView`, `_ScrollPaginationView` 等
 
-- 有意义的技术方案、问题解决方法要记录到 `knowledge_base/` 目录
-- 临时性的开发文档不要保留在根目录
-- README 和主要文档保持最新
+### 测试验证流程
 
-## 常见问题处理
-
-### 分页相关问题
-
-1. **分页结果不准确**
-   - 检查 TextPainter 配置是否与 Text Widget 一致
-   - 确认行高、字间距等参数正确传递
-
-2. **图片显示异常**
-   - 验证图片文件路径是否存在
-   - 检查图片文件权限
-   - 确认图片格式支持
-
-3. **性能问题**
-   - 启用分页缓存
-   - 检查是否有重复分页计算
-   - 考虑优化大文件处理
-
-### 常用命令
-
+代码修改后必须执行：
 ```bash
-# 运行应用
-flutter run
-
-# 分析代码
-flutter analyze --no-fatal-infos
-
-# 清理构建缓存
-flutter clean
-
-# 更新依赖
-flutter pub get
+flutter analyze --no-fatal-infos   # 修复所有错误和警告
+dart format .                      # 格式化代码
+flutter test                       # 运行测试
+flutter build apk --debug          # 验证构建
 ```
+
+## 关键文件索引
+
+| 文件 | 用途 |
+|------|------|
+| [lib/services/enhanced_paginator.dart](lib/services/enhanced_paginator.dart) | 核心分页器 v2.0（二分法高性能分页）|
+| [lib/services/pagination_cache_service.dart](lib/services/pagination_cache_service.dart) | 分页缓存服务 |
+| [lib/services/reading_router_service.dart](lib/services/reading_router_service.dart) | 阅读器入口路由 |
+| [lib/services/text_preprocessor.dart](lib/services/text_preprocessor.dart) | 文本预处理（缩进、空行压缩）|
+| [lib/providers/reader_providers.dart](lib/providers/reader_providers.dart) | 阅读器状态管理（ReaderSettings, ReaderPaginationNotifier）|
+| [lib/pages/reader_page.dart](lib/pages/reader_page.dart) | 阅读页面主组件 |
+| [lib/services/database_service.dart](lib/services/database_service.dart) | 数据库版本管理 |
+| [lib/services/book_import_service.dart](lib/services/book_import_service.dart) | 书籍导入服务 |
+
+## 常见问题
+
+### 分页结果不准确
+- 检查 TextPainter 配置是否与 Text Widget 一致
+- 确认行高、字间距等参数正确传递
+- 验证 `EnhancedPaginator` 的 `pageSize` 计算
+
+### 图片显示异常
+- 验证图片文件路径是否存在
+- 检查 `BookImageMapService` 映射是否正确
+- 确认图片格式支持
+
+### 性能问题
+- 启用分页缓存 (`PaginationCacheService`)
+- 检查是否有重复分页计算
+- 考虑使用渐进式分页
+
+## 知识库
+
+技术方案和问题解决记录存放在 `knowledge_base/` 目录：
+- [pagination_research_2025.md](knowledge_base/pagination_research_2025.md) - 分页技术调研
+- [LEGADO_PAGINATION_IMPLEMENTATION.md](knowledge_base/LEGADO_PAGINATION_IMPLEMENTATION.md) - 分页实施计划
+- [text_pagination_solutions.md](knowledge_base/text_pagination_solutions.md) - 文本分页方案
 
 ## 更新记录
 
+### 2025-12-23
+- 清理根目录临时文档（14个英文标题文档）
+- 更新 CLAUDE.md 架构说明
+
 ### 2025-01-19
-- 清理了8个未使用的分页器文件
-- 清理了测试和调试文件
-- 修复了编译错误
+- 清理未使用的分页器文件
 - 创建本文档
 
 ---
