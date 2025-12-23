@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 /// 优化策略：
 /// 1. 按最大行数分页，避免每页多次二分测量
 /// 2. 向下取整行数，确保不溢出
-/// 3. 图片独占一页
+/// 3. 图片按比例占用页面高度，允许与文本共存
 class EnhancedPaginator {
   static void Function(int currentPage, String stage)? _onProgress;
 
@@ -103,43 +103,97 @@ class EnhancedPaginator {
     final pages = <String>[];
     final pageContents = <PageContent>[];
     final pageCharOffsets = <int>[];
+    final charsPerLine = (availableWidth / fontSize).floor().clamp(1, 9999);
+    final linesPerPage = (actualAvailableHeight / lineHeightPx).floor().clamp(1, 9999);
+    final estimatedCharsPerPage = charsPerLine * linesPerPage;
 
     // 解析内容元素
     final contentElements = supportImages
         ? _parseContentElements(text)
         : [ContentElement(isImage: false, content: text, startIndex: 0)];
 
+    final buffer = StringBuffer();
+    final currentImages = <ImageElement>[];
+    double remainingHeight = actualAvailableHeight;
+    int? pageStartOffset;
+    const imageHeightRatio = 0.45;
+
+    void flushPage() {
+      if (buffer.isEmpty && currentImages.isEmpty) return;
+      pages.add(buffer.toString());
+      pageContents.add(PageContent(
+        textContent: buffer.toString(),
+        images: List<ImageElement>.from(currentImages),
+      ));
+      pageCharOffsets.add(pageStartOffset ?? 0);
+      buffer.clear();
+      currentImages.clear();
+      remainingHeight = actualAvailableHeight;
+      pageStartOffset = null;
+    }
+
     for (final element in contentElements) {
       if (element.isImage) {
-        // 图片独占一页
-        pages.add('<img src="${element.content}"/>');
-        pageContents.add(PageContent(
-          textContent: '',
-          images: [
-            ImageElement(
-                path: element.content,
-                width: availableWidth,
-                height: actualAvailableHeight)
-          ],
+        final imageHeight = (actualAvailableHeight * imageHeightRatio)
+            .clamp(lineHeightPx * 3, actualAvailableHeight);
+        if (remainingHeight < imageHeight &&
+            (buffer.isNotEmpty || currentImages.isNotEmpty)) {
+          flushPage();
+        }
+        pageStartOffset ??= element.startIndex;
+        buffer.write(
+          '<img src="${element.content}" data-height="${imageHeight.toStringAsFixed(1)}"/>',
+        );
+        currentImages.add(ImageElement(
+          path: element.content,
+          width: availableWidth,
+          height: imageHeight,
         ));
-        pageCharOffsets.add(element.startIndex);
+        remainingHeight -= imageHeight;
+        if (remainingHeight < lineHeightPx) {
+          flushPage();
+        }
         continue;
       }
 
-      // 🚀 逐页布局分页（单次布局求断点）
-      await _paginateTextFast(
-        text: element.content,
-        availableWidth: availableWidth,
-        availableHeight: actualAvailableHeight,
-        textStyle: textStyle,
-        textPainter: textPainter,
-        maxLines: maxLines,
-        pages: pages,
-        pageContents: pageContents,
-        pageCharOffsets: pageCharOffsets,
-        baseOffset: element.startIndex,
-      );
+      var cursor = 0;
+      final textContent = element.content;
+      while (cursor < textContent.length) {
+        pageStartOffset ??= element.startIndex + cursor;
+        final maxLinesForRemaining =
+            (remainingHeight / lineHeightPx).floor().clamp(1, maxLines);
+        final endIndex = _findPageEnd(
+          text: textContent,
+          startIndex: cursor,
+          estimatedCharsPerPage: estimatedCharsPerPage,
+          availableWidth: availableWidth,
+          availableHeight: remainingHeight,
+          maxLines: maxLinesForRemaining,
+          textStyle: textStyle,
+          textPainter: textPainter,
+        );
+
+        final pageText = textContent.substring(cursor, endIndex);
+        buffer.write(pageText);
+
+        textPainter
+          ..text = TextSpan(text: pageText, style: textStyle)
+          ..maxLines = maxLinesForRemaining
+          ..ellipsis = null;
+        textPainter.layout(maxWidth: availableWidth);
+        final usedHeight = textPainter.height;
+        remainingHeight = (remainingHeight - usedHeight).clamp(0.0, actualAvailableHeight);
+
+        cursor = endIndex;
+        if (cursor < textContent.length) {
+          flushPage();
+        } else if (remainingHeight < lineHeightPx) {
+          flushPage();
+        }
+      }
     }
+
+    flushPage();
 
     textPainter.dispose();
 
@@ -292,7 +346,7 @@ class EnhancedPaginator {
   /// 解析内容元素
   static List<ContentElement> _parseContentElements(String text) {
     final elements = <ContentElement>[];
-    final imgPattern = RegExp(r'<img\s+src="([^"]+)"\s*/?>');
+    final imgPattern = RegExp(r'<img\s+[^>]*src="([^"]+)"[^>]*?>');
 
     int lastIndex = 0;
     for (final match in imgPattern.allMatches(text)) {

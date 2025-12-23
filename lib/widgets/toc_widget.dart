@@ -1,11 +1,9 @@
 ﻿import 'package:flutter/material.dart';
-import '../models/book.dart';
 import '../models/chapter.dart';
 import '../models/bookmark.dart';
 
 /// 目录和书签组件 - 参考anx-reader的双Tab设计
 class TocWidget extends StatefulWidget {
-  final Book book;
   final List<Chapter> chapters;
   final List<Bookmark> bookmarks;
   final Function(int pageIndex) onPageTap;
@@ -14,7 +12,6 @@ class TocWidget extends StatefulWidget {
 
   const TocWidget({
     super.key,
-    required this.book,
     required this.chapters,
     required this.bookmarks,
     required this.onPageTap,

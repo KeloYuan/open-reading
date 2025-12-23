@@ -12,23 +12,32 @@ import '../widgets/enhanced_text_selection_toolbar.dart';
 import '../widgets/tts_settings_sheet.dart';
 import '../widgets/page_turning_settings_sheet.dart';
 import '../models/book_note.dart';
+import '../models/bookmark.dart';
+import '../models/chapter.dart';
 import '../services/book_dao.dart';
 import '../services/data_manager.dart';
+import '../services/bookmark_dao.dart';
 import '../services/reading_stats_dao.dart';
 import 'cover_pagination_view.dart';
+import '../widgets/toc_widget.dart';
 
 /// 混合内容元素（文本或图片）
 class _ContentElement {
   final bool isImage;
   final String content; // 如果是文本就是文本内容，如果是图片就是文件路径
+  final double? imageHeight;
 
-  const _ContentElement({required this.isImage, required this.content});
+  const _ContentElement({
+    required this.isImage,
+    required this.content,
+    this.imageHeight,
+  });
 }
 
 /// 解析混合内容（文本+图片）
 List<_ContentElement> _parseMixedContent(String content) {
   final elements = <_ContentElement>[];
-  final imgPattern = RegExp(r'<img src="([^"]+)"\s*/?>');
+  final imgPattern = RegExp(r'<img\s+[^>]*src="([^"]+)"[^>]*?>');
 
   int lastIndex = 0;
   for (var match in imgPattern.allMatches(content)) {
@@ -43,7 +52,17 @@ List<_ContentElement> _parseMixedContent(String content) {
     // 添加图片
     final imagePath = match.group(1);
     if (imagePath != null && imagePath.isNotEmpty) {
-      elements.add(_ContentElement(isImage: true, content: imagePath));
+      final tagText = match.group(0) ?? '';
+      final heightMatch =
+          RegExp(r'data-height="([^"]+)"').firstMatch(tagText);
+      final imageHeight = heightMatch != null
+          ? double.tryParse(heightMatch.group(1) ?? '')
+          : null;
+      elements.add(_ContentElement(
+        isImage: true,
+        content: imagePath,
+        imageHeight: imageHeight,
+      ));
     }
 
     lastIndex = match.end;
@@ -58,6 +77,207 @@ List<_ContentElement> _parseMixedContent(String content) {
   }
 
   return elements;
+}
+
+class _ChapterMarker {
+  final String title;
+  final int level;
+  final int startIndex;
+
+  const _ChapterMarker({
+    required this.title,
+    required this.level,
+    required this.startIndex,
+  });
+}
+
+final List<RegExp> _chapterTitlePatterns = [
+  // 中文章节
+  RegExp(r'^第[一二三四五六七八九十百千\d]+章\s*(.*)$'),
+  RegExp(r'^第[一二三四五六七八九十百千\d]+节\s*(.*)$'),
+  RegExp(r'^[一二三四五六七八九十]+、\s*(.*)$'),
+  RegExp(r'^\d+\.\s*(.*)$'),
+  RegExp(r'^[\d]+[\.、]\s*(.*)$'),
+  // 英文章节
+  RegExp(r'^Chapter\s+\d+\s*(.*)$', caseSensitive: false),
+  RegExp(r'^Part\s+\d+\s*(.*)$', caseSensitive: false),
+  RegExp(r'^Section\s+\d+\s*(.*)$', caseSensitive: false),
+  // 特殊章节
+  RegExp(r'^(序言|前言|引言|目录|后记|跋|结语)(.*)$'),
+  RegExp(
+    r'^(Preface|Introduction|Prologue|Epilogue)(.*)$',
+    caseSensitive: false,
+  ),
+  // 分割线章节
+  RegExp(r'^[=\-]{3,}\s*(.+)\s*[=\-]{3,}$'),
+  RegExp(r'^\*{3,}\s*(.+)\s*\*{3,}$'),
+];
+
+String _cleanChapterTitle(String title) {
+  return title
+      .replaceAll(RegExp(r'[^\w\s\u4e00-\u9fff]+'), '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+}
+
+String _normalizeTitleKey(String title) {
+  return title
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^\w\u4e00-\u9fff]'), '');
+}
+
+int _determineChapterLevel(String title) {
+  if (RegExp(r'第[一二三四五六七八九十百千\d]+章').hasMatch(title) ||
+      RegExp(r'Chapter\s+\d+', caseSensitive: false).hasMatch(title) ||
+      RegExp(r'Part\s+\d+', caseSensitive: false).hasMatch(title)) {
+    return 0;
+  }
+
+  if (RegExp(r'第[一二三四五六七八九十\d]+节').hasMatch(title) ||
+      RegExp(r'Section\s+\d+', caseSensitive: false).hasMatch(title) ||
+      RegExp(r'^\d+\.\d+').hasMatch(title)) {
+    return 1;
+  }
+
+  if (RegExp(r'^\d+\.\d+\.\d+').hasMatch(title) ||
+      RegExp(r'[一二三四五六七八九十]+、').hasMatch(title)) {
+    return 2;
+  }
+
+  return 0;
+}
+
+List<_ChapterMarker> _splitContentFallback(String content) {
+  const targetChapterLength = 5000;
+  final markers = <_ChapterMarker>[];
+  int index = 0;
+  int chapterIndex = 1;
+
+  while (index < content.length) {
+    markers.add(_ChapterMarker(
+      title: '第$chapterIndex章',
+      level: 0,
+      startIndex: index,
+    ));
+    chapterIndex++;
+
+    if (index + targetChapterLength >= content.length) break;
+    final nextBreak = content.indexOf('\n', index + targetChapterLength);
+    if (nextBreak == -1) break;
+    index = nextBreak + 1;
+  }
+
+  return markers;
+}
+
+List<_ChapterMarker> _extractChapterMarkers(String content) {
+  final lines = content.split('\n');
+  final markers = <_ChapterMarker>[];
+  final seenTitles = <String>{};
+  int offset = 0;
+
+  for (final line in lines) {
+    final trimmed = line.trim();
+    if (trimmed.isNotEmpty) {
+      for (final pattern in _chapterTitlePatterns) {
+        if (pattern.hasMatch(trimmed)) {
+          final title = _cleanChapterTitle(trimmed);
+          if (title.isNotEmpty) {
+            final key = _normalizeTitleKey(title);
+            if (!seenTitles.contains(key)) {
+              markers.add(_ChapterMarker(
+                title: title,
+                level: _determineChapterLevel(trimmed),
+                startIndex: offset,
+              ));
+              seenTitles.add(key);
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    offset += line.length + 1;
+  }
+
+  return markers.isEmpty ? _splitContentFallback(content) : markers;
+}
+
+int _findPageForCharIndex(List<int> offsets, int charIndex) {
+  if (offsets.isEmpty) return 0;
+
+  int low = 0;
+  int high = offsets.length - 1;
+  int result = 0;
+
+  while (low <= high) {
+    final mid = (low + high) >> 1;
+    final value = offsets[mid];
+    if (value <= charIndex) {
+      result = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return result;
+}
+
+int _findPageByTitle(List<String> pages, String title) {
+  final normalizedTitle = _normalizeTitleKey(title);
+  if (normalizedTitle.isEmpty) return 0;
+
+  for (int i = 0; i < pages.length; i++) {
+    final normalizedPage = _normalizeTitleKey(pages[i]);
+    if (normalizedPage.contains(normalizedTitle)) {
+      return i;
+    }
+  }
+
+  return 0;
+}
+
+List<Chapter> _buildChapterHierarchy({
+  required List<_ChapterMarker> markers,
+  required List<int> pageCharOffsets,
+  required List<String> pages,
+}) {
+  final root = <Chapter>[];
+  final stack = <Chapter>[];
+
+  for (int i = 0; i < markers.length; i++) {
+    final marker = markers[i];
+    int startPage = pageCharOffsets.isNotEmpty
+        ? _findPageForCharIndex(pageCharOffsets, marker.startIndex)
+        : _findPageByTitle(pages, marker.title);
+    if (pages.isNotEmpty) {
+      startPage = startPage.clamp(0, pages.length - 1);
+    }
+
+    final chapter = Chapter(
+      title: marker.title,
+      startPage: startPage,
+      level: marker.level,
+      order: i,
+      subChapters: <Chapter>[],
+    );
+
+    while (stack.isNotEmpty && marker.level <= stack.last.level) {
+      stack.removeLast();
+    }
+
+    if (stack.isEmpty) {
+      root.add(chapter);
+    } else {
+      stack.last.subChapters.add(chapter);
+    }
+
+    stack.add(chapter);
+  }
+
+  return root;
 }
 
 /// 支持句子高亮的文本渲染组件
@@ -83,7 +303,7 @@ class _HighlightedText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // 🖼️ 检查是否包含图片标签
-    final hasImages = text.contains(RegExp(r'<img\s+src="[^"]+"\s*/?>'));
+    final hasImages = text.contains(RegExp(r'<img\s+[^>]*src="[^"]+\"[^>]*?>'));
 
     if (hasImages) {
       // 包含图片，使用混合内容渲染
@@ -232,7 +452,10 @@ class _HighlightedText extends StatelessWidget {
             // 渲染图片
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: _buildImage(element.content),
+              child: _buildImage(
+                element.content,
+                maxHeight: element.imageHeight,
+              ),
             );
           } else {
             // 渲染文本
@@ -248,10 +471,10 @@ class _HighlightedText extends StatelessWidget {
   }
 
   /// 构建图片组件
-  Widget _buildImage(String imagePath) {
+  Widget _buildImage(String imagePath, {double? maxHeight}) {
     final file = File(imagePath);
 
-    return Image.file(
+    final imageWidget = Image.file(
       file,
       fit: BoxFit.contain,
       errorBuilder: (context, error, stackTrace) {
@@ -296,6 +519,15 @@ class _HighlightedText extends StatelessWidget {
           ),
         );
       },
+    );
+
+    if (maxHeight == null) {
+      return imageWidget;
+    }
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: imageWidget,
     );
   }
 
@@ -2844,11 +3076,68 @@ class _ReaderToolbar extends ConsumerWidget {
     ).showSnackBar(const SnackBar(content: Text('书签功能')));
   }
 
-  void _showTableOfContents(BuildContext context, WidgetRef ref) {
-    // TODO: Implement TOC navigation
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('目录导航')));
+  Future<void> _showTableOfContents(BuildContext context, WidgetRef ref) async {
+    final paginationState = ref.read(readerPaginationProvider);
+    final content = paginationState.cachedText ?? '';
+
+    if (paginationState.pages.isEmpty || content.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('暂无可用目录')));
+      return;
+    }
+
+    final markers = _extractChapterMarkers(content);
+    final chapters = _buildChapterHierarchy(
+      markers: markers,
+      pageCharOffsets: paginationState.pageCharOffsets ?? const [],
+      pages: paginationState.pages,
+    );
+
+    if (chapters.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('未识别到目录')));
+      return;
+    }
+
+    final readerPageState =
+        context.findAncestorStateOfType<_ReaderPageState>();
+    final bookId = readerPageState?.widget.bookId;
+    List<Bookmark> bookmarks = [];
+
+    if (bookId != null) {
+      try {
+        bookmarks = await BookmarkDao().getBookmarksForBook(bookId);
+      } catch (e) {
+        debugPrint('❌ 加载书签失败: $e');
+      }
+    }
+
+    if (!context.mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (dialogContext) {
+        return TocWidget(
+          chapters: chapters,
+          bookmarks: bookmarks,
+          currentPageIndex: paginationState.currentPageIndex,
+          onPageTap: (pageIndex) {
+            Navigator.of(dialogContext).pop();
+            ref.read(readerPaginationProvider.notifier).goToPage(pageIndex);
+          },
+          onBookmarkTap: (bookmark) {
+            Navigator.of(dialogContext).pop();
+            ref
+                .read(readerPaginationProvider.notifier)
+                .goToPage(bookmark.pageNumber - 1);
+          },
+        );
+      },
+    );
   }
 
   /// 处理分享功能
