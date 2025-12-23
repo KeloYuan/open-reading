@@ -1,4 +1,5 @@
 ﻿import 'dart:ui';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +9,7 @@ import '../utils/app_themes.dart';
 import '../services/sync/webdav_sync_service.dart';
 import '../services/reading_engine_coordinator.dart';
 import '../services/pagination_cache_service.dart';
+import '../services/book_dao.dart';
 import '../widgets/webdav_config_dialog.dart';
 // import 'stable_reader_test_page.dart'; // 已删除
 
@@ -369,6 +371,7 @@ class _SettingsPageState extends State<SettingsPage> {
               title: '云端同步',
               icon: Icons.cloud_sync,
               children: [
+                // WebDAV配置入口
                 _buildActionSetting(
                   title: 'WebDAV配置',
                   subtitle: _webdavService.isConfigured
@@ -380,13 +383,112 @@ class _SettingsPageState extends State<SettingsPage> {
                       ? Icon(Icons.check_circle, color: Colors.green, size: 20)
                       : null,
                 ),
-                if (_webdavService.isConfigured)
+
+                // 同步功能说明
+                if (_webdavService.isConfigured) ...[
+                  // 同步状态和时间
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              _getSyncStatusIcon(_webdavService.status),
+                              size: 16,
+                              color: _getSyncStatusColor(_webdavService.status),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _webdavService.getStatusDescription(),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: _getSyncStatusColor(_webdavService.status),
+                              ),
+                            ),
+                            const Spacer(),
+                            if (_webdavService.lastSyncTime != null)
+                              Text(
+                                '上次: ${_formatSyncTime(_webdavService.lastSyncTime!)}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // 同步内容说明
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 14, color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 6),
+                            Text(
+                              '同步内容',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            _buildSyncChip('书籍', Icons.book),
+                            _buildSyncChip('书签', Icons.bookmark),
+                            _buildSyncChip('笔记', Icons.note),
+                            _buildSyncChip('进度', Icons.timeline),
+                            _buildSyncChip('统计', Icons.bar_chart),
+                            _buildSyncChip('书源', Icons.source),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // 立即同步按钮
                   _buildActionSetting(
                     title: '立即同步',
-                    subtitle: '手动同步阅读数据',
+                    subtitle: '手动同步所有阅读数据',
                     onTap: _syncNow,
                     icon: Icons.sync,
                   ),
+
+                  // 书籍文件同步设置
+                  _buildActionSetting(
+                    title: '书籍文件同步',
+                    subtitle: '选择需要上传到云端的书籍文件',
+                    onTap: _showBookFileSyncDialog,
+                    icon: Icons.upload_file,
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 20),
@@ -2474,5 +2576,303 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     );
+  }
+
+  /// 同步状态图标
+  IconData _getSyncStatusIcon(SyncStatus status) {
+    switch (status) {
+      case SyncStatus.idle:
+        return Icons.cloud_done;
+      case SyncStatus.syncing:
+        return Icons.sync;
+      case SyncStatus.completed:
+        return Icons.check_circle;
+      case SyncStatus.failed:
+        return Icons.error;
+      case SyncStatus.noNetwork:
+        return Icons.cloud_off;
+      case SyncStatus.notConfigured:
+        return Icons.cloud_queue;
+    }
+  }
+
+  /// 同步状态颜色
+  Color _getSyncStatusColor(SyncStatus status) {
+    switch (status) {
+      case SyncStatus.idle:
+        return Colors.grey;
+      case SyncStatus.syncing:
+        return Colors.blue;
+      case SyncStatus.completed:
+        return Colors.green;
+      case SyncStatus.failed:
+        return Colors.red;
+      case SyncStatus.noNetwork:
+        return Colors.orange;
+      case SyncStatus.notConfigured:
+        return Colors.grey;
+    }
+  }
+
+  /// 格式化同步时间
+  String _formatSyncTime(DateTime time) {
+    final now = DateTime.now();
+    final diff = now.difference(time);
+
+    if (diff.inMinutes < 1) {
+      return '刚刚';
+    } else if (diff.inMinutes < 60) {
+      return '${diff.inMinutes}分钟前';
+    } else if (diff.inHours < 24) {
+      return '${diff.inHours}小时前';
+    } else if (diff.inDays < 7) {
+      return '${diff.inDays}天前';
+    } else {
+      return '${time.month}-${time.day}';
+    }
+  }
+
+  /// 构建同步内容标签
+  Widget _buildSyncChip(String label, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Theme.of(context).colorScheme.primary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 显示书籍文件同步选择对话框
+  Future<void> _showBookFileSyncDialog() async {
+    final selectedBooks = _webdavService.getBooksSelectedForSync();
+    final bookDao = BookDao();
+    final allBooks = await bookDao.getAllBooks();
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final selectedSet = <int>{...selectedBooks};
+
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.upload_file, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('书籍文件同步'),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 说明文字
+                  const Text(
+                    '选择需要上传到云端的书籍文件',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, size: 16, color: Colors.amber),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '书籍文件较大，建议仅选择重要书籍同步',
+                            style: TextStyle(fontSize: 12, color: Colors.amber.shade700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // 全选/取消按钮
+                  Row(
+                    children: [
+                      TextButton.icon(
+                        onPressed: () {
+                          if (selectedSet.length == allBooks.length) {
+                            selectedSet.clear();
+                          } else {
+                            selectedSet.addAll(allBooks.map((b) => b.id!));
+                          }
+                          setDialogState(() {});
+                        },
+                        icon: Icon(
+                          selectedSet.length == allBooks.length
+                              ? Icons.check_box
+                              : Icons.check_box_outline_blank,
+                          size: 18,
+                        ),
+                        label: Text(
+                          selectedSet.length == allBooks.length ? '取消全选' : '全选',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '已选: ${selectedSet.length}/${allBooks.length}',
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // 书籍列表
+                  SizedBox(
+                    height: 300,
+                    child: allBooks.isEmpty
+                        ? const Center(
+                            child: Text('暂无书籍'),
+                          )
+                        : ListView.builder(
+                            itemCount: allBooks.length,
+                            itemBuilder: (context, index) {
+                              final book = allBooks[index];
+                              final isSelected = selectedSet.contains(book.id);
+                              final file = File(book.filePath);
+                              final fileSize = file.existsSync()
+                                  ? file.lengthSync()
+                                  : 0;
+
+                              return CheckboxListTile(
+                                value: isSelected,
+                                onChanged: (value) {
+                                  if (value == true) {
+                                    selectedSet.add(book.id!);
+                                  } else {
+                                    selectedSet.remove(book.id!);
+                                  }
+                                  setDialogState(() {});
+                                },
+                                title: Text(
+                                  book.title,
+                                  style: const TextStyle(fontSize: 14),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      book.author,
+                                      style: const TextStyle(fontSize: 12),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if (fileSize > 0)
+                                      Text(
+                                        _formatFileSize(fileSize),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                secondary: book.coverImagePath != null &&
+                                        book.coverImagePath!.isNotEmpty &&
+                                        File(book.coverImagePath!).existsSync()
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: Image.file(
+                                          File(book.coverImagePath!),
+                                          width: 40,
+                                          height: 56,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      )
+                                    : Container(
+                                        width: 40,
+                                        height: 56,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.withValues(alpha: 0.2),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Icon(
+                                          Icons.book,
+                                          size: 20,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  // 保存选择
+                  for (final bookId in selectedSet) {
+                    await _webdavService.setBookForSync(bookId, true);
+                  }
+                  setState(() {});
+                  if (mounted) {
+                    Navigator.pop(context);
+                    _showInfoSnackBar('已选择 ${selectedSet.length} 本书籍进行文件同步');
+                  }
+                },
+                child: const Text('保存'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// 格式化文件大小
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    } else if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    } else if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+    } else {
+      return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(2)} GB';
+    }
   }
 }

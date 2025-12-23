@@ -6,7 +6,15 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../book_dao.dart';
+import '../bookmark_dao.dart';
+import '../book_note_dao.dart';
+import '../reading_stats_dao.dart';
+import '../book_source_dao.dart';
 import '../../models/book.dart';
+import '../../models/bookmark.dart';
+import '../../models/book_note.dart';
+import '../../models/book_source.dart';
+import 'sync_utils.dart';
 
 /// WebDAV同步状态
 enum SyncStatus {
@@ -20,15 +28,23 @@ enum SyncStatus {
 
 /// WebDAV同步服务
 /// 参考anx-reader的架构设计，提供完整的数据同步功能
+///
+/// 支持同步的数据类型：
+/// - 书籍元数据（差异化字段）
+/// - 书签
+/// - 笔记/高亮
+/// - 阅读进度
+/// - 阅读统计
+/// - 书源配置
+/// - 书籍文件（按需上传）
 class WebDavSyncService {
   static final WebDavSyncService _instance = WebDavSyncService._internal();
   factory WebDavSyncService() => _instance;
   WebDavSyncService._internal();
 
   final Dio _dio = Dio();
-  final ValueNotifier<SyncStatus> _statusNotifier = ValueNotifier<SyncStatus>(
-    SyncStatus.notConfigured,
-  );
+  final ValueNotifier<SyncStatus> _statusNotifier =
+      ValueNotifier<SyncStatus>(SyncStatus.notConfigured);
 
   // WebDAV配置
   String _serverUrl = '';
@@ -44,6 +60,13 @@ class WebDavSyncService {
 
   // DAO实例
   final BookDao _bookDao = BookDao();
+  final BookmarkDao _bookmarkDao = BookmarkDao();
+  final BookNoteDao _noteDao = BookNoteDao();
+  final ReadingStatsDao _statsDao = ReadingStatsDao();
+  // BookSourceDao 使用静态方法，不需要实例
+
+  // 按需上传的书籍文件集合
+  final Set<int> _selectedBooksForSync = {};
 
   // 网络监听
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
@@ -62,6 +85,7 @@ class WebDavSyncService {
   /// 初始化同步服务
   Future<void> initialize() async {
     await _loadConfiguration();
+    await _loadSyncSettings();
     await _setupNetworkListener();
 
     if (_isConfigured && _autoSync) {
@@ -84,8 +108,9 @@ class WebDavSyncService {
         _lastSyncTime = DateTime.parse(lastSyncStr);
       }
 
-      _isConfigured =
-          _serverUrl.isNotEmpty && _username.isNotEmpty && _password.isNotEmpty;
+      _isConfigured = _serverUrl.isNotEmpty &&
+          _username.isNotEmpty &&
+          _password.isNotEmpty;
 
       if (_isConfigured) {
         _setupDioClient();
@@ -99,26 +124,54 @@ class WebDavSyncService {
     }
   }
 
+  /// 加载同步设置
+  Future<void> _loadSyncSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final selectedBooksStr = prefs.getStringList('webdav_selected_books');
+      if (selectedBooksStr != null) {
+        _selectedBooksForSync.clear();
+        _selectedBooksForSync
+            .addAll(selectedBooksStr.map((s) => int.tryParse(s) ?? 0));
+      }
+    } catch (e) {
+      debugPrint('加载同步设置失败: $e');
+    }
+  }
+
+  /// 保存同步设置
+  Future<void> _saveSyncSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(
+        'webdav_selected_books',
+        _selectedBooksForSync.map((s) => s.toString()).toList(),
+      );
+    } catch (e) {
+      debugPrint('保存同步设置失败: $e');
+    }
+  }
+
   /// 设置网络监听
   Future<void> _setupNetworkListener() async {
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-      List<ConnectivityResult> results,
-    ) {
-      final hasNetwork = results.any(
-        (result) => result != ConnectivityResult.none,
-      );
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen(
+      (List<ConnectivityResult> results) {
+        final hasNetwork =
+            results.any((result) => result != ConnectivityResult.none);
 
-      if (_hasNetwork != hasNetwork) {
-        _hasNetwork = hasNetwork;
+        if (_hasNetwork != hasNetwork) {
+          _hasNetwork = hasNetwork;
 
-        if (hasNetwork && _isConfigured && _autoSync) {
-          // 网络恢复，执行同步
-          _performSync();
-        } else if (!hasNetwork) {
-          _statusNotifier.value = SyncStatus.noNetwork;
+          if (hasNetwork && _isConfigured && _autoSync) {
+            // 网络恢复，执行同步
+            _performSync();
+          } else if (!hasNetwork) {
+            _statusNotifier.value = SyncStatus.noNetwork;
+          }
         }
-      }
-    });
+      },
+    );
   }
 
   /// 设置Dio客户端
@@ -257,6 +310,56 @@ class WebDavSyncService {
     return await _performSync();
   }
 
+  /// 设置书籍是否需要同步文件
+  Future<void> setBookForSync(int bookId, bool shouldSync) async {
+    if (shouldSync) {
+      _selectedBooksForSync.add(bookId);
+    } else {
+      _selectedBooksForSync.remove(bookId);
+    }
+    await _saveSyncSettings();
+  }
+
+  /// 获取选择需要同步的书籍集合
+  Set<int> getBooksSelectedForSync() {
+    return Set.from(_selectedBooksForSync);
+  }
+
+  /// 上传指定书籍的文件
+  Future<bool> uploadBookFile(int bookId) async {
+    try {
+      final book = await _bookDao.getBookById(bookId);
+      if (book == null) {
+        debugPrint('书籍不存在: $bookId');
+        return false;
+      }
+
+      final bookFile = File(book.filePath);
+      if (!await bookFile.exists()) {
+        debugPrint('书籍文件不存在: ${book.filePath}');
+        return false;
+      }
+
+      final fileName = book.contentHash ?? 'book_$bookId.${book.format}';
+      final remotePath = 'xxread/files/$fileName';
+
+      final fileBytes = await bookFile.readAsBytes();
+      await _dio.put(
+        remotePath,
+        data: fileBytes,
+        options: Options(
+          headers: {'Content-Type': 'application/octet-stream'},
+        ),
+      );
+
+      debugPrint('已上传书籍文件: ${book.title}');
+      return true;
+    } catch (e) {
+      debugPrint('上传书籍文件失败: $e');
+      return false;
+    }
+  }
+
   /// 执行同步
   Future<bool> _performSync() async {
     if (!_isConfigured || !_hasNetwork) {
@@ -312,11 +415,14 @@ class WebDavSyncService {
   Future<void> _ensureSyncDirectories() async {
     const directories = [
       'xxread/',
+      'xxread/meta/',
       'xxread/books/',
       'xxread/bookmarks/',
-      'xxread/progress/',
       'xxread/notes/',
-      'xxread/files/', // 书籍文件目录
+      'xxread/progress/',
+      'xxread/stats/',
+      'xxread/sources/',
+      'xxread/files/',
     ];
 
     for (final dir in directories) {
@@ -329,14 +435,60 @@ class WebDavSyncService {
         }
       }
     }
+
+    // 保存设备信息
+    await _saveDeviceMeta();
+  }
+
+  /// 保存设备元数据
+  Future<void> _saveDeviceMeta() async {
+    try {
+      final deviceId = await SyncUtils.getDeviceId();
+      final deviceMeta = {
+        'device_id': deviceId,
+        'device_name': 'xxread',
+        'platform': Platform.operatingSystem,
+        'first_sync_time':
+            (await _getFirstSyncTime())?.toIso8601String() ??
+                DateTime.now().toIso8601String(),
+        'last_sync_time': DateTime.now().toIso8601String(),
+      };
+
+      await _dio.put(
+        'xxread/meta/device_id.json',
+        data: jsonEncode(deviceMeta),
+      );
+    } catch (e) {
+      debugPrint('保存设备元数据失败: $e');
+    }
+  }
+
+  /// 获取首次同步时间
+  Future<DateTime?> _getFirstSyncTime() async {
+    try {
+      final response = await _dio.get('xxread/meta/device_id.json');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.data);
+        return DateTime.parse(data['first_sync_time']);
+      }
+    } catch (e) {
+      // 忽略错误
+    }
+    return null;
   }
 
   /// 上传本地数据
   Future<void> _uploadLocalData() async {
-    await _uploadBooks();
-    await _uploadBookmarks();
-    await _uploadProgress();
-    await _uploadBookFiles(); // 上传书籍文件
+    await Future.wait([
+      _uploadBooks(),
+      _uploadBookmarks(),
+      _uploadNotes(),
+      _uploadProgress(),
+      _uploadStats(),
+      _uploadSources(),
+    ]);
+
+    await _uploadBookFiles();
   }
 
   /// 上传书籍列表（使用差异化同步）
@@ -351,11 +503,14 @@ class WebDavSyncService {
         map.remove('cached_content');
         map.remove('cached_pages');
         map.remove('table_of_contents');
+        // 添加更新时间
+        map['update_time'] = DateTime.now().toIso8601String();
         return map;
       }).toList();
 
       final booksData = {
-        'version': 2, // 版本2支持差异化同步
+        'version': 3,
+        'device_id': await SyncUtils.getDeviceId(),
         'timestamp': DateTime.now().toIso8601String(),
         'books': booksMetadata,
         'book_count': books.length,
@@ -364,63 +519,146 @@ class WebDavSyncService {
       final jsonData = jsonEncode(booksData);
       await _dio.put('xxread/books/books.json', data: jsonData);
 
-      debugPrint('已上传 ${books.length} 本书籍的元数据');
+      debugPrint('📚 已上传 ${books.length} 本书籍的元数据');
     } catch (e) {
       debugPrint('上传书籍列表失败: $e');
     }
   }
 
-  /// 上传书签（暂时上传空列表）
+  /// 上传书签
   Future<void> _uploadBookmarks() async {
     try {
+      final bookmarks = await _bookmarkDao.getAllBookmarks();
+
       final bookmarksData = {
         'version': 1,
+        'device_id': await SyncUtils.getDeviceId(),
         'timestamp': DateTime.now().toIso8601String(),
-        'bookmarks': <Map<String, dynamic>>[],
+        'bookmarks': bookmarks.map((b) => b.toMap()).toList(),
       };
 
       final jsonData = jsonEncode(bookmarksData);
       await _dio.put('xxread/bookmarks/bookmarks.json', data: jsonData);
+
+      debugPrint('🔖 已上传 ${bookmarks.length} 个书签');
     } catch (e) {
       debugPrint('上传书签失败: $e');
     }
   }
 
-  /// 上传阅读进度（当前仅上传基本信息）
+  /// 上传笔记/高亮
+  Future<void> _uploadNotes() async {
+    try {
+      final notes = await _noteDao.getAllNotes();
+
+      final notesData = {
+        'version': 1,
+        'device_id': await SyncUtils.getDeviceId(),
+        'timestamp': DateTime.now().toIso8601String(),
+        'notes': notes.map((n) => n.toMap()).toList(),
+      };
+
+      final jsonData = jsonEncode(notesData);
+      await _dio.put('xxread/notes/notes.json', data: jsonData);
+
+      debugPrint('📝 已上传 ${notes.length} 条笔记');
+    } catch (e) {
+      debugPrint('上传笔记失败: $e');
+    }
+  }
+
+  /// 上传阅读进度
   Future<void> _uploadProgress() async {
     try {
       final books = await _bookDao.getAllBooks();
+
       final progressData = {
-        'version': 1,
+        'version': 2,
+        'device_id': await SyncUtils.getDeviceId(),
         'timestamp': DateTime.now().toIso8601String(),
-        'progress': books
-            .map(
-              (book) => {
-                'bookId': book.id,
-                'filePath': book.filePath,
-                'currentPage': book.currentPage,
-                'totalPages': book.totalPages,
-              },
-            )
-            .toList(),
+        'progress': books.map((book) {
+          return {
+            'bookId': book.id,
+            'filePath': book.filePath,
+            'currentPage': book.currentPage,
+            'totalPages': book.totalPages,
+            'update_time': DateTime.now().toIso8601String(),
+          };
+        }).toList(),
       };
 
       final jsonData = jsonEncode(progressData);
       await _dio.put('xxread/progress/progress.json', data: jsonData);
+
+      debugPrint('📄 已上传 ${books.length} 本书籍的阅读进度');
     } catch (e) {
       debugPrint('上传阅读进度失败: $e');
     }
   }
 
-  /// 上传书籍文件（仅上传用户导入的书籍）
+  /// 上传阅读统计
+  Future<void> _uploadStats() async {
+    try {
+      final stats = await _statsDao.getAllStats();
+
+      final statsData = {
+        'version': 1,
+        'device_id': await SyncUtils.getDeviceId(),
+        'timestamp': DateTime.now().toIso8601String(),
+        'stats': stats,
+      };
+
+      final jsonData = jsonEncode(statsData);
+      await _dio.put('xxread/stats/reading_stats.json', data: jsonData);
+
+      debugPrint('📊 已上传 ${stats.length} 条阅读统计');
+    } catch (e) {
+      debugPrint('上传阅读统计失败: $e');
+    }
+  }
+
+  /// 上传书源
+  Future<void> _uploadSources() async {
+    try {
+      final sources = await BookSourceDao.getAll();
+
+      final sourcesData = {
+        'version': 1,
+        'device_id': await SyncUtils.getDeviceId(),
+        'timestamp': DateTime.now().toIso8601String(),
+        'sources': sources.map((s) => s.toJson()).toList(),
+      };
+
+      final jsonData = jsonEncode(sourcesData);
+      await _dio.put('xxread/sources/book_sources.json', data: jsonData);
+
+      debugPrint('📡 已上传 ${sources.length} 个书源');
+    } catch (e) {
+      debugPrint('上传书源失败: $e');
+    }
+  }
+
+  /// 上传书籍文件（按需上传）
   Future<void> _uploadBookFiles() async {
     try {
+      if (_selectedBooksForSync.isEmpty) {
+        debugPrint('⏭️ 没有选择需要同步的书籍文件');
+        return;
+      }
+
       final books = await _bookDao.getAllBooks();
+      final booksToSync =
+          books.where((b) => _selectedBooksForSync.contains(b.id)).toList();
+
+      if (booksToSync.isEmpty) {
+        debugPrint('⏭️ 选择的书籍不存在');
+        return;
+      }
+
       int uploadedCount = 0;
       int skippedCount = 0;
 
-      for (final book in books) {
-        // 检查书籍文件是否存在
+      for (final book in booksToSync) {
         final bookFile = File(book.filePath);
         if (!await bookFile.exists()) {
           debugPrint('跳过不存在的文件: ${book.filePath}');
@@ -428,32 +666,28 @@ class WebDavSyncService {
           continue;
         }
 
-        // 获取文件大小，避免上传过大的文件
         final fileSize = await bookFile.length();
         const maxFileSize = 100 * 1024 * 1024; // 100MB限制
         if (fileSize > maxFileSize) {
-          debugPrint('跳过过大文件 (${(fileSize / 1024 / 1024).toStringAsFixed(1)}MB): ${book.title}');
+          debugPrint(
+            '跳过过大文件 (${SyncUtils.formatFileSize(fileSize)}): ${book.title}',
+          );
           skippedCount++;
           continue;
         }
 
-        // 生成远程文件路径
         final fileName = book.contentHash ?? 'book_${book.id}.${book.format}';
         final remotePath = 'xxread/files/$fileName';
 
         try {
-          // 检查远程是否已存在
-          final headResponse = await _dio.head(remotePath);
-          if (headResponse.statusCode == 200) {
-            debugPrint('文件已存在，跳过: ${book.title}');
-            skippedCount++;
-            continue;
-          }
+          await _dio.head(remotePath);
+          debugPrint('文件已存在，跳过: ${book.title}');
+          skippedCount++;
+          continue;
         } catch (e) {
           // 文件不存在，继续上传
         }
 
-        // 上传文件
         final fileBytes = await bookFile.readAsBytes();
         await _dio.put(
           remotePath,
@@ -464,10 +698,12 @@ class WebDavSyncService {
         );
 
         uploadedCount++;
-        debugPrint('已上传书籍: ${book.title} (${(fileSize / 1024).toStringAsFixed(1)}KB)');
+        debugPrint('📦 已上传书籍: ${book.title} (${SyncUtils.formatFileSize(fileSize)})');
       }
 
-      debugPrint('书籍文件上传完成: 上传 $uploadedCount 个, 跳过 $skippedCount 个');
+      debugPrint(
+        '📚 书籍文件上传完成: 上传 $uploadedCount 个, 跳过 $skippedCount 个',
+      );
     } catch (e) {
       debugPrint('上传书籍文件失败: $e');
     }
@@ -475,9 +711,14 @@ class WebDavSyncService {
 
   /// 下载远程数据
   Future<void> _downloadRemoteData() async {
-    await _downloadBooks();
-    await _downloadBookmarks();
-    await _downloadProgress();
+    await Future.wait([
+      _downloadBooks(),
+      _downloadBookmarks(),
+      _downloadNotes(),
+      _downloadProgress(),
+      _downloadStats(),
+      _downloadSources(),
+    ]);
   }
 
   /// 下载书籍列表
@@ -489,7 +730,6 @@ class WebDavSyncService {
         final remoteBooks =
             (data['books'] as List).cast<Map<String, dynamic>>();
 
-        // 合并本地和远程数据
         await _mergeBooks(remoteBooks);
       }
     } catch (e) {
@@ -502,11 +742,29 @@ class WebDavSyncService {
     try {
       final response = await _dio.get('xxread/bookmarks/bookmarks.json');
       if (response.statusCode == 200) {
-        jsonDecode(response.data);
-        debugPrint('下载书签数据（占位）');
+        final data = jsonDecode(response.data);
+        final remoteBookmarks =
+            (data['bookmarks'] as List).cast<Map<String, dynamic>>();
+
+        await _mergeBookmarks(remoteBookmarks);
       }
     } catch (e) {
       debugPrint('下载书签失败: $e');
+    }
+  }
+
+  /// 下载笔记
+  Future<void> _downloadNotes() async {
+    try {
+      final response = await _dio.get('xxread/notes/notes.json');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.data);
+        final remoteNotes = (data['notes'] as List).cast<Map<String, dynamic>>();
+
+        await _mergeNotes(remoteNotes);
+      }
+    } catch (e) {
+      debugPrint('下载笔记失败: $e');
     }
   }
 
@@ -519,7 +777,6 @@ class WebDavSyncService {
         final remoteProgress =
             (data['progress'] as List).cast<Map<String, dynamic>>();
 
-        // 合并阅读进度
         await _mergeProgress(remoteProgress);
       }
     } catch (e) {
@@ -527,28 +784,239 @@ class WebDavSyncService {
     }
   }
 
-  /// 合并阅读进度
+  /// 下载阅读统计
+  Future<void> _downloadStats() async {
+    try {
+      final response = await _dio.get('xxread/stats/reading_stats.json');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.data);
+        final remoteStats = (data['stats'] as List).cast<Map<String, dynamic>>();
+
+        await _mergeStats(remoteStats);
+      }
+    } catch (e) {
+      debugPrint('下载阅读统计失败: $e');
+    }
+  }
+
+  /// 下载书源
+  Future<void> _downloadSources() async {
+    try {
+      final response = await _dio.get('xxread/sources/book_sources.json');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.data);
+        final remoteSources =
+            (data['sources'] as List).cast<Map<String, dynamic>>();
+
+        await _mergeSources(remoteSources);
+      }
+    } catch (e) {
+      debugPrint('下载书源失败: $e');
+    }
+  }
+
+  /// 合并书签（双向合并，按 bookId+pageNumber 去重）
+  Future<void> _mergeBookmarks(List<Map<String, dynamic>> remoteBookmarks) async {
+    int addedCount = 0;
+    int mergedCount = 0;
+
+    final localBookmarks = await _bookmarkDao.getAllBookmarks();
+    final localMap = <String, Bookmark>{};
+
+    for (final bookmark in localBookmarks) {
+      final key = SyncUtils.generateBookmarkKey(bookmark.bookId, bookmark.pageNumber);
+      localMap[key] = bookmark;
+    }
+
+    for (final remoteMap in remoteBookmarks) {
+      try {
+        final remoteBookmark = Bookmark.fromMap(remoteMap);
+        final key = SyncUtils.generateBookmarkKey(
+          remoteBookmark.bookId,
+          remoteBookmark.pageNumber,
+        );
+
+        if (localMap.containsKey(key)) {
+          // 已存在，跳过（保留创建时间较早的）
+          mergedCount++;
+        } else {
+          // 新增远程书签
+          await _bookmarkDao.insertBookmark(remoteBookmark);
+          localMap[key] = remoteBookmark;
+          addedCount++;
+        }
+      } catch (e) {
+        debugPrint('合并书签失败: $e');
+      }
+    }
+
+    debugPrint('🔖 书签合并完成: 新增 $addedCount, 已存在 $mergedCount');
+  }
+
+  /// 合并笔记（按位置去重，时间戳优先）
+  Future<void> _mergeNotes(List<Map<String, dynamic>> remoteNotes) async {
+    int addedCount = 0;
+    int updatedCount = 0;
+
+    final localNotes = await _noteDao.getAllNotes();
+    final localMap = <String, BookNote>{};
+
+    for (final note in localNotes) {
+      final key = SyncUtils.generateNoteKey(
+        note.bookId,
+        note.cfi,
+        note.startOffset,
+        note.endOffset,
+      );
+      localMap[key] = note;
+    }
+
+    for (final remoteMap in remoteNotes) {
+      try {
+        final remoteNote = BookNote.fromMap(remoteMap);
+        final key = SyncUtils.generateNoteKey(
+          remoteNote.bookId,
+          remoteNote.cfi,
+          remoteNote.startOffset,
+          remoteNote.endOffset,
+        );
+
+        if (localMap.containsKey(key)) {
+          final localNote = localMap[key]!;
+
+          // 比较更新时间，使用较新的
+          if (SyncUtils.isRemoteNewer(
+            localNote.updateTime.toIso8601String(),
+            remoteNote.updateTime.toIso8601String(),
+          )) {
+            await _noteDao.updateBookNoteById(remoteNote);
+            updatedCount++;
+          }
+        } else {
+          // 新增远程笔记
+          await _noteDao.insertBookNote(remoteNote);
+          localMap[key] = remoteNote;
+          addedCount++;
+        }
+      } catch (e) {
+        debugPrint('合并笔记失败: $e');
+      }
+    }
+
+    debugPrint('📝 笔记合并完成: 新增 $addedCount, 更新 $updatedCount');
+  }
+
+  /// 合并阅读进度（时间戳优先）
   Future<void> _mergeProgress(List<Map<String, dynamic>> remoteProgress) async {
+    int updatedCount = 0;
+
     for (final progress in remoteProgress) {
       try {
         final bookId = progress['bookId'] as int;
         final remoteCurrentPage = progress['currentPage'] as int;
+        final remoteUpdateTime = progress['update_time'] as String?;
 
         final localBook = await _bookDao.getBookById(bookId);
         if (localBook != null) {
-          // 如果远程进度更大，更新本地
-          if (remoteCurrentPage > localBook.currentPage) {
+          // 比较更新时间，决定是否使用远程进度
+          final localUpdateTime =
+              DateTime.now().toIso8601String(); // 本地更新时间
+
+          if (remoteUpdateTime != null &&
+              SyncUtils.isRemoteNewer(localUpdateTime, remoteUpdateTime)) {
             final updatedBook = localBook.copyWith(
               currentPage: remoteCurrentPage,
             );
             await _bookDao.updateBook(updatedBook);
-            debugPrint('更新书籍 $bookId 的阅读进度: ${localBook.currentPage} -> $remoteCurrentPage');
+            updatedCount++;
+            debugPrint(
+              '📄 更新书籍 $bookId 的阅读进度: ${localBook.currentPage} -> $remoteCurrentPage',
+            );
           }
         }
       } catch (e) {
         debugPrint('合并进度失败: $e');
       }
     }
+
+    debugPrint('📄 阅读进度合并完成: 更新 $updatedCount');
+  }
+
+  /// 合并阅读统计（同日期累加）
+  Future<void> _mergeStats(List<Map<String, dynamic>> remoteStats) async {
+    int mergedCount = 0;
+
+    for (final stat in remoteStats) {
+      try {
+        final date = stat['date'] as String;
+        final remoteDuration = stat['durationInSeconds'] as int;
+
+        final db = await _statsDao.dbService.database;
+        final existing = await db.query(
+          'reading_stats',
+          where: 'date = ?',
+          whereArgs: [date],
+        );
+
+        if (existing.isNotEmpty) {
+          // 累加时长
+          final localDuration = existing.first['durationInSeconds'] as int;
+          final newDuration = localDuration + remoteDuration;
+
+          await db.update(
+            'reading_stats',
+            {'durationInSeconds': newDuration},
+            where: 'date = ?',
+            whereArgs: [date],
+          );
+          mergedCount++;
+        } else {
+          // 插入新记录
+          await db.insert('reading_stats', {
+            'date': date,
+            'durationInSeconds': remoteDuration,
+          });
+        }
+      } catch (e) {
+        debugPrint('合并统计失败: $e');
+      }
+    }
+
+    debugPrint('📊 阅读统计合并完成: 累加 $mergedCount');
+  }
+
+  /// 合并书源（按 URL 去重，双向合并）
+  Future<void> _mergeSources(List<Map<String, dynamic>> remoteSources) async {
+    int addedCount = 0;
+    int mergedCount = 0;
+
+    final localSources = await BookSourceDao.getAll();
+    final localUrlSet = <String>{};
+
+    for (final source in localSources) {
+      localUrlSet.add(source.bookSourceUrl);
+    }
+
+    for (final remoteMap in remoteSources) {
+      try {
+        final url = remoteMap['book_source_url'] as String;
+
+        if (localUrlSet.contains(url)) {
+          // URL 已存在，跳过（保留本地）
+          mergedCount++;
+        } else {
+          // 新增远程书源
+          final bookSource = BookSource.fromJson(remoteMap);
+          await BookSourceDao.insert(bookSource);
+          localUrlSet.add(url);
+          addedCount++;
+        }
+      } catch (e) {
+        debugPrint('合并书源失败: $e');
+      }
+    }
+
+    debugPrint('📡 书源合并完成: 新增 $addedCount, 已存在 $mergedCount');
   }
 
   /// 合并书籍数据
@@ -563,7 +1031,7 @@ class WebDavSyncService {
           await _bookDao.insertBook(book);
         }
       } else {
-        // 合并数据，保留最新的阅读进度
+        // 合并数据
         final mergedBook = _mergeBookData(localBook, book);
         await _bookDao.updateBook(mergedBook);
       }
@@ -608,9 +1076,11 @@ class WebDavSyncService {
     await prefs.remove('webdav_auto_sync');
     await prefs.remove('webdav_sync_interval');
     await prefs.remove('webdav_last_sync');
+    await prefs.remove('webdav_selected_books');
 
     _stopAutoSync();
     _isConfigured = false;
+    _selectedBooksForSync.clear();
     _statusNotifier.value = SyncStatus.notConfigured;
   }
 

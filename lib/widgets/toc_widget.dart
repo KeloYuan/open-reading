@@ -69,10 +69,18 @@ class _TocWidgetState extends State<TocWidget>
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final surface = scheme.surface;
+    final onSurface = scheme.onSurface;
+    final primary = scheme.primary;
+    final muted = onSurface.withValues(alpha: 0.55);
+    final divider = scheme.outline.withValues(alpha: 0.2);
+
     return Container(
       height: MediaQuery.of(context).size.height * 0.7,
       decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
+        color: surface.withValues(alpha: 0.98),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
@@ -83,10 +91,10 @@ class _TocWidgetState extends State<TocWidget>
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Center(
               child: Container(
-                width: 40,
+                width: 44,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.5),
+                  color: muted.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -100,10 +108,10 @@ class _TocWidgetState extends State<TocWidget>
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: '搜索章节或书签...',
-                prefixIcon: const Icon(Icons.search_rounded),
+                prefixIcon: Icon(Icons.search_rounded, color: muted),
                 suffixIcon: _searchQuery != null && _searchQuery!.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear_rounded),
+                        icon: Icon(Icons.clear_rounded, color: muted),
                         onPressed: () {
                           _searchController.clear();
                           _updateSearchResults('');
@@ -112,12 +120,10 @@ class _TocWidgetState extends State<TocWidget>
                     : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
+                  borderSide: BorderSide(color: divider),
                 ),
                 filled: true,
-                fillColor: Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.8),
+                fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 12,
@@ -130,15 +136,16 @@ class _TocWidgetState extends State<TocWidget>
           // Tab栏
           TabBar(
             controller: _tabController,
-            labelColor: Theme.of(context).primaryColor,
-            unselectedLabelColor: Colors.grey,
-            indicatorColor: Theme.of(context).primaryColor,
+            labelColor: primary,
+            unselectedLabelColor: muted,
+            indicatorColor: primary,
+            indicatorWeight: 3,
             tabs: [
               Tab(
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.toc, size: 18),
+                    Icon(Icons.toc, size: 18, color: primary),
                     const SizedBox(width: 8),
                     Text('目录 (${_filteredChapters.length})'),
                   ],
@@ -148,39 +155,13 @@ class _TocWidgetState extends State<TocWidget>
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.bookmark, size: 18),
+                    Icon(Icons.bookmark, size: 18, color: primary),
                     const SizedBox(width: 8),
                     Text('书签 (${_filteredBookmarks.length})'),
                   ],
                 ),
               ),
             ],
-          ),
-
-          // 搜索栏
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: '搜索章节或书签...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchQuery != null
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: _clearSearch,
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-              ),
-              onChanged: _onSearchChanged,
-            ),
           ),
 
           // 内容区域
@@ -213,6 +194,11 @@ class _TocWidgetState extends State<TocWidget>
   Widget _buildChapterItem(Chapter chapter, {int depth = 0}) {
     final isCurrentChapter = _isCurrentChapter(chapter);
     final hasSubChapters = chapter.subChapters.isNotEmpty;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final primary = scheme.primary;
+    final muted = scheme.onSurface.withValues(alpha: 0.6);
+    final cardBase = scheme.surfaceContainerLow;
 
     return Column(
       children: [
@@ -222,10 +208,15 @@ class _TocWidgetState extends State<TocWidget>
             bottom: 8,
             left: depth * 16.0, // 根据层级缩进
           ),
-          elevation: isCurrentChapter ? 2 : 0,
-          color: isCurrentChapter
-              ? Theme.of(context).primaryColor.withValues(alpha: 0.1)
-              : null,
+          elevation: 0,
+          color: cardBase,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(
+              color: scheme.outline.withValues(alpha: 0.12),
+              width: 0.8,
+            ),
+          ),
           child: InkWell(
             onTap: () => widget.onPageTap(chapter.startPage),
             borderRadius: BorderRadius.circular(8),
@@ -252,7 +243,7 @@ class _TocWidgetState extends State<TocWidget>
                               ? Icons.expand_less
                               : Icons.expand_more,
                           size: 18,
-                          color: Theme.of(context).primaryColor,
+                          color: primary,
                         ),
                       ),
                     )
@@ -284,13 +275,13 @@ class _TocWidgetState extends State<TocWidget>
                                 margin: const EdgeInsets.only(right: 8),
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
-                                  color: Colors.blue.withValues(alpha: 0.2),
+                                  color: primary.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Icon(
                                   Icons.book,
                                   size: 12,
-                                  color: Colors.blue[700],
+                                  color: primary,
                                 ),
                               )
                             else if (chapter.isPossibleTableOfContents)
@@ -298,13 +289,13 @@ class _TocWidgetState extends State<TocWidget>
                                 margin: const EdgeInsets.only(right: 8),
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
-                                  color: Colors.orange.withValues(alpha: 0.2),
+                                  color: scheme.tertiary.withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Icon(
                                   Icons.list,
                                   size: 12,
-                                  color: Colors.orange[700],
+                                  color: scheme.tertiary,
                                 ),
                               )
                             else if (chapter.isPreface)
@@ -312,13 +303,13 @@ class _TocWidgetState extends State<TocWidget>
                                 margin: const EdgeInsets.only(right: 8),
                                 padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
-                                  color: Colors.green.withValues(alpha: 0.2),
+                                  color: scheme.secondary.withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Icon(
                                   Icons.start,
                                   size: 12,
-                                  color: Colors.green[700],
+                                  color: scheme.secondary,
                                 ),
                               ),
                             Expanded(
@@ -330,7 +321,7 @@ class _TocWidgetState extends State<TocWidget>
                                       ? FontWeight.w600
                                       : _getChapterFontWeight(chapter.level),
                                   color: isCurrentChapter
-                                      ? Theme.of(context).primaryColor
+                                      ? primary
                                       : _getChapterTextColor(chapter.level),
                                 ),
                                 maxLines: 2,
@@ -346,7 +337,7 @@ class _TocWidgetState extends State<TocWidget>
                               '第 ${chapter.startPage + 1} 页',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey[600],
+                                color: muted,
                               ),
                             ),
                             if (hasSubChapters) ...[
@@ -357,16 +348,14 @@ class _TocWidgetState extends State<TocWidget>
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Theme.of(
-                                    context,
-                                  ).primaryColor.withValues(alpha: 0.1),
+                                  color: primary.withValues(alpha: 0.08),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
                                   '${chapter.subChapters.length}节',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: Theme.of(context).primaryColor,
+                                    color: primary,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -386,7 +375,7 @@ class _TocWidgetState extends State<TocWidget>
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).primaryColor,
+                        color: primary,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Text(
@@ -430,13 +419,23 @@ class _TocWidgetState extends State<TocWidget>
 
   Widget _buildBookmarkItem(Bookmark bookmark) {
     final isCurrentPage = bookmark.pageNumber - 1 == widget.currentPageIndex;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final primary = scheme.primary;
+    final muted = scheme.onSurface.withValues(alpha: 0.6);
+    final cardBase = scheme.surfaceContainerLow;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      elevation: isCurrentPage ? 2 : 0,
-      color: isCurrentPage
-          ? Theme.of(context).primaryColor.withValues(alpha: 0.1)
-          : null,
+      elevation: 0,
+      color: cardBase,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: scheme.outline.withValues(alpha: 0.12),
+          width: 0.8,
+        ),
+      ),
       child: InkWell(
         onTap: () => widget.onBookmarkTap(bookmark),
         borderRadius: BorderRadius.circular(8),
@@ -448,17 +447,15 @@ class _TocWidgetState extends State<TocWidget>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: isCurrentPage
-                      ? Theme.of(context).primaryColor.withValues(alpha: 0.2)
-                      : Colors.grey.withValues(alpha: 0.1),
+                  color: scheme.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   Icons.bookmark,
                   size: 20,
                   color: isCurrentPage
-                      ? Theme.of(context).primaryColor
-                      : Colors.grey[600],
+                      ? primary
+                      : muted,
                 ),
               ),
               const SizedBox(width: 12),
@@ -474,7 +471,7 @@ class _TocWidgetState extends State<TocWidget>
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
                         color: isCurrentPage
-                            ? Theme.of(context).primaryColor
+                            ? primary
                             : null,
                       ),
                     ),
@@ -482,7 +479,7 @@ class _TocWidgetState extends State<TocWidget>
                       const SizedBox(height: 4),
                       Text(
                         bookmark.note,
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                        style: TextStyle(fontSize: 14, color: muted),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -490,7 +487,7 @@ class _TocWidgetState extends State<TocWidget>
                     const SizedBox(height: 4),
                     Text(
                       _formatDate(bookmark.createDate),
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      style: TextStyle(fontSize: 12, color: muted),
                     ),
                   ],
                 ),
@@ -504,7 +501,7 @@ class _TocWidgetState extends State<TocWidget>
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).primaryColor,
+                    color: primary,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Text(
@@ -524,15 +521,19 @@ class _TocWidgetState extends State<TocWidget>
   }
 
   Widget _buildEmptyState(String message, IconData icon) {
+    final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 64, color: Colors.grey[400]),
+          Icon(icon, size: 64, color: scheme.onSurface.withValues(alpha: 0.4)),
           const SizedBox(height: 16),
           Text(
             message,
-            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            style: TextStyle(
+              fontSize: 16,
+              color: scheme.onSurface.withValues(alpha: 0.6),
+            ),
           ),
         ],
       ),
@@ -542,32 +543,6 @@ class _TocWidgetState extends State<TocWidget>
   bool _isCurrentChapter(Chapter chapter) {
     return widget.currentPageIndex >= chapter.startPage &&
         (chapter.endPage == 0 || widget.currentPageIndex <= chapter.endPage);
-  }
-
-  void _onSearchChanged(String query) {
-    setState(() {
-      _searchQuery = query.isEmpty ? null : query;
-
-      if (_searchQuery == null) {
-        _filteredChapters = widget.chapters;
-        _filteredBookmarks = widget.bookmarks;
-      } else {
-        final lowerQuery = query.toLowerCase();
-
-        _filteredChapters = widget.chapters.where((chapter) {
-          return chapter.title.toLowerCase().contains(lowerQuery);
-        }).toList();
-
-        _filteredBookmarks = widget.bookmarks.where((bookmark) {
-          return bookmark.note.toLowerCase().contains(lowerQuery);
-        }).toList();
-      }
-    });
-  }
-
-  void _clearSearch() {
-    _searchController.clear();
-    _onSearchChanged('');
   }
 
   String _formatDate(DateTime date) {
@@ -587,19 +562,20 @@ class _TocWidgetState extends State<TocWidget>
 
   // 根据章节层级获取颜色
   Color _getChapterLevelColor(int level, bool isCurrentChapter) {
+    final scheme = Theme.of(context).colorScheme;
     if (isCurrentChapter) {
-      return Theme.of(context).primaryColor;
+      return scheme.primary;
     }
 
     switch (level) {
       case 0:
-        return Theme.of(context).primaryColor.withValues(alpha: 0.7);
+        return scheme.primary.withValues(alpha: 0.7);
       case 1:
-        return Colors.orange.withValues(alpha: 0.6);
+        return scheme.tertiary.withValues(alpha: 0.6);
       case 2:
-        return Colors.green.withValues(alpha: 0.6);
+        return scheme.secondary.withValues(alpha: 0.6);
       default:
-        return Colors.grey.withValues(alpha: 0.5);
+        return scheme.onSurface.withValues(alpha: 0.3);
     }
   }
 
@@ -631,15 +607,16 @@ class _TocWidgetState extends State<TocWidget>
 
   // 根据章节层级获取文本颜色
   Color? _getChapterTextColor(int level) {
+    final scheme = Theme.of(context).colorScheme;
     switch (level) {
       case 0:
         return null; // 使用主题默认颜色
       case 1:
-        return Colors.grey[700];
+        return scheme.onSurface.withValues(alpha: 0.8);
       case 2:
-        return Colors.grey[600];
+        return scheme.onSurface.withValues(alpha: 0.65);
       default:
-        return Colors.grey[500];
+        return scheme.onSurface.withValues(alpha: 0.5);
     }
   }
 }

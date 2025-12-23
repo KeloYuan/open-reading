@@ -97,6 +97,8 @@ final List<RegExp> _chapterTitlePatterns = [
   RegExp(r'^第[一二三四五六七八九十百千\d]+节\s*(.*)$'),
   RegExp(r'^[一二三四五六七八九十]+、\s*(.*)$'),
   RegExp(r'^\d+\.\s*(.*)$'),
+  RegExp(r'^\d+\.\d+\s*(.*)$'),
+  RegExp(r'^\d+\.\d+\.\d+\s*(.*)$'),
   RegExp(r'^[\d]+[\.、]\s*(.*)$'),
   // 英文章节
   RegExp(r'^Chapter\s+\d+\s*(.*)$', caseSensitive: false),
@@ -170,11 +172,166 @@ List<_ChapterMarker> _splitContentFallback(String content) {
   return markers;
 }
 
+String _sanitizeTocTitle(String title) {
+  return title.replaceAll(RegExp(r'\s+'), ' ').trim();
+}
+
+String _stripTocPageNumber(String line) {
+  var result = line;
+  result = result.replaceAll(RegExp(r'[·\.]{2,}\s*\d+\s*$'), '');
+  result = result.replaceAll(RegExp(r'\s+\d+\s*$'), '');
+  return result.trim();
+}
+
+String? _extractTocTitleFromLine(String line) {
+  final cleaned = _stripTocPageNumber(line);
+  if (cleaned.isEmpty) return null;
+
+  for (final pattern in _chapterTitlePatterns) {
+    if (pattern.hasMatch(cleaned)) {
+      return _sanitizeTocTitle(cleaned);
+    }
+  }
+  return null;
+}
+
+bool _looksLikeTocEntryLine(String line) {
+  final cleaned = _stripTocPageNumber(line);
+  if (cleaned.length < 2 || cleaned.length > 80) return false;
+  if (RegExp(r'^\d+$').hasMatch(cleaned)) return false;
+  if (!RegExp(r'[A-Za-z\u4e00-\u9fff]').hasMatch(cleaned)) return false;
+  return true;
+}
+
+bool _looksLikeHeadingLine(String line) {
+  if (line.length > 80) return false;
+  for (final pattern in _chapterTitlePatterns) {
+    if (pattern.hasMatch(line)) return true;
+  }
+  return false;
+}
+
 List<_ChapterMarker> _extractChapterMarkers(String content) {
   final lines = content.split('\n');
+  final tocLinePattern = RegExp(
+    r'^\s*[\[【(（]?\s*(目录|目\s*录|contents)\s*[】\]）)]?\s*[:：]?\s*$',
+    caseSensitive: false,
+  );
+
+  int offset = 0;
+  int tocStartLine = -1;
+  int tocEndLine = -1;
+
+  // Step 1: locate the TOC section near the start
+  for (int i = 0; i < lines.length; i++) {
+    final trimmed = lines[i].trim();
+    if (tocLinePattern.hasMatch(trimmed)) {
+      tocStartLine = i;
+      break;
+    }
+    offset += lines[i].length + 1;
+  }
+
+  if (tocStartLine != -1) {
+    int emptyStreak = 0;
+    for (int i = tocStartLine + 1; i < lines.length; i++) {
+      final trimmed = lines[i].trim();
+      if (trimmed.isEmpty) {
+        emptyStreak++;
+      } else {
+        emptyStreak = 0;
+      }
+
+      if (emptyStreak >= 3) {
+        tocEndLine = i;
+        break;
+      }
+      if (i - tocStartLine > 200) {
+        tocEndLine = i;
+        break;
+      }
+      if (RegExp(r'^第[一二三四五六七八九十百千\d]+章').hasMatch(trimmed) &&
+          i - tocStartLine > 10) {
+        tocEndLine = i;
+        break;
+      }
+    }
+    if (tocEndLine == -1) {
+      tocEndLine = lines.length;
+    }
+  }
+
+  // Step 2: collect TOC titles in that section
+  final tocTitles = <String>[];
+  if (tocStartLine != -1) {
+    for (int i = tocStartLine + 1; i < tocEndLine; i++) {
+      final trimmed = lines[i].trim();
+      if (trimmed.isEmpty) continue;
+      final title = _extractTocTitleFromLine(trimmed);
+      if (title != null && title.isNotEmpty) {
+        tocTitles.add(title);
+      } else if (_looksLikeTocEntryLine(trimmed)) {
+        tocTitles.add(_sanitizeTocTitle(_stripTocPageNumber(trimmed)));
+      }
+    }
+  }
+
+  // Step 3: if TOC titles found, map to first occurrence after TOC
+  if (tocTitles.isNotEmpty) {
+    final markers = <_ChapterMarker>[];
+    final seenTitles = <String>{};
+    for (final tocTitle in tocTitles) {
+      final normalizedToc = _normalizeTitleKey(tocTitle);
+      if (normalizedToc.isEmpty) continue;
+      if (seenTitles.contains(normalizedToc)) continue;
+
+      int offsetCursor = 0;
+      bool matched = false;
+      for (int i = 0; i < lines.length; i++) {
+        final trimmed = lines[i].trim();
+        final normalizedLine = _normalizeTitleKey(trimmed);
+        if (i <= tocStartLine) {
+          offsetCursor += lines[i].length + 1;
+          continue;
+        }
+
+        if (normalizedLine.isNotEmpty &&
+            normalizedLine.startsWith(normalizedToc) &&
+            _looksLikeHeadingLine(trimmed)) {
+          markers.add(_ChapterMarker(
+            title: tocTitle,
+            level: _determineChapterLevel(tocTitle),
+            startIndex: offsetCursor,
+          ));
+          seenTitles.add(normalizedToc);
+          matched = true;
+          break;
+        }
+
+        offsetCursor += lines[i].length + 1;
+      }
+      if (!matched) {
+        markers.add(_ChapterMarker(
+          title: tocTitle,
+          level: _determineChapterLevel(tocTitle),
+          startIndex: -1,
+        ));
+        seenTitles.add(normalizedToc);
+      }
+    }
+
+    return markers;
+  }
+
+  // Step 4: fallback to loose detection only if no TOC section found
+  if (tocStartLine != -1) {
+    return [];
+  }
+
+  // Step 5: no TOC section, use loose detection
   final markers = <_ChapterMarker>[];
   final seenTitles = <String>{};
-  int offset = 0;
+  offset = 0;
 
   for (final line in lines) {
     final trimmed = line.trim();
@@ -249,7 +406,7 @@ List<Chapter> _buildChapterHierarchy({
 
   for (int i = 0; i < markers.length; i++) {
     final marker = markers[i];
-    int startPage = pageCharOffsets.isNotEmpty
+    int startPage = marker.startIndex >= 0 && pageCharOffsets.isNotEmpty
         ? _findPageForCharIndex(pageCharOffsets, marker.startIndex)
         : _findPageByTitle(pages, marker.title);
     if (pages.isNotEmpty) {
@@ -278,6 +435,109 @@ List<Chapter> _buildChapterHierarchy({
   }
 
   return root;
+}
+
+void _showSideToast(BuildContext context, String message) {
+  final overlay = Overlay.of(context);
+  if (overlay == null) return;
+
+  late OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (context) => _SideToast(
+      message: message,
+      onDismissed: () => entry.remove(),
+    ),
+  );
+  overlay.insert(entry);
+}
+
+class _SideToast extends StatefulWidget {
+  final String message;
+  final VoidCallback onDismissed;
+
+  const _SideToast({
+    required this.message,
+    required this.onDismissed,
+  });
+
+  @override
+  State<_SideToast> createState() => _SideToastState();
+}
+
+class _SideToastState extends State<_SideToast>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<Offset> _slideAnimation;
+  late final Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 240),
+      reverseDuration: const Duration(milliseconds: 180),
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0.6, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOut,
+      reverseCurve: Curves.easeIn,
+    );
+    _controller.forward();
+    Future.delayed(const Duration(seconds: 2), () async {
+      if (!mounted) return;
+      await _controller.reverse();
+      if (mounted) {
+        widget.onDismissed();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final topInset = MediaQuery.of(context).padding.top;
+    return Positioned(
+      top: topInset + 16,
+      right: 12,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: Material(
+            color: scheme.surfaceContainerHigh,
+            elevation: 2,
+            borderRadius: BorderRadius.circular(12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 260),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                child: Text(
+                  widget.message,
+                  style: TextStyle(
+                    color: scheme.onSurface,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// 支持句子高亮的文本渲染组件
@@ -3071,9 +3331,7 @@ class _ReaderToolbar extends ConsumerWidget {
 
   void _handleBookmark(BuildContext context, WidgetRef ref) {
     // TODO: Implement bookmark functionality
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('书签功能')));
+    _showSideToast(context, '书签功能');
   }
 
   Future<void> _showTableOfContents(BuildContext context, WidgetRef ref) async {
@@ -3081,9 +3339,7 @@ class _ReaderToolbar extends ConsumerWidget {
     final content = paginationState.cachedText ?? '';
 
     if (paginationState.pages.isEmpty || content.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('暂无可用目录')));
+      _showSideToast(context, '暂无可用目录');
       return;
     }
 
@@ -3095,9 +3351,7 @@ class _ReaderToolbar extends ConsumerWidget {
     );
 
     if (chapters.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('未识别到目录')));
+      _showSideToast(context, '未识别到目录');
       return;
     }
 
@@ -3145,9 +3399,7 @@ class _ReaderToolbar extends ConsumerWidget {
     final paginationState = ref.read(readerPaginationProvider);
     final currentPageContent = paginationState.currentPageContent ?? '';
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('分享当前页面内容 (${currentPageContent.length}字)')),
-    );
+    _showSideToast(context, '分享当前页面内容 (${currentPageContent.length}字)');
   }
 
   /// 显示主题选择器
@@ -3652,9 +3904,7 @@ class _ReaderToolbar extends ConsumerWidget {
           () {
             HapticFeedback.lightImpact();
             Navigator.pop(context);
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(label)));
+            _showSideToast(context, label);
           },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),

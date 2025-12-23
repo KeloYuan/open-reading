@@ -71,7 +71,8 @@
       "Bash(del libpagesstable_reader_test_page.dart)",
       "Bash(del libservicesdebug_image_files.dart)",
       "Bash(del clear_cache.dart)",
-      "Bash(xcrun simctl list:*)"
+      "Bash(xcrun simctl list:*)",
+      "Bash(/Users/xiaoyuan/flutter/flutter/bin/flutter analyze:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",

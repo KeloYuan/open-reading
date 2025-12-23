@@ -54,9 +54,11 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
             color: _getDialogBackgroundColor(),
             borderRadius: BorderRadius.circular(24),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [_buildHeader(), _buildForm(), _buildActions()],
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [_buildHeader(), _buildForm(), _buildActions()],
+            ),
           ),
         ),
       ),

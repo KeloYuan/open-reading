@@ -299,4 +299,14 @@ class BookNoteDao {
     );
     return List.generate(maps.length, (i) => BookNote.fromMap(maps[i]));
   }
+
+  /// 获取所有注释（用于同步）
+  Future<List<BookNote>> getAllNotes() async {
+    final db = await _dbService.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'book_notes',
+      orderBy: 'update_time DESC',
+    );
+    return List.generate(maps.length, (i) => BookNote.fromMap(maps[i]));
+  }
 }

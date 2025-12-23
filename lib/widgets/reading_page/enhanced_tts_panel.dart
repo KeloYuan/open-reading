@@ -138,12 +138,18 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     return Container(
       width: double.infinity,
       constraints: BoxConstraints(
         maxHeight: screenSize.height * 0.85,
         minHeight: 320,
+      ),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -191,6 +197,7 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
   }
 
   Widget _buildDragHandle() {
+    final theme = Theme.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -199,7 +206,7 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
           width: 40,
           height: 4,
           decoration: BoxDecoration(
-            color: Colors.grey.withValues(alpha: 0.3),
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -208,22 +215,25 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
   }
 
   Widget _buildHeader() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
           Icon(
             Icons.record_voice_over,
-            color: Theme.of(context).primaryColor,
+            color: scheme.primary,
             size: 24,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               '语音朗读',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurface,
+              ),
             ),
           ),
           IconButton(
@@ -234,12 +244,13 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
             },
             icon: Icon(
               _showAdvancedSettings ? Icons.expand_less : Icons.expand_more,
+              color: scheme.onSurface,
             ),
             tooltip: _showAdvancedSettings ? '收起设置' : '展开设置',
           ),
           IconButton(
             onPressed: widget.onClose,
-            icon: const Icon(Icons.close),
+            icon: Icon(Icons.close, color: scheme.onSurface),
             tooltip: '关闭',
           ),
         ],
@@ -248,6 +259,7 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
   }
 
   Widget _buildPlaybackIndicator() {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       height: 120,
       margin: const EdgeInsets.symmetric(horizontal: 32),
@@ -260,7 +272,7 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
               painter: SoundWavePainter(
                 animation: _waveAnimationController,
                 isPlaying: _ttsHandler.isPlaying,
-                color: Theme.of(context).primaryColor,
+                color: scheme.primary,
               ),
             );
           },
@@ -321,6 +333,7 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
     required String tooltip,
     bool isPrimary = false,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     return Tooltip(
       message: tooltip,
       child: Container(
@@ -328,12 +341,12 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
         height: isPrimary ? 64 : 48,
         decoration: BoxDecoration(
           color: isPrimary
-              ? Theme.of(context).primaryColor
-              : Theme.of(context).colorScheme.surface,
+              ? scheme.primary
+              : scheme.surfaceContainerHigh,
           borderRadius: BorderRadius.circular(isPrimary ? 32 : 24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
+              color: scheme.shadow.withValues(alpha: 0.1),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -345,10 +358,10 @@ class _EnhancedTtsPanelState extends State<EnhancedTtsPanel>
             icon,
             size: isPrimary ? 32 : 24,
             color: isPrimary
-                ? Colors.white
+                ? scheme.onPrimary
                 : (onPressed != null
-                      ? Theme.of(context).colorScheme.onSurface
-                      : Theme.of(context).disabledColor),
+                      ? scheme.onSurface
+                      : scheme.onSurface.withValues(alpha: 0.38)),
           ),
         ),
       ),

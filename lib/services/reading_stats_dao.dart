@@ -239,4 +239,14 @@ class ReadingStatsDao {
 
     return intensityMap;
   }
+
+  /// 获取所有阅读统计（用于同步）
+  Future<List<Map<String, dynamic>>> getAllStats() async {
+    final db = await dbService.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'reading_stats',
+      orderBy: 'date DESC',
+    );
+    return maps;
+  }
 }

@@ -109,4 +109,14 @@ class BookmarkDao {
       whereArgs: [bookId],
     );
   }
+
+  // 获取所有书签（用于同步）
+  Future<List<Bookmark>> getAllBookmarks() async {
+    final db = await _databaseService.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'bookmarks',
+      orderBy: 'createDate DESC',
+    );
+    return List.generate(maps.length, (i) => Bookmark.fromMap(maps[i]));
+  }
 }
