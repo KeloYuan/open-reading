@@ -1,16 +1,128 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:epubx/epubx.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:path/path.dart' as path;
 import '../models/book.dart';
 import '../pages/reader_page.dart';
+import 'book_dao.dart';
 import 'enhanced_txt_import_service.dart';
 import 'text_preprocessor.dart'; // 🔧 导入文本预处理器
 import 'epub_image_extractor.dart';
 import 'book_image_map_service.dart';
+import '../widgets/side_toast.dart';
 // import 'debug_image_files.dart'; // 已删除
+
+class TxtDecodeRequest {
+  final Uint8List bytes;
+  final String? encodingOverride;
+
+  TxtDecodeRequest({
+    required this.bytes,
+    this.encodingOverride,
+  });
+}
+
+String decodeAndPreprocessTxtInIsolate(TxtDecodeRequest request) {
+  final txtService = EnhancedTxtImportService();
+  String content = txtService.decodeWithOverride(
+    request.bytes,
+    encodingOverride: request.encodingOverride,
+  );
+  final normalized = EnhancedTxtImportService.normalizeEncoding(
+    request.encodingOverride,
+  );
+  if (normalized == 'auto' && _looksGarbled(content)) {
+    for (final candidate in ['gbk', 'utf16le', 'utf16be']) {
+      final fallback = txtService.decodeWithOverride(
+        request.bytes,
+        encodingOverride: candidate,
+      );
+      if (!_looksGarbled(fallback)) {
+        content = fallback;
+        break;
+      }
+    }
+  }
+
+  final preprocessor = TextPreprocessor();
+  content = preprocessor.process(
+    content,
+    indentSize: 2,
+    indentDialogue: true,
+    compressEmptyLines: true,
+    paragraphSpacing: 0,
+  );
+
+  return content;
+}
+
+bool _looksGarbled(String text) {
+  final value = text.trim();
+  if (value.isEmpty) {
+    return true;
+  }
+
+  int total = 0;
+  int cjk = 0;
+  int asciiLetters = 0;
+  int digits = 0;
+  int latinExtended = 0;
+  int otherNonAscii = 0;
+  int replacement = 0;
+
+  for (final rune in value.runes) {
+    if (rune <= 0x20) {
+      continue;
+    }
+    total++;
+    if (rune == 0xfffd) {
+      replacement++;
+      continue;
+    }
+    if ((rune >= 0x4e00 && rune <= 0x9fff) ||
+        (rune >= 0x3400 && rune <= 0x4dbf) ||
+        (rune >= 0xf900 && rune <= 0xfaff)) {
+      cjk++;
+      continue;
+    }
+    if ((rune >= 0x41 && rune <= 0x5a) ||
+        (rune >= 0x61 && rune <= 0x7a)) {
+      asciiLetters++;
+      continue;
+    }
+    if (rune >= 0x30 && rune <= 0x39) {
+      digits++;
+      continue;
+    }
+    if (rune >= 0x00c0 && rune <= 0x024f) {
+      latinExtended++;
+      continue;
+    }
+    if (rune > 0x7e) {
+      otherNonAscii++;
+    }
+  }
+
+  if (total == 0 || replacement > 0) {
+    return true;
+  }
+
+  final asciiRatio = (asciiLetters + digits) / total;
+  final cjkRatio = cjk / total;
+  final nonAsciiRatio = (latinExtended + otherNonAscii) / total;
+
+  if (cjkRatio >= 0.2) {
+    return false;
+  }
+  if (asciiRatio >= 0.6) {
+    return false;
+  }
+  return nonAsciiRatio >= 0.3;
+}
 
 /// 阅读器路由服务
 ///
@@ -48,6 +160,24 @@ class ReadingRouterService {
       return;
     }
 
+    final format = book.format.toLowerCase();
+    if (format == 'txt') {
+      var previewContent = await _loadTxtPreviewContent(
+        book,
+        maxBytes: 128 * 1024,
+      );
+      if (previewContent.trim().isEmpty) {
+        previewContent = '正在加载全书...';
+      }
+      _openReaderPage(
+        context,
+        book,
+        previewContent,
+        fullContentLoader: () => _loadFullTxtContent(book),
+      );
+      return;
+    }
+
     // 无缓存，显示加载对话框并在后台加载
     debugPrint('📖 缓存为空，显示加载动画并异步加载书籍');
 
@@ -57,6 +187,7 @@ class ReadingRouterService {
       barrierDismissible: false,
       builder: (dialogContext) => _buildLoadingDialog(book),
     );
+    await Future.delayed(const Duration(milliseconds: 16));
 
     try {
       // 在后台异步加载书籍内容（一次性全部加载）
@@ -84,24 +215,24 @@ class ReadingRouterService {
 
       // 显示错误信息
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('加载失败: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        showSideToast(context, '加载失败: $e');
       }
     }
   }
 
   /// 打开阅读页面
-  static void _openReaderPage(BuildContext context, Book book, String content) {
+  static void _openReaderPage(
+    BuildContext context,
+    Book book,
+    String content, {
+    Future<String> Function()? fullContentLoader,
+  }) {
     final page = ReaderPage(
       bookContent: content,
       bookTitle: book.title,
       initialPageIndex: book.currentPage,
       bookId: book.id,
+      fullContentLoader: fullContentLoader,
     );
 
     Navigator.push(
@@ -144,31 +275,11 @@ class ReadingRouterService {
       final fileSizeMB = fileSize / (1024 * 1024);
       debugPrint('📊 文件大小: ${fileSizeMB.toStringAsFixed(2)} MB');
 
-      final format = book.format.toLowerCase();
       String content;
 
+      final format = book.format.toLowerCase();
       if (format == 'txt') {
-        // TXT 文件一次性全部加载（无论大小），使用智能编码检测
-        debugPrint('📖 一次性加载TXT文件 (${fileSizeMB.toStringAsFixed(2)} MB)');
-
-        // 使用 EnhancedTxtImportService 的智能编码检测
-        final bytes = await file.readAsBytes();
-        final txtService = EnhancedTxtImportService();
-        content = txtService.detectTextEncoding(bytes);
-
-        debugPrint('✅ 成功加载TXT文件，长度: ${content.length} 字符');
-
-        // 🔧 文本预处理：压缩空行、添加段首缩进
-        debugPrint('📝 开始文本预处理（压缩空行、添加缩进）...');
-        final preprocessor = TextPreprocessor();
-        content = preprocessor.process(
-          content,
-          indentSize: 2, // 段首缩进2个字符
-          indentDialogue: true, // 对话也缩进
-          compressEmptyLines: true, // 压缩多余空行
-          paragraphSpacing: 0, // 段落间距0行（紧密排列）
-        );
-        debugPrint('✅ 文本预处理完成，处理后长度: ${content.length} 字符');
+        content = await _loadFullTxtContent(book);
       } else if (format == 'epub') {
         content = await _parseEpubContent(file, bookId);
         debugPrint('✅ 成功加载EPUB文件，长度: ${content.length}');
@@ -200,6 +311,164 @@ class ReadingRouterService {
     } catch (e) {
       debugPrint('❌ 加载文件失败: $e');
       rethrow;
+    }
+  }
+
+  static Future<String> _loadFullTxtContent(Book book) async {
+    final file = File(book.filePath);
+    final fileSize = await file.length();
+    final fileSizeMB = fileSize / (1024 * 1024);
+    debugPrint('📖 一次性加载TXT文件 (${fileSizeMB.toStringAsFixed(2)} MB)');
+
+    final bytes = await file.readAsBytes();
+    final txtService = EnhancedTxtImportService();
+    final normalized = EnhancedTxtImportService.normalizeEncoding(
+      book.textEncoding,
+    );
+    final isAuto = normalized == 'auto';
+    final detectedEncoding = txtService.detectEncoding(
+      bytes,
+      encodingOverride: book.textEncoding,
+    );
+    if (bytes.length > 512 * 1024) {
+      debugPrint('🧵 大文本解码与预处理改为isolate执行');
+      if (isAuto) {
+        await _persistTxtEncoding(book, detectedEncoding);
+      }
+      return await compute(
+        decodeAndPreprocessTxtInIsolate,
+        TxtDecodeRequest(
+          bytes: bytes,
+          encodingOverride: detectedEncoding,
+        ),
+      );
+    }
+
+    final decodeResult = txtService.decodeWithResult(
+      bytes,
+      encodingOverride: book.textEncoding,
+    );
+    String content = decodeResult.content;
+    String resolvedEncoding = isAuto ? decodeResult.encoding : normalized;
+    if (isAuto && _looksGarbled(content)) {
+      for (final candidate in ['gbk', 'utf16le', 'utf16be']) {
+        final fallback = txtService.decodeWithOverride(
+          bytes,
+          encodingOverride: candidate,
+        );
+        if (!_looksGarbled(fallback)) {
+          content = fallback;
+          resolvedEncoding = candidate;
+          break;
+        }
+      }
+    }
+    if (isAuto) {
+      await _persistTxtEncoding(book, resolvedEncoding);
+    }
+    final preprocessor = TextPreprocessor();
+    content = preprocessor.process(
+      content,
+      indentSize: 2,
+      indentDialogue: true,
+      compressEmptyLines: true,
+      paragraphSpacing: 0,
+    );
+    debugPrint('✅ 成功加载TXT文件，长度: ${content.length} 字符');
+    return content;
+  }
+
+  static Future<String> _loadTxtPreviewContent(
+    Book book, {
+    int maxBytes = 128 * 1024,
+  }) async {
+    try {
+      final file = File(book.filePath);
+      if (!await file.exists()) {
+        return '';
+      }
+
+      final builder = BytesBuilder();
+      await for (final chunk in file.openRead(0, maxBytes)) {
+        builder.add(chunk);
+      }
+      var bytes = builder.takeBytes();
+      if (bytes.isEmpty) return '';
+
+      final txtService = EnhancedTxtImportService();
+      final normalized = EnhancedTxtImportService.normalizeEncoding(
+        book.textEncoding,
+      );
+      final isAuto = normalized == 'auto';
+      final effectiveEncoding = isAuto
+          ? txtService.detectEncoding(
+              bytes,
+              encodingOverride: book.textEncoding,
+            )
+          : normalized;
+
+      bytes = _trimBytesForEncoding(bytes, effectiveEncoding);
+      if (bytes.isEmpty) return '';
+
+      var content = txtService.decodeWithOverride(
+        bytes,
+        encodingOverride: effectiveEncoding,
+      );
+      if (isAuto && _looksGarbled(content)) {
+        for (final candidate in ['gbk', 'utf16le', 'utf16be']) {
+          final fallback = txtService.decodeWithOverride(
+            bytes,
+            encodingOverride: candidate,
+          );
+          if (!_looksGarbled(fallback)) {
+            content = fallback;
+            break;
+          }
+        }
+      }
+      return content;
+    } catch (e) {
+      debugPrint('❌ TXT预览加载失败: $e');
+      return '';
+    }
+  }
+
+  static Uint8List _trimBytesForEncoding(
+    Uint8List bytes,
+    String? encodingOverride,
+  ) {
+    final normalized = EnhancedTxtImportService.normalizeEncoding(
+      encodingOverride,
+    );
+    if ((normalized == 'utf16le' || normalized == 'utf16be') &&
+        bytes.length.isOdd) {
+      return bytes.sublist(0, bytes.length - 1);
+    }
+    return bytes;
+  }
+
+  static Future<void> _persistTxtEncoding(
+    Book book,
+    String encoding,
+  ) async {
+    if (book.id == null) {
+      return;
+    }
+    final normalized = EnhancedTxtImportService.normalizeEncoding(encoding);
+    if (normalized == 'auto') {
+      return;
+    }
+    final current = EnhancedTxtImportService.normalizeEncoding(
+      book.textEncoding,
+    );
+    if (current == normalized) {
+      return;
+    }
+    try {
+      await BookDao().updateBookTextEncoding(book.id!, normalized);
+      debugPrint('✅ 更新TXT编码: ${book.title} -> $normalized');
+    } catch (e) {
+      debugPrint('❌ 更新TXT编码失败: $e');
     }
   }
 

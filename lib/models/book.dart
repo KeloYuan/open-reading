@@ -14,6 +14,7 @@ class Book {
   final String? contentHash;
   final String? tableOfContents;
   final String? coverImagePath; // 书籍封面图片路径
+  final String? textEncoding; // TXT编码（auto/gbk/utf8/utf16le/utf16be）
 
   Book({
     this.id,
@@ -30,6 +31,7 @@ class Book {
     this.contentHash,
     this.tableOfContents,
     this.coverImagePath,
+    this.textEncoding,
   }) : importDate = importDate ?? DateTime.now();
 
   // content 字段已被移除
@@ -50,6 +52,7 @@ class Book {
       'content_hash': contentHash,
       'table_of_contents': tableOfContents,
       'cover_image_path': coverImagePath,
+      'text_encoding': textEncoding,
     };
   }
 
@@ -69,6 +72,7 @@ class Book {
       contentHash: map['content_hash'],
       tableOfContents: map['table_of_contents'],
       coverImagePath: map['cover_image_path'],
+      textEncoding: map['text_encoding'],
     );
   }
 
@@ -87,6 +91,7 @@ class Book {
     String? contentHash,
     String? tableOfContents,
     String? coverImagePath,
+    String? textEncoding,
   }) {
     return Book(
       id: id ?? this.id,
@@ -103,6 +108,7 @@ class Book {
       contentHash: contentHash ?? this.contentHash,
       tableOfContents: tableOfContents ?? this.tableOfContents,
       coverImagePath: coverImagePath ?? this.coverImagePath,
+      textEncoding: textEncoding ?? this.textEncoding,
     );
   }
 }

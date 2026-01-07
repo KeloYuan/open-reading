@@ -1,37 +1,25 @@
 # 稳定分页方案实施指南
 
+> ⚠️ 本指南基于旧版 `stable_*` 方案，当前仓库已移除对应文件。
+> 现有实现请以 `lib/services/enhanced_paginator.dart` 与 `lib/pages/reader_page.dart` 为准。
+
 ## 🎯 解决方案概述
 
 我已经为您创建了一个**简单、稳定、可靠**的分页方案，不再使用复杂的二分查找，专注于稳定性。
 
 ### 核心文件
 
-1. **`lib/services/stable_text_paginator.dart`** - 新的稳定分页器
-2. **`lib/pages/stable_reader_test_page.dart`** - 测试页面
+1. **`lib/services/enhanced_paginator.dart`** - 当前分页器实现
+2. **`lib/pages/reader_page.dart`** - 当前阅读页集成位置
 3. **`knowledge_base/REAL_PROBLEMS_AND_SOLUTIONS.md`** - 问题分析文档
 
 ---
 
 ## 🚀 快速测试
 
-### 步骤1：添加测试页面路由
+### 步骤1：准备测试入口
 
-在您的主页或任何地方添加一个按钮跳转到测试页面：
-
-```dart
-// 例如在 home_page_responsive.dart 或任何页面
-ElevatedButton(
-  onPressed: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const StableReaderTestPage(),
-      ),
-    );
-  },
-  child: const Text('测试稳定分页器'),
-)
-```
+当前仓库未内置稳定分页测试页，建议直接打开阅读页后调整字体/行距/边距进行验证，或在 `reader_page.dart` 中添加临时调试入口。
 
 ### 步骤2：运行应用
 
@@ -61,6 +49,8 @@ flutter run
 ---
 
 ## 📝 集成到您的阅读器
+
+> 注：以下代码示例基于旧版 stable_* 方案，当前实现请对照 `enhanced_paginator.dart` 与 `reader_page.dart` 调整。
 
 ### 方案一：完全替换（推荐）
 
@@ -439,10 +429,10 @@ A: 检查图片路径是否正确，File是否存在。可以先用占位符测�
 
 ## 🎉 下一步
 
-1. **立即测试** - 运行StableReaderTestPage
+1. **立即测试** - 打开阅读页进行验证
 2. **调整参数** - 测试各种字体大小、行距组合
 3. **集成到阅读器** - 替换旧的分页器
-4. **删除旧代码** - 确认新方案稳定后，删除fast_text_paginator_optimized.dart
+4. **删除旧代码** - 确认新方案稳定后，清理旧分页实现
 
 ---
 

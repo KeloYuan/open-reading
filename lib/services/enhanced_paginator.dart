@@ -8,8 +8,6 @@ import 'package:flutter/material.dart';
 /// 2. 向下取整行数，确保不溢出
 /// 3. 图片按比例占用页面高度，允许与文本共存
 class EnhancedPaginator {
-  static void Function(int currentPage, String stage)? _onProgress;
-
   /// 渐进式分页（快速）
   static Future<ProgressivePaginationResult> paginateProgressive({
     required String text,
@@ -20,16 +18,13 @@ class EnhancedPaginator {
     double letterSpacing = 0.0,
     bool supportImages = true,
     int quickSamplePages = 10,
-    Function(int currentPage, String stage)? onProgress,
   }) async {
-    _onProgress = onProgress;
-
     final startTime = DateTime.now();
     debugPrint('\n📖 ===== 开始高性能分页 v2.0 =====');
     debugPrint('   文本长度: ${text.length} 字符');
 
-    // 直接使用高性能分页
-    final result = await _fastPaginate(
+    // 先快速采样分页，避免大文本卡住UI
+    final sampleResult = await _fastPaginate(
       text: text,
       screenSize: screenSize,
       fontSize: fontSize,
@@ -37,30 +32,44 @@ class EnhancedPaginator {
       padding: padding,
       letterSpacing: letterSpacing,
       supportImages: supportImages,
+      pageLimit: quickSamplePages,
     );
 
-    final duration = DateTime.now().difference(startTime);
-    final speed = duration.inMilliseconds > 0
-        ? (text.length / duration.inMilliseconds * 1000).toInt()
-        : text.length;
-
-    debugPrint('✅ 分页完成: ${result.pages.length}页');
-    debugPrint('   耗时: ${duration.inMilliseconds}ms');
-    debugPrint('   速度: $speed 字符/秒');
-
-    // 返回结果
-    final sampledPages = result.pages.take(quickSamplePages).toList();
+    final sampledPages = sampleResult.pages;
     final avgCharsPerPage = sampledPages.isNotEmpty
         ? sampledPages.fold<int>(0, (sum, page) => sum + page.length) /
             sampledPages.length
         : 500;
     final estimatedTotal = (text.length / avgCharsPerPage).ceil();
 
+    // 精确分页放到后台异步执行
+    final preciseCalculationFuture = Future<PreciseCalculationResult>(() async {
+      await Future.delayed(Duration.zero);
+      final result = await _fastPaginate(
+        text: text,
+        screenSize: screenSize,
+        fontSize: fontSize,
+        lineHeight: lineHeight,
+        padding: padding,
+        letterSpacing: letterSpacing,
+        supportImages: supportImages,
+      );
+      final duration = DateTime.now().difference(startTime);
+      final speed = duration.inMilliseconds > 0
+          ? (text.length / duration.inMilliseconds * 1000).toInt()
+          : text.length;
+
+      debugPrint('✅ 分页完成: ${result.pages.length}页');
+      debugPrint('   耗时: ${duration.inMilliseconds}ms');
+      debugPrint('   速度: $speed 字符/秒');
+      return result;
+    });
+
     return ProgressivePaginationResult(
-      sampledPages: result.pages, // 返回所有页（已经很快了）
+      sampledPages: sampledPages,
       estimatedTotal: estimatedTotal,
-      pageCharOffsets: result.pageCharOffsets,
-      preciseCalculationFuture: Future.value(result),
+      pageCharOffsets: sampleResult.pageCharOffsets,
+      preciseCalculationFuture: preciseCalculationFuture,
     );
   }
 
@@ -73,6 +82,7 @@ class EnhancedPaginator {
     required EdgeInsets padding,
     required double letterSpacing,
     required bool supportImages,
+    int? pageLimit,
   }) async {
     final availableWidth = screenSize.width - padding.horizontal;
     final availableHeight = screenSize.height - padding.vertical;
@@ -117,6 +127,11 @@ class EnhancedPaginator {
     double remainingHeight = actualAvailableHeight;
     int? pageStartOffset;
     const imageHeightRatio = 0.45;
+    var stop = false;
+
+    bool reachedLimit() {
+      return pageLimit != null && pages.length >= pageLimit;
+    }
 
     void flushPage() {
       if (buffer.isEmpty && currentImages.isEmpty) return;
@@ -130,15 +145,20 @@ class EnhancedPaginator {
       currentImages.clear();
       remainingHeight = actualAvailableHeight;
       pageStartOffset = null;
+      if (reachedLimit()) {
+        stop = true;
+      }
     }
 
     for (final element in contentElements) {
+      if (stop) break;
       if (element.isImage) {
         final imageHeight = (actualAvailableHeight * imageHeightRatio)
             .clamp(lineHeightPx * 3, actualAvailableHeight);
         if (remainingHeight < imageHeight &&
             (buffer.isNotEmpty || currentImages.isNotEmpty)) {
           flushPage();
+          if (stop) break;
         }
         pageStartOffset ??= element.startIndex;
         buffer.write(
@@ -152,6 +172,7 @@ class EnhancedPaginator {
         remainingHeight -= imageHeight;
         if (remainingHeight < lineHeightPx) {
           flushPage();
+          if (stop) break;
         }
         continue;
       }
@@ -159,6 +180,7 @@ class EnhancedPaginator {
       var cursor = 0;
       final textContent = element.content;
       while (cursor < textContent.length) {
+        if (stop) break;
         pageStartOffset ??= element.startIndex + cursor;
         final maxLinesForRemaining =
             (remainingHeight / lineHeightPx).floor().clamp(1, maxLines);
@@ -187,13 +209,17 @@ class EnhancedPaginator {
         cursor = endIndex;
         if (cursor < textContent.length) {
           flushPage();
+          if (stop) break;
         } else if (remainingHeight < lineHeightPx) {
           flushPage();
+          if (stop) break;
         }
       }
     }
 
-    flushPage();
+    if (!stop) {
+      flushPage();
+    }
 
     textPainter.dispose();
 
@@ -202,60 +228,6 @@ class EnhancedPaginator {
       pageContents: pageContents,
       pageCharOffsets: pageCharOffsets,
     );
-  }
-
-  /// 🚀 逐页布局文本分页（每页仅一次布局）
-  static Future<void> _paginateTextFast({
-    required String text,
-    required double availableWidth,
-    required double availableHeight,
-    required TextStyle textStyle,
-    required TextPainter textPainter,
-    required int maxLines,
-    required List<String> pages,
-    required List<PageContent> pageContents,
-    required List<int> pageCharOffsets,
-    required int baseOffset,
-  }) async {
-    if (text.isEmpty) return;
-
-    int startIndex = 0;
-    int pageCount = 0;
-
-    // 估算每页字符数（用于初始猜测）
-    final charsPerLine = (availableWidth / textStyle.fontSize!).floor();
-    final linesPerPage =
-        (availableHeight / (textStyle.fontSize! * (textStyle.height ?? 1.5)))
-            .floor();
-    final estimatedCharsPerPage = charsPerLine * linesPerPage;
-
-    while (startIndex < text.length) {
-      // 单次布局找断点
-      final endIndex = _findPageEnd(
-        text: text,
-        startIndex: startIndex,
-        estimatedCharsPerPage: estimatedCharsPerPage,
-        availableWidth: availableWidth,
-        availableHeight: availableHeight,
-        maxLines: maxLines,
-        textStyle: textStyle,
-        textPainter: textPainter,
-      );
-
-      final pageText = text.substring(startIndex, endIndex);
-      pages.add(pageText);
-      pageContents.add(PageContent(textContent: pageText, images: []));
-      pageCharOffsets.add(baseOffset + startIndex);
-
-      startIndex = endIndex;
-      pageCount++;
-
-      // 每50页让出CPU
-      if (pageCount % 50 == 0) {
-        _reportProgress(pages.length, '分页中...');
-        await Future.delayed(Duration.zero);
-      }
-    }
   }
 
   /// 🚀 单次布局找断点（减少重复测量）
@@ -335,12 +307,6 @@ class EnhancedPaginator {
 
     // 🔧 直接返回断点，不再寻找标点符号
     return breakpoint;
-  }
-
-  static void _reportProgress(int currentPage, String stage) {
-    if (_onProgress != null) {
-      _onProgress!(currentPage, stage);
-    }
   }
 
   /// 解析内容元素

@@ -83,6 +83,19 @@ class TtsPreferences {
     }
   }
 
+  /// 当前音色标识符
+  String? get voiceId {
+    return _prefs?.getString('tts_voice_id');
+  }
+
+  set voiceId(String? value) {
+    if (value == null) {
+      _prefs?.remove('tts_voice_id');
+    } else {
+      _prefs?.setString('tts_voice_id', value);
+    }
+  }
+
   /// 清除所有TTS配置
   Future<void> clear() async {
     await _prefs?.remove('tts_volume');
@@ -91,6 +104,7 @@ class TtsPreferences {
     await _prefs?.remove('tts_language');
     await _prefs?.remove('tts_is_system');
     await _prefs?.remove('tts_engine');
+    await _prefs?.remove('tts_voice_id');
   }
 
   /// 重置为默认值

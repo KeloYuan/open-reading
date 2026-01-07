@@ -274,3 +274,29 @@ class TextPreprocessor {
     return processed;
   }
 }
+
+class TextPreprocessRequest {
+  final String text;
+  final int indentSize;
+  final bool indentDialogue;
+  final bool compressEmptyLines;
+  final int paragraphSpacing;
+
+  const TextPreprocessRequest({
+    required this.text,
+    this.indentSize = 2,
+    this.indentDialogue = true,
+    this.compressEmptyLines = true,
+    this.paragraphSpacing = 0,
+  });
+}
+
+String preprocessTextInIsolate(TextPreprocessRequest request) {
+  return TextPreprocessor().process(
+    request.text,
+    indentSize: request.indentSize,
+    indentDialogue: request.indentDialogue,
+    compressEmptyLines: request.compressEmptyLines,
+    paragraphSpacing: request.paragraphSpacing,
+  );
+}

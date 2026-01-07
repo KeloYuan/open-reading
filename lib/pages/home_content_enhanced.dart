@@ -8,6 +8,7 @@ import '../services/reading_stats_dao.dart';
 import '../utils/glass_config.dart';
 import '../utils/responsive_helper.dart';
 import 'detailed_stats_page.dart';
+import 'home_page_responsive.dart';
 
 class HomeContentEnhanced extends StatefulWidget {
   const HomeContentEnhanced({super.key});
@@ -63,6 +64,16 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
 
   @override
   Widget build(BuildContext context) {
+    // 检查是否在侧边导航栏模式下
+    final navContext = NavigationContext.of(context);
+    final useRailNavigation = navContext?.useRailNavigation ?? false;
+
+    // 在侧边导航栏模式下，不显示 Scaffold 和 AppBar
+    if (useRailNavigation) {
+      return _buildContent(context);
+    }
+
+    // 手机模式：显示完整的 Scaffold + AppBar
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -92,7 +103,21 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
           ),
         ),
       ),
-      body: Container(
+      body: _buildContent(context),
+    );
+  }
+
+  // 提取页面内容部分，在两种模式下共用
+  Widget _buildContent(BuildContext context) {
+    final navContext = NavigationContext.of(context);
+    final useRailNavigation = navContext?.useRailNavigation ?? false;
+    final isTablet =
+        useRailNavigation || ResponsiveHelper.isTablet(context);
+    if (isTablet) {
+      return _buildTabletContent(context);
+    }
+
+    return Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -162,7 +187,84 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
                   ),
                 ),
               ),
+      );
+  }
+
+  Widget _buildTabletContent(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final horizontalPadding = ResponsiveHelper.getHorizontalPadding(context);
+    final topPadding = mediaQuery.padding.top +
+        ResponsiveHelper.getValue(
+          context,
+          mobile: 20.0,
+          tablet: 28.0,
+          desktop: 32.0,
+        );
+    final bottomPadding = mediaQuery.padding.bottom + 36.0;
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+          colors: [
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.06),
+            Theme.of(context).colorScheme.secondary.withValues(alpha: 0.10),
+            Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.05),
+            Theme.of(context).colorScheme.primaryContainer.withValues(
+                  alpha: 0.12,
+                ),
+            Theme.of(context).colorScheme.secondaryContainer.withValues(
+                  alpha: 0.08,
+                ),
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
+          ],
+        ),
       ),
+      child: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _loadAllStats,
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  topPadding,
+                  horizontalPadding,
+                  bottomPadding,
+                ),
+                children: [
+                  _buildTabletHeroCard(),
+                  const SizedBox(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 7,
+                        child: Column(
+                          children: [
+                            _buildTabletSummaryPanel(),
+                            const SizedBox(height: 20),
+                            _buildRecentActivity(),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        flex: 5,
+                        child: Column(
+                          children: [
+                            _buildWeeklyChartCard(chartHeight: 260),
+                            const SizedBox(height: 20),
+                            _buildTabletFocusCard(),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
     );
   }
 
@@ -287,6 +389,434 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
     );
   }
 
+  Widget _buildTabletHeroCard() {
+    final totalMinutes = (_summaryStats['total'] ?? 0) ~/ 60;
+    final todayMinutes = (_summaryStats['today'] ?? 0) ~/ 60;
+    final weekMinutes = (_summaryStats['week'] ?? 0) ~/ 60;
+    final totalHours = totalMinutes / 60;
+    final totalValue =
+        totalHours >= 1 ? totalHours.toStringAsFixed(1) : '$totalMinutes';
+    final totalUnit = totalHours >= 1 ? '小时' : '分钟';
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                Theme.of(context).colorScheme.secondary.withValues(alpha: 0.10),
+                Theme.of(context)
+                    .colorScheme
+                    .secondaryContainer
+                    .withValues(alpha: 0.18),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.auto_stories,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          '今日阅读时光',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '$todayMinutes',
+                          style:
+                              Theme.of(context).textTheme.displaySmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                        ),
+                        const SizedBox(width: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text(
+                            '分钟',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.7),
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      todayMinutes > 0 ? '已完成今日阅读，保持节奏' : '今天也要留点时间给阅读',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.7),
+                          ),
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        _buildTabletMetricChip(
+                          label: '本周阅读',
+                          value: '$weekMinutes',
+                          unit: '分钟',
+                          icon: Icons.calendar_view_week,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                        _buildTabletMetricChip(
+                          label: '累计阅读',
+                          value: totalValue,
+                          unit: totalUnit,
+                          icon: Icons.emoji_events,
+                          color: Theme.of(context).colorScheme.tertiary,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 24),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surface
+                      .withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color:
+                        Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.library_books,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 28,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '$_bookCount',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    Text(
+                      '藏书',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.6),
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabletMetricChip({
+    required String label,
+    required String value,
+    required String unit,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.12),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.7),
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$value $unit',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabletSummaryPanel() {
+    final totalMinutes = (_summaryStats['total'] ?? 0) ~/ 60;
+    final todayMinutes = (_summaryStats['today'] ?? 0) ~/ 60;
+    final weekMinutes = (_summaryStats['week'] ?? 0) ~/ 60;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.insights,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '关键指标',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildWideLayout(todayMinutes, weekMinutes, totalMinutes),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabletFocusCard() {
+    final weekMinutes = (_summaryStats['week'] ?? 0) ~/ 60;
+    final todayMinutes = (_summaryStats['today'] ?? 0) ~/ 60;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
+                Theme.of(context)
+                    .colorScheme
+                    .primaryContainer
+                    .withValues(alpha: 0.25),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .tertiary
+                          .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.bolt,
+                      color: Theme.of(context).colorScheme.tertiary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '阅读节奏',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildFocusMetric(
+                      label: '今日阅读',
+                      value: '$todayMinutes',
+                      unit: '分钟',
+                      icon: Icons.timer,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildFocusMetric(
+                      label: '本周累计',
+                      value: '$weekMinutes',
+                      unit: '分钟',
+                      icon: Icons.trending_up,
+                      color: Theme.of(context).colorScheme.secondary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFocusMetric({
+    required String label,
+    required String value,
+    required String unit,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.6),
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$value $unit',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSummaryCards() {
     final totalMinutes = (_summaryStats['total'] ?? 0) ~/ 60;
     final todayMinutes = (_summaryStats['today'] ?? 0) ~/ 60;
@@ -403,7 +933,83 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
   }
 
   Widget _buildWideLayout(int todayMinutes, int weekMinutes, int totalMinutes) {
-    // 获取iOS设备优化的GridView间距和纵横比
+    // 检查是否为平板或桌面设备
+    final isTablet = ResponsiveHelper.isTablet(context);
+    final isDesktop = ResponsiveHelper.isDesktop(context);
+
+    // 平板和桌面使用 Row 布局，确保卡片高度一致
+    if (isTablet || isDesktop) {
+      final cardSpacing = ResponsiveHelper.getValue(
+        context,
+        mobile: 12.0,
+        tablet: 16.0,
+        desktop: 20.0,
+      );
+      final rowSpacing = ResponsiveHelper.getValue(
+        context,
+        mobile: 12.0,
+        tablet: 16.0,
+        desktop: 20.0,
+      );
+
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _StatCard(
+                  title: '今日阅读',
+                  value: '$todayMinutes',
+                  unit: '分钟',
+                  icon: Icons.today,
+                  color: Colors.blue,
+                  onTap: () => _navigateToDetailedStats(context),
+                ),
+              ),
+              SizedBox(width: cardSpacing),
+              Expanded(
+                child: _StatCard(
+                  title: '本周阅读',
+                  value: '$weekMinutes',
+                  unit: '分钟',
+                  icon: Icons.calendar_view_week,
+                  color: Colors.orange,
+                  onTap: () => _navigateToDetailedStats(context),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: rowSpacing),
+          Row(
+            children: [
+              Expanded(
+                child: _StatCard(
+                  title: '累计阅读',
+                  value: '$totalMinutes',
+                  unit: '分钟',
+                  icon: Icons.history,
+                  color: Colors.green,
+                  onTap: () => _navigateToDetailedStats(context),
+                ),
+              ),
+              SizedBox(width: cardSpacing),
+              Expanded(
+                child: _StatCard(
+                  title: '书架藏书',
+                  value: '$_bookCount',
+                  unit: '本',
+                  icon: Icons.book,
+                  color: Colors.purple,
+                  onTap: () => _navigateToDetailedStats(context),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    // 手机端使用 GridView，优化不同屏幕尺寸的间距和纵横比
     final screenWidth = MediaQuery.of(context).size.width;
 
     // 根据iOS设备屏幕尺寸优化间距和纵横比 - 为iPhone 16 Pro优化
@@ -471,7 +1077,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
     );
   }
 
-  Widget _buildWeeklyChartCard() {
+  Widget _buildWeeklyChartCard({double? chartHeight}) {
     if (_weeklyData.isEmpty) {
       return Container();
     }
@@ -528,7 +1134,7 @@ class _HomeContentEnhancedState extends State<HomeContentEnhanced> {
               ),
               const SizedBox(height: 24),
               SizedBox(
-                height: 200,
+                height: chartHeight ?? 200,
                 child: BarChart(
                   BarChartData(
                     alignment: BarChartAlignment.spaceAround,

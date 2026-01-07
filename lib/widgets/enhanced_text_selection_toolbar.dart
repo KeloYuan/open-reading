@@ -1,6 +1,7 @@
-﻿import 'package:flutter/material.dart'; 
+import 'package:flutter/material.dart'; 
 import 'package:flutter/services.dart';
 import '../models/book_note.dart';
+import 'side_toast.dart';
 import '../services/book_note_dao.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -243,16 +244,7 @@ class _EnhancedTextSelectionToolbarState
 
   void _showFeedback(String message) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor:
-              widget.backgroundColor?.withValues(alpha: 0.9) ??
-              Theme.of(context).primaryColor.withValues(alpha: 0.9),
-        ),
-      );
+      showSideToast(context, message);
     }
   }
 

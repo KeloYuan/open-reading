@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class ResponsiveHelper {
   // 屏幕尺寸断点
   static const double largeMobileBreakpoint = 414.0; // iPhone Plus/Pro Max等大屏手机
-  static const double tabletBreakpoint = 768.0;
+  static const double tabletBreakpoint = 820.0; // 降低断点以支持小尺寸平板(7-8英寸)和折叠屏
   static const double desktopBreakpoint = 1200.0;
   
   // 判断是否为普通手机
@@ -118,7 +118,7 @@ class ResponsiveHelper {
     return getValue(
       context,
       mobile: 0.7,
-      tablet: 0.75,  // 平板稍微调高，适应更多列数
+      tablet: 0.5,  // 平板封面再高一点
       desktop: 0.8,  // 桌面也相应调整
     );
   }
@@ -128,7 +128,7 @@ class ResponsiveHelper {
     return getValue(
       context,
       mobile: 2,
-      tablet: 4,    // 平板增加到4列，更好利用空间
+      tablet: 3,    // 平板减为3列，封面更高更接近3:4
       desktop: 5,   // 桌面增加到5列
     );
   }

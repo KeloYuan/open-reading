@@ -8,9 +8,9 @@
 2. **[REAL_PROBLEMS_AND_SOLUTIONS.md](REAL_PROBLEMS_AND_SOLUTIONS.md)** ⭐⭐⭐⭐⭐ - 真实问题分析与解决方案
 3. **[IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md)** ⭐⭐⭐⭐⭐ - 实施指南（立即可用）
 
-**已提供完整的稳定分页实现：**
-- `lib/services/stable_text_paginator.dart` - 稳定的分页器
-- `lib/pages/stable_reader_test_page.dart` - 测试页面
+**当前分页实现参考：**
+- `lib/services/enhanced_paginator.dart` - 分页器实现
+- `lib/pages/reader_page.dart` - 阅读页集成
 
 ---
 

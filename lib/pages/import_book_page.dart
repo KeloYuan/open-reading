@@ -1,6 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../services/book_import_service.dart';
+import '../widgets/side_toast.dart';
 
 class ImportBookPage extends StatefulWidget {
   const ImportBookPage({super.key});
@@ -13,6 +14,15 @@ class _ImportBookPageState extends State<ImportBookPage> {
   bool _isLoading = false;
   double _progress = 0.0;
   String _progressMessage = '';
+  String _encodingOverride = 'auto';
+
+  static const List<Map<String, String>> _encodingOptions = [
+    {'label': '自动识别', 'value': 'auto'},
+    {'label': 'GBK/GB2312', 'value': 'gbk'},
+    {'label': 'UTF-8', 'value': 'utf8'},
+    {'label': 'UTF-16 LE', 'value': 'utf16le'},
+    {'label': 'UTF-16 BE', 'value': 'utf16be'},
+  ];
 
   /// 导入文件并显示进度
   ///
@@ -27,6 +37,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
 
     try {
       final book = await BookImportService().importBook(
+        encodingOverride:
+            _encodingOverride == 'auto' ? null : _encodingOverride,
         progressCallback: (progress, message) {
           if (mounted) {
             setState(() {
@@ -43,9 +55,7 @@ class _ImportBookPageState extends State<ImportBookPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('导入失败: $e')));
+        showSideToast(context, '导入失败: $e');
       }
     } finally {
       if (mounted) {
@@ -121,6 +131,60 @@ class _ImportBookPageState extends State<ImportBookPage> {
                                 context,
                               ).colorScheme.onSurface.withValues(alpha: 0.7),
                             ),
+                      ),
+                      const SizedBox(height: 20),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'TXT编码（可选）',
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelLarge
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.7),
+                              ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              Theme.of(context).colorScheme.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .outline
+                                .withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _encodingOverride,
+                            isExpanded: true,
+                            items: _encodingOptions
+                                .map(
+                                  (option) => DropdownMenuItem(
+                                    value: option['value'],
+                                    child: Text(option['label']!),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setState(() {
+                                _encodingOverride = value;
+                              });
+                            },
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 32),
                       if (_isLoading) ...[

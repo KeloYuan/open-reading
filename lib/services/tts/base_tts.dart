@@ -3,6 +3,36 @@ import 'package:flutter/material.dart';
 
 enum TtsStateEnum { playing, stopped, paused, continued }
 
+/// TTS音色模型
+class TtsVoice {
+  final String name;
+  final String locale;
+  final String? identifier;
+  final String? displayName;
+
+  const TtsVoice({
+    required this.name,
+    required this.locale,
+    this.identifier,
+    this.displayName,
+  });
+
+  /// 用于显示的标签
+  String get label => displayName ?? name;
+
+  /// 唯一标识符
+  String get id => identifier ?? '$locale-$name';
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is TtsVoice && other.id == id;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
+}
+
 abstract class BaseTts {
   double get volume;
   set volume(double volume);
@@ -41,4 +71,16 @@ abstract class BaseTts {
   bool get isPlaying;
 
   String? get currentVoiceText;
+
+  /// 获取当前音色
+  TtsVoice? get currentVoice;
+
+  /// 设置音色
+  Future<void> setVoice(TtsVoice voice);
+
+  /// 获取可用音色列表
+  Future<List<TtsVoice>> getVoices();
+
+  /// 按语言筛选音色
+  Future<List<TtsVoice>> getVoicesByLanguage(String language);
 }

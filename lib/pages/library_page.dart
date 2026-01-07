@@ -1,4 +1,6 @@
-﻿import 'dart:io';
+import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,7 +9,10 @@ import '../services/book_dao.dart';
 import '../services/reading_router_service.dart';
 import '../services/pagination_cache_service.dart';
 import '../services/reading_progress_service.dart';
+import '../services/library_event_bus.dart';
+import '../widgets/side_toast.dart';
 import 'import_book_page.dart';
+import 'home_page_responsive.dart';
 import '../utils/responsive_helper.dart';
 import '../widgets/scrolling_text.dart';
 // import '../utils/glass_config.dart';
@@ -23,12 +28,18 @@ class _LibraryPageState extends State<LibraryPage> {
   List<Book> _books = [];
   bool _isLoading = true;
   final _bookDao = BookDao();
+  StreamSubscription<void>? _librarySubscription;
 
   @override
   void initState() {
     super.initState();
     _loadBooks();
     _setupPageImmersiveMode();
+    _librarySubscription = LibraryEventBus().stream.listen((_) {
+      if (mounted) {
+        _loadBooks();
+      }
+    });
   }
 
   @override
@@ -37,8 +48,22 @@ class _LibraryPageState extends State<LibraryPage> {
     _setupThemeBasedImmersiveMode();
   }
 
+  @override
+  void dispose() {
+    _librarySubscription?.cancel();
+    super.dispose();
+  }
+
+  bool _shouldApplySystemUI() {
+    final route = ModalRoute.of(context);
+    return route?.isCurrent ?? true;
+  }
+
   // 与首页一致的沉浸式处理，确保安卓手势提示线“干净”
   void _setupPageImmersiveMode() {
+    if (!_shouldApplySystemUI()) {
+      return;
+    }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -55,6 +80,9 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   void _setupThemeBasedImmersiveMode() {
+    if (!_shouldApplySystemUI()) {
+      return;
+    }
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiOverlayStyle(
@@ -92,6 +120,16 @@ class _LibraryPageState extends State<LibraryPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 检查是否在侧边导航栏模式下
+    final navContext = NavigationContext.of(context);
+    final useRailNavigation = navContext?.useRailNavigation ?? false;
+
+    // 在侧边导航栏模式下，不显示 Scaffold 和 AppBar
+    if (useRailNavigation) {
+      return _buildContent(context);
+    }
+
+    // 手机模式：显示完整的 Scaffold + AppBar
     return Scaffold(
       extendBody: true, // 让内容延伸到导航区，配合手势小白条
       extendBodyBehindAppBar: true,
@@ -129,7 +167,15 @@ class _LibraryPageState extends State<LibraryPage> {
           ),
         ),
       ),
-      body: Container(
+      body: _buildContent(context),
+      // 悬浮添加书籍按钮 - 适配平板侧边导航栏
+      floatingActionButton: _buildFloatingActionButton(),
+    );
+  }
+
+  // 提取页面内容部分，在两种模式下共用
+  Widget _buildContent(BuildContext context) {
+    return Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -169,53 +215,60 @@ class _LibraryPageState extends State<LibraryPage> {
             // 顶部自定义 Positioned 已移除，沿用 AppBar 的 flexibleSpace
           ],
         ),
+      );
+  }
+
+  Widget _buildFloatingActionButton() {
+    final isTablet = ResponsiveHelper.isTablet(context);
+    final isDesktop = ResponsiveHelper.isDesktop(context);
+    final useRailNav = isTablet || isDesktop;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    // 侧边导航栏模式：FAB 在右下角，边距较小
+    // 底部导航栏模式：FAB 需要避开导航栏
+    final double bottomMargin = useRailNav
+        ? bottomPadding + 16 // 侧边导航：只需避开安全区域
+        : 68 + 25 + bottomPadding.clamp(0.0, 50.0) + 15; // 底部导航：避开悬浮导航栏
+
+    return Container(
+      margin: EdgeInsets.only(bottom: bottomMargin),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(
+              context,
+            ).colorScheme.primary.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
       ),
-      // 悬浮添加书籍按钮
-      floatingActionButton: Container(
-        margin: EdgeInsets.only(
-          bottom: 68 +
-              25 +
-              (MediaQuery.of(context).padding.bottom).clamp(0.0, 50.0) +
-              15, // 精确避开悬浮导航栏，减少边距
-        ),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Theme.of(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: FloatingActionButton(
+            onPressed: () async {
+              final result = await Navigator.push(
                 context,
-              ).colorScheme.primary.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-              spreadRadius: 0,
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: FloatingActionButton(
-              onPressed: () async {
-                final result = await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ImportBookPage(),
-                  ),
-                );
-                // 导入完成后刷新书籍列表
-                if (result == true || mounted) {
-                  _loadBooks();
-                }
-              },
-              backgroundColor: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: 0.9),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              heroTag: "add_book_fab", // 添加唯一标识避免冲突
-              child: const Icon(Icons.add, size: 28),
-            ),
+                MaterialPageRoute(
+                  builder: (context) => const ImportBookPage(),
+                ),
+              );
+              // 导入完成后刷新书籍列表
+              if (result == true && mounted) {
+                _loadBooks();
+              }
+            },
+            backgroundColor: Theme.of(
+              context,
+            ).colorScheme.primary.withValues(alpha: 0.9),
+            foregroundColor: Colors.white,
+            elevation: 0,
+            heroTag: "add_book_fab", // 添加唯一标识避免冲突
+            child: const Icon(Icons.add, size: 28),
           ),
         ),
       ),
@@ -323,77 +376,90 @@ class _LibraryPageState extends State<LibraryPage> {
     // 毛玻璃效果增强 - 网格容器背景
     // 为整个书籍网格添加细微的毛玻璃背景层
 
-    int crossAxisCount;
-    double childAspectRatio;
-    double spacing;
+    // 使用 ResponsiveHelper 获取响应式列数和纵横比
+    int crossAxisCount = ResponsiveHelper.getBookGridColumns(context);
 
+    // 根据屏幕类型调整间距
+    double spacing;
     if (isDesktop) {
-      crossAxisCount = 5; // 桌面增加到5列，显示更多书籍
-      childAspectRatio = 0.55; // 更长的书籍比例，稍微加长
       spacing = 16;
     } else if (isTablet) {
-      crossAxisCount = 4; // 平板4列
-      childAspectRatio = 0.55; // 更长的书籍比例，稍微加长
       spacing = 14;
     } else {
-      // 手机端固定2列显示
-      crossAxisCount = 2;
-      childAspectRatio = 0.65; // 手机端优化比例
       spacing = 12;
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          stops: const [0.0, 0.3, 0.7, 1.0],
-          colors: [
-            Theme.of(context).colorScheme.surface.withValues(alpha: 0.0),
-            Theme.of(
-              context,
-            ).colorScheme.primaryContainer.withValues(alpha: 0.03),
-            Theme.of(
-              context,
-            ).colorScheme.secondaryContainer.withValues(alpha: 0.03),
-            Theme.of(context).colorScheme.surface.withValues(alpha: 0.0),
-          ],
-        ),
-      ),
-      child: GridView.builder(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          topInset + 60 + 16,
-          16,
-          // 精确计算悬浮导航栏占用空间：导航栏68px + 边距25px + 底部安全区域(限制最大值) + 10px缓冲
-          68 +
-              25 +
-              (MediaQuery.of(context).padding.bottom).clamp(0.0, 50.0) +
-              10,
-        ),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: crossAxisCount,
-          crossAxisSpacing: spacing,
-          mainAxisSpacing: spacing + 8,
-          childAspectRatio: childAspectRatio,
-        ),
-        itemCount: _books.length,
-        itemBuilder: (context, index) {
-          final book = _books[index];
-          return _BookCoverItem(
-            book: book,
-            onTap: () async {
-              final fullBook = await _bookDao.getBookById(book.id!);
-              if (fullBook != null && mounted && context.mounted) {
-                // 直接打开沉浸式阅读器
-                await ReadingRouterService.openBook(context, fullBook);
-                _loadBooks();
-              }
+    final gap = isTablet ? 4.0 : 6.0;
+    final textHeight = isTablet ? 26.0 : 36.0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 让网格高度为 3:4 封面 + 文本区域预留高度
+        final horizontalPadding = 16.0 * 2;
+        final totalSpacing = spacing * (crossAxisCount - 1);
+        final availableWidth = math.max(
+          0.0,
+          constraints.maxWidth - horizontalPadding - totalSpacing,
+        );
+        final itemWidth = availableWidth / crossAxisCount;
+        final itemHeight = (itemWidth * 4 / 3) + textHeight + gap;
+        final childAspectRatio =
+            itemWidth > 0 ? itemWidth / itemHeight : 0.75;
+
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: const [0.0, 0.3, 0.7, 1.0],
+              colors: [
+                Theme.of(context).colorScheme.surface.withValues(alpha: 0.0),
+                Theme.of(
+                  context,
+                ).colorScheme.primaryContainer.withValues(alpha: 0.03),
+                Theme.of(
+                  context,
+                ).colorScheme.secondaryContainer.withValues(alpha: 0.03),
+                Theme.of(context).colorScheme.surface.withValues(alpha: 0.0),
+              ],
+            ),
+          ),
+          child: GridView.builder(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              topInset + 60 + 16,
+              16,
+              // 精确计算悬浮导航栏占用空间：导航栏68px + 边距25px + 底部安全区域(限制最大值) + 10px缓冲
+              68 +
+                  25 +
+                  (MediaQuery.of(context).padding.bottom).clamp(0.0, 50.0) +
+                  10,
+            ),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              crossAxisSpacing: spacing,
+              mainAxisSpacing: spacing + 8,
+              childAspectRatio: childAspectRatio,
+            ),
+            itemCount: _books.length,
+            itemBuilder: (context, index) {
+              final book = _books[index];
+              return _BookCoverItem(
+                book: book,
+                onTap: () async {
+                  final fullBook = await _bookDao.getBookById(book.id!);
+                  if (fullBook != null && mounted && context.mounted) {
+                    // 直接打开沉浸式阅读器
+                    await ReadingRouterService.openBook(context, fullBook);
+                    _loadBooks();
+                  }
+                },
+                onLongPress: () => _showBookOptions(book),
+              );
             },
-            onLongPress: () => _showBookOptions(book),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -836,9 +902,9 @@ class _LibraryPageState extends State<LibraryPage> {
                 ),
                 TextButton(
                   onPressed: () async {
-                    // Store the Navigator and ScaffoldMessenger before the async gap.
+                    // Store the Navigator and toast context before the async gap.
                     final navigator = Navigator.of(context);
-                    final scaffoldMessenger = ScaffoldMessenger.of(context);
+                    final toastContext = this.context;
 
                     // 关闭确认对话框
                     navigator.pop();
@@ -880,20 +946,13 @@ class _LibraryPageState extends State<LibraryPage> {
                       Navigator.of(context).pop();
 
                       _loadBooks();
-                      scaffoldMessenger.showSnackBar(
-                        SnackBar(content: Text('《${book.title}》已删除')),
-                      );
+                      showSideToast(toastContext, '《${book.title}》已删除');
                     } catch (e) {
                       // 关闭进度对话框
                       Navigator.of(context).pop();
 
                       // Handle error
-                      scaffoldMessenger.showSnackBar(
-                        SnackBar(
-                          content: Text('删除失败: $e'),
-                          backgroundColor: Theme.of(context).colorScheme.error,
-                        ),
-                      );
+                      showSideToast(toastContext, '删除失败: $e');
                     }
                   },
                   child: Text(
@@ -999,139 +1058,152 @@ class _BookCoverItem extends StatelessWidget {
       onTap: onTap,
       onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 书籍封面区域 - 占据主要空间
-          Expanded(
-            flex: 8, // 给封面最多空间
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                    spreadRadius: 0,
-                  ),
-                ],
-              ),
-              child: Stack(
-                children: [
-                  // 封面图片或默认图标
-                  ClipRRect(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isTablet = ResponsiveHelper.isTablet(context);
+          final gap = isTablet ? 4.0 : 6.0;
+          final textHeight = isTablet ? 26.0 : 36.0;
+          final maxWidth = constraints.maxWidth;
+          final maxHeight = constraints.maxHeight;
+          final targetCoverHeight = maxWidth * 4 / 3;
+          final availableCoverHeight =
+              math.max(0.0, maxHeight - textHeight - gap);
+          final coverHeight =
+              math.min(availableCoverHeight, targetCoverHeight);
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 书籍封面区域 - 3:4比例，但不超过可用高度
+              SizedBox(
+                width: double.infinity,
+                height: coverHeight,
+                child: Container(
+                  decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    child: _buildCoverImage(context, book),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.15),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                        spreadRadius: 0,
+                      ),
+                    ],
                   ),
-                  // 阅读进度指示器（仅在有进度时显示）
-                  if (progress > 0)
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          borderRadius: const BorderRadius.only(
-                            bottomLeft: Radius.circular(12),
-                            bottomRight: Radius.circular(12),
-                          ),
-                        ),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: progress.clamp(0.0, 1.0),
+                  child: Stack(
+                    children: [
+                      // 封面图片或默认图标
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: _buildCoverImage(context, book),
+                      ),
+                      // 阅读进度指示器（仅在有进度时显示）
+                      if (progress > 0)
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
                           child: Container(
+                            height: 4,
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primary,
+                              color: Colors.black.withValues(alpha: 0.3),
                               borderRadius: const BorderRadius.only(
                                 bottomLeft: Radius.circular(12),
                                 bottomRight: Radius.circular(12),
                               ),
                             ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  // "在读"标签
-                  if (book.currentPage > 0)
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.2),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: progress.clamp(0.0, 1.0),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  borderRadius: const BorderRadius.only(
+                                    bottomLeft: Radius.circular(12),
+                                    bottomRight: Radius.circular(12),
+                                  ),
+                                ),
+                              ),
                             ),
-                          ],
-                        ),
-                        child: Text(
-                          '在读',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.onPrimary,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w500,
                           ),
+                        ),
+                      // "在读"标签
+                      if (book.currentPage > 0)
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primary,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              '在读',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onPrimary,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(height: gap),
+              // 书籍信息区域 - 固定高度
+              SizedBox(
+                height: textHeight,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 书名 - 使用滚动文本
+                      Expanded(
+                        child: ScrollingText(
+                          text: book.title,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                          duration: const Duration(seconds: 4),
+                          pauseDuration: const Duration(milliseconds: 1500),
                         ),
                       ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          // 书籍信息区域 - 紧凑显示
-          Expanded(
-            flex: 2, // 给文本信息适当空间
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 书名 - 使用滚动文本
-                  Flexible(
-                    flex: 2,
-                    child: ScrollingText(
-                      text: book.title,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                      duration: const Duration(seconds: 4),
-                      pauseDuration: const Duration(milliseconds: 1500),
-                    ),
+                      const SizedBox(height: 2),
+                      // 作者信息
+                      Text(
+                        book.author,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.6),
+                              fontSize: 11,
+                            ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  // 作者信息
-                  Flexible(
-                    flex: 1,
-                    child: Text(
-                      book.author,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withValues(alpha: 0.6),
-                            fontSize: 11,
-                          ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

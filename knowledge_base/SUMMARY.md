@@ -1,5 +1,8 @@
 # 知识库总结 - 真实问题与解决方案
 
+> 注意：文档中提到的 `stable_text_paginator.dart` / `stable_reader_test_page.dart` 已不在当前仓库。
+> 当前实现请以 `lib/services/enhanced_paginator.dart` 与 `lib/pages/reader_page.dart` 为准。
+
 ## 📚 知识库文档列表
 
 ### 核心实施文档（请优先阅读）
@@ -73,18 +76,14 @@
 
 我为您创建了：
 
-1. **`lib/services/stable_text_paginator.dart`**
-   - 简单稳定的分页器
-   - 不用二分查找
-   - 配置严格一致
-   - 内置图片支持
-   - 详细的日志输出
+1. **`lib/services/enhanced_paginator.dart`**
+   - 当前分页实现
+   - 支持图片与渐进式分页
+   - 性能与稳定性权衡后的主版本
 
-2. **`lib/pages/stable_reader_test_page.dart`**
-   - 完整的测试页面
-   - 可以实时调整参数
-   - 立即看到效果
-   - 验证稳定性
+2. **`lib/pages/reader_page.dart`**
+   - 当前阅读页集成位置
+   - 相关 UI/配置/分页流程集中在此文件
 
 ### 🔑 核心原则
 
@@ -114,22 +113,7 @@
 
 ### 第1步：测试（5分钟）
 
-```dart
-// 在任意页面添加按钮
-ElevatedButton(
-  onPressed: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const StableReaderTestPage(),
-      ),
-    );
-  },
-  child: const Text('测试稳定分页'),
-)
-```
-
-运行应用，打开测试页面，调整参数，看看是否稳定。
+当前仓库没有独立的测试页。建议直接在 `reader_page.dart` 中打开书籍，修改字体/行距/边距等配置进行验证，并观察日志输出。
 
 ### 第2步：集成（30分钟）
 
@@ -158,7 +142,7 @@ ElevatedButton(
 ❌ 可靠性：差（TextPainter配置不一致）
 ```
 
-### 新方案（stable_text_paginator.dart）
+### 现有方案（enhanced_paginator.dart）
 ```
 ✅ 稳定性：优（参数变化后正常）
 ✅ 可维护性：优（代码简单清晰）

@@ -706,12 +706,6 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         letterSpacing: settings.letterSpacing,
         supportImages: true, // 🔑 启用图片支持
         quickSamplePages: 10, // 快速采样前10页
-        onProgress: (currentPage, stage) {
-          // 更新进度显示
-          state = state.copyWith(
-            loadingStage: '$stage ($currentPage 页)',
-          );
-        },
       );
 
       // 阶段1：使用快速估算结果，立即显示

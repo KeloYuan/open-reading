@@ -33,11 +33,13 @@ class MetadataExtractionParams {
   final Uint8List bytes;
   final String fileName;
   final String extension;
+  final String? encodingOverride;
 
   MetadataExtractionParams({
     required this.bytes,
     required this.fileName,
     required this.extension,
+    this.encodingOverride,
   });
 }
 
@@ -96,7 +98,10 @@ Future<SimpleMetadata> extractTxtMetadataInIsolate(
         : params.bytes;
 
     // 智能检测编码（支持 GB2312/GBK/UTF-8）
-    String content = _detectAndDecodeText(bytesToAnalyze);
+    String content = _detectAndDecodeText(
+      bytesToAnalyze,
+      encodingOverride: params.encodingOverride,
+    );
 
     // 提取标题（从前几行）
     final lines = content
@@ -116,6 +121,10 @@ Future<SimpleMetadata> extractTxtMetadataInIsolate(
           break;
         }
       }
+    }
+    if (_looksGarbled(title) && params.encodingOverride != null) {
+      title = params.fileName
+          .replaceAll(RegExp(r'\.(txt)$', caseSensitive: false), '');
     }
 
     // 估算页数（基于文件大小，避免完全解析）
@@ -144,6 +153,70 @@ Future<SimpleMetadata> extractTxtMetadataInIsolate(
       estimatedPages: (params.bytes.length / 10000).ceil().clamp(1, 9999),
     );
   }
+}
+
+bool _looksGarbled(String text) {
+  final value = text.trim();
+  if (value.isEmpty) {
+    return true;
+  }
+
+  int total = 0;
+  int cjk = 0;
+  int asciiLetters = 0;
+  int digits = 0;
+  int latinExtended = 0;
+  int otherNonAscii = 0;
+  int replacement = 0;
+
+  for (final rune in value.runes) {
+    if (rune <= 0x20) {
+      continue;
+    }
+    total++;
+    if (rune == 0xfffd) {
+      replacement++;
+      continue;
+    }
+    if ((rune >= 0x4e00 && rune <= 0x9fff) ||
+        (rune >= 0x3400 && rune <= 0x4dbf) ||
+        (rune >= 0xf900 && rune <= 0xfaff)) {
+      cjk++;
+      continue;
+    }
+    if ((rune >= 0x41 && rune <= 0x5a) ||
+        (rune >= 0x61 && rune <= 0x7a)) {
+      asciiLetters++;
+      continue;
+    }
+    if (rune >= 0x30 && rune <= 0x39) {
+      digits++;
+      continue;
+    }
+    if (rune >= 0x00c0 && rune <= 0x024f) {
+      latinExtended++;
+      continue;
+    }
+    if (rune > 0x7e) {
+      otherNonAscii++;
+    }
+  }
+
+  if (total == 0 || replacement > 0) {
+    return true;
+  }
+
+  final asciiRatio = (asciiLetters + digits) / total;
+  final cjkRatio = cjk / total;
+  final nonAsciiRatio = (latinExtended + otherNonAscii) / total;
+
+  if (cjkRatio >= 0.2) {
+    return false;
+  }
+  if (asciiRatio >= 0.6) {
+    return false;
+  }
+  return nonAsciiRatio >= 0.3;
 }
 
 /// 在isolate中提取MOBI元数据
@@ -221,8 +294,17 @@ Future<SimpleMetadata> extractMobiMetadataInIsolate(
 /// 在 isolate 中使用的简化版编码检测
 /// 参数 [bytes] 要解码的字节数组
 /// 返回解码后的文本内容
-String _detectAndDecodeText(Uint8List bytes) {
+String _detectAndDecodeText(Uint8List bytes, {String? encodingOverride}) {
   debugPrint('🔍 [Isolate] 开始编码检测，文件大小: ${bytes.length} 字节');
+
+  final normalizedOverride = _normalizeEncoding(encodingOverride);
+  if (normalizedOverride != 'auto') {
+    final forced = _decodeWithEncodingOverride(bytes, normalizedOverride);
+    if (forced != null && forced.isNotEmpty) {
+      debugPrint('✅ [Isolate] 使用指定编码: $normalizedOverride');
+      return forced;
+    }
+  }
 
   // 1. 检测 BOM
   if (bytes.length >= 3 &&
@@ -248,6 +330,17 @@ String _detectAndDecodeText(Uint8List bytes) {
   try {
     final content = utf8.decode(bytes, allowMalformed: false);
     if (_isValidUtf8Content(content)) {
+      final utf8Quality = _contentQualityScore(content);
+      try {
+        final gbkContent = gbk.decode(bytes);
+        final gbkQuality = _contentQualityScore(gbkContent);
+        if (gbkQuality > utf8Quality + 0.15 &&
+            _isValidGbkContent(gbkContent)) {
+          debugPrint('✅ [Isolate] 识别为GBK/GB2312（质量更高）');
+          return gbkContent;
+        }
+      } catch (_) {}
+
       debugPrint('✅ [Isolate] UTF-8 解码成功 (${content.length} 字符)');
       return content;
     }
@@ -263,9 +356,14 @@ String _detectAndDecodeText(Uint8List bytes) {
 
   if (gbkScore > 0.3) {
     try {
-      final content = gbk.decode(bytes);
+      var content = gbk.decode(bytes);
       // 如果评分很高(>0.8)，直接接受
       if (gbkScore > 0.8) {
+        final chineseRatio = _chineseRatio(content);
+        if (chineseRatio < 0.05) {
+          debugPrint('⚠️ [Isolate] GBK 中文比例过低，尝试宽松解码');
+          content = _decodeGbkLenient(bytes);
+        }
         debugPrint(
             '✅ [Isolate] GBK 解码成功 (高评分: ${gbkScore.toStringAsFixed(2)}, ${content.length} 字符)');
         return content;
@@ -329,6 +427,36 @@ String _decodeUtf16BE(Uint8List bytes) {
     buffer.writeCharCode(codeUnit);
   }
   return buffer.toString();
+}
+
+String _normalizeEncoding(String? encoding) {
+  if (encoding == null) return 'auto';
+  final normalized = encoding.toLowerCase().replaceAll('-', '').trim();
+  if (normalized.isEmpty) return 'auto';
+  if (normalized == 'gb2312' || normalized == 'gbk') return 'gbk';
+  if (normalized == 'utf8') return 'utf8';
+  if (normalized == 'utf16le') return 'utf16le';
+  if (normalized == 'utf16be') return 'utf16be';
+  return 'auto';
+}
+
+String? _decodeWithEncodingOverride(Uint8List bytes, String encoding) {
+  try {
+    switch (encoding) {
+      case 'gbk':
+        return gbk.decode(bytes);
+      case 'utf8':
+        return utf8.decode(bytes, allowMalformed: true);
+      case 'utf16le':
+        return _decodeUtf16LE(bytes);
+      case 'utf16be':
+        return _decodeUtf16BE(bytes);
+      default:
+        return null;
+    }
+  } catch (_) {
+    return null;
+  }
 }
 
 /// 计算 GBK 特征评分
@@ -422,4 +550,49 @@ bool _isValidGbkContent(String content) {
 bool _hasExcessiveReplacementChars(String content) {
   final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
   return replacementCount > content.length * 0.1;
+}
+
+double _contentQualityScore(String content) {
+  if (content.isEmpty) return 0.0;
+  final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
+  final replacementRatio = replacementCount / content.length;
+  final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length;
+  final chineseRatio = chineseCount / content.length;
+  final printableCount = content.codeUnits.where((c) {
+    return (c >= 32 && c <= 126) || c == 9 || c == 10 || c == 13;
+  }).length;
+  final printableRatio = printableCount / content.length;
+  final penalty = (1.0 - (replacementRatio * 5)).clamp(0.0, 1.0);
+  return (chineseRatio * 0.7 + printableRatio * 0.3) * penalty;
+}
+
+double _chineseRatio(String content) {
+  if (content.isEmpty) return 0.0;
+  final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length;
+  return chineseCount / content.length;
+}
+
+String _decodeGbkLenient(Uint8List bytes) {
+  final buffer = StringBuffer();
+  int i = 0;
+  while (i < bytes.length) {
+    final b1 = bytes[i];
+    if (b1 <= 0x7F) {
+      buffer.writeCharCode(b1);
+      i++;
+      continue;
+    }
+    if (i + 1 < bytes.length) {
+      final b2 = bytes[i + 1];
+      if (b2 >= 0x40 && b2 <= 0xFE && b2 != 0x7F) {
+        try {
+          buffer.write(gbk.decode([b1, b2]));
+        } catch (_) {}
+        i += 2;
+        continue;
+      }
+    }
+    i++;
+  }
+  return buffer.toString();
 }

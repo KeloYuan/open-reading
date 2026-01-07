@@ -19,7 +19,6 @@ class SystemTts extends BaseTts {
   late FlutterTts flutterTts;
 
   String? _currentVoiceText;
-  static String? _prevVoiceText;
 
   bool restarting = false;
   bool _isTtsEngineReady = false; // TTS引擎是否就绪
@@ -41,6 +40,11 @@ class SystemTts extends BaseTts {
   @override
   final ValueNotifier<TtsStateEnum> ttsStateNotifier =
       ValueNotifier<TtsStateEnum>(TtsStateEnum.stopped);
+
+  /// 当前音色
+  TtsVoice? _currentVoice;
+  List<TtsVoice> _availableVoices = [];
+  bool _hasLoadedVoices = false;
 
   @override
   void updateTtsState(TtsStateEnum newState) {
@@ -221,6 +225,9 @@ class SystemTts extends BaseTts {
       }
 
       debugPrint('   ✅ TTS引擎配置完成');
+
+      // 加载保存的音色设置
+      await _loadSavedVoice();
 
       // 标记引擎已就绪
       _isTtsEngineReady = true;
@@ -421,11 +428,7 @@ class SystemTts extends BaseTts {
 
   @override
   Future<void> resume() async {
-    if (isAndroid) {
-      speak(content: _prevVoiceText);
-    } else {
-      speak(content: _currentVoiceText);
-    }
+    speak(content: _currentVoiceText);
     // resume会在speak中通过setStartHandler重新启动高亮计时器
   }
 
@@ -468,5 +471,175 @@ class SystemTts extends BaseTts {
   Future<void> dispose() async {
     _stopHighlightTimer();
     await flutterTts.stop();
+  }
+
+  @override
+  TtsVoice? get currentVoice => _currentVoice;
+
+  @override
+  Future<void> setVoice(TtsVoice voice) async {
+    try {
+      debugPrint('🔊 设置音色: ${voice.label} (${voice.id})');
+
+      // iOS: 设置语音
+      if (isIOS) {
+        await flutterTts.setVoice({
+          'name': voice.name,
+          'locale': voice.locale,
+        });
+        debugPrint('   ✅ iOS 音色已设置');
+      }
+      // Android: 设置语言和语音
+      else if (isAndroid) {
+        await flutterTts.setLanguage(voice.locale);
+        if (voice.name.isNotEmpty) {
+          await flutterTts.setVoice({
+            'name': voice.name,
+            'locale': voice.locale,
+          });
+        }
+        debugPrint('   ✅ Android 音色已设置');
+      }
+
+      _currentVoice = voice;
+      TtsPreferences().voiceId = voice.id;
+
+      // 如果正在播放，重新应用音色
+      if (_currentVoiceText != null && ttsStateNotifier.value == TtsStateEnum.playing) {
+        debugPrint('   🔄 重新应用音色到当前播放');
+        await stop();
+        await Future.delayed(const Duration(milliseconds: 100));
+        await speak(content: _currentVoiceText);
+      }
+
+      debugPrint('✅ 音色设置完成');
+    } catch (e, stack) {
+      debugPrint('❌ 设置音色失败: $e');
+      debugPrint('Stack: $stack');
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<TtsVoice>> getVoices() async {
+    if (_hasLoadedVoices && _availableVoices.isNotEmpty) {
+      return _availableVoices;
+    }
+
+    try {
+      debugPrint('🔍 获取可用音色列表...');
+
+      final voices = <TtsVoice>[];
+
+      // iOS: 获取语音列表
+      if (isIOS) {
+        final iosVoices = await flutterTts.getVoices;
+        if (iosVoices != null) {
+          for (final voice in iosVoices) {
+            if (voice is Map<String, dynamic>) {
+              final name = voice['name'] as String? ?? '';
+              final locale = voice['locale'] as String? ?? 'zh-CN';
+              voices.add(TtsVoice(
+                name: name,
+                locale: locale,
+                identifier: name,
+                displayName: voice['displayName'] as String?,
+              ));
+            }
+          }
+        }
+        debugPrint('   ✅ iOS: 找到 ${voices.length} 个音色');
+      }
+      // Android: 获取语音列表
+      else if (isAndroid) {
+        // Android 需要先设置语言才能获取该语言的语音
+        final currentLang = TtsPreferences().language;
+        final androidVoices = await flutterTts.getVoices;
+        if (androidVoices != null) {
+          for (final voice in androidVoices) {
+            if (voice is Map<String, dynamic>) {
+              final name = voice['name'] as String? ?? '';
+              final locale = voice['locale'] as String? ?? currentLang;
+              voices.add(TtsVoice(
+                name: name,
+                locale: locale,
+                identifier: name,
+                displayName: voice['displayName'] as String?,
+              ));
+            }
+          }
+        }
+        debugPrint('   ✅ Android: 找到 ${voices.length} 个音色');
+      }
+      // Windows: 使用 getLanguages 模拟
+      else if (isWindows) {
+        final languages = await flutterTts.getLanguages;
+        if (languages != null) {
+          for (final lang in languages) {
+            if (lang is String) {
+              voices.add(TtsVoice(
+                name: 'Default',
+                locale: lang,
+                displayName: lang,
+              ));
+            }
+          }
+        }
+        debugPrint('   ✅ Windows: 找到 ${voices.length} 个音色');
+      }
+
+      _availableVoices = voices;
+      _hasLoadedVoices = true;
+
+      debugPrint('✅ 共找到 ${voices.length} 个可用音色');
+      return voices;
+    } catch (e, stack) {
+      debugPrint('❌ 获取音色列表失败: $e');
+      debugPrint('Stack: $stack');
+      return [];
+    }
+  }
+
+  @override
+  Future<List<TtsVoice>> getVoicesByLanguage(String language) async {
+    final allVoices = await getVoices();
+    final filtered = allVoices.where((v) => v.locale.startsWith(language)).toList();
+    debugPrint('🔍 语言 $language 的音色: ${filtered.length} 个');
+    return filtered;
+  }
+
+  /// 初始化时加载并应用保存的音色
+  Future<void> _loadSavedVoice() async {
+    try {
+      final savedVoiceId = TtsPreferences().voiceId;
+      if (savedVoiceId == null) {
+        debugPrint('   ℹ️ 无保存的音色设置，使用系统默认');
+        return;
+      }
+
+      debugPrint('   🔄 加载保存的音色: $savedVoiceId');
+
+      final voices = await getVoices();
+      final savedVoice = voices.where((v) => v.id == savedVoiceId).firstOrNull;
+
+      if (savedVoice != null) {
+        _currentVoice = savedVoice;
+        // iOS/Android: 设置语音
+        if (isIOS || isAndroid) {
+          await flutterTts.setVoice({
+            'name': savedVoice.name,
+            'locale': savedVoice.locale,
+          });
+          if (isAndroid) {
+            await flutterTts.setLanguage(savedVoice.locale);
+          }
+        }
+        debugPrint('   ✅ 已加载保存的音色: ${savedVoice.label}');
+      } else {
+        debugPrint('   ⚠️ 保存的音色不存在，使用系统默认');
+      }
+    } catch (e) {
+      debugPrint('   ⚠️ 加载保存的音色失败: $e');
+    }
   }
 }

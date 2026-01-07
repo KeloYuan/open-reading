@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/book_source.dart';
 import '../services/book_source_service.dart';
+import '../widgets/side_toast.dart';
 
 /// 书源管理页面
 /// 提供书源搜索、管理、导入导出功能
@@ -77,7 +78,7 @@ class _BookSourcePageState extends State<BookSourcePage>
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showErrorSnackBar('加载书源失败: $e');
+        _showToast('加载书源失败: $e');
       }
     }
   }
@@ -436,7 +437,7 @@ class _BookSourcePageState extends State<BookSourcePage>
                   Switch(
                     value: source.enabled,
                     onChanged: (value) => _toggleSourceEnabled(source, value),
-                    activeColor: colorScheme.primary,
+                    activeThumbColor: colorScheme.primary,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ],
@@ -578,28 +579,26 @@ class _BookSourcePageState extends State<BookSourcePage>
         enabled,
       );
       if (success) {
-        _loadData(); // 刷新数据
-        _showSuccessSnackBar(enabled ? '书源已启用' : '书源已禁用');
+        _loadData();
+        _showToast(enabled ? '书源已启用' : '书源已禁用');
       } else {
-        _showErrorSnackBar('操作失败');
+        _showToast('操作失败');
       }
     } catch (e) {
-      _showErrorSnackBar('操作失败: $e');
+      _showToast('操作失败: $e');
     }
   }
 
   void _testSource(BookSource source) {
-    _showInfoSnackBar('书源测试功能开发中...');
+    _showToast('书源测试功能开发中...');
   }
 
   void _showSourceDetail(BookSource source) {
-    // TODO: 实现书源详情页面
-    _showInfoSnackBar('书源详情功能开发中...');
+    _showToast('书源详情功能开发中...');
   }
 
   void _showAddSourceDialog() {
-    // TODO: 实现添加书源对话框
-    _showInfoSnackBar('添加书源功能开发中...');
+    _showToast('添加书源功能开发中...');
   }
 
   void _showMenuDialog() {
@@ -615,7 +614,7 @@ class _BookSourcePageState extends State<BookSourcePage>
               title: const Text('导入书源'),
               onTap: () {
                 Navigator.pop(context);
-                _showInfoSnackBar('导入书源功能开发中...');
+                _showToast('导入书源功能开发中...');
               },
             ),
             ListTile(
@@ -623,7 +622,7 @@ class _BookSourcePageState extends State<BookSourcePage>
               title: const Text('导出书源'),
               onTap: () {
                 Navigator.pop(context);
-                _showInfoSnackBar('导出书源功能开发中...');
+                _showToast('导出书源功能开发中...');
               },
             ),
             ListTile(
@@ -646,21 +645,7 @@ class _BookSourcePageState extends State<BookSourcePage>
     );
   }
 
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.green),
-    );
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
-  }
-
-  void _showInfoSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.blue),
-    );
+  void _showToast(String message) {
+    showSideToast(context, message);
   }
 }

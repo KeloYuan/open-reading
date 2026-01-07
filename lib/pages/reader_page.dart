@@ -1,12 +1,14 @@
 ﻿import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:path/path.dart' as path;
+import 'package:vector_math/vector_math_64.dart' as vm;
 import '../providers/reader_providers.dart';
 import '../widgets/enhanced_text_selection_toolbar.dart';
 import '../widgets/tts_settings_sheet.dart';
@@ -18,8 +20,11 @@ import '../services/book_dao.dart';
 import '../services/data_manager.dart';
 import '../services/bookmark_dao.dart';
 import '../services/reading_stats_dao.dart';
+import '../services/enhanced_txt_import_service.dart';
+import '../services/text_preprocessor.dart';
 import 'cover_pagination_view.dart';
 import '../widgets/toc_widget.dart';
+import '../widgets/side_toast.dart';
 
 /// 混合内容元素（文本或图片）
 class _ContentElement {
@@ -435,109 +440,6 @@ List<Chapter> _buildChapterHierarchy({
   }
 
   return root;
-}
-
-void _showSideToast(BuildContext context, String message) {
-  final overlay = Overlay.of(context);
-  if (overlay == null) return;
-
-  late OverlayEntry entry;
-  entry = OverlayEntry(
-    builder: (context) => _SideToast(
-      message: message,
-      onDismissed: () => entry.remove(),
-    ),
-  );
-  overlay.insert(entry);
-}
-
-class _SideToast extends StatefulWidget {
-  final String message;
-  final VoidCallback onDismissed;
-
-  const _SideToast({
-    required this.message,
-    required this.onDismissed,
-  });
-
-  @override
-  State<_SideToast> createState() => _SideToastState();
-}
-
-class _SideToastState extends State<_SideToast>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<Offset> _slideAnimation;
-  late final Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 240),
-      reverseDuration: const Duration(milliseconds: 180),
-    );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0.6, 0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-      reverseCurve: Curves.easeIn,
-    );
-    _controller.forward();
-    Future.delayed(const Duration(seconds: 2), () async {
-      if (!mounted) return;
-      await _controller.reverse();
-      if (mounted) {
-        widget.onDismissed();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final topInset = MediaQuery.of(context).padding.top;
-    return Positioned(
-      top: topInset + 16,
-      right: 12,
-      child: SlideTransition(
-        position: _slideAnimation,
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: Material(
-            color: scheme.surfaceContainerHigh,
-            elevation: 2,
-            borderRadius: BorderRadius.circular(12),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 260),
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                child: Text(
-                  widget.message,
-                  style: TextStyle(
-                    color: scheme.onSurface,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// 支持句子高亮的文本渲染组件
@@ -1017,20 +919,30 @@ class ReaderPage extends ConsumerStatefulWidget {
   /// 书籍ID（用于保存阅读进度）
   final int? bookId;
 
+  /// 全量内容加载器（用于分块加载）
+  final Future<String> Function()? fullContentLoader;
+
   const ReaderPage({
     Key? key,
     required this.bookContent,
     this.bookTitle,
     this.initialPageIndex = 0,
     this.bookId,
+    this.fullContentLoader,
   }) : super(key: key);
 
   @override
   ConsumerState<ReaderPage> createState() => _ReaderPageState();
 }
 
+/// 全屏控制方法通道
+const _fullscreenChannel = MethodChannel('com.niki.xxread/fullscreen');
+
 class _ReaderPageState extends ConsumerState<ReaderPage>
     with TickerProviderStateMixin, WidgetsBindingObserver {
+  late String _currentBookContent;
+  bool _isUpgradingContent = false;
+  bool _hasRequestedFullContent = false;
   // 动画控制器用于工具栏显示隐藏
   late AnimationController _toolbarAnimationController;
   late Animation<double> _toolbarOpacityAnimation;
@@ -1069,6 +981,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     // 记录阅读开始时间
     _readingStartTime = DateTime.now();
     debugPrint('📊 开始记录阅读时间: $_readingStartTime');
+
+    _currentBookContent = widget.bookContent;
 
     _initializeAnimations();
     _initializePage();
@@ -1117,8 +1031,10 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       // 延迟一帧执行，确保窗口状态已更新
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && !ref.read(toolbarProvider).isVisible) {
-          debugPrint('📱 应用恢复前台，重新进入沉浸式模式');
+          debugPrint('📱 [Lifecycle] 应用恢复前台，工具栏未显示，重新进入全屏');
           _hideSystemUI();
+        } else {
+          debugPrint('📱 [Lifecycle] 应用恢复前台，工具栏可见: ${ref.read(toolbarProvider).isVisible}');
         }
       });
     }
@@ -1217,7 +1133,65 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // 初始化分页，会自动恢复到 initialPageIndex
       await initializePagination();
+      _maybeUpgradeFullContent();
       await _initializeTts(); // 等待TTS初始化完成
+    });
+  }
+
+  void _maybeUpgradeFullContent() {
+    final loader = widget.fullContentLoader;
+    if (loader == null || _hasRequestedFullContent) {
+      return;
+    }
+    _hasRequestedFullContent = true;
+
+    Future(() async {
+      if (!mounted) return;
+      setState(() {
+        _isUpgradingContent = true;
+      });
+
+      final paginationState = ref.read(readerPaginationProvider);
+      final currentCharOffset = paginationState.currentCharOffset;
+      final currentProgress = paginationState.progress;
+
+      String fullContent;
+      try {
+        fullContent = await loader();
+      } catch (e) {
+        debugPrint('❌ 全量内容加载失败: $e');
+        if (mounted) {
+          setState(() {
+            _isUpgradingContent = false;
+          });
+        }
+        return;
+      }
+
+      if (!mounted) return;
+      if (fullContent == _currentBookContent) {
+        setState(() {
+          _isUpgradingContent = false;
+        });
+        return;
+      }
+
+      _currentBookContent = fullContent;
+      await initializePagination();
+
+      if (!mounted) return;
+      final notifier = ref.read(readerPaginationProvider.notifier);
+      if (currentCharOffset != null) {
+        notifier.goToCharIndex(currentCharOffset);
+      } else {
+        notifier.goToProgress(currentProgress);
+      }
+
+      if (mounted) {
+        setState(() {
+          _isUpgradingContent = false;
+        });
+      }
     });
   }
 
@@ -1246,7 +1220,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     final settingsWithPadding = settings.copyWith(padding: responsivePadding);
 
     debugPrint('🎯 初始化沉浸式阅读器分页');
-    debugPrint('   - 书籍内容长度: ${widget.bookContent.length} 字符');
+    debugPrint('   - 书籍内容长度: ${_currentBookContent.length} 字符');
     debugPrint('   - 初始页码: ${widget.initialPageIndex}');
     debugPrint(
       '   - 屏幕尺寸: ${size.width.toInt()}x${size.height.toInt()} (DPR: ${devicePixelRatio.toStringAsFixed(2)})',
@@ -1259,7 +1233,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     );
 
     await ref.read(readerPaginationProvider.notifier).initializePagination(
-          text: widget.bookContent,
+          text: _currentBookContent,
           screenSize: adjustedSize, // ✅ 使用调整后的尺寸
           settings: settingsWithPadding,
           statusBarHeight: statusBarHeight,
@@ -1283,6 +1257,81 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       debugPrint('❌ TTS初始化失败: $e');
       debugPrint('Stack: $stack');
     }
+  }
+
+  Future<void> reloadWithEncoding(String encoding) async {
+    final bookId = widget.bookId;
+    if (bookId == null) {
+      showSideToast(context, '无法修改编码：缺少书籍信息');
+      return;
+    }
+
+    final book = await BookDao().getBookById(bookId);
+    if (book == null) {
+      showSideToast(context, '未找到书籍信息');
+      return;
+    }
+    if (book.format.toLowerCase() != 'txt') {
+      showSideToast(context, '仅TXT支持手动编码');
+      return;
+    }
+
+    final normalized = EnhancedTxtImportService.normalizeEncoding(encoding);
+    final stored = normalized == 'auto' ? null : normalized;
+    final updatedBook = book.copyWith(textEncoding: stored);
+    await BookDao().updateBook(updatedBook);
+
+    showSideToast(context, '编码已更新，重新加载中...');
+
+    final file = File(updatedBook.filePath);
+    if (!await file.exists()) {
+      showSideToast(context, '文件不存在，无法重新加载');
+      return;
+    }
+
+    final bytes = await file.readAsBytes();
+    final txtService = EnhancedTxtImportService();
+    var content = txtService.decodeWithOverride(
+      bytes,
+      encodingOverride: updatedBook.textEncoding,
+    );
+
+    if (content.length > 500000) {
+      content = await compute(
+        preprocessTextInIsolate,
+        TextPreprocessRequest(
+          text: content,
+          indentSize: 2,
+          indentDialogue: true,
+          compressEmptyLines: true,
+          paragraphSpacing: 0,
+        ),
+      );
+    } else {
+      content = TextPreprocessor().process(
+        content,
+        indentSize: 2,
+        indentDialogue: true,
+        compressEmptyLines: true,
+        paragraphSpacing: 0,
+      );
+    }
+
+    if (!mounted) return;
+
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => ReaderPage(
+          bookContent: content,
+          bookTitle: updatedBook.title,
+          initialPageIndex: updatedBook.currentPage,
+          bookId: updatedBook.id,
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    );
   }
 
   /// 获取当前页面文本（用于TTS）
@@ -1434,6 +1483,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
   /// 显示工具栏
   void _showToolbar() {
+    debugPrint('📱 [Toolbar] _showToolbar 调用');
     ref.read(toolbarProvider.notifier).show();
     _toolbarAnimationController.forward();
 
@@ -1449,11 +1499,13 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
   /// 隐藏工具栏
   void _hideToolbar() {
+    debugPrint('📱 [Toolbar] _hideToolbar 调用');
     // 先执行动画
     _toolbarAnimationController.reverse().then((_) {
       // 动画完成后再更新状态
       if (mounted) {
         ref.read(toolbarProvider.notifier).hide();
+        debugPrint('📱 [Toolbar] 工具栏已隐藏');
       }
     });
 
@@ -1483,14 +1535,29 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
   /// 进入沉浸式模式（隐藏状态栏和导航栏）
   void _enterImmersiveMode() {
-    debugPrint('📱 进入沉浸式全屏模式');
+    debugPrint('📱 [Immersive] _enterImmersiveMode 调用，平台: ${Platform.operatingSystem}');
     _hideSystemUI();
+    // 只在 iOS 上安排额外的强化调用
+    if (Platform.isIOS) {
+      _scheduleImmersiveEnforce();
+    }
   }
 
   /// 退出沉浸式模式（恢复状态栏和导航栏）
   void _exitImmersiveMode() {
     _showSystemUI();
     debugPrint('📱 退出沉浸式模式 - 恢复系统UI');
+  }
+
+  void _scheduleImmersiveEnforce() {
+    for (final delayMs in [120, 420]) {
+      Future.delayed(Duration(milliseconds: delayMs), () {
+        if (!mounted) return;
+        if (!ref.read(toolbarProvider).isVisible) {
+          _hideSystemUI();
+        }
+      });
+    }
   }
 
   /// 启用屏幕常亮（防止长按选择文字时黑屏）
@@ -1514,33 +1581,40 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   }
 
   /// 显示系统 UI（状态栏和导航栏）- 工具栏显示时使用
-  Future<void> _showSystemUI() async {
-    try {
-      const platform = MethodChannel('com.niki.xread/fullscreen');
-      await platform.invokeMethod('showSystemUI');
-      debugPrint('📱 显示系统UI - 工具栏可见');
-    } catch (e) {
-      debugPrint('❌ 显示系统UI失败: $e');
-      // 降级使用 Flutter API
-      SystemChrome.setEnabledSystemUIMode(
-        SystemUiMode.manual,
-        overlays: SystemUiOverlay.values,
-      );
+  void _showSystemUI() {
+    debugPrint('📱 [SystemUI] _showSystemUI 调用，平台: ${Platform.operatingSystem}');
+    if (Platform.isAndroid) {
+      // Android: 使用原生方法通道确保系统UI正确显示
+      _fullscreenChannel.invokeMethod('showSystemUI').catchError((e) {
+        debugPrint('⚠️ 原生 showSystemUI 调用失败: $e，使用备用方案');
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      });
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
+    debugPrint('📱 [SystemUI] 已设置为 edgeToEdge（显示系统栏）');
   }
 
   /// 隐藏系统 UI（状态栏和导航栏）- 工具栏隐藏时使用
-  Future<void> _hideSystemUI() async {
-    debugPrint('📱 隐藏系统UI，进入全屏');
-
-    try {
-      const platform = MethodChannel('com.niki.xread/fullscreen');
-      await platform.invokeMethod('hideSystemUI');
-      debugPrint('✅ 原生全屏已设置');
-    } catch (e) {
-      debugPrint('❌ 原生全屏失败: $e，使用降级方案');
-      // 降级使用 Flutter API
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+  void _hideSystemUI() {
+    debugPrint('📱 [SystemUI] _hideSystemUI 调用，平台: ${Platform.operatingSystem}');
+    if (Platform.isAndroid) {
+      // Android: 使用原生方法通道确保完全隐藏系统UI
+      _fullscreenChannel.invokeMethod('hideSystemUI').catchError((e) {
+        debugPrint('⚠️ 原生 hideSystemUI 调用失败: $e，使用备用方案');
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      });
+      debugPrint('📱 [SystemUI] Android 已调用原生 hideSystemUI（全屏）');
+    } else if (Platform.isIOS) {
+      // iOS: 先切换到 edgeToEdge，再切换到 immersive，确保状态栏能正确隐藏
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      // 使用稍长的延迟确保系统能正确响应
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+          debugPrint('📱 [SystemUI] iOS 已设置为 immersive（全屏）');
+        }
+      });
     }
   }
 
@@ -1816,6 +1890,49 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
                             ],
                           ),
                         ),
+                      ),
+                    ),
+                  ),
+                if (_isUpgradingContent)
+                  Positioned(
+                    top: 48,
+                    right: 16,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color:
+                            settings.backgroundColor.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.08),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                settings.textStyle.color ?? Colors.black,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '加载全量内容中',
+                            style: settings.textStyle.copyWith(fontSize: 12),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -3106,7 +3223,9 @@ class _SimulationPaginationViewState extends State<_SimulationPaginationView>
                 transform: Matrix4.identity()
                   ..setEntry(3, 2, 0.002) // 透视效果
                   ..rotateY(rotationY)
-                  ..scale(_scaleAnimation.value),
+                  ..scaleByVector3(
+                    vm.Vector3.all(_scaleAnimation.value),
+                  ),
                 child: _buildPageContent(_currentPage),
               );
             },
@@ -3331,7 +3450,7 @@ class _ReaderToolbar extends ConsumerWidget {
 
   void _handleBookmark(BuildContext context, WidgetRef ref) {
     // TODO: Implement bookmark functionality
-    _showSideToast(context, '书签功能');
+    showSideToast(context, '书签功能');
   }
 
   Future<void> _showTableOfContents(BuildContext context, WidgetRef ref) async {
@@ -3339,7 +3458,7 @@ class _ReaderToolbar extends ConsumerWidget {
     final content = paginationState.cachedText ?? '';
 
     if (paginationState.pages.isEmpty || content.isEmpty) {
-      _showSideToast(context, '暂无可用目录');
+      showSideToast(context, '暂无可用目录');
       return;
     }
 
@@ -3351,7 +3470,7 @@ class _ReaderToolbar extends ConsumerWidget {
     );
 
     if (chapters.isEmpty) {
-      _showSideToast(context, '未识别到目录');
+      showSideToast(context, '未识别到目录');
       return;
     }
 
@@ -3399,7 +3518,7 @@ class _ReaderToolbar extends ConsumerWidget {
     final paginationState = ref.read(readerPaginationProvider);
     final currentPageContent = paginationState.currentPageContent ?? '';
 
-    _showSideToast(context, '分享当前页面内容 (${currentPageContent.length}字)');
+    showSideToast(context, '分享当前页面内容 (${currentPageContent.length}字)');
   }
 
   /// 显示主题选择器
@@ -3867,6 +3986,16 @@ class _ReaderToolbar extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               _buildMoreMenuItem(context, Icons.search_rounded, '搜索', settings),
+              _buildMoreMenuItem(
+                context,
+                Icons.code_rounded,
+                '编码',
+                settings,
+                onTap: () {
+                  Navigator.pop(context);
+                  _showEncodingSelector(context, ref);
+                },
+              ),
               _buildMoreMenuItem(context, Icons.share_rounded, '分享', settings),
               _buildMoreMenuItem(
                 context,
@@ -3892,6 +4021,84 @@ class _ReaderToolbar extends ConsumerWidget {
     );
   }
 
+  Future<void> _showEncodingSelector(BuildContext context, WidgetRef ref) async {
+    final readerPageState =
+        context.findAncestorStateOfType<_ReaderPageState>();
+    if (readerPageState == null) {
+      showSideToast(context, '无法获取书籍信息');
+      return;
+    }
+
+    final bookId = readerPageState.widget.bookId;
+    if (bookId == null) {
+      showSideToast(context, '无法获取书籍信息');
+      return;
+    }
+
+    final book = await BookDao().getBookById(bookId);
+    if (book == null) {
+      showSideToast(context, '未找到书籍信息');
+      return;
+    }
+
+    if (book.format.toLowerCase() != 'txt') {
+      showSideToast(context, '仅TXT支持手动编码');
+      return;
+    }
+
+    final currentEncoding = EnhancedTxtImportService.normalizeEncoding(
+      book.textEncoding,
+    );
+
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        String? selectedEncoding = currentEncoding;
+        final options = const [
+          {'label': '自动识别', 'value': 'auto'},
+          {'label': 'GBK/GB2312', 'value': 'gbk'},
+          {'label': 'UTF-8', 'value': 'utf8'},
+          {'label': 'UTF-16 LE', 'value': 'utf16le'},
+          {'label': 'UTF-16 BE', 'value': 'utf16be'},
+        ];
+        return AlertDialog(
+          title: const Text('选择TXT编码'),
+          content: SizedBox(
+            width: 320,
+            child: RadioGroup<String>(
+              groupValue: selectedEncoding,
+              onChanged: (value) async {
+                if (value == null) return;
+                selectedEncoding = value;
+                Navigator.of(dialogContext).pop();
+                await readerPageState.reloadWithEncoding(value);
+              },
+              child: ListView(
+                shrinkWrap: true,
+                children: options
+                    .map(
+                      (option) => RadioListTile<String>(
+                        value: option['value']!,
+                        title: Text(option['label']!),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildMoreMenuItem(
     BuildContext context,
     IconData icon,
@@ -3904,7 +4111,7 @@ class _ReaderToolbar extends ConsumerWidget {
           () {
             HapticFeedback.lightImpact();
             Navigator.pop(context);
-            _showSideToast(context, label);
+            showSideToast(context, label);
           },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),

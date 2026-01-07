@@ -1,6 +1,7 @@
 ﻿import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../services/sync/webdav_sync_service.dart';
+import 'side_toast.dart';
 
 /// WebDAV配置对话框
 class WebDavConfigDialog extends StatefulWidget {
@@ -339,18 +340,11 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
       );
 
       if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('连接测试成功！'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        showSideToast(context, '连接测试成功！');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('连接测试失败: $e'), backgroundColor: Colors.red),
-        );
+        showSideToast(context, '连接测试失败: $e');
       }
     } finally {
       if (mounted) {
@@ -383,18 +377,11 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
 
       if (success && mounted) {
         Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('WebDAV配置已保存'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        showSideToast(context, 'WebDAV配置已保存');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存配置失败: $e'), backgroundColor: Colors.red),
-        );
+        showSideToast(context, '保存配置失败: $e');
       }
     } finally {
       if (mounted) {
@@ -429,9 +416,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
       await _syncService.clearConfiguration();
       if (mounted) {
         Navigator.pop(context, false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('WebDAV配置已清除')));
+        showSideToast(context, 'WebDAV配置已清除');
       }
     }
   }

@@ -11,7 +11,7 @@ class DatabaseService {
 
   static Database? _database;
   static const String _dbName = 'xxread_v2.db';
-  static const int _dbVersion = 9;
+  static const int _dbVersion = 10;
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -232,6 +232,13 @@ class DatabaseService {
       await _createReadingStatsIndexes(db);
       await _createBookNotesIndexes(db);
     }
+    if (oldVersion < 10) {
+      final tableInfo = await db.rawQuery('PRAGMA table_info(books)');
+      final columnNames = tableInfo.map((c) => c['name'] as String).toSet();
+      if (!columnNames.contains('text_encoding')) {
+        await db.execute('ALTER TABLE books ADD COLUMN text_encoding TEXT');
+      }
+    }
   }
 
   Future<void> _createTables(Database db) async {
@@ -250,7 +257,8 @@ class DatabaseService {
         file_modified_time INTEGER,
         content_hash TEXT,
         table_of_contents TEXT,
-        cover_image_path TEXT
+        cover_image_path TEXT,
+        text_encoding TEXT
       )
     ''');
 

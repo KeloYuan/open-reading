@@ -19,6 +19,7 @@ import 'book_import_isolate.dart';
 import 'epub_image_extractor.dart';
 import 'book_image_map_service.dart';
 import 'pagination_cache_service.dart';
+import 'library_event_bus.dart';
 import '../utils/encoding_detector_helper.dart';
 
 class EnhancedBookMetadata {
@@ -33,6 +34,7 @@ class EnhancedBookMetadata {
   final int estimatedPages;
   final List<String>? tags;
   final Map<String, dynamic>? additionalInfo;
+  final String? textEncoding;
 
   EnhancedBookMetadata({
     required this.title,
@@ -46,6 +48,7 @@ class EnhancedBookMetadata {
     required this.estimatedPages,
     this.tags,
     this.additionalInfo,
+    this.textEncoding,
   });
 }
 
@@ -151,7 +154,10 @@ class BookImportService {
   ///
   /// 参数 [progressCallback] 可选的进度回调函数，接收进度值(0.0-1.0)和描述信息
   /// 返回成功导入的Book对象，失败或取消返回null
-  Future<Book?> importBook({ImportProgressCallback? progressCallback}) async {
+  Future<Book?> importBook({
+    ImportProgressCallback? progressCallback,
+    String? encodingOverride,
+  }) async {
     try {
       progressCallback?.call(0.0, '选择文件中...');
 
@@ -334,6 +340,7 @@ class BookImportService {
           newFilePath,
           pickedFile.name,
           pickedFile.extension ?? '',
+          encodingOverride: encodingOverride,
           progressCallback: (subProgress, message) {
             // 将子进度映射到0.55-0.85区间（占30%）
             final mappedProgress = 0.55 + (subProgress * 0.3);
@@ -364,6 +371,7 @@ class BookImportService {
           totalPages: metadata.estimatedPages,
           coverImagePath: coverImagePath,
           contentHash: contentHash,
+          textEncoding: metadata.textEncoding ?? encodingOverride,
         );
 
         // 7. Insert metadata into the database
@@ -376,6 +384,7 @@ class BookImportService {
         debugPrint('Pages: ${metadata.estimatedPages}');
         debugPrint('Language: ${metadata.language ?? 'Unknown'}');
         debugPrint('Publisher: ${metadata.publisher ?? 'Unknown'}');
+        LibraryEventBus().notifyLibraryChanged();
 
         // 🖼️ 如果是EPUB格式，保存图片映射
         if (pickedFile.extension?.toLowerCase() == 'epub' &&
@@ -449,6 +458,7 @@ class BookImportService {
     String filePath,
     String fileName,
     String extension, {
+    String? encodingOverride,
     Function(double, String)? progressCallback,
   }) async {
     final ext = extension.toLowerCase();
@@ -510,7 +520,11 @@ class BookImportService {
           break;
         case 'txt':
           progressCallback?.call(0.5, '检测文本编码...');
-          metadata = await _extractTxtMetadata(bytes, fileName);
+          metadata = await _extractTxtMetadata(
+            bytes,
+            fileName,
+            encodingOverride: encodingOverride,
+          );
           break;
         case 'mobi':
         case 'azw':
@@ -772,8 +786,9 @@ class BookImportService {
   /// 使用增强服务提取TXT元数据（使用isolate优化）
   Future<EnhancedBookMetadata> _extractTxtMetadata(
     Uint8List bytes,
-    String fileName,
-  ) async {
+    String fileName, {
+    String? encodingOverride,
+  }) async {
     try {
       debugPrint('📖 开始TXT元数据提取: $fileName');
 
@@ -784,6 +799,12 @@ class BookImportService {
       // 打印详细的编码分析报告
       final report = EncodingDetectorHelper.generateReport(analysis);
       EncodingDetectorHelper.debugPrintReport(report);
+
+      final detectedEncoding = _enhancedTxtService.detectEncoding(
+        bytes,
+        encodingOverride: encodingOverride,
+      );
+      var resolvedEncoding = detectedEncoding;
 
       // 对于大文件，使用isolate处理
       SimpleMetadata simpleMetadata;
@@ -796,6 +817,7 @@ class BookImportService {
             bytes: bytes,
             fileName: fileName,
             extension: 'txt',
+            encodingOverride: detectedEncoding,
           ),
         );
       } else {
@@ -803,12 +825,18 @@ class BookImportService {
         String content;
         try {
           debugPrint('🔄 开始智能编码检测...');
-          content = _enhancedTxtService.detectTextEncoding(bytes);
+          final decodeResult = _enhancedTxtService.decodeWithResult(
+            bytes,
+            encodingOverride: encodingOverride,
+          );
+          content = decodeResult.content;
+          resolvedEncoding = decodeResult.encoding;
           debugPrint('✅ 文本编码检测成功，内容长度: ${content.length}');
         } catch (e, stackTrace) {
           debugPrint('❌ 编码检测失败: $e');
           debugPrint('Stack trace: $stackTrace');
           content = utf8.decode(bytes, allowMalformed: true);
+          resolvedEncoding = 'utf8';
           debugPrint('使用UTF-8 fallback解码');
         }
 
@@ -827,9 +855,12 @@ class BookImportService {
             .split('\n')
             .where((e) => e.trim().isNotEmpty)
             .toList();
-        final title = lines.isNotEmpty
+        var title = lines.isNotEmpty
             ? lines.first.substring(0, lines.first.length.clamp(0, 50))
             : fileName.replaceAll(RegExp(r'\.(txt)$'), '');
+        if (_looksGarbled(title) && encodingOverride != null) {
+          title = fileName.replaceAll(RegExp(r'\.(txt)$'), '');
+        }
         final estimatedPages = (content.length / 1500).ceil().clamp(1, 9999);
 
         simpleMetadata = SimpleMetadata(
@@ -886,6 +917,7 @@ class BookImportService {
         estimatedPages: simpleMetadata.estimatedPages,
         language: simpleMetadata.language,
         coverImage: coverImage,
+        textEncoding: resolvedEncoding,
         additionalInfo: {
           'format': 'TXT',
           'fileSize': bytes.length,
@@ -896,6 +928,70 @@ class BookImportService {
       debugPrint('Stack trace: $stackTrace');
       return _extractBasicMetadata(bytes, fileName);
     }
+  }
+
+  bool _looksGarbled(String text) {
+    final value = text.trim();
+    if (value.isEmpty) {
+      return true;
+    }
+
+    int total = 0;
+    int cjk = 0;
+    int asciiLetters = 0;
+    int digits = 0;
+    int latinExtended = 0;
+    int otherNonAscii = 0;
+    int replacement = 0;
+
+    for (final rune in value.runes) {
+      if (rune <= 0x20) {
+        continue;
+      }
+      total++;
+      if (rune == 0xfffd) {
+        replacement++;
+        continue;
+      }
+      if ((rune >= 0x4e00 && rune <= 0x9fff) ||
+          (rune >= 0x3400 && rune <= 0x4dbf) ||
+          (rune >= 0xf900 && rune <= 0xfaff)) {
+        cjk++;
+        continue;
+      }
+      if ((rune >= 0x41 && rune <= 0x5a) ||
+          (rune >= 0x61 && rune <= 0x7a)) {
+        asciiLetters++;
+        continue;
+      }
+      if (rune >= 0x30 && rune <= 0x39) {
+        digits++;
+        continue;
+      }
+      if (rune >= 0x00c0 && rune <= 0x024f) {
+        latinExtended++;
+        continue;
+      }
+      if (rune > 0x7e) {
+        otherNonAscii++;
+      }
+    }
+
+    if (total == 0 || replacement > 0) {
+      return true;
+    }
+
+    final asciiRatio = (asciiLetters + digits) / total;
+    final cjkRatio = cjk / total;
+    final nonAsciiRatio = (latinExtended + otherNonAscii) / total;
+
+    if (cjkRatio >= 0.2) {
+      return false;
+    }
+    if (asciiRatio >= 0.6) {
+      return false;
+    }
+    return nonAsciiRatio >= 0.3;
   }
 
   /// Extract FictionBook 2 (FB2) metadata

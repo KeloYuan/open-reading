@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -9,9 +9,10 @@ import '../utils/app_themes.dart';
 import '../services/sync/webdav_sync_service.dart';
 import '../services/reading_engine_coordinator.dart';
 import '../services/pagination_cache_service.dart';
+import '../widgets/side_toast.dart';
 import '../services/book_dao.dart';
 import '../widgets/webdav_config_dialog.dart';
-// import 'stable_reader_test_page.dart'; // 已删除
+import 'home_page_responsive.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -148,6 +149,16 @@ class _SettingsPageState extends State<SettingsPage> {
     final themeNotifier = Provider.of<ThemeNotifier>(context);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
+    // 检查是否在侧边导航栏模式下
+    final navContext = NavigationContext.of(context);
+    final useRailNavigation = navContext?.useRailNavigation ?? false;
+
+    // 在侧边导航栏模式下，不显示 Scaffold 和 AppBar
+    if (useRailNavigation) {
+      return _buildContent(context, themeNotifier, isDarkMode);
+    }
+
+    // 手机模式：显示完整的 Scaffold + AppBar
     return Scaffold(
       extendBody: true,
       extendBodyBehindAppBar: true,
@@ -156,7 +167,13 @@ class _SettingsPageState extends State<SettingsPage> {
         elevation: 0,
         toolbarHeight: 0, // 关闭系统AppBar，使用自绘毛玻璃顶栏
       ),
-      body: Container(
+      body: _buildContent(context, themeNotifier, isDarkMode),
+    );
+  }
+
+  // 提取页面内容部分，在两种模式下共用
+  Widget _buildContent(BuildContext context, ThemeNotifier themeNotifier, bool isDarkMode) {
+    return Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -637,8 +654,7 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 100),
           ],
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildSectionCard({
@@ -1491,18 +1507,11 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final success = await _webdavService.manualSync();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(success ? '同步成功' : '同步失败'),
-            backgroundColor: success ? Colors.green : Colors.red,
-          ),
-        );
+        showSideToast(context, success ? '同步成功' : '同步失败');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('同步失败: $e'), backgroundColor: Colors.red),
-        );
+        showSideToast(context, '同步失败: $e');
       }
     }
   }
@@ -1976,15 +1985,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
       if (confirmed == true && mounted) {
         // TODO: 实现重新提取封面的逻辑
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('封面提取功能正在开发中...')));
+        showSideToast(context, '封面提取功能正在开发中...');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('操作失败: $e')));
+        showSideToast(context, '操作失败: $e');
       }
     }
   }
@@ -1993,13 +1998,9 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _cleanCoverCache() async {
     try {
       // TODO: 实现清理封面缓存的逻辑
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('缓存清理功能正在开发中...')));
+      showSideToast(context, '缓存清理功能正在开发中...');
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('清理失败: $e')));
+      showSideToast(context, '清理失败: $e');
     }
   }
 
@@ -2329,13 +2330,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _showInfoSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.blue,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    showSideToast(context, message);
   }
 
   /// 查看缓存统计
@@ -2496,23 +2491,7 @@ class _SettingsPageState extends State<SettingsPage> {
               Navigator.pop(context);
               try {
                 // 显示加载提示
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Row(
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        ),
-                        SizedBox(width: 12),
-                        Text('正在清除缓存...'),
-                      ],
-                    ),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
+                showSideToast(context, '正在清除缓存...');
 
                 // 清除持久化分页缓存
                 await PaginationCacheService.clearAllCache();
@@ -2525,11 +2504,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 if (!mounted) return;
 
                 // 显示成功消息
-                ScaffoldMessenger.of(context).clearSnackBars();
                 _showInfoSnackBar('✅ 缓存已清除 ($cacheCount 个文件, $cacheSizeMB MB)');
               } catch (e) {
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).clearSnackBars();
                 _showInfoSnackBar('清除缓存失败: $e');
               }
             },

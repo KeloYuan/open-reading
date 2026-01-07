@@ -1,6 +1,5 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'dart:ui';
 import 'package:fl_chart/fl_chart.dart';
@@ -20,6 +19,25 @@ import '../services/reading_stats_dao.dart';
 import '../services/app_state_service.dart';
 import '../services/reading_router_service.dart';
 import '../models/book.dart';
+
+/// 导航上下文 - 用于通知子页面是否在侧边导航栏模式下
+class NavigationContext extends InheritedWidget {
+  final bool useRailNavigation;
+
+  const NavigationContext({
+    super.key,
+    required this.useRailNavigation,
+    required Widget child,
+  }) : super(child: child);
+
+  static NavigationContext? of(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<NavigationContext>();
+  }
+
+  @override
+  bool updateShouldNotify(NavigationContext oldWidget) =>
+      useRailNavigation != oldWidget.useRailNavigation;
+}
 
 class HomePageResponsive extends StatefulWidget {
   const HomePageResponsive({super.key});
@@ -114,8 +132,16 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
     _setupThemeBasedImmersiveMode();
   }
 
+  bool _shouldApplySystemUI() {
+    final route = ModalRoute.of(context);
+    return route?.isCurrent ?? true;
+  }
+
   // 页面级沉浸式设置
   void _setupPageImmersiveMode() {
+    if (!_shouldApplySystemUI()) {
+      return;
+    }
     // 强制启用边到边模式
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
@@ -136,6 +162,9 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
 
   // 基于主题的沉浸式设置 (在didChangeDependencies中调用)
   void _setupThemeBasedImmersiveMode() {
+    if (!_shouldApplySystemUI()) {
+      return;
+    }
     // 获取当前主题状态
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
@@ -288,7 +317,12 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                 ),
               ),
             ),
-            Expanded(child: _navigationItems[_selectedIndex].page),
+            Expanded(
+              child: NavigationContext(
+                useRailNavigation: true,
+                child: _navigationItems[_selectedIndex].page,
+              ),
+            ),
           ],
         ),
       ),
@@ -794,58 +828,36 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
-    final bool isCupertino = !kIsWeb && Platform.isIOS;
     final double appBarHeight = 60;
-    final double screenWidth = mediaQuery.size.width;
     final double refreshEdgeOffset = mediaQuery.padding.top + appBarHeight;
-
-    const double topContentInset = 16;
-    const double baseSpacingAfterWelcome = 24;
-    const double baseSectionSpacing = 28;
-
-    double summaryTargetSpacing = baseSpacingAfterWelcome;
-    double weeklyTargetSpacing = baseSectionSpacing;
-    double recentTargetSpacing = baseSectionSpacing;
-
-    if (isCupertino) {
-      if (screenWidth >= 428) {
-        summaryTargetSpacing = 12;
-        weeklyTargetSpacing = 14;
-        recentTargetSpacing = 14;
-      } else if (screenWidth >= 414) {
-        summaryTargetSpacing = 16;
-        weeklyTargetSpacing = 18;
-        recentTargetSpacing = 18;
-      } else if (screenWidth >= 390) {
-        summaryTargetSpacing = 18;
-        weeklyTargetSpacing = 20;
-        recentTargetSpacing = 20;
-      } else {
-        summaryTargetSpacing = 20;
-        weeklyTargetSpacing = 22;
-        recentTargetSpacing = 20;
-      }
-    }
-
-    summaryTargetSpacing =
-        summaryTargetSpacing.clamp(12, baseSpacingAfterWelcome).toDouble();
-    weeklyTargetSpacing =
-        weeklyTargetSpacing.clamp(12, baseSectionSpacing).toDouble();
-    recentTargetSpacing =
-        recentTargetSpacing.clamp(12, baseSectionSpacing).toDouble();
-
-    final double summaryLift =
-        isCupertino ? baseSpacingAfterWelcome - summaryTargetSpacing : 0;
-    final double weeklyLift =
-        isCupertino ? baseSectionSpacing - weeklyTargetSpacing : 0;
-    final double recentLift =
-        isCupertino ? baseSectionSpacing - recentTargetSpacing : 0;
-
+    final double screenWidth = mediaQuery.size.width;
+    final double screenHeight = mediaQuery.size.height;
+    final bool isCompactHeight = screenHeight < 720;
+    final double horizontalPadding = screenWidth < 360
+        ? 14
+        : screenWidth < 390
+            ? 16
+            : screenWidth < 430
+                ? 18
+                : 20;
+    final double topInset = isCompactHeight ? 12 : 16;
+    final double cardSpacing = screenWidth < 360
+        ? 8
+        : screenWidth < 390
+            ? 10
+            : screenWidth < 430
+                ? 12
+                : 14;
+    final double sectionSpacing = cardSpacing + (isCompactHeight ? 4 : 6);
     final double contentTopPadding =
-        mediaQuery.padding.top + appBarHeight + topContentInset;
-    const double spacingAfterWelcome = baseSpacingAfterWelcome;
-    const double sectionSpacing = baseSectionSpacing;
+        mediaQuery.padding.top + appBarHeight + topInset;
     final double contentBottomPadding = mediaQuery.padding.bottom + 60;
+    final double chartHeight = isCompactHeight
+        ? 170
+        : screenWidth < 390
+            ? 185
+            : 200;
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -883,38 +895,22 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                   edgeOffset: refreshEdgeOffset,
                   child: ListView(
                     padding: EdgeInsets.fromLTRB(
-                      16,
+                      horizontalPadding,
                       contentTopPadding,
-                      16,
+                      horizontalPadding,
                       contentBottomPadding,
                     ),
                     children: [
-                      _buildWelcomeCard(),
-                      SizedBox(height: spacingAfterWelcome),
-                      Transform.translate(
-                        offset: Offset(0, -summaryLift),
-                        transformHitTests: false,
-                        child: _buildSummaryCards(),
-                      ),
+                      _buildMobileHeroCard(),
                       SizedBox(height: sectionSpacing),
-                      Transform.translate(
-                        offset: Offset(0, -weeklyLift),
-                        transformHitTests: false,
-                        child: _buildWeeklyChartCard(),
-                      ),
+                      _buildMobileSummaryGrid(cardSpacing: cardSpacing),
                       SizedBox(height: sectionSpacing),
-                      Transform.translate(
-                        offset: Offset(0, -recentLift),
-                        transformHitTests: false,
-                        child: _buildRecentActivity(),
-                      ),
+                      _buildWeeklyChartCard(chartHeight: chartHeight),
+                      SizedBox(height: sectionSpacing),
+                      _buildRecentActivity(),
                       if (_recentBooks.isNotEmpty) ...[
                         SizedBox(height: sectionSpacing),
-                        Transform.translate(
-                          offset: Offset(0, -recentLift),
-                          transformHitTests: false,
-                          child: _buildRecentBooksSection(),
-                        ),
+                        _buildRecentBooksSection(),
                       ],
                     ],
                   ),
@@ -977,293 +973,273 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
     );
   }
 
-  // 复制HomeContentEnhanced中的方法
-  Widget _buildWelcomeCard() {
+  Widget _buildMobileHeroCard() {
     final totalMinutes = (_summaryStats['total'] ?? 0) ~/ 60;
     final todayMinutes = (_summaryStats['today'] ?? 0) ~/ 60;
+    final weekMinutes = (_summaryStats['week'] ?? 0) ~/ 60;
+    final totalHours = totalMinutes / 60;
+    final totalValue =
+        totalHours >= 1 ? totalHours.toStringAsFixed(1) : '$totalMinutes';
+    final totalUnit = totalHours >= 1 ? '小时' : '分钟';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.surface.withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: Theme.of(
-                  context,
-                ).colorScheme.outline.withValues(alpha: 0.2),
-                width: 1,
-              ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                Theme.of(context).colorScheme.secondary.withValues(alpha: 0.1),
+                Theme.of(context)
+                    .colorScheme
+                    .secondaryContainer
+                    .withValues(alpha: 0.16),
+              ],
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        Icons.auto_stories,
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '今日阅读时光',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            todayMinutes > 0
-                                ? '已阅读 $todayMinutes 分钟，继续保持！'
-                                : '开始今天的阅读之旅吧',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withValues(alpha: 0.7),
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                if (totalMinutes > 0) ...[
-                  const SizedBox(height: 16),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Theme.of(
-                            context,
-                          ).colorScheme.primaryContainer.withValues(alpha: 0.4),
-                          Theme.of(context)
-                              .colorScheme
-                              .secondaryContainer
-                              .withValues(alpha: 0.3),
-                        ],
-                      ),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Row(
+                    child: Icon(
+                      Icons.auto_stories,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.primary.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Icon(
-                            Icons.emoji_events,
-                            color: Theme.of(context).colorScheme.primary,
-                            size: 16,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
                         Text(
-                          '累计阅读 ${(totalMinutes / 60).toStringAsFixed(1)} 小时',
+                          '今日阅读时光',
                           style: Theme.of(context)
                               .textTheme
-                              .bodySmall
-                              ?.copyWith(fontWeight: FontWeight.w500),
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          todayMinutes > 0
+                              ? '已阅读 $todayMinutes 分钟，继续保持'
+                              : '今天也要留点时间给阅读',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.7),
+                              ),
                         ),
                       ],
                     ),
                   ),
                 ],
-              ],
-            ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '$todayMinutes',
+                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(width: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      '分钟',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurface
+                                .withValues(alpha: 0.7),
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _buildMobileStatChip(
+                    label: '本周阅读',
+                    value: '$weekMinutes',
+                    unit: '分钟',
+                    icon: Icons.calendar_view_week,
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+                  _buildMobileStatChip(
+                    label: '累计阅读',
+                    value: totalValue,
+                    unit: totalUnit,
+                    icon: Icons.emoji_events,
+                    color: Theme.of(context).colorScheme.tertiary,
+                  ),
+                  _buildMobileStatChip(
+                    label: '书架藏书',
+                    value: '$_bookCount',
+                    unit: '本',
+                    icon: Icons.library_books,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildSummaryCards() {
+  Widget _buildMobileStatChip({
+    required String label,
+    required String value,
+    required String unit,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.12),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.7),
+                    ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$value $unit',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileSummaryGrid({required double cardSpacing}) {
     final totalMinutes = (_summaryStats['total'] ?? 0) ~/ 60;
     final todayMinutes = (_summaryStats['today'] ?? 0) ~/ 60;
     final weekMinutes = (_summaryStats['week'] ?? 0) ~/ 60;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 400;
-        return isNarrow
-            ? _buildNarrowLayout(todayMinutes, weekMinutes, totalMinutes)
-            : _buildWideLayout(todayMinutes, weekMinutes, totalMinutes);
+        final maxWidth = constraints.maxWidth;
+        final int columns = 2;
+        final double spacing = cardSpacing;
+        final double aspectRatio = maxWidth < 360
+            ? 1.2
+            : maxWidth < 390
+                ? 1.3
+                : maxWidth < 430
+                    ? 1.4
+                    : 1.5;
+
+        return GridView.count(
+          crossAxisCount: columns,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: spacing,
+          mainAxisSpacing: spacing,
+          childAspectRatio: aspectRatio,
+          children: [
+            GestureDetector(
+              onTap: () => _navigateToDetailedStats(),
+              child: _StatCard(
+                title: '今日阅读',
+                value: '$todayMinutes',
+                unit: '分钟',
+                icon: Icons.today,
+                color: Colors.blue,
+              ),
+            ),
+            GestureDetector(
+              onTap: () => _navigateToDetailedStats(),
+              child: _StatCard(
+                title: '本周阅读',
+                value: '$weekMinutes',
+                unit: '分钟',
+                icon: Icons.calendar_view_week,
+                color: Colors.orange,
+              ),
+            ),
+            GestureDetector(
+              onTap: () => _navigateToDetailedStats(),
+              child: _StatCard(
+                title: '累计阅读',
+                value: '$totalMinutes',
+                unit: '分钟',
+                icon: Icons.history,
+                color: Colors.green,
+              ),
+            ),
+            _StatCard(
+              title: '书架藏书',
+              value: '$_bookCount',
+              unit: '本',
+              icon: Icons.book,
+              color: Colors.purple,
+            ),
+          ],
+        );
       },
     );
   }
 
-  Widget _buildNarrowLayout(
-    int todayMinutes,
-    int weekMinutes,
-    int totalMinutes,
-  ) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: () => _navigateToDetailedStats(),
-                child: _StatCard(
-                  title: '今日阅读',
-                  value: '$todayMinutes',
-                  unit: '分钟',
-                  icon: Icons.today,
-                  color: Colors.blue,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: GestureDetector(
-                onTap: () => _navigateToDetailedStats(),
-                child: _StatCard(
-                  title: '本周阅读',
-                  value: '$weekMinutes',
-                  unit: '分钟',
-                  icon: Icons.calendar_view_week,
-                  color: Colors.orange,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: () => _navigateToDetailedStats(),
-                child: _StatCard(
-                  title: '累计阅读',
-                  value: '$totalMinutes',
-                  unit: '分钟',
-                  icon: Icons.history,
-                  color: Colors.green,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _StatCard(
-                title: '书架藏书',
-                value: '$_bookCount',
-                unit: '本',
-                icon: Icons.book,
-                color: Colors.purple,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWideLayout(int todayMinutes, int weekMinutes, int totalMinutes) {
-    // 获取iOS设备优化的GridView间距和纵横比
-    final screenWidth = MediaQuery.of(context).size.width;
-
-    // 根据iOS设备屏幕尺寸优化间距和纵横比
-    double gridSpacing, aspectRatio;
-
-    if (screenWidth >= 428) {
-      // iPhone Pro Max等大屏设备
-      gridSpacing = 12.0;
-      aspectRatio = 1.4;
-    } else if (screenWidth >= 414) {
-      // iPhone Plus等设备
-      gridSpacing = 12.0;
-      aspectRatio = 1.3;
-    } else if (screenWidth >= 390) {
-      // iPhone Pro等设备
-      gridSpacing = 10.0;
-      aspectRatio = 1.3;
-    } else {
-      // iPhone SE, Mini等小屏设备
-      gridSpacing = 10.0;
-      aspectRatio = 1.2;
-    }
-
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: gridSpacing,
-      mainAxisSpacing: gridSpacing,
-      childAspectRatio: aspectRatio,
-      children: [
-        GestureDetector(
-          onTap: () => _navigateToDetailedStats(),
-          child: _StatCard(
-            title: '今日阅读',
-            value: '$todayMinutes',
-            unit: '分钟',
-            icon: Icons.today,
-            color: Colors.blue,
-          ),
-        ),
-        GestureDetector(
-          onTap: () => _navigateToDetailedStats(),
-          child: _StatCard(
-            title: '本周阅读',
-            value: '$weekMinutes',
-            unit: '分钟',
-            icon: Icons.calendar_view_week,
-            color: Colors.orange,
-          ),
-        ),
-        GestureDetector(
-          onTap: () => _navigateToDetailedStats(),
-          child: _StatCard(
-            title: '累计阅读',
-            value: '$totalMinutes',
-            unit: '分钟',
-            icon: Icons.history,
-            color: Colors.green,
-          ),
-        ),
-        _StatCard(
-          title: '书架藏书',
-          value: '$_bookCount',
-          unit: '本',
-          icon: Icons.book,
-          color: Colors.purple,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWeeklyChartCard() {
+  Widget _buildWeeklyChartCard({double? chartHeight}) {
     if (_weeklyData.isEmpty) {
       return Container();
     }
@@ -1320,7 +1296,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
               ),
               const SizedBox(height: 24),
               SizedBox(
-                height: 200,
+                height: chartHeight ?? 200,
                 child: BarChart(
                   BarChartData(
                     alignment: BarChartAlignment.spaceAround,
@@ -1815,6 +1791,11 @@ class _GenericPageWrapper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 平板布局优化：使用导航栏时移除底部安全区域边距
+    final isTablet = ResponsiveHelper.isTablet(context);
+    final isDesktop = ResponsiveHelper.isDesktop(context);
+    final useRailNav = isTablet || isDesktop;
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -1841,7 +1822,7 @@ class _GenericPageWrapper extends StatelessWidget {
           0,
           0,
           0,
-          0, // 移除底部padding，避免遮挡
+          useRailNav ? 0 : 0, // 导航栏模式时不需要额外边距
         ),
         child: child,
       ),
@@ -1977,7 +1958,15 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
     _applySettingsPageSystemUI();
   }
 
+  bool _shouldApplySystemUI() {
+    final route = ModalRoute.of(context);
+    return route?.isCurrent ?? true;
+  }
+
   void _applySettingsPageSystemUI() {
+    if (!_shouldApplySystemUI()) {
+      return;
+    }
     // 强制启用边到边模式
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
@@ -2008,6 +1997,9 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
     // 在每次构建后重新应用状态栏设置
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        if (!_shouldApplySystemUI()) {
+          return;
+        }
         _applySettingsPageSystemUI();
       }
     });

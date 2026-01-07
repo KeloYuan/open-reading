@@ -2,9 +2,18 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../models/chapter.dart';
-import 'txt_text_processor.dart';
 import 'text_preprocessor.dart';
 import 'package:gbk_codec/gbk_codec.dart';
+
+class TxtDecodeResult {
+  final String content;
+  final String encoding;
+
+  const TxtDecodeResult({
+    required this.content,
+    required this.encoding,
+  });
+}
 
 /// 增强的TXT文件导入服务
 ///
@@ -16,8 +25,76 @@ import 'package:gbk_codec/gbk_codec.dart';
 /// - [analyzeChapterStructure] 智能章节结构分析
 /// - [optimizedPageEstimation] 优化分页估算
 class EnhancedTxtImportService {
-  final _textProcessor = TxtTextProcessor();
   final _preprocessor = TextPreprocessor();
+  static const int _encodingSampleSize = 256 * 1024;
+
+  static String normalizeEncoding(String? encoding) {
+    if (encoding == null) return 'auto';
+    final normalized = encoding.toLowerCase().replaceAll('-', '').trim();
+    if (normalized.isEmpty) return 'auto';
+    if (normalized == 'gb2312' || normalized == 'gbk') return 'gbk';
+    if (normalized == 'utf8') return 'utf8';
+    if (normalized == 'utf16le') return 'utf16le';
+    if (normalized == 'utf16be') return 'utf16be';
+    return 'auto';
+  }
+
+  String detectEncoding(
+    Uint8List bytes, {
+    String? encodingOverride,
+  }) {
+    final normalized = normalizeEncoding(encodingOverride);
+    if (normalized != 'auto') {
+      return normalized;
+    }
+    final sample = bytes.length > _encodingSampleSize
+        ? bytes.sublist(0, _encodingSampleSize)
+        : bytes;
+    return _detectTextEncodingWithResult(sample).encoding;
+  }
+
+  TxtDecodeResult decodeWithResult(
+    Uint8List bytes, {
+    String? encodingOverride,
+  }) {
+    final encoding = normalizeEncoding(encodingOverride);
+    if (encoding == 'auto') {
+      return _detectTextEncodingWithResult(bytes);
+    }
+    try {
+      switch (encoding) {
+        case 'gbk':
+          return TxtDecodeResult(content: gbk.decode(bytes), encoding: 'gbk');
+        case 'utf8':
+          return TxtDecodeResult(
+            content: utf8.decode(bytes, allowMalformed: true),
+            encoding: 'utf8',
+          );
+        case 'utf16le':
+          return TxtDecodeResult(
+            content: _decodeUtf16LE(bytes),
+            encoding: 'utf16le',
+          );
+        case 'utf16be':
+          return TxtDecodeResult(
+            content: _decodeUtf16BE(bytes),
+            encoding: 'utf16be',
+          );
+        default:
+          return _detectTextEncodingWithResult(bytes);
+      }
+    } catch (e) {
+      debugPrint('❌ 指定编码解码失败: $encoding, 错误: $e');
+      return _detectTextEncodingWithResult(bytes);
+    }
+  }
+
+  String decodeWithOverride(Uint8List bytes, {String? encodingOverride}) {
+    return decodeWithResult(
+      bytes,
+      encodingOverride: encodingOverride,
+    ).content;
+  }
 
   /// 智能检测文本编码
   ///
@@ -32,6 +109,10 @@ class EnhancedTxtImportService {
   /// 3. GBK/GB2312特征检测（中文旧文件）
   /// 4. UTF-8宽松模式（降级方案）
   String detectTextEncoding(Uint8List bytes) {
+    return _detectTextEncodingWithResult(bytes).content;
+  }
+
+  TxtDecodeResult _detectTextEncodingWithResult(Uint8List bytes) {
     debugPrint('🔍 开始编码检测，文件大小: ${bytes.length} 字节');
 
     // 显示前16个字节的十六进制值，用于调试
@@ -50,19 +131,28 @@ class EnhancedTxtImportService {
         bytes[1] == 0xBB &&
         bytes[2] == 0xBF) {
       debugPrint('✅ 检测到 UTF-8 BOM');
-      return utf8.decode(bytes.sublist(3));
+      return TxtDecodeResult(
+        content: utf8.decode(bytes.sublist(3)),
+        encoding: 'utf8',
+      );
     }
 
     // UTF-16 LE BOM: FF FE
     if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) {
       debugPrint('✅ 检测到 UTF-16 LE BOM');
-      return _decodeUtf16LE(bytes.sublist(2));
+      return TxtDecodeResult(
+        content: _decodeUtf16LE(bytes.sublist(2)),
+        encoding: 'utf16le',
+      );
     }
 
     // UTF-16 BE BOM: FE FF
     if (bytes.length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) {
       debugPrint('✅ 检测到 UTF-16 BE BOM');
-      return _decodeUtf16BE(bytes.sublist(2));
+      return TxtDecodeResult(
+        content: _decodeUtf16BE(bytes.sublist(2)),
+        encoding: 'utf16be',
+      );
     }
 
     // 2. 尝试 UTF-8 严格解码（优先，因为是现代标准）
@@ -71,8 +161,20 @@ class EnhancedTxtImportService {
       final content = utf8.decode(bytes, allowMalformed: false);
       // 验证解码质量
       if (_isValidUtf8Content(content)) {
+        final utf8Quality = _contentQualityScore(content);
+        // 如果GBK解码质量明显更高，优先GBK
+        try {
+          final gbkContent = gbk.decode(bytes);
+          final gbkQuality = _contentQualityScore(gbkContent);
+          if (gbkQuality > utf8Quality + 0.15 &&
+              _isValidGbkContent(gbkContent)) {
+            debugPrint('✅ 识别为GBK/GB2312（质量更高）');
+            return TxtDecodeResult(content: gbkContent, encoding: 'gbk');
+          }
+        } catch (_) {}
+
         debugPrint('✅ UTF-8 解码成功 (${content.length} 字符)');
-        return content;
+        return TxtDecodeResult(content: content, encoding: 'utf8');
       }
       debugPrint('⚠️ UTF-8 解码通过，但内容验证失败');
     } catch (e) {
@@ -89,17 +191,22 @@ class EnhancedTxtImportService {
     if (gbkScore > 0.3) {
       // 评分>0.3表示很可能是GBK编码
       try {
-        final content = gbk.decode(bytes);
+        var content = gbk.decode(bytes);
         // 如果评分很高(>0.8)，直接接受，不做严格验证
         if (gbkScore > 0.8) {
+          final chineseRatio = _chineseRatio(content);
+          if (chineseRatio < 0.05) {
+            debugPrint('⚠️ GBK 解码中文比例过低，尝试宽松解码');
+            content = _decodeGbkLenient(bytes);
+          }
           debugPrint(
               '✅ GBK/GB2312 解码成功 (高评分: ${gbkScore.toStringAsFixed(2)}, ${content.length} 字符)');
-          return content;
+          return TxtDecodeResult(content: content, encoding: 'gbk');
         }
         // 评分中等时才做验证
         if (content.isNotEmpty && _isValidGbkContent(content)) {
           debugPrint('✅ GBK/GB2312 解码成功 (${content.length} 字符)');
-          return content;
+          return TxtDecodeResult(content: content, encoding: 'gbk');
         }
         debugPrint('⚠️ GBK 解码通过，但内容验证失败');
       } catch (e) {
@@ -113,7 +220,7 @@ class EnhancedTxtImportService {
       final content = utf8.decode(bytes, allowMalformed: true);
       if (content.isNotEmpty && !_hasExcessiveReplacementChars(content)) {
         debugPrint('✅ UTF-8 宽松模式成功 (${content.length} 字符)');
-        return content;
+        return TxtDecodeResult(content: content, encoding: 'utf8');
       }
       debugPrint('⚠️ UTF-8 宽松模式替换字符过多');
     } catch (e) {
@@ -126,7 +233,7 @@ class EnhancedTxtImportService {
       final content = gbk.decode(bytes);
       if (content.isNotEmpty) {
         debugPrint('⚠️ 强制使用 GBK 解码 (${content.length} 字符)');
-        return content;
+        return TxtDecodeResult(content: content, encoding: 'gbk');
       }
     } catch (e) {
       debugPrint('❌ 强制 GBK 失败: $e');
@@ -134,7 +241,10 @@ class EnhancedTxtImportService {
 
     // 6. 最终降级：UTF-8 宽松 + 允许所有错误
     debugPrint('⚠️ 最终降级：UTF-8 宽松模式（允许所有错误）');
-    return utf8.decode(bytes, allowMalformed: true);
+    return TxtDecodeResult(
+      content: utf8.decode(bytes, allowMalformed: true),
+      encoding: 'utf8',
+    );
   }
 
   /// UTF-16 LE 解码
@@ -288,6 +398,51 @@ class EnhancedTxtImportService {
   bool _hasExcessiveReplacementChars(String content) {
     final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
     return replacementCount > content.length * 0.1;
+  }
+
+  double _contentQualityScore(String content) {
+    if (content.isEmpty) return 0.0;
+    final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
+    final replacementRatio = replacementCount / content.length;
+    final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length;
+    final chineseRatio = chineseCount / content.length;
+    final printableCount = content.codeUnits.where((c) {
+      return (c >= 32 && c <= 126) || c == 9 || c == 10 || c == 13;
+    }).length;
+    final printableRatio = printableCount / content.length;
+    final penalty = (1.0 - (replacementRatio * 5)).clamp(0.0, 1.0);
+    return (chineseRatio * 0.7 + printableRatio * 0.3) * penalty;
+  }
+
+  double _chineseRatio(String content) {
+    if (content.isEmpty) return 0.0;
+    final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length;
+    return chineseCount / content.length;
+  }
+
+  String _decodeGbkLenient(Uint8List bytes) {
+    final buffer = StringBuffer();
+    int i = 0;
+    while (i < bytes.length) {
+      final b1 = bytes[i];
+      if (b1 <= 0x7F) {
+        buffer.writeCharCode(b1);
+        i++;
+        continue;
+      }
+      if (i + 1 < bytes.length) {
+        final b2 = bytes[i + 1];
+        if (b2 >= 0x40 && b2 <= 0xFE && b2 != 0x7F) {
+          try {
+            buffer.write(gbk.decode([b1, b2]));
+          } catch (_) {}
+          i += 2;
+          continue;
+        }
+      }
+      i++;
+    }
+    return buffer.toString();
   }
 
   /// 增强的TXT元数据提取

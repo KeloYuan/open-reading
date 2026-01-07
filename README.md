@@ -74,49 +74,83 @@
 
 ```
 lib/
-├── main.dart                    # 应用入口和主题配置
-├── models/                      # 数据模型
-│   ├── book.dart               # 书籍模型
-│   ├── bookmark.dart           # 书签模型
-│   ├── note.dart               # 笔记模型
-│   ├── highlight.dart          # 高亮模型
-│   └── chapter.dart            # 章节模型
-├── pages/                       # 页面组件
+├── main.dart                         # 应用入口和主题配置
+├── models/                           # 数据模型
+│   ├── book.dart                     # 书籍模型
+│   ├── book_note.dart                # 统一笔记/高亮模型
+│   ├── bookmark.dart                 # 书签模型
+│   ├── chapter.dart                  # 章节模型
+│   ├── book_source.dart              # 书源模型
+│   ├── page_turning_config.dart      # 翻页配置
+│   ├── text_page_data.dart           # 文本页面数据
+│   ├── highlight.dart                # 兼容层
+│   └── note.dart                     # 兼容层
+├── pages/                            # 页面组件
+│   ├── reader_page.dart              # 阅读页面（核心）
 │   ├── home_page_responsive.dart     # 主页（响应式）
 │   ├── home_content_enhanced.dart    # 主页内容
-│   ├── reading_page_enhanced.dart    # 阅读页面
-│   ├── library_page.dart            # 书库页面
-│   ├── settings_page.dart           # 设置页面
-│   ├── detailed_stats_page.dart     # 统计详情
-│   └── import_book_page.dart        # 导入书籍
-├── services/                    # 业务逻辑
-│   ├── database_service.dart    # 数据库服务
-│   ├── book_dao.dart           # 书籍数据访问
-│   ├── bookmark_dao.dart       # 书签数据访问
-│   ├── note_dao.dart           # 笔记数据访问
-│   ├── highlight_dao.dart      # 高亮数据访问
-│   ├── reading_stats_dao.dart  # 统计数据访问
-│   ├── storage_service.dart    # 存储服务
-│   ├── book_import_service.dart # 书籍导入
-│   └── text_paginator.dart     # 文本分页
-├── utils/                       # 工具类
-│   ├── app_themes.dart         # 应用主题
-│   ├── theme_mixin.dart        # 主题混入
-│   ├── glass_config.dart       # 毛玻璃配置
-│   ├── progressive_blur.dart   # 渐进模糊
-│   ├── responsive_helper.dart  # 响应式辅助
-│   ├── color_extensions.dart   # 颜色扩展
-│   ├── text_selection_helper.dart # 文本选择辅助
-│   ├── text_painter_pagination.dart # 文本绘制分页
-│   └── pagination_cache.dart   # 分页缓存
-└── widgets/                     # 自定义组件
-    ├── liquid_glass_navigation.dart  # 液态玻璃导航
-    ├── floating_capsule_navigation.dart # 浮动胶囊导航
-    ├── custom_slider_components.dart # 自定义滑块
-    ├── note_dialog.dart         # 笔记对话框
-    ├── toc_widget.dart          # 目录组件
-    └── text_selection_toolbar.dart # 文本选择工具栏
+│   ├── library_page.dart             # 书库页面
+│   ├── import_book_page.dart         # 导入书籍
+│   ├── settings_page.dart            # 设置页面
+│   ├── book_source_page.dart         # 书源管理
+│   ├── detailed_stats_page.dart      # 统计详情
+│   ├── user_agreement_page.dart      # 用户协议
+│   └── cover_pagination_view.dart    # 覆盖翻页视图
+├── providers/                        # 状态管理
+│   └── reader_providers.dart         # 阅读器核心 Provider
+├── services/                         # 业务逻辑
+│   ├── database_service.dart         # 数据库服务
+│   ├── enhanced_database_service.dart # 增强数据库服务
+│   ├── book_dao.dart                 # 书籍数据访问
+│   ├── bookmark_dao.dart             # 书签数据访问
+│   ├── book_note_dao.dart            # 笔记/高亮数据访问
+│   ├── reading_stats_dao.dart        # 统计数据访问
+│   ├── book_source_dao.dart          # 书源数据访问
+│   ├── book_import_service.dart      # 书籍导入
+│   ├── enhanced_txt_import_service.dart # TXT 导入
+│   ├── enhanced_paginator.dart       # 核心分页器
+│   ├── pagination_cache_service.dart # 分页缓存
+│   ├── text_preprocessor.dart        # 文本预处理
+│   ├── reading_router_service.dart   # 阅读路由
+│   ├── reader_settings_service.dart  # 阅读设置持久化
+│   ├── reading_progress_service.dart # 阅读进度
+│   ├── book_image_manager.dart       # 图片缓存
+│   ├── epub_image_extractor.dart     # EPUB 图片提取
+│   ├── book_image_map_service.dart   # 图片路径映射
+│   ├── cover_generator.dart          # 封面生成
+│   ├── tts_service.dart              # TTS 服务
+│   ├── tts/                          # TTS 模块
+│   │   ├── base_tts.dart
+│   │   ├── system_tts.dart
+│   │   └── tts_preferences.dart
+│   └── sync/                         # 同步模块
+│       ├── webdav_sync_service.dart
+│       └── sync_utils.dart
+├── utils/                            # 工具类
+│   ├── app_themes.dart               # 应用主题
+│   ├── glass_config.dart             # 毛玻璃配置
+│   ├── progressive_blur.dart         # 渐进模糊
+│   ├── responsive_helper.dart        # 响应式辅助
+│   ├── page_transitions.dart         # 页面转场
+│   ├── theme_mixin.dart              # 主题混入
+│   └── encoding_detector_helper.dart # 编码检测
+└── widgets/                          # 自定义组件
+    ├── enhanced_text_selection_toolbar.dart # 文本选择工具栏
+    ├── highlight_color_picker.dart    # 高亮颜色
+    ├── page_turning_settings_sheet.dart # 翻页设置
+    ├── tts_settings_sheet.dart        # TTS 设置
+    ├── toc_widget.dart                # 目录组件
+    ├── side_toast.dart                # 侧边提示
+    ├── tap_zone_diagram.dart          # 点击区域示意
+    ├── scrolling_text.dart            # 滚动文本
+    └── webdav_config_dialog.dart      # WebDAV 配置
 ```
+
+## 📚 文档索引
+
+- `CODEBASE_DOCUMENTATION.md` - 项目架构与文件索引
+- `lib/lib-project.md` - lib/ 目录结构速览
+- `knowledge_base/README.md` - 分页与阅读器技术知识库
 
 ## 🚀 快速开始
 
