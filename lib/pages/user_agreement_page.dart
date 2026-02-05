@@ -277,13 +277,10 @@ class _UserAgreementPageState extends State<UserAgreementPage>
               width: 90,
               height: 90,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
+                gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFF667eea),
-                    const Color(0xFF764ba2),
-                  ],
+                  colors: [Color(0xFF667eea), Color(0xFF764ba2)],
                 ),
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [

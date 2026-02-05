@@ -213,7 +213,7 @@ class _TapZoneSettingsSheetState extends State<TapZoneSettingsSheet> {
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 itemCount: 1, // 只显示默认方案
                 itemBuilder: (context, index) {
-                  final pattern = TapTurningPattern.defaultPattern;
+                  const pattern = TapTurningPattern.defaultPattern;
                   final isSelected = index == _selectedIndex;
 
                   return Padding(

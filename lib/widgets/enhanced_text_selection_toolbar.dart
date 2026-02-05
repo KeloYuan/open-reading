@@ -279,7 +279,7 @@ class _EnhancedTextSelectionToolbarState
           scale: _scaleAnimation.value,
           child: Opacity(
             opacity: _opacityAnimation.value,
-            child: Container(
+            child: SizedBox(
               width: 420, // 从 370 增加到 420
               child: Column(
                 mainAxisSize: MainAxisSize.min,

@@ -8,6 +8,73 @@ import 'package:flutter/material.dart';
 /// 2. 向下取整行数，确保不溢出
 /// 3. 图片按比例占用页面高度，允许与文本共存
 class EnhancedPaginator {
+  /// 快速采样分页（仅采样，不启动精确计算）
+  static Future<SamplePaginationResult> paginateSample({
+    required String text,
+    required Size screenSize,
+    required double fontSize,
+    required double lineHeight,
+    required EdgeInsets padding,
+    double letterSpacing = 0.0,
+    List<String>? fontFamilyFallback,
+    String? fontFamily,
+    bool supportImages = true,
+    int quickSamplePages = 10,
+  }) async {
+    final sampleResult = await _fastPaginate(
+      text: text,
+      screenSize: screenSize,
+      fontSize: fontSize,
+      lineHeight: lineHeight,
+      padding: padding,
+      letterSpacing: letterSpacing,
+      fontFamilyFallback: fontFamilyFallback,
+      fontFamily: fontFamily,
+      supportImages: supportImages,
+      pageLimit: quickSamplePages,
+    );
+
+    final sampledPages = sampleResult.pages;
+    final avgCharsPerPage = sampledPages.isNotEmpty
+        ? sampledPages.fold<int>(0, (sum, page) => sum + page.length) /
+            sampledPages.length
+        : 500;
+    final estimatedTotal = (text.length / avgCharsPerPage).ceil();
+    final isComplete = sampledPages.length < quickSamplePages;
+
+    return SamplePaginationResult(
+      pages: sampledPages,
+      estimatedTotal: isComplete ? sampledPages.length : estimatedTotal,
+      pageCharOffsets: sampleResult.pageCharOffsets,
+      isComplete: isComplete,
+    );
+  }
+
+  /// 精确分页（用于后台线程/Isolate）
+  static Future<PreciseCalculationResult> paginatePrecise({
+    required String text,
+    required Size screenSize,
+    required double fontSize,
+    required double lineHeight,
+    required EdgeInsets padding,
+    double letterSpacing = 0.0,
+    List<String>? fontFamilyFallback,
+    String? fontFamily,
+    bool supportImages = true,
+  }) async {
+    return _fastPaginate(
+      text: text,
+      screenSize: screenSize,
+      fontSize: fontSize,
+      lineHeight: lineHeight,
+      padding: padding,
+      letterSpacing: letterSpacing,
+      fontFamilyFallback: fontFamilyFallback,
+      fontFamily: fontFamily,
+      supportImages: supportImages,
+    );
+  }
+
   /// 渐进式分页（快速）
   static Future<ProgressivePaginationResult> paginateProgressive({
     required String text,
@@ -16,6 +83,8 @@ class EnhancedPaginator {
     required double lineHeight,
     required EdgeInsets padding,
     double letterSpacing = 0.0,
+    List<String>? fontFamilyFallback,
+    String? fontFamily,
     bool supportImages = true,
     int quickSamplePages = 10,
   }) async {
@@ -31,6 +100,8 @@ class EnhancedPaginator {
       lineHeight: lineHeight,
       padding: padding,
       letterSpacing: letterSpacing,
+      fontFamilyFallback: fontFamilyFallback,
+      fontFamily: fontFamily,
       supportImages: supportImages,
       pageLimit: quickSamplePages,
     );
@@ -52,6 +123,8 @@ class EnhancedPaginator {
         lineHeight: lineHeight,
         padding: padding,
         letterSpacing: letterSpacing,
+        fontFamilyFallback: fontFamilyFallback,
+        fontFamily: fontFamily,
         supportImages: supportImages,
       );
       final duration = DateTime.now().difference(startTime);
@@ -81,6 +154,8 @@ class EnhancedPaginator {
     required double lineHeight,
     required EdgeInsets padding,
     required double letterSpacing,
+    List<String>? fontFamilyFallback,
+    String? fontFamily,
     required bool supportImages,
     int? pageLimit,
   }) async {
@@ -103,6 +178,8 @@ class EnhancedPaginator {
       fontSize: fontSize,
       height: lineHeight,
       letterSpacing: letterSpacing,
+      fontFamilyFallback: fontFamilyFallback,
+      fontFamily: fontFamily,
     );
 
     final textPainter = TextPainter(
@@ -413,5 +490,19 @@ class ProgressivePaginationResult {
     required this.estimatedTotal,
     required this.pageCharOffsets,
     required this.preciseCalculationFuture,
+  });
+}
+
+class SamplePaginationResult {
+  final List<String> pages;
+  final int estimatedTotal;
+  final List<int> pageCharOffsets;
+  final bool isComplete;
+
+  SamplePaginationResult({
+    required this.pages,
+    required this.estimatedTotal,
+    required this.pageCharOffsets,
+    required this.isComplete,
   });
 }

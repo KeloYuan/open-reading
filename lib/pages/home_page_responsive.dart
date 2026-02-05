@@ -13,12 +13,15 @@ import 'detailed_stats_page.dart';
 import 'book_source_page.dart';
 import '../utils/responsive_helper.dart';
 import '../utils/glass_config.dart';
+import '../utils/system_ui_helper.dart';
 import '../utils/page_transitions.dart';
+import '../utils/localization_extension.dart';
 import '../services/book_dao.dart';
 import '../services/reading_stats_dao.dart';
 import '../services/app_state_service.dart';
 import '../services/reading_router_service.dart';
 import '../models/book.dart';
+import '../l10n/app_localizations.dart';
 
 /// 导航上下文 - 用于通知子页面是否在侧边导航栏模式下
 class NavigationContext extends InheritedWidget {
@@ -27,8 +30,8 @@ class NavigationContext extends InheritedWidget {
   const NavigationContext({
     super.key,
     required this.useRailNavigation,
-    required Widget child,
-  }) : super(child: child);
+    required super.child,
+  });
 
   static NavigationContext? of(BuildContext context) {
     return context.dependOnInheritedWidgetOfExactType<NavigationContext>();
@@ -50,6 +53,7 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
   int _selectedIndex = 0;
   late PageController _pageController;
   bool _booksourceEnabled = false;
+  AppLocalizations? _l10n;
 
   List<NavigationItem> _navigationItems = [];
 
@@ -63,7 +67,6 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
       viewportFraction: 1.0, // 保持全屏显示
       keepPage: true, // 保持页面状态
     );
-    _setupPageImmersiveMode();
   }
 
   Future<void> _loadSettings() async {
@@ -75,17 +78,18 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
   }
 
   void _initializeNavigationItems() {
+    final l10n = _l10n;
     final baseItems = [
       NavigationItem(
         icon: Icons.home_outlined,
         selectedIcon: Icons.home,
-        label: '首页',
+        label: l10n?.home ?? '首页',
         page: const HomeContentEnhanced(),
       ),
       NavigationItem(
         icon: Icons.library_books_outlined,
         selectedIcon: Icons.library_books,
-        label: '书库',
+        label: l10n?.library ?? '书库',
         page: const LibraryPage(),
       ),
     ];
@@ -98,7 +102,7 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
         NavigationItem(
           icon: Icons.source_outlined,
           selectedIcon: Icons.source,
-          label: '书源',
+          label: l10n?.bookSource ?? '书源',
           page: const BookSourcePage(),
         ),
       );
@@ -109,7 +113,7 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
       NavigationItem(
         icon: Icons.settings_outlined,
         selectedIcon: Icons.settings,
-        label: '设置',
+        label: l10n?.settings ?? '设置',
         page: const SettingsPage(),
       ),
     );
@@ -126,10 +130,12 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _l10n = AppLocalizations.of(context);
     // 每次依赖变化时重新应用沉浸式设置
     _setupPageImmersiveMode();
     // 应用基于主题的设置
     _setupThemeBasedImmersiveMode();
+    _initializeNavigationItems();
   }
 
   bool _shouldApplySystemUI() {
@@ -168,21 +174,24 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
     // 获取当前主题状态
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    // 应用基于主题的沉浸式样式
-    SystemChrome.setSystemUIOverlayStyle(
-      SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness:
-            isDarkMode ? Brightness.light : Brightness.dark,
-        statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness:
-            isDarkMode ? Brightness.light : Brightness.dark,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      ),
-    );
+    // 应用基于主题的沉浸式样式 - 使用 microtask 确保在当前帧渲染后执行
+    Future.microtask(() {
+      if (!mounted) return;
+      SystemChrome.setSystemUIOverlayStyle(
+        SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness:
+              isDarkMode ? Brightness.light : Brightness.dark,
+          statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarIconBrightness:
+              isDarkMode ? Brightness.light : Brightness.dark,
+          systemNavigationBarDividerColor: Colors.transparent,
+          systemStatusBarContrastEnforced: false,
+          systemNavigationBarContrastEnforced: false,
+        ),
+      );
+    });
   }
 
   @override
@@ -194,13 +203,24 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
   @override
   Widget build(BuildContext context) {
     final navigationType = ResponsiveHelper.getNavigationType(context);
+    final overlayStyle = SystemUiHelper.overlayStyleForBrightness(
+      Theme.of(context).brightness,
+    );
 
+    Widget content;
     switch (navigationType) {
       case NavigationType.rail:
-        return _buildNavigationRail();
+        content = _buildNavigationRail();
+        break;
       case NavigationType.bottom:
-        return _buildBottomNavigation();
+        content = _buildBottomNavigation();
+        break;
     }
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlayStyle,
+      child: content,
+    );
   }
 
   // 桌面端：侧边导航栏
@@ -389,12 +409,12 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
             physics: const BouncingScrollPhysics(
               parent: AlwaysScrollableScrollPhysics(),
             ),
+            // 禁用页面捕捉以减少卡顿
+            pageSnapping: true,
             children: _navigationItems.map((item) {
               // 使用RepaintBoundary和AutomaticKeepAliveClientMixin优化重绘和内存管理
               return RepaintBoundary(child: _buildPageWrapper(item.page));
             }).toList(),
-            // 禁用页面捕捉以减少卡顿
-            pageSnapping: true,
           ),
           // 悬浮药丸导航栏
           Positioned(
@@ -563,7 +583,7 @@ class _HomePageResponsiveState extends State<HomePageResponsive> {
                 ),
               ],
             ),
-            child: Icon(
+            child: const Icon(
               Icons.auto_stories_rounded,
               color: Colors.white,
               size: 28,
@@ -800,7 +820,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
   /// 最多返回5本书
   Future<List<Book>> _loadRecentBooks() async {
     try {
-      await _appStateService.initialize();
+      if (!_appStateService.isInitialized) {
+        await _appStateService.initialize();
+      }
       final appState = _appStateService.currentState;
       final recentBooksList = appState.readingState.recentBooks;
       final books = <Book>[];
@@ -828,7 +850,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
-    final double appBarHeight = 60;
+    const double appBarHeight = 60;
     final double refreshEdgeOffset = mediaQuery.padding.top + appBarHeight;
     final double screenWidth = mediaQuery.size.width;
     final double screenHeight = mediaQuery.size.height;
@@ -953,7 +975,7 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                       children: [
                         Expanded(
                           child: Text(
-                            '首页',
+                            context.l10n.home,
                             style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.w600,
@@ -1177,16 +1199,9 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxWidth = constraints.maxWidth;
-        final int columns = 2;
+        const int columns = 2;
         final double spacing = cardSpacing;
-        final double aspectRatio = maxWidth < 360
-            ? 1.2
-            : maxWidth < 390
-                ? 1.3
-                : maxWidth < 430
-                    ? 1.4
-                    : 1.5;
+        const double aspectRatio = 1.3;
 
         return GridView.count(
           crossAxisCount: columns,
@@ -1628,28 +1643,29 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
         ? (book.currentPage / book.totalPages * 100).clamp(0, 100)
         : 0.0;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _navigateToReader(book),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color:
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Theme.of(
-                  context,
-                ).colorScheme.outline.withValues(alpha: 0.1),
-                width: 1,
+    return RepaintBoundary(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _navigateToReader(book),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color:
+                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outline.withValues(alpha: 0.1),
+                  width: 1,
+                ),
               ),
-            ),
-            child: Row(
-              children: [
+              child: Row(
+                children: [
                 // 书籍封面或图标
                 Container(
                   width: 48,
@@ -1765,7 +1781,8 @@ class _HomeContentWrapperState extends State<_HomeContentWrapper> {
                     context,
                   ).colorScheme.onSurface.withValues(alpha: 0.4),
                 ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -2046,7 +2063,7 @@ class _SettingsPageWrapperState extends State<_SettingsPageWrapper> {
                     children: [
                       Expanded(
                         child: Text(
-                          '设置',
+                          context.l10n.settings,
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.w600,

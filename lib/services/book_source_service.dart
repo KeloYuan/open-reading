@@ -315,7 +315,11 @@ class BookSourceService {
   Future<ImportResult> importFromFile(File file) async {
     try {
       if (!await file.exists()) {
-        return ImportResult(success: 0, total: 0, errors: ['文件不存在']);
+        return const ImportResult(
+          success: 0,
+          total: 0,
+          errors: ['文件不存在'],
+        );
       }
 
       final content = await file.readAsString();
@@ -351,7 +355,7 @@ class BookSourceService {
   Future<TestResult> testSource(BookSource source) async {
     try {
       if (source.bookSourceUrl.isEmpty) {
-        return TestResult(
+        return const TestResult(
           success: false,
           message: '书源URL不能为空',
           responseTime: 0,

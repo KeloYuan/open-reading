@@ -373,6 +373,252 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error'**
   String get error;
+
+  /// No description provided for @initializationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Initialization failed'**
+  String get initializationFailed;
+
+  /// No description provided for @unknownError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown error'**
+  String get unknownError;
+
+  /// No description provided for @retry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get retry;
+
+  /// No description provided for @appearanceSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get appearanceSettings;
+
+  /// No description provided for @readingTips.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading Tips'**
+  String get readingTips;
+
+  /// No description provided for @readingFontSettingsMoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading font settings moved'**
+  String get readingFontSettingsMoved;
+
+  /// No description provided for @readingFontSettingsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Open any book, tap the center of the screen, then use the bottom toolbar to adjust font size, line spacing, letter spacing, margins, and reading font.'**
+  String get readingFontSettingsHint;
+
+  /// No description provided for @readingSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading Settings'**
+  String get readingSettings;
+
+  /// No description provided for @bookSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Sources'**
+  String get bookSource;
+
+  /// No description provided for @bookSourceFeatures.
+  ///
+  /// In en, this message translates to:
+  /// **'Book Sources'**
+  String get bookSourceFeatures;
+
+  /// No description provided for @enableBookSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable book sources'**
+  String get enableBookSource;
+
+  /// No description provided for @enableBookSourceHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable online book search and reading'**
+  String get enableBookSourceHint;
+
+  /// No description provided for @bookSourceEnabledHint.
+  ///
+  /// In en, this message translates to:
+  /// **'When enabled, you will see the \"Sources\" tab for online search and reading.'**
+  String get bookSourceEnabledHint;
+
+  /// No description provided for @enableTts.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable TTS'**
+  String get enableTts;
+
+  /// No description provided for @enableTtsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable text-to-speech reading'**
+  String get enableTtsHint;
+
+  /// No description provided for @ttsSpeedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Speed'**
+  String get ttsSpeedLabel;
+
+  /// No description provided for @ttsSpeedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjust reading speed'**
+  String get ttsSpeedHint;
+
+  /// No description provided for @ttsVolumeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume'**
+  String get ttsVolumeLabel;
+
+  /// No description provided for @ttsVolumeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjust reading volume'**
+  String get ttsVolumeHint;
+
+  /// No description provided for @ttsPitchLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pitch'**
+  String get ttsPitchLabel;
+
+  /// No description provided for @ttsPitchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjust reading pitch'**
+  String get ttsPitchHint;
+
+  /// No description provided for @cloudSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud Sync'**
+  String get cloudSync;
+
+  /// No description provided for @webdavConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'WebDAV'**
+  String get webdavConfig;
+
+  /// No description provided for @webdavConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Configured - {serverUrl}'**
+  String webdavConfigured(Object serverUrl);
+
+  /// No description provided for @webdavConfigHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to configure WebDAV server'**
+  String get webdavConfigHint;
+
+  /// No description provided for @appSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'App Settings'**
+  String get appSettings;
+
+  /// No description provided for @appFont.
+  ///
+  /// In en, this message translates to:
+  /// **'App Font'**
+  String get appFont;
+
+  /// No description provided for @fontSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System Default'**
+  String get fontSystem;
+
+  /// No description provided for @fontSourceHanSans.
+  ///
+  /// In en, this message translates to:
+  /// **'Source Han Sans'**
+  String get fontSourceHanSans;
+
+  /// No description provided for @fontJetBrainsMono.
+  ///
+  /// In en, this message translates to:
+  /// **'JetBrains Mono'**
+  String get fontJetBrainsMono;
+
+  /// No description provided for @languageSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow system'**
+  String get languageSystem;
+
+  /// No description provided for @languageChinese.
+  ///
+  /// In en, this message translates to:
+  /// **'Chinese'**
+  String get languageChinese;
+
+  /// No description provided for @languageEnglish.
+  ///
+  /// In en, this message translates to:
+  /// **'English'**
+  String get languageEnglish;
+
+  /// No description provided for @typographySettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Typography'**
+  String get typographySettings;
+
+  /// No description provided for @fontFamilyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Font'**
+  String get fontFamilyLabel;
+
+  /// No description provided for @fontSizeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Font Size'**
+  String get fontSizeLabel;
+
+  /// No description provided for @lineSpacingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Line Spacing'**
+  String get lineSpacingLabel;
+
+  /// No description provided for @letterSpacingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Letter Spacing'**
+  String get letterSpacingLabel;
+
+  /// No description provided for @firstLineIndentLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'First-line Indent'**
+  String get firstLineIndentLabel;
+
+  /// No description provided for @pageMarginLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Page Margin'**
+  String get pageMarginLabel;
+
+  /// No description provided for @resetDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get resetDefault;
 }
 
 class _AppLocalizationsDelegate

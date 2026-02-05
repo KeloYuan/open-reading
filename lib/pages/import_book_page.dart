@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/book_import_service.dart';
 import '../widgets/side_toast.dart';
+import '../utils/localization_extension.dart';
 
 class ImportBookPage extends StatefulWidget {
   const ImportBookPage({super.key});
@@ -18,7 +19,7 @@ class _ImportBookPageState extends State<ImportBookPage> {
 
   static const List<Map<String, String>> _encodingOptions = [
     {'label': '自动识别', 'value': 'auto'},
-    {'label': 'GBK/GB2312', 'value': 'gbk'},
+    {'label': 'GBK/GB2312/GB18030', 'value': 'gbk'},
     {'label': 'UTF-8', 'value': 'utf8'},
     {'label': 'UTF-16 LE', 'value': 'utf16le'},
     {'label': 'UTF-16 BE', 'value': 'utf16be'},
@@ -75,7 +76,7 @@ class _ImportBookPageState extends State<ImportBookPage> {
       extendBodyBehindAppBar: false,
       appBar: AppBar(
         title: Text(
-          '导入书籍',
+          context.l10n.importBooks,
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w600,

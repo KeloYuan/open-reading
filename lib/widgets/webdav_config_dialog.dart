@@ -227,14 +227,14 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
                 color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  const Icon(Icons.error, color: Colors.red, size: 16),
-                  const SizedBox(width: 8),
+                  Icon(Icons.error, color: Colors.red, size: 16),
+                  SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '配置或连接失败，请检查设置',
-                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                      style: TextStyle(color: Colors.red, fontSize: 12),
                     ),
                   ),
                 ],

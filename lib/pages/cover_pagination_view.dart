@@ -13,14 +13,14 @@ class CoverPaginationView extends ConsumerStatefulWidget {
   final VoidCallback? onTap;
 
   const CoverPaginationView({
-    Key? key,
+    super.key,
     required this.pages,
     required this.controller,
     required this.settings,
     this.onPageChanged,
     this.onTextSelection,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   ConsumerState<CoverPaginationView> createState() =>

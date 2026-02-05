@@ -14,6 +14,7 @@ class ReaderSettingsService {
   static const String _keyShowPageIndicator = 'reader_show_page_indicator';
   static const String _keyEnableTextSelection = 'reader_enable_text_selection';
   static const String _keyParagraphSpacing = 'reader_paragraph_spacing';
+  static const String _keyFontFamily = 'reader_font_family';
 
   /// 保存设置到SharedPreferences
   static Future<void> saveSettings(ReaderSettings settings) async {
@@ -30,6 +31,10 @@ class ReaderSettingsService {
       prefs.setBool(_keyShowPageIndicator, settings.showPageIndicator),
       prefs.setBool(_keyEnableTextSelection, settings.enableTextSelection),
       prefs.setInt(_keyParagraphSpacing, settings.paragraphSpacing),
+      if (settings.fontFamily != null && settings.fontFamily!.isNotEmpty)
+        prefs.setString(_keyFontFamily, settings.fontFamily!)
+      else
+        prefs.remove(_keyFontFamily),
     ]);
   }
 
@@ -46,6 +51,12 @@ class ReaderSettingsService {
     final showPageIndicator = prefs.getBool(_keyShowPageIndicator) ?? true;
     final enableTextSelection = prefs.getBool(_keyEnableTextSelection) ?? true;
     final paragraphSpacing = prefs.getInt(_keyParagraphSpacing) ?? 0;
+    final storedFontFamily = prefs.getString(_keyFontFamily);
+    final fontFamily = (storedFontFamily == null ||
+            storedFontFamily.isEmpty ||
+            storedFontFamily == 'system')
+        ? null
+        : storedFontFamily;
 
     // 解析枚举类型
     final themeStr = prefs.getString(_keyTheme);
@@ -75,6 +86,7 @@ class ReaderSettingsService {
       showPageIndicator: showPageIndicator,
       enableTextSelection: enableTextSelection,
       paragraphSpacing: paragraphSpacing,
+      fontFamily: fontFamily,
     );
   }
 
@@ -93,6 +105,7 @@ class ReaderSettingsService {
       prefs.remove(_keyShowPageIndicator),
       prefs.remove(_keyEnableTextSelection),
       prefs.remove(_keyParagraphSpacing),
+      prefs.remove(_keyFontFamily),
     ]);
   }
 }

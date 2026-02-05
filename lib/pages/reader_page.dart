@@ -1,5 +1,6 @@
 ﻿import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -22,6 +23,9 @@ import '../services/bookmark_dao.dart';
 import '../services/reading_stats_dao.dart';
 import '../services/enhanced_txt_import_service.dart';
 import '../services/text_preprocessor.dart';
+import '../utils/system_ui_helper.dart';
+import '../utils/font_catalog.dart';
+import '../utils/localization_extension.dart';
 import 'cover_pagination_view.dart';
 import '../widgets/toc_widget.dart';
 import '../widgets/side_toast.dart';
@@ -923,13 +927,13 @@ class ReaderPage extends ConsumerStatefulWidget {
   final Future<String> Function()? fullContentLoader;
 
   const ReaderPage({
-    Key? key,
+    super.key,
     required this.bookContent,
     this.bookTitle,
     this.initialPageIndex = 0,
     this.bookId,
     this.fullContentLoader,
-  }) : super(key: key);
+  });
 
   @override
   ConsumerState<ReaderPage> createState() => _ReaderPageState();
@@ -972,6 +976,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   int _totalReadingSeconds = 0;
   Timer? _readingTimeTimer;
 
+  ProviderSubscription<ReaderSettings>? _readerSettingsSub;
+
   @override
   void initState() {
     super.initState();
@@ -986,6 +992,99 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
     _initializeAnimations();
     _initializePage();
+
+    _readerSettingsSub = ref.listenManual<ReaderSettings>(
+      readerSettingsProvider,
+      (previous, next) {
+        if (previous == null) return;
+
+        // 检测主题变化
+        if (previous.theme != next.theme) {
+          debugPrint('🎨 主题已切换: ${previous.themeName} → ${next.themeName}');
+          if (mounted) {
+            setState(() {});
+            // 主题切换后重新应用全屏模式（如果工具栏未显示）
+            final toolbarVisible = ref.read(toolbarProvider).isVisible;
+            if (!toolbarVisible) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  _hideSystemUI();
+                  debugPrint('🎨 主题切换完成，重新进入全屏模式');
+                }
+              });
+            } else {
+              _applyReaderSystemUIStyle(next);
+            }
+          }
+        }
+
+        // 检测影响分页的设置是否变化
+        final needRepagination = previous.fontSize != next.fontSize ||
+            previous.lineSpacing != next.lineSpacing ||
+            previous.letterSpacing != next.letterSpacing ||
+            previous.horizontalMargin != next.horizontalMargin ||
+            previous.firstLineIndent != next.firstLineIndent ||
+            previous.fontFamily != next.fontFamily;
+
+        if (needRepagination) {
+          debugPrint('📝 排版设置变化，触发重新分页...');
+          debugPrint('   字体: ${previous.fontSize} → ${next.fontSize}');
+
+          // 取消之前的防抖计时器
+          _repaginationDebounceTimer?.cancel();
+
+          // 使用防抖延迟重新分页（200ms），避免频繁调整时卡顿
+          _repaginationDebounceTimer =
+              Timer(const Duration(milliseconds: 200), () {
+            if (!mounted) return;
+
+            setState(() {
+              _isRepaginating = true;
+            });
+
+            // 保存当前页面的字符位置（而不是进度百分比）
+            final paginationState = ref.read(readerPaginationProvider);
+            final currentCharOffset = paginationState.currentCharOffset;
+            final currentProgress = paginationState.progress; // 作为备用方案
+
+            debugPrint(
+                '💾 保存当前阅读位置: 字符索引 $currentCharOffset (进度 ${(currentProgress * 100).toStringAsFixed(1)}%)');
+
+            // 使用延迟确保loading状态能被显示
+            Future.delayed(const Duration(milliseconds: 50), () async {
+              if (!mounted) return;
+
+              // 重新分页（会等待完成）
+              await initializePagination();
+
+              // 重新分页完成后，恢复到相应的阅读位置
+              if (mounted) {
+                final notifier = ref.read(readerPaginationProvider.notifier);
+
+                // 优先使用字符索引定位，更精确
+                if (currentCharOffset != null) {
+                  notifier.goToCharIndex(currentCharOffset);
+                  debugPrint(
+                    '✅ 重新分页完成，已通过字符索引 $currentCharOffset 精确定位',
+                  );
+                } else {
+                  // 回退到进度百分比方法
+                  notifier.goToProgress(currentProgress);
+                  debugPrint(
+                    '✅ 重新分页完成，已恢复到 ${(currentProgress * 100).toStringAsFixed(1)}% 位置',
+                  );
+                }
+
+                // 隐藏loading
+                setState(() {
+                  _isRepaginating = false;
+                });
+              }
+            });
+          });
+        }
+      },
+    );
 
     // 延迟进入沉浸式全屏模式，确保窗口已完全初始化
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1054,6 +1153,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     _repaginationDebounceTimer?.cancel();
     _readingTimeTimer?.cancel();
     _selectionToolbarDelayTimer?.cancel();
+    _readerSettingsSub?.close();
+    ref.read(readerPaginationProvider.notifier).reset();
 
     // 禁用屏幕常亮
     _disableWakeLock();
@@ -1080,7 +1181,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       if (seconds >= 5) {
         _totalReadingSeconds += seconds;
         _statsDao.insertReadingTime(now, seconds);
-        debugPrint('📊 保存阅读时间: ${seconds}秒 (累计: ${_totalReadingSeconds}秒)');
+        debugPrint('📊 保存阅读时间: $seconds秒 (累计: $_totalReadingSeconds秒)');
       }
 
       // 重置开始时间
@@ -1267,6 +1368,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     }
 
     final book = await BookDao().getBookById(bookId);
+    if (!mounted) return;
     if (book == null) {
       showSideToast(context, '未找到书籍信息');
       return;
@@ -1280,11 +1382,13 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     final stored = normalized == 'auto' ? null : normalized;
     final updatedBook = book.copyWith(textEncoding: stored);
     await BookDao().updateBook(updatedBook);
+    if (!mounted) return;
 
     showSideToast(context, '编码已更新，重新加载中...');
 
     final file = File(updatedBook.filePath);
     if (!await file.exists()) {
+      if (!mounted) return;
       showSideToast(context, '文件不存在，无法重新加载');
       return;
     }
@@ -1583,6 +1687,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   /// 显示系统 UI（状态栏和导航栏）- 工具栏显示时使用
   void _showSystemUI() {
     debugPrint('📱 [SystemUI] _showSystemUI 调用，平台: ${Platform.operatingSystem}');
+    final settings = ref.read(readerSettingsProvider);
+    _applyReaderSystemUIStyle(settings);
     if (Platform.isAndroid) {
       // Android: 使用原生方法通道确保系统UI正确显示
       _fullscreenChannel.invokeMethod('showSystemUI').catchError((e) {
@@ -1592,7 +1698,14 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     } else {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
+    _applyReaderSystemUIStyle(settings);
     debugPrint('📱 [SystemUI] 已设置为 edgeToEdge（显示系统栏）');
+  }
+
+  void _applyReaderSystemUIStyle(ReaderSettings settings) {
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiHelper.overlayStyleForBackground(settings.backgroundColor),
+    );
   }
 
   /// 隐藏系统 UI（状态栏和导航栏）- 工具栏隐藏时使用
@@ -1733,95 +1846,6 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     final settings = ref.watch(readerSettingsProvider);
     final toolbarState = ref.watch(toolbarProvider);
 
-    // 在build方法中设置监听器（必须在build方法中）
-    ref.listen<ReaderSettings>(readerSettingsProvider, (previous, next) {
-      if (previous == null) return;
-
-      // 检测主题变化
-      if (previous.theme != next.theme) {
-        debugPrint('🎨 主题已切换: ${previous.themeName} → ${next.themeName}');
-        // 强制重建以更新背景色
-        if (mounted) {
-          setState(() {});
-          // 主题切换后重新应用全屏模式（如果工具栏未显示）
-          if (!toolbarState.isVisible) {
-            // 使用 addPostFrameCallback 确保在UI重建完成后再应用全屏
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                _hideSystemUI();
-                debugPrint('🎨 主题切换完成，重新进入全屏模式');
-              }
-            });
-          }
-        }
-      }
-
-      // 检测影响分页的设置是否变化
-      final needRepagination = previous.fontSize != next.fontSize ||
-          previous.lineSpacing != next.lineSpacing ||
-          previous.letterSpacing != next.letterSpacing ||
-          previous.horizontalMargin != next.horizontalMargin ||
-          previous.firstLineIndent != next.firstLineIndent;
-
-      if (needRepagination) {
-        debugPrint('📝 排版设置变化，触发重新分页...');
-        debugPrint('   字体: ${previous.fontSize} → ${next.fontSize}');
-
-        // 取消之前的防抖计时器
-        _repaginationDebounceTimer?.cancel();
-
-        // 使用防抖延迟重新分页（200ms），避免频繁调整时卡顿
-        _repaginationDebounceTimer =
-            Timer(const Duration(milliseconds: 200), () {
-          if (!mounted) return;
-
-          setState(() {
-            _isRepaginating = true;
-          });
-
-          // 保存当前页面的字符位置（而不是进度百分比）
-          final paginationState = ref.read(readerPaginationProvider);
-          final currentCharOffset = paginationState.currentCharOffset;
-          final currentProgress = paginationState.progress; // 作为备用方案
-
-          debugPrint(
-              '💾 保存当前阅读位置: 字符索引 $currentCharOffset (进度 ${(currentProgress * 100).toStringAsFixed(1)}%)');
-
-          // 使用延迟确保loading状态能被显示
-          Future.delayed(const Duration(milliseconds: 50), () async {
-            if (!mounted) return;
-
-            // 重新分页（会等待完成）
-            await initializePagination();
-
-            // 重新分页完成后，恢复到相应的阅读位置
-            if (mounted) {
-              final notifier = ref.read(readerPaginationProvider.notifier);
-
-              // 优先使用字符索引定位，更精确
-              if (currentCharOffset != null) {
-                notifier.goToCharIndex(currentCharOffset);
-                debugPrint(
-                  '✅ 重新分页完成，已通过字符索引 $currentCharOffset 精确定位',
-                );
-              } else {
-                // 回退到进度百分比方法
-                notifier.goToProgress(currentProgress);
-                debugPrint(
-                  '✅ 重新分页完成，已恢复到 ${(currentProgress * 100).toStringAsFixed(1)}% 位置',
-                );
-              }
-
-              // 隐藏loading
-              setState(() {
-                _isRepaginating = false;
-              });
-            }
-          });
-        });
-      }
-    });
-
     return Scaffold(
       body: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
@@ -1839,9 +1863,11 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
                 _buildReaderContentArea(settings),
 
                 // 页面信息浮层（状态栏和进度）
-                _ReaderOverlay(
-                  showStatusBar: true,
-                  showProgress: settings.showPageIndicator,
+                RepaintBoundary(
+                  child: _ReaderOverlay(
+                    showStatusBar: true,
+                    showProgress: settings.showPageIndicator,
+                  ),
                 ),
 
                 // 工具栏（顶部和底部）
@@ -1897,42 +1923,44 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
                   Positioned(
                     top: 48,
                     right: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color:
-                            settings.backgroundColor.withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.08),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                settings.textStyle.color ?? Colors.black,
+                    child: RepaintBoundary(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              settings.backgroundColor.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  settings.textStyle.color ?? Colors.black,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '加载全量内容中',
-                            style: settings.textStyle.copyWith(fontSize: 12),
-                          ),
-                        ],
+                            const SizedBox(width: 8),
+                            Text(
+                              '加载全量内容中',
+                              style: settings.textStyle.copyWith(fontSize: 12),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1977,25 +2005,27 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   /// 构建阅读内容区域
   Widget _buildReaderContentArea(ReaderSettings settings) {
     return Positioned.fill(
-      child: _ReaderTextView(
-        paginationMode: settings.paginationMode,
-        onPageChanged: (pageIndex) {
-          // 页面变化时关闭文本选择工具栏
-          if (_showTextSelectionToolbar) {
-            _closeTextSelectionToolbar();
-          }
+      child: RepaintBoundary(
+        child: _ReaderTextView(
+          paginationMode: settings.paginationMode,
+          onPageChanged: (pageIndex) {
+            // 页面变化时关闭文本选择工具栏
+            if (_showTextSelectionToolbar) {
+              _closeTextSelectionToolbar();
+            }
 
-          // 页面变化时取消自动隐藏计时器
-          _cancelAutoHideTimer();
-          if (ref.read(toolbarProvider).isVisible) {
-            _startAutoHideTimer();
-          }
+            // 页面变化时取消自动隐藏计时器
+            _cancelAutoHideTimer();
+            if (ref.read(toolbarProvider).isVisible) {
+              _startAutoHideTimer();
+            }
 
-          // 保存阅读进度
-          _saveReadingProgress(pageIndex);
-        },
-        onTextSelection: _handleTextSelection,
-        onTap: _handleCenterTap,
+            // 保存阅读进度
+            _saveReadingProgress(pageIndex);
+          },
+          onTextSelection: _handleTextSelection,
+          onTap: _handleCenterTap,
+        ),
       ),
     );
   }
@@ -2462,7 +2492,7 @@ class _ReaderTextViewState extends ConsumerState<_ReaderTextView> {
     // 关键：使用分页时保存的settings（包含响应式padding），如果没有则使用当前settings
     final renderSettings = paginationState.paginationSettings ?? settings;
 
-    if (paginationState.isLoading) {
+    if (paginationState.isLoading && paginationState.pages.isEmpty) {
       return _buildLoadingView(settings);
     }
 
@@ -2746,69 +2776,230 @@ class _SlidePaginationView extends StatefulWidget {
 }
 
 class _SlidePaginationViewState extends State<_SlidePaginationView> {
+  final Map<int, ui.Image> _pageSnapshots = {};
+  final Map<int, GlobalKey> _pageKeys = {};
+  Timer? _scrollEndTimer;
+  bool _showSnapshots = false;
+
   @override
-  Widget build(BuildContext context) {
-    return PageView.builder(
-      controller: widget.controller,
-      onPageChanged: widget.onPageChanged,
-      itemCount: widget.pages.length,
-      // 优化滚动物理效果
-      physics: const PageScrollPhysics(parent: ClampingScrollPhysics()),
-      itemBuilder: (context, index) {
-        return _buildPageContent(context, widget.pages[index]);
-      },
-    );
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _prefetchSnapshotsForCurrent();
+    });
   }
 
-  Widget _buildPageContent(BuildContext context, String pageContent) {
-    // 分页器已经精确计算了每页应该有多少文字
-    // 渲染时需要确保尺寸和分页一致
-    return RepaintBoundary(
-      child: Consumer(
-        builder: (context, ref, child) {
-          final currentSettings = ref.watch(readerSettingsProvider);
-          final ttsState = ref.watch(readerTtsProvider);
-          final paginationState = ref.watch(readerPaginationProvider);
+  @override
+  void didUpdateWidget(_SlidePaginationView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.pages != widget.pages) {
+      _clearSnapshots();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _prefetchSnapshotsForCurrent();
+      });
+    }
+  }
 
-          // 获取屏幕尺寸
-          final screenSize = MediaQuery.of(context).size;
-          final statusBarHeight = MediaQuery.of(context).padding.top;
+  @override
+  void dispose() {
+    _scrollEndTimer?.cancel();
+    _clearSnapshots();
+    super.dispose();
+  }
 
-          // 分页时保存的 padding 和 maxLines
-          final basePadding = paginationState.paginationSettings?.padding ??
-              currentSettings.padding;
-          final maxLines = paginationState.maxLinesPerPage ?? 20;
-
-          // 🔧 渲染时的 padding：
-          // - 顶部需要加上状态栏高度（分页时的屏幕尺寸已减去状态栏）
-          // - 左右底部保持和分页一致
-          final renderPadding = EdgeInsets.only(
-            left: basePadding.left,
-            right: basePadding.right,
-            top: basePadding.top + statusBarHeight, // 加上状态栏高度
-            bottom: basePadding.bottom,
-          );
-
-          return Container(
-            width: screenSize.width,
-            height: screenSize.height, // 使用完整屏幕高度
-            padding: renderPadding,
-            color: currentSettings.backgroundColor,
-            // ClipRect确保超出部分被裁剪
-            child: ClipRect(
-              clipBehavior: Clip.hardEdge,
-              child: _HighlightedText(
-                text: pageContent,
-                style: currentSettings.textStyle,
-                highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
-                enableSelection: currentSettings.enableTextSelection,
-                onTextSelection: widget.onTextSelection,
-                maxLines: maxLines,
-              ),
-            ),
+  @override
+  Widget build(BuildContext context) {
+    return NotificationListener<ScrollNotification>(
+      onNotification: _handleScrollNotification,
+      child: PageView.builder(
+        controller: widget.controller,
+        onPageChanged: (pageIndex) {
+          widget.onPageChanged?.call(pageIndex);
+          _prefetchSnapshotsFor(pageIndex);
+        },
+        itemCount: widget.pages.length,
+        // 优化滚动物理效果
+        physics: const PageScrollPhysics(parent: ClampingScrollPhysics()),
+        itemBuilder: (context, index) {
+          return _buildPageContent(
+            context,
+            index,
+            widget.pages[index],
           );
         },
       ),
+    );
+  }
+
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification) {
+      _scrollEndTimer?.cancel();
+      if (!_showSnapshots) {
+        setState(() {
+          _showSnapshots = true;
+        });
+      }
+      _prefetchSnapshotsForCurrent();
+    } else if (notification is ScrollEndNotification ||
+        (notification is UserScrollNotification &&
+            notification.direction == ScrollDirection.idle)) {
+      _scrollEndTimer?.cancel();
+      _scrollEndTimer = Timer(const Duration(milliseconds: 140), () {
+        if (!mounted) return;
+        setState(() {
+          _showSnapshots = false;
+        });
+      });
+    }
+    return false;
+  }
+
+  GlobalKey _getPageKey(int index) {
+    return _pageKeys.putIfAbsent(index, () => GlobalKey());
+  }
+
+  void _prefetchSnapshotsForCurrent() {
+    final current = widget.controller.page?.round() ??
+        widget.controller.initialPage.clamp(0, widget.pages.length - 1);
+    _prefetchSnapshotsFor(current);
+  }
+
+  void _prefetchSnapshotsFor(int pageIndex) {
+    final targets = <int>{
+      pageIndex - 1,
+      pageIndex,
+      pageIndex + 1,
+    }..removeWhere((value) => value < 0 || value >= widget.pages.length);
+
+    for (final index in targets) {
+      _captureSnapshot(index);
+    }
+
+    _evictSnapshotsExcept(targets);
+  }
+
+  Future<void> _captureSnapshot(int index, {int attempts = 2}) async {
+    if (_pageSnapshots.containsKey(index)) return;
+    final boundaryKey = _getPageKey(index);
+
+    final boundaryContext = boundaryKey.currentContext;
+    if (boundaryContext == null) {
+      await Future<void>.delayed(Duration.zero);
+      if (!mounted) return;
+      return _captureSnapshot(index, attempts: attempts);
+    }
+
+    final boundary = boundaryContext.findRenderObject();
+    if (boundary is! RenderRepaintBoundary) return;
+
+    if (boundary.debugNeedsPaint && attempts > 0) {
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+      if (!mounted) return;
+      return _captureSnapshot(index, attempts: attempts - 1);
+    }
+
+    try {
+      final pixelRatio = View.of(boundaryContext).devicePixelRatio;
+      final image = await boundary.toImage(pixelRatio: pixelRatio);
+      if (!mounted) {
+        image.dispose();
+        return;
+      }
+      setState(() {
+        _pageSnapshots[index] = image;
+      });
+    } catch (e) {
+      debugPrint('❌ 页面快照失败: $e');
+    }
+  }
+
+  void _evictSnapshotsExcept(Set<int> keep) {
+    final toRemove =
+        _pageSnapshots.keys.where((key) => !keep.contains(key)).toList();
+    for (final key in toRemove) {
+      _pageSnapshots[key]?.dispose();
+      _pageSnapshots.remove(key);
+    }
+  }
+
+  void _clearSnapshots() {
+    for (final image in _pageSnapshots.values) {
+      image.dispose();
+    }
+    _pageSnapshots.clear();
+    _pageKeys.clear();
+  }
+
+  Widget _buildPageContent(
+    BuildContext context,
+    int pageIndex,
+    String pageContent,
+  ) {
+    // 分页器已经精确计算了每页应该有多少文字
+    // 渲染时需要确保尺寸和分页一致
+    final snapshot = _pageSnapshots[pageIndex];
+    final showSnapshot = _showSnapshots && snapshot != null;
+
+    return Stack(
+      children: [
+        RepaintBoundary(
+          key: _getPageKey(pageIndex),
+          child: Consumer(
+            builder: (context, ref, child) {
+              final currentSettings = ref.watch(readerSettingsProvider);
+              final ttsState = ref.watch(readerTtsProvider);
+              final paginationState = ref.watch(readerPaginationProvider);
+
+              // 获取屏幕尺寸
+              final screenSize = MediaQuery.of(context).size;
+              final statusBarHeight = MediaQuery.of(context).padding.top;
+
+              // 分页时保存的 padding 和 maxLines
+              final basePadding = paginationState.paginationSettings?.padding ??
+                  currentSettings.padding;
+              final maxLines = paginationState.maxLinesPerPage ?? 20;
+
+              // 🔧 渲染时的 padding：
+              // - 顶部需要加上状态栏高度（分页时的屏幕尺寸已减去状态栏）
+              // - 左右底部保持和分页一致
+              final renderPadding = EdgeInsets.only(
+                left: basePadding.left,
+                right: basePadding.right,
+                top: basePadding.top + statusBarHeight, // 加上状态栏高度
+                bottom: basePadding.bottom,
+              );
+
+              return Container(
+                width: screenSize.width,
+                height: screenSize.height, // 使用完整屏幕高度
+                padding: renderPadding,
+                color: currentSettings.backgroundColor,
+                // ClipRect确保超出部分被裁剪
+                child: ClipRect(
+                  clipBehavior: Clip.hardEdge,
+                  child: _HighlightedText(
+                    text: pageContent,
+                    style: currentSettings.textStyle,
+                    highlightedSentenceIndex: ttsState.highlightedSentenceIndex,
+                    enableSelection: currentSettings.enableTextSelection,
+                    onTextSelection: widget.onTextSelection,
+                    maxLines: maxLines,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        if (showSnapshot)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: RawImage(
+                image: snapshot,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -2983,13 +3174,13 @@ class _SimulationPaginationView extends StatefulWidget {
   final VoidCallback? onTap;
 
   const _SimulationPaginationView({
-    Key? key,
+    super.key,
     required this.pages,
     required this.settings,
     this.onPageChanged,
     this.onTextSelection,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   State<_SimulationPaginationView> createState() =>
@@ -3717,6 +3908,7 @@ class _ReaderToolbar extends ConsumerWidget {
               child: Consumer(
                 builder: (context, ref, child) {
                   final settings = ref.watch(readerSettingsProvider);
+                  final l10n = context.l10n;
                   return ListView(
                     controller: scrollController,
                     children: [
@@ -3739,7 +3931,7 @@ class _ReaderToolbar extends ConsumerWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            '排版设置',
+                            l10n.typographySettings,
                             style: settings.textStyle.copyWith(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -3758,9 +3950,55 @@ class _ReaderToolbar extends ConsumerWidget {
                       ),
                       const SizedBox(height: 16),
 
+                      // 字体选择
+                      Text(
+                        l10n.fontFamilyLabel,
+                        style: settings.textStyle.copyWith(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: FontCatalog.readerFonts.map((option) {
+                          final isSelected =
+                              settings.fontFamily == option.family;
+                          final label = FontCatalog.labelFor(l10n, option);
+                          return ChoiceChip(
+                            label: Text(
+                              label,
+                              style: settings.textStyle.copyWith(
+                                fontSize: 13,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                                fontFamily: option.family,
+                              ),
+                            ),
+                            selected: isSelected,
+                            selectedColor: settings.textStyle.color?.withValues(
+                              alpha: 0.18,
+                            ),
+                            backgroundColor:
+                                settings.textStyle.color?.withValues(
+                              alpha: 0.08,
+                            ),
+                            onSelected: (_) {
+                              HapticFeedback.selectionClick();
+                              ref
+                                  .read(readerSettingsProvider.notifier)
+                                  .updateFontFamily(option.family);
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 24),
+
                       // 字体大小滑块
                       _buildSliderSetting(
-                        label: '字体大小',
+                        label: l10n.fontSizeLabel,
                         value: settings.fontSize,
                         min: 12.0,
                         max: 36.0,
@@ -3778,7 +4016,7 @@ class _ReaderToolbar extends ConsumerWidget {
 
                       // 行距滑块
                       _buildSliderSetting(
-                        label: '行距',
+                        label: l10n.lineSpacingLabel,
                         value: settings.lineSpacing,
                         min: 1.0,
                         max: 3.0,
@@ -3796,7 +4034,7 @@ class _ReaderToolbar extends ConsumerWidget {
 
                       // 字间距滑块
                       _buildSliderSetting(
-                        label: '字间距',
+                        label: l10n.letterSpacingLabel,
                         value: settings.letterSpacing,
                         min: -0.5,
                         max: 2.0,
@@ -3814,7 +4052,7 @@ class _ReaderToolbar extends ConsumerWidget {
 
                       // 首行缩进滑块
                       _buildSliderSetting(
-                        label: '首行缩进',
+                        label: l10n.firstLineIndentLabel,
                         value: settings.firstLineIndent,
                         min: 0.0,
                         max: 4.0,
@@ -3833,7 +4071,7 @@ class _ReaderToolbar extends ConsumerWidget {
 
                       // 页边距滑块
                       _buildSliderSetting(
-                        label: '页边距',
+                        label: l10n.pageMarginLabel,
                         value: settings.horizontalMargin,
                         min: 10.0,
                         max: 40.0,
@@ -3869,6 +4107,9 @@ class _ReaderToolbar extends ConsumerWidget {
                             ref
                                 .read(readerSettingsProvider.notifier)
                                 .updateHorizontalMargin(20.0);
+                            ref
+                                .read(readerSettingsProvider.notifier)
+                                .updateFontFamily(null);
                           },
                           icon: Icon(
                             Icons.refresh,
@@ -3877,7 +4118,7 @@ class _ReaderToolbar extends ConsumerWidget {
                             ),
                           ),
                           label: Text(
-                            '恢复默认',
+                            l10n.resetDefault,
                             style: settings.textStyle.copyWith(fontSize: 15),
                           ),
                         ),
@@ -4036,6 +4277,7 @@ class _ReaderToolbar extends ConsumerWidget {
     }
 
     final book = await BookDao().getBookById(bookId);
+    if (!context.mounted) return;
     if (book == null) {
       showSideToast(context, '未找到书籍信息');
       return;
@@ -4056,9 +4298,9 @@ class _ReaderToolbar extends ConsumerWidget {
       context: context,
       builder: (dialogContext) {
         String? selectedEncoding = currentEncoding;
-        final options = const [
+        const options = [
           {'label': '自动识别', 'value': 'auto'},
-          {'label': 'GBK/GB2312', 'value': 'gbk'},
+          {'label': 'GBK/GB2312/GB18030', 'value': 'gbk'},
           {'label': 'UTF-8', 'value': 'utf8'},
           {'label': 'UTF-16 LE', 'value': 'utf16le'},
           {'label': 'UTF-16 BE', 'value': 'utf16be'},

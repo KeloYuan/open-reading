@@ -145,4 +145,130 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get error => '错误';
+
+  @override
+  String get initializationFailed => '初始化失败';
+
+  @override
+  String get unknownError => '未知错误';
+
+  @override
+  String get retry => '重试';
+
+  @override
+  String get appearanceSettings => '外观设置';
+
+  @override
+  String get readingTips => '阅读提示';
+
+  @override
+  String get readingFontSettingsMoved => '阅读字体设置已移至阅读界面';
+
+  @override
+  String get readingFontSettingsHint =>
+      '打开任意书籍，点击屏幕中央，在底部控制栏中点击“设置”按钮，即可调整字体大小、行间距、字符间距、页面边距与阅读字体。';
+
+  @override
+  String get readingSettings => '阅读设置';
+
+  @override
+  String get bookSource => '书源';
+
+  @override
+  String get bookSourceFeatures => '书源功能';
+
+  @override
+  String get enableBookSource => '启用书源功能';
+
+  @override
+  String get enableBookSourceHint => '开启在线书籍搜索和阅读功能';
+
+  @override
+  String get bookSourceEnabledHint => '启用书源功能后，可在导航栏中看到“书源”选项，支持在线书籍搜索和阅读。';
+
+  @override
+  String get enableTts => '启用朗读功能';
+
+  @override
+  String get enableTtsHint => '开启文本转语音朗读';
+
+  @override
+  String get ttsSpeedLabel => '朗读速度';
+
+  @override
+  String get ttsSpeedHint => '调整朗读的快慢';
+
+  @override
+  String get ttsVolumeLabel => '朗读音量';
+
+  @override
+  String get ttsVolumeHint => '调整朗读音量大小';
+
+  @override
+  String get ttsPitchLabel => '音调高低';
+
+  @override
+  String get ttsPitchHint => '调整朗读音调';
+
+  @override
+  String get cloudSync => '云端同步';
+
+  @override
+  String get webdavConfig => 'WebDAV配置';
+
+  @override
+  String webdavConfigured(Object serverUrl) {
+    return '已配置 - $serverUrl';
+  }
+
+  @override
+  String get webdavConfigHint => '点击配置WebDAV服务器';
+
+  @override
+  String get appSettings => '应用设置';
+
+  @override
+  String get appFont => '全局字体';
+
+  @override
+  String get fontSystem => '系统默认';
+
+  @override
+  String get fontSourceHanSans => '思源黑体';
+
+  @override
+  String get fontJetBrainsMono => 'JetBrains Mono';
+
+  @override
+  String get languageSystem => '跟随系统';
+
+  @override
+  String get languageChinese => '简体中文';
+
+  @override
+  String get languageEnglish => 'English';
+
+  @override
+  String get typographySettings => '排版设置';
+
+  @override
+  String get fontFamilyLabel => '字体';
+
+  @override
+  String get fontSizeLabel => '字体大小';
+
+  @override
+  String get lineSpacingLabel => '行距';
+
+  @override
+  String get letterSpacingLabel => '字间距';
+
+  @override
+  String get firstLineIndentLabel => '首行缩进';
+
+  @override
+  String get pageMarginLabel => '页边距';
+
+  @override
+  String get resetDefault => '恢复默认';
 }

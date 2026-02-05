@@ -474,7 +474,7 @@ class BookImportService {
     Uint8List bytes;
 
     // 对于超大的非TXT文件（如大PDF），仍然限制读取大小避免内存问题
-    final maxBytesForMetadata = 10 * 1024 * 1024; // 10MB
+    const int maxBytesForMetadata = 10 * 1024 * 1024; // 10MB
 
     if (fileSize > maxBytesForMetadata && ext != 'txt' && ext != 'epub') {
       // 非TXT/EPUB的大文件只读取前10MB用于元数据提取
@@ -719,7 +719,7 @@ class BookImportService {
 
       // Extract basic metadata - PDF metadata is often limited
       final title = fileName.replaceAll(RegExp(r'\.(pdf)$'), '');
-      final author = 'Unknown';
+      const author = 'Unknown';
 
       // 提取PDF封面（先尝试从PDF第一页，再尝试网络）
       Uint8List? coverImage;

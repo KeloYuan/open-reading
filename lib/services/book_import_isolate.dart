@@ -92,7 +92,7 @@ Future<SimpleMetadata> extractTxtMetadataInIsolate(
 ) async {
   try {
     // 只读取文件的前100KB用于元数据提取
-    final maxBytesForMetadata = 100 * 1024; // 100KB
+    const int maxBytesForMetadata = 100 * 1024; // 100KB
     final bytesToAnalyze = params.bytes.length > maxBytesForMetadata
         ? params.bytes.sublist(0, maxBytesForMetadata)
         : params.bytes;
@@ -240,7 +240,7 @@ Future<SimpleMetadata> extractMobiMetadataInIsolate(
 
       if (identifier.contains('BOOKMOBI') || identifier.contains('TEXTREAD')) {
         // 只分析文件的前500KB
-        final maxBytesForAnalysis = 500 * 1024;
+        const int maxBytesForAnalysis = 500 * 1024;
         final bytesToAnalyze = params.bytes.length > maxBytesForAnalysis
             ? params.bytes.sublist(0, maxBytesForAnalysis)
             : params.bytes;
@@ -332,7 +332,7 @@ String _detectAndDecodeText(Uint8List bytes, {String? encodingOverride}) {
     if (_isValidUtf8Content(content)) {
       final utf8Quality = _contentQualityScore(content);
       try {
-        final gbkContent = gbk.decode(bytes);
+        final gbkContent = gbk_bytes.decode(bytes);
         final gbkQuality = _contentQualityScore(gbkContent);
         if (gbkQuality > utf8Quality + 0.15 &&
             _isValidGbkContent(gbkContent)) {
@@ -356,7 +356,7 @@ String _detectAndDecodeText(Uint8List bytes, {String? encodingOverride}) {
 
   if (gbkScore > 0.3) {
     try {
-      var content = gbk.decode(bytes);
+      var content = gbk_bytes.decode(bytes);
       // 如果评分很高(>0.8)，直接接受
       if (gbkScore > 0.8) {
         final chineseRatio = _chineseRatio(content);
@@ -395,7 +395,7 @@ String _detectAndDecodeText(Uint8List bytes, {String? encodingOverride}) {
   // 5. 强制 GBK
   debugPrint('📊 [Isolate] 步骤4: 强制 GBK...');
   try {
-    final content = gbk.decode(bytes);
+    final content = gbk_bytes.decode(bytes);
     if (content.isNotEmpty) {
       debugPrint('⚠️ [Isolate] 强制 GBK (${content.length} 字符)');
       return content;
@@ -433,7 +433,12 @@ String _normalizeEncoding(String? encoding) {
   if (encoding == null) return 'auto';
   final normalized = encoding.toLowerCase().replaceAll('-', '').trim();
   if (normalized.isEmpty) return 'auto';
-  if (normalized == 'gb2312' || normalized == 'gbk') return 'gbk';
+  if (normalized == 'gb2312' ||
+      normalized == 'gbk' ||
+      normalized == 'gb18030' ||
+      normalized == 'gb') {
+    return 'gbk';
+  }
   if (normalized == 'utf8') return 'utf8';
   if (normalized == 'utf16le') return 'utf16le';
   if (normalized == 'utf16be') return 'utf16be';
@@ -444,7 +449,7 @@ String? _decodeWithEncodingOverride(Uint8List bytes, String encoding) {
   try {
     switch (encoding) {
       case 'gbk':
-        return gbk.decode(bytes);
+        return gbk_bytes.decode(bytes);
       case 'utf8':
         return utf8.decode(bytes, allowMalformed: true);
       case 'utf16le':
@@ -586,7 +591,7 @@ String _decodeGbkLenient(Uint8List bytes) {
       final b2 = bytes[i + 1];
       if (b2 >= 0x40 && b2 <= 0xFE && b2 != 0x7F) {
         try {
-          buffer.write(gbk.decode([b1, b2]));
+          buffer.write(gbk_bytes.decode([b1, b2]));
         } catch (_) {}
         i += 2;
         continue;

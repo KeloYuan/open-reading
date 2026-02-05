@@ -183,5 +183,51 @@
   "error": "Error",
   "@error": {
     "description": "Error message"
-  }
+  },
+  "initializationFailed": "Initialization failed",
+  "unknownError": "Unknown error",
+  "retry": "Retry",
+  "appearanceSettings": "Appearance",
+  "readingTips": "Reading Tips",
+  "readingFontSettingsMoved": "Reading font settings moved",
+  "readingFontSettingsHint": "Open any book, tap the center of the screen, then use the bottom toolbar to adjust font size, line spacing, letter spacing, margins, and reading font.",
+  "readingSettings": "Reading Settings",
+  "bookSource": "Sources",
+  "bookSourceFeatures": "Book Sources",
+  "enableBookSource": "Enable book sources",
+  "enableBookSourceHint": "Enable online book search and reading",
+  "bookSourceEnabledHint": "When enabled, you will see the \"Sources\" tab for online search and reading.",
+  "enableTts": "Enable TTS",
+  "enableTtsHint": "Enable text-to-speech reading",
+  "ttsSpeedLabel": "Speed",
+  "ttsSpeedHint": "Adjust reading speed",
+  "ttsVolumeLabel": "Volume",
+  "ttsVolumeHint": "Adjust reading volume",
+  "ttsPitchLabel": "Pitch",
+  "ttsPitchHint": "Adjust reading pitch",
+  "cloudSync": "Cloud Sync",
+  "webdavConfig": "WebDAV",
+  "webdavConfigured": "Configured - {serverUrl}",
+  "@webdavConfigured": {
+    "placeholders": {
+      "serverUrl": {}
+    }
+  },
+  "webdavConfigHint": "Tap to configure WebDAV server",
+  "appSettings": "App Settings",
+  "appFont": "App Font",
+  "fontSystem": "System Default",
+  "fontSourceHanSans": "Source Han Sans",
+  "fontJetBrainsMono": "JetBrains Mono",
+  "languageSystem": "Follow system",
+  "languageChinese": "Chinese",
+  "languageEnglish": "English",
+  "typographySettings": "Typography",
+  "fontFamilyLabel": "Font",
+  "fontSizeLabel": "Font Size",
+  "lineSpacingLabel": "Line Spacing",
+  "letterSpacingLabel": "Letter Spacing",
+  "firstLineIndentLabel": "First-line Indent",
+  "pageMarginLabel": "Page Margin",
+  "resetDefault": "Reset"
 }

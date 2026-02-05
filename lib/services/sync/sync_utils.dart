@@ -9,7 +9,7 @@ import 'package:uuid/uuid.dart';
 /// 提供设备识别、时间戳比较、数据合并等同步辅助功能
 class SyncUtils {
   static const String _deviceIdKey = 'webdav_device_id';
-  static final Uuid _uuid = const Uuid();
+  static const Uuid _uuid = Uuid();
 
   /// 获取或生成设备唯一标识
   ///

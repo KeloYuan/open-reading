@@ -6,13 +6,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
 import '../utils/app_themes.dart';
+import '../l10n/app_localizations.dart';
+import '../services/app_settings_notifier.dart';
 import '../services/sync/webdav_sync_service.dart';
 import '../services/reading_engine_coordinator.dart';
 import '../services/pagination_cache_service.dart';
+import '../utils/font_catalog.dart';
 import '../widgets/side_toast.dart';
 import '../services/book_dao.dart';
 import '../widgets/webdav_config_dialog.dart';
 import 'home_page_responsive.dart';
+import '../utils/glass_config.dart';
+import '../utils/localization_extension.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -47,7 +52,6 @@ class _SettingsPageState extends State<SettingsPage> {
   // 其他设置
   bool _enableBatteryOptimization = true;
   bool _enableFullscreen = false;
-  String _language = 'zh-CN';
 
   // 开发者设置
   bool _enableDeveloperMode = false;
@@ -94,7 +98,6 @@ class _SettingsPageState extends State<SettingsPage> {
       _enableBatteryOptimization =
           prefs.getBool('enableBatteryOptimization') ?? true;
       _enableFullscreen = prefs.getBool('enableFullscreen') ?? false;
-      _language = prefs.getString('language') ?? 'zh-CN';
 
       // 开发者设置
       _enableDeveloperMode = prefs.getBool('enableDeveloperMode') ?? false;
@@ -104,6 +107,11 @@ class _SettingsPageState extends State<SettingsPage> {
       _enableMemoryStats = prefs.getBool('enableMemoryStats') ?? false;
       _showFPS = prefs.getBool('showFPS') ?? false;
     });
+
+    // 依据动画设置动态调整毛玻璃强度
+    GlassEffectConfig.applyPerformanceMode(
+      reduceEffects: !_enableAnimations,
+    );
 
     // 初始化WebDAV服务
     await _webdavService.initialize();
@@ -134,7 +142,6 @@ class _SettingsPageState extends State<SettingsPage> {
       _enableBatteryOptimization,
     );
     await prefs.setBool('enableFullscreen', _enableFullscreen);
-    await prefs.setString('language', _language);
 
     // 开发者设置
     await prefs.setBool('enableDeveloperMode', _enableDeveloperMode);
@@ -147,6 +154,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final themeNotifier = Provider.of<ThemeNotifier>(context);
+    final appSettings = Provider.of<AppSettingsNotifier>(context);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     // 检查是否在侧边导航栏模式下
@@ -155,7 +163,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
     // 在侧边导航栏模式下，不显示 Scaffold 和 AppBar
     if (useRailNavigation) {
-      return _buildContent(context, themeNotifier, isDarkMode);
+      return _buildContent(context, themeNotifier, appSettings, isDarkMode);
     }
 
     // 手机模式：显示完整的 Scaffold + AppBar
@@ -167,12 +175,18 @@ class _SettingsPageState extends State<SettingsPage> {
         elevation: 0,
         toolbarHeight: 0, // 关闭系统AppBar，使用自绘毛玻璃顶栏
       ),
-      body: _buildContent(context, themeNotifier, isDarkMode),
+      body: _buildContent(context, themeNotifier, appSettings, isDarkMode),
     );
   }
 
   // 提取页面内容部分，在两种模式下共用
-  Widget _buildContent(BuildContext context, ThemeNotifier themeNotifier, bool isDarkMode) {
+  Widget _buildContent(
+    BuildContext context,
+    ThemeNotifier themeNotifier,
+    AppSettingsNotifier appSettings,
+    bool isDarkMode,
+  ) {
+    final l10n = context.l10n;
     return Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -202,7 +216,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           children: [
             _buildSectionCard(
-              title: '外观设置',
+              title: l10n.appearanceSettings,
               icon: Icons.palette_outlined,
               children: [
                 _buildThemeToggle(themeNotifier, isDarkMode),
@@ -214,7 +228,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 20),
             _buildSectionCard(
-              title: '阅读提示',
+              title: l10n.readingTips,
               icon: Icons.info_outline,
               children: [
                 Container(
@@ -240,7 +254,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        '字体设置已移至阅读界面',
+                        l10n.readingFontSettingsMoved,
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onSurface,
                           fontSize: 16,
@@ -249,7 +263,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        '打开任意书籍，点击屏幕中央，在底部控制栏中点击"设置"按钮，即可调整字体大小、行间距、字符间距、页面边距等阅读设置。',
+                        l10n.readingFontSettingsHint,
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Theme.of(
@@ -266,7 +280,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 20),
             _buildSectionCard(
-              title: '阅读设置',
+              title: l10n.readingSettings,
               icon: Icons.book_outlined,
               children: [
                 _buildReadingEngineSelector(),
@@ -282,12 +296,12 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 20),
             _buildSectionCard(
-              title: '书源功能',
+              title: l10n.bookSourceFeatures,
               icon: Icons.source,
               children: [
                 _buildSwitchSetting(
-                  title: '启用书源功能',
-                  subtitle: '开启在线书籍搜索和阅读功能',
+                  title: l10n.enableBookSource,
+                  subtitle: l10n.enableBookSourceHint,
                   value: _enableBooksource,
                   onChanged: (value) {
                     setState(() => _enableBooksource = value);
@@ -320,7 +334,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              '启用书源功能后，可在导航栏中看到"书源"选项，支持在线书籍搜索和阅读。',
+                              l10n.bookSourceEnabledHint,
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.amber.shade700,
@@ -336,20 +350,20 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 20),
             _buildSectionCard(
-              title: 'TTS朗读',
+              title: l10n.ttsReading,
               icon: Icons.record_voice_over,
               children: [
                 _buildSwitchSetting(
-                  title: '启用朗读功能',
-                  subtitle: '开启文本转语音朗读',
+                  title: l10n.enableTts,
+                  subtitle: l10n.enableTtsHint,
                   value: _enableTTS,
                   onChanged: (value) => setState(() => _enableTTS = value),
                   icon: Icons.play_circle_outline,
                 ),
                 if (_enableTTS) ...[
                   _buildSliderSetting(
-                    title: '朗读速度',
-                    subtitle: '调整朗读的快慢',
+                    title: l10n.ttsSpeedLabel,
+                    subtitle: l10n.ttsSpeedHint,
                     value: _ttsSpeed,
                     min: 0.1,
                     max: 2.0,
@@ -359,8 +373,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     formatter: (value) => '${(value * 100).round()}%',
                   ),
                   _buildSliderSetting(
-                    title: '朗读音量',
-                    subtitle: '调整朗读音量大小',
+                    title: l10n.ttsVolumeLabel,
+                    subtitle: l10n.ttsVolumeHint,
                     value: _ttsVolume,
                     min: 0.0,
                     max: 1.0,
@@ -370,8 +384,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     formatter: (value) => '${(value * 100).round()}%',
                   ),
                   _buildSliderSetting(
-                    title: '音调高低',
-                    subtitle: '调整朗读音调',
+                    title: l10n.ttsPitchLabel,
+                    subtitle: l10n.ttsPitchHint,
                     value: _ttsPitch,
                     min: 0.5,
                     max: 2.0,
@@ -385,19 +399,23 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 20),
             _buildSectionCard(
-              title: '云端同步',
+              title: l10n.cloudSync,
               icon: Icons.cloud_sync,
               children: [
                 // WebDAV配置入口
                 _buildActionSetting(
-                  title: 'WebDAV配置',
+                  title: l10n.webdavConfig,
                   subtitle: _webdavService.isConfigured
-                      ? '已配置 - ${_webdavService.serverUrl}'
-                      : '点击配置WebDAV服务器',
+                      ? l10n.webdavConfigured(_webdavService.serverUrl)
+                      : l10n.webdavConfigHint,
                   onTap: _showWebDavConfig,
                   icon: Icons.cloud,
                   trailing: _webdavService.isConfigured
-                      ? Icon(Icons.check_circle, color: Colors.green, size: 20)
+                      ? const Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                          size: 20,
+                        )
                       : null,
                 ),
 
@@ -506,6 +524,15 @@ class _SettingsPageState extends State<SettingsPage> {
                     icon: Icons.upload_file,
                   ),
                 ],
+              ],
+            ),
+            const SizedBox(height: 20),
+            _buildSectionCard(
+              title: l10n.appSettings,
+              icon: Icons.language,
+              children: [
+                _buildLanguageSelector(appSettings),
+                _buildAppFontSelector(appSettings),
               ],
             ),
             const SizedBox(height: 20),
@@ -792,8 +819,212 @@ class _SettingsPageState extends State<SettingsPage> {
       title: '动画效果',
       subtitle: '开启页面切换动画',
       value: _enableAnimations,
-      onChanged: (value) => setState(() => _enableAnimations = value),
+      onChanged: (value) {
+        setState(() => _enableAnimations = value);
+        GlassEffectConfig.applyPerformanceMode(
+          reduceEffects: !value,
+        );
+      },
       icon: Icons.animation,
+    );
+  }
+
+  Widget _buildLanguageSelector(AppSettingsNotifier appSettings) {
+    final l10n = context.l10n;
+    final currentCode = appSettings.localeCode;
+    final currentLabel = _languageLabel(l10n, currentCode);
+
+    return _buildActionSetting(
+      title: l10n.language,
+      subtitle: currentLabel,
+      icon: Icons.translate,
+      onTap: () => _showLanguageModal(appSettings),
+    );
+  }
+
+  Widget _buildAppFontSelector(AppSettingsNotifier appSettings) {
+    final l10n = context.l10n;
+    final selectedOption =
+        FontCatalog.appFontForFamily(appSettings.appFontFamily);
+
+    return _buildActionSetting(
+      title: l10n.appFont,
+      subtitle: FontCatalog.labelFor(l10n, selectedOption),
+      icon: Icons.font_download_outlined,
+      onTap: () => _showAppFontModal(appSettings),
+    );
+  }
+
+  String _languageLabel(AppLocalizations l10n, String code) {
+    switch (code) {
+      case 'zh':
+      case 'zh-CN':
+      case 'zh_CN':
+        return l10n.languageChinese;
+      case 'en':
+      case 'en-US':
+      case 'en_US':
+        return l10n.languageEnglish;
+      default:
+        return l10n.languageSystem;
+    }
+  }
+
+  void _showLanguageModal(AppSettingsNotifier appSettings) {
+    final l10n = context.l10n;
+    final options = [
+      _LanguageOption(code: 'system', label: l10n.languageSystem),
+      _LanguageOption(code: 'zh', label: l10n.languageChinese),
+      _LanguageOption(code: 'en', label: l10n.languageEnglish),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.translate,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      l10n.language,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...options.map((option) {
+                final isSelected = appSettings.localeCode == option.code;
+                return ListTile(
+                  title: Text(option.label),
+                  trailing: isSelected
+                      ? Icon(
+                          Icons.check_circle,
+                          color: Theme.of(context).colorScheme.primary,
+                        )
+                      : null,
+                  onTap: () {
+                    appSettings.setLocaleCode(option.code);
+                    Navigator.pop(context);
+                  },
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAppFontModal(AppSettingsNotifier appSettings) {
+    final l10n = context.l10n;
+    const options = FontCatalog.appFonts;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 16),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.font_download_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      l10n.appFont,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...options.map((option) {
+                final isSelected =
+                    appSettings.appFontFamily == option.family;
+                return ListTile(
+                  title: Text(
+                    FontCatalog.labelFor(l10n, option),
+                    style: TextStyle(fontFamily: option.family),
+                  ),
+                  trailing: isSelected
+                      ? Icon(
+                          Icons.check_circle,
+                          color: Theme.of(context).colorScheme.primary,
+                        )
+                      : null,
+                  onTap: () {
+                    appSettings.setAppFontFamily(option.family);
+                    Navigator.pop(context);
+                  },
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -2825,11 +3056,10 @@ class _SettingsPageState extends State<SettingsPage> {
                   for (final bookId in selectedSet) {
                     await _webdavService.setBookForSync(bookId, true);
                   }
+                  if (!context.mounted) return;
                   setState(() {});
-                  if (mounted) {
-                    Navigator.pop(context);
-                    _showInfoSnackBar('已选择 ${selectedSet.length} 本书籍进行文件同步');
-                  }
+                  Navigator.pop(context);
+                  _showInfoSnackBar('已选择 ${selectedSet.length} 本书籍进行文件同步');
                 },
                 child: const Text('保存'),
               ),
@@ -2852,4 +3082,14 @@ class _SettingsPageState extends State<SettingsPage> {
       return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(2)} GB';
     }
   }
+}
+
+class _LanguageOption {
+  final String code;
+  final String label;
+
+  const _LanguageOption({
+    required this.code,
+    required this.label,
+  });
 }

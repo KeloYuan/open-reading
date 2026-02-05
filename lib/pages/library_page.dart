@@ -15,7 +15,7 @@ import 'import_book_page.dart';
 import 'home_page_responsive.dart';
 import '../utils/responsive_helper.dart';
 import '../widgets/scrolling_text.dart';
-// import '../utils/glass_config.dart';
+import '../utils/localization_extension.dart';
 
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
@@ -34,7 +34,6 @@ class _LibraryPageState extends State<LibraryPage> {
   void initState() {
     super.initState();
     _loadBooks();
-    _setupPageImmersiveMode();
     _librarySubscription = LibraryEventBus().stream.listen((_) {
       if (mounted) {
         _loadBooks();
@@ -57,26 +56,6 @@ class _LibraryPageState extends State<LibraryPage> {
   bool _shouldApplySystemUI() {
     final route = ModalRoute.of(context);
     return route?.isCurrent ?? true;
-  }
-
-  // 与首页一致的沉浸式处理，确保安卓手势提示线“干净”
-  void _setupPageImmersiveMode() {
-    if (!_shouldApplySystemUI()) {
-      return;
-    }
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness: Brightness.dark,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      ),
-    );
   }
 
   void _setupThemeBasedImmersiveMode() {
@@ -135,7 +114,7 @@ class _LibraryPageState extends State<LibraryPage> {
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: Text(
-          '书库',
+          context.l10n.library,
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w600,
@@ -395,7 +374,7 @@ class _LibraryPageState extends State<LibraryPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         // 让网格高度为 3:4 封面 + 文本区域预留高度
-        final horizontalPadding = 16.0 * 2;
+        const double horizontalPadding = 32.0;
         final totalSpacing = spacing * (crossAxisCount - 1);
         final availableWidth = math.max(
           0.0,
@@ -444,17 +423,19 @@ class _LibraryPageState extends State<LibraryPage> {
             itemCount: _books.length,
             itemBuilder: (context, index) {
               final book = _books[index];
-              return _BookCoverItem(
-                book: book,
-                onTap: () async {
-                  final fullBook = await _bookDao.getBookById(book.id!);
-                  if (fullBook != null && mounted && context.mounted) {
-                    // 直接打开沉浸式阅读器
-                    await ReadingRouterService.openBook(context, fullBook);
-                    _loadBooks();
-                  }
-                },
-                onLongPress: () => _showBookOptions(book),
+              return RepaintBoundary(
+                child: _BookCoverItem(
+                  book: book,
+                  onTap: () async {
+                    final fullBook = await _bookDao.getBookById(book.id!);
+                    if (fullBook != null && mounted && context.mounted) {
+                      // 直接打开沉浸式阅读器
+                      await ReadingRouterService.openBook(context, fullBook);
+                      _loadBooks();
+                    }
+                  },
+                  onLongPress: () => _showBookOptions(book),
+                ),
               );
             },
           ),
@@ -550,7 +531,7 @@ class _LibraryPageState extends State<LibraryPage> {
                                     fit: BoxFit.cover,
                                   ),
                                 )
-                              : Icon(
+                              : const Icon(
                                   Icons.menu_book,
                                   color: Colors.white,
                                   size: 24,
@@ -941,17 +922,21 @@ class _LibraryPageState extends State<LibraryPage> {
                     try {
                       // 在后台执行删除操作
                       await _performBookDeletion(book);
+                      if (!mounted) return;
 
                       // 关闭进度对话框
-                      Navigator.of(context).pop();
+                      navigator.pop();
 
                       _loadBooks();
+                      if (!toastContext.mounted) return;
                       showSideToast(toastContext, '《${book.title}》已删除');
                     } catch (e) {
+                      if (!mounted) return;
                       // 关闭进度对话框
-                      Navigator.of(context).pop();
+                      navigator.pop();
 
                       // Handle error
+                      if (!toastContext.mounted) return;
                       showSideToast(toastContext, '删除失败: $e');
                     }
                   },
@@ -1248,7 +1233,7 @@ class _BookCoverItem extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.menu_book, size: 48, color: Colors.white),
+          const Icon(Icons.menu_book, size: 48, color: Colors.white),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1257,7 +1242,7 @@ class _BookCoverItem extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,

@@ -63,8 +63,11 @@ class PaginationCacheService {
     required double paddingBottom,
     required double firstLineIndent,
     required double devicePixelRatio,
+    String? fontFamily,
   }) {
     // 转换为整数，避免浮点字符串转换开销
+    final fontToken =
+        (fontFamily == null || fontFamily.isEmpty) ? 'system' : fontFamily;
     final params = '${screenWidth.toInt()}_'
         '${screenHeight.toInt()}_'
         '${(fontSize * 10).toInt()}_' // 保留1位小数
@@ -73,7 +76,8 @@ class PaginationCacheService {
         '${paddingLeft.toInt()}_${paddingRight.toInt()}_'
         '${paddingTop.toInt()}_${paddingBottom.toInt()}_'
         '${(firstLineIndent * 10).toInt()}_'
-        '${(devicePixelRatio * 100).toInt()}';
+        '${(devicePixelRatio * 100).toInt()}_'
+        '$fontToken';
 
     return '${contentHash}_$params';
   }
@@ -148,7 +152,7 @@ class PaginationCacheService {
       final age = DateTime.now().difference(lastModified).inDays;
 
       if (age > _maxCacheAgeDays) {
-        debugPrint('⚠️ 缓存已过期（${age}天），删除旧缓存');
+        debugPrint('⚠️ 缓存已过期（$age天），删除旧缓存');
         await file.delete();
         return null;
       }
@@ -188,6 +192,21 @@ class PaginationCacheService {
     }
   }
 
+  /// 删除指定缓存
+  static Future<void> deleteCache({required String cacheKey}) async {
+    try {
+      final filePath = await _getCacheFilePath(cacheKey);
+      final file = File(filePath);
+
+      if (await file.exists()) {
+        await file.delete();
+        debugPrint('✅ 已删除分页缓存: $filePath');
+      }
+    } catch (e) {
+      debugPrint('❌ 删除分页缓存失败: $e');
+    }
+  }
+
   /// 清理过期缓存
   static Future<void> clearExpiredCache() async {
     try {
@@ -213,7 +232,7 @@ class PaginationCacheService {
       }
 
       if (deletedCount > 0) {
-        debugPrint('✅ 已清理${deletedCount}个过期缓存文件');
+        debugPrint('✅ 已清理$deletedCount个过期缓存文件');
       }
     } catch (e) {
       debugPrint('❌ 清理过期缓存失败: $e');
@@ -257,7 +276,7 @@ class PaginationCacheService {
       }
 
       if (deletedCount > 0) {
-        debugPrint('✅ 已删除该书籍的 ${deletedCount} 个缓存文件');
+        debugPrint('✅ 已删除该书籍的 $deletedCount 个缓存文件');
       } else {
         debugPrint('ℹ️ 未找到该书籍的缓存文件');
       }
@@ -321,7 +340,7 @@ class PaginationCacheService {
 
       final duration = DateTime.now().difference(startTime).inMilliseconds;
       if (deletedCount > 0) {
-        debugPrint('✅ 已删除该书籍的 ${deletedCount} 个缓存文件 (耗时: ${duration}ms)');
+        debugPrint('✅ 已删除该书籍的 $deletedCount 个缓存文件 (耗时: ${duration}ms)');
       } else {
         debugPrint('ℹ️ 未找到该书籍的缓存文件 (耗时: ${duration}ms)');
       }

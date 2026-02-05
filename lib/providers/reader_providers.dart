@@ -1,14 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:crypto/crypto.dart';
 import '../services/enhanced_paginator.dart';
 import '../services/pagination_cache_service.dart';
+import '../services/pagination_isolate.dart';
 import '../services/tts/system_tts.dart';
 import '../services/tts/base_tts.dart';
 import '../services/reader_settings_service.dart';
 import '../models/page_turning_config.dart';
+import '../utils/font_catalog.dart';
 
 /// 翻页模式枚举
 enum PaginationMode {
@@ -44,6 +48,7 @@ class ReaderSettings {
   final double horizontalMargin; // 水平页边距（10-40px）
   final bool enableFirstLineIndent; // 是否启用首行缩进（默认关闭）
   final int paragraphSpacing; // 段落间距（0-2行空行）
+  final String? fontFamily;
 
   const ReaderSettings({
     this.fontSize = 18.0,
@@ -59,6 +64,7 @@ class ReaderSettings {
     this.horizontalMargin = 20.0,
     this.enableFirstLineIndent = false,
     this.paragraphSpacing = 0, // 默认0行空行（段落紧密排列）
+    this.fontFamily,
   });
 
   /// 复制并修改设置
@@ -75,6 +81,7 @@ class ReaderSettings {
     double? horizontalMargin,
     bool? enableFirstLineIndent,
     int? paragraphSpacing,
+    String? fontFamily,
   }) {
     return ReaderSettings(
       fontSize: fontSize ?? this.fontSize,
@@ -90,6 +97,7 @@ class ReaderSettings {
       enableFirstLineIndent:
           enableFirstLineIndent ?? this.enableFirstLineIndent,
       paragraphSpacing: paragraphSpacing ?? this.paragraphSpacing,
+      fontFamily: fontFamily ?? this.fontFamily,
     );
   }
 
@@ -101,8 +109,6 @@ class ReaderSettings {
   /// 获取主题对应的文本样式
   TextStyle get textStyle {
     Color textColor;
-    String? fontFamily;
-
     switch (theme) {
       case ReadingTheme.day:
         textColor = const Color(0xFF333333);
@@ -136,6 +142,7 @@ class ReaderSettings {
       letterSpacing: letterSpacing,
       color: textColor,
       fontFamily: fontFamily,
+      fontFamilyFallback: FontCatalog.readerFallbacks(fontFamily),
       decoration: TextDecoration.none,
     );
   }
@@ -498,6 +505,13 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
     _debounceSaveSettings(); // 使用防抖保存
   }
 
+  /// 更新字体族（带防抖）
+  void updateFontFamily(String? fontFamily) {
+    state = state.copyWith(fontFamily: fontFamily);
+    _debounceSaveSettings();
+    _invalidateAndRefresh();
+  }
+
   /// 切换阅读主题
   void switchTheme(ReadingTheme theme) {
     state = state.copyWith(theme: theme);
@@ -530,21 +544,253 @@ class ReaderSettingsNotifier extends StateNotifier<ReaderSettings> {
   }
 }
 
+/// 精确分页任务上下文
+class _PrecisePaginationContext {
+  final String text;
+  final Size screenSize;
+  final ReaderSettings settings;
+  final String cacheKey;
+  final bool supportImages;
+
+  _PrecisePaginationContext({
+    required this.text,
+    required this.screenSize,
+    required this.settings,
+    required this.cacheKey,
+    required this.supportImages,
+  });
+}
+
 /// 阅读器分页状态管理 - Riverpod StateNotifier
 class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
   ReaderPaginationNotifier() : super(const ReaderPaginationState()) {
     _initBackgroundLoader();
   }
 
-  /// 初始化后台加载监听（已禁用 - 统一使用一次性全部加载）
+
+  int _paginationRequestId = 0;
+  Isolate? _paginationIsolate;
+  ReceivePort? _paginationReceivePort;
+  _PrecisePaginationContext? _pendingPreciseContext;
+
+  static const int _paginationIsolateThreshold = 800000;
+  static const int _eagerPreciseThreshold = 2000000;
+  static const int _largeTextSamplePages = 6;
+
+  bool _isStaleRequest(int requestId) => requestId != _paginationRequestId;
+
+  bool _shouldUsePaginationIsolate(String text) {
+    if (kIsWeb) return false;
+    return text.length >= _paginationIsolateThreshold;
+  }
+
+  bool _shouldEagerPrecisePagination(String text) {
+    return text.length >= _eagerPreciseThreshold;
+  }
+
+  int _getSamplePageCount(String text) {
+    return text.length >= _eagerPreciseThreshold ? _largeTextSamplePages : 10;
+  }
+
+  /// 初始化后台加载监听（预取触发）
   void _initBackgroundLoader() {
-    // 禁用后台渐进式加载，所有内容一次性加载完成
-    debugPrint('⚠️ 后台渐进式加载已禁用，使用一次性全部加载');
+    // 使用预取触发的后台精确分页
+    debugPrint('✅ 启用预取触发的后台精确分页');
   }
 
   @override
   void dispose() {
+    _cancelPrecisePagination();
     super.dispose();
+  }
+
+  void _disposePaginationIsolate() {
+    _paginationReceivePort?.close();
+    _paginationReceivePort = null;
+    _paginationIsolate?.kill(priority: Isolate.immediate);
+    _paginationIsolate = null;
+  }
+
+  void _cancelPrecisePagination() {
+    _pendingPreciseContext = null;
+    _disposePaginationIsolate();
+    if (state.isProgressiveLoading) {
+      state = state.copyWith(isProgressiveLoading: false);
+    }
+  }
+
+  void reset() {
+    _cancelPrecisePagination();
+    state = const ReaderPaginationState();
+  }
+
+  void _maybeStartPrecisePagination(int pageIndex, int requestId) {
+    if (_isStaleRequest(requestId)) return;
+    if (_pendingPreciseContext == null) return;
+    if (state.isProgressiveLoading) return;
+    if (state.isEstimated != true) {
+      _pendingPreciseContext = null;
+      return;
+    }
+
+    if (state.pages.isEmpty) return;
+    final triggerIndex = (state.pages.length - 3).clamp(0, state.pages.length - 1);
+    if (pageIndex < triggerIndex) return;
+
+    final context = _pendingPreciseContext!;
+    _pendingPreciseContext = null;
+    _startPrecisePagination(context, requestId: requestId);
+  }
+
+  Future<void> _startPrecisePagination(
+    _PrecisePaginationContext context, {
+    required int requestId,
+  }) async {
+    if (_isStaleRequest(requestId)) return;
+    if (_paginationIsolate != null) return;
+
+    state = state.copyWith(
+      isProgressiveLoading: true,
+      loadingStage: '后台精确分页中...',
+    );
+
+    if (!_shouldUsePaginationIsolate(context.text)) {
+      await _runPrecisePaginationOnMain(context, requestId: requestId);
+      return;
+    }
+
+    final receivePort = ReceivePort();
+    _paginationReceivePort = receivePort;
+
+    try {
+      _paginationIsolate = await Isolate.spawn(
+        paginationIsolateEntry,
+        PaginationIsolateParams(
+          text: context.text,
+          screenWidth: context.screenSize.width,
+          screenHeight: context.screenSize.height,
+          fontSize: context.settings.fontSize,
+          lineHeight: context.settings.lineSpacing,
+          letterSpacing: context.settings.letterSpacing,
+          fontFamily: context.settings.fontFamily,
+          fontFamilyFallback:
+              FontCatalog.readerFallbacks(context.settings.fontFamily),
+          paddingLeft: context.settings.padding.left,
+          paddingRight: context.settings.padding.right,
+          paddingTop: context.settings.padding.top,
+          paddingBottom: context.settings.padding.bottom,
+          supportImages: context.supportImages,
+          sendPort: receivePort.sendPort,
+        ),
+        debugName: 'PaginationIsolate',
+      );
+    } catch (e) {
+      debugPrint('❌ 启动分页 isolate 失败: $e，回退到主线程');
+      _disposePaginationIsolate();
+      await _runPrecisePaginationOnMain(context, requestId: requestId);
+      return;
+    }
+
+    receivePort.listen((message) {
+      if (_isStaleRequest(requestId)) {
+        _disposePaginationIsolate();
+        return;
+      }
+
+      if (message is PaginationIsolateResult) {
+        _applyPreciseResult(
+          pages: message.pages,
+          pageCharOffsets: message.pageCharOffsets,
+          pageContents: null,
+          paginationSettings: context.settings,
+          cacheKey: context.cacheKey,
+        );
+        _disposePaginationIsolate();
+        return;
+      }
+
+      if (message is Map && message['error'] != null) {
+        debugPrint('❌ 后台精确分页失败: ${message['error']}');
+        if (message['stack'] != null) {
+          debugPrint('堆栈: ${message['stack']}');
+        }
+        _disposePaginationIsolate();
+        state = state.copyWith(isProgressiveLoading: false);
+        _runPrecisePaginationOnMain(context, requestId: requestId);
+        return;
+      }
+    });
+  }
+
+  Future<void> _runPrecisePaginationOnMain(
+    _PrecisePaginationContext context, {
+    required int requestId,
+  }) async {
+    if (_isStaleRequest(requestId)) return;
+    await Future<void>.delayed(Duration.zero);
+    try {
+      final result = await EnhancedPaginator.paginatePrecise(
+        text: context.text,
+        screenSize: context.screenSize,
+        fontSize: context.settings.fontSize,
+        lineHeight: context.settings.lineSpacing,
+        padding: context.settings.padding,
+        letterSpacing: context.settings.letterSpacing,
+        fontFamily: context.settings.fontFamily,
+        fontFamilyFallback:
+            FontCatalog.readerFallbacks(context.settings.fontFamily),
+        supportImages: context.supportImages,
+      );
+      if (_isStaleRequest(requestId)) return;
+      _applyPreciseResult(
+        pages: result.pages,
+        pageCharOffsets: result.pageCharOffsets,
+        pageContents: result.pageContents,
+        paginationSettings: context.settings,
+        cacheKey: context.cacheKey,
+      );
+    } catch (e, stackTrace) {
+      debugPrint('❌ 主线程精确分页失败: $e');
+      debugPrint('堆栈: $stackTrace');
+      if (_isStaleRequest(requestId)) return;
+      state = state.copyWith(isProgressiveLoading: false);
+    }
+  }
+
+  void _applyPreciseResult({
+    required List<String> pages,
+    required List<int> pageCharOffsets,
+    required List<PageContent>? pageContents,
+    required ReaderSettings paginationSettings,
+    required String cacheKey,
+  }) {
+    if (pages.isEmpty) {
+      state = state.copyWith(isProgressiveLoading: false);
+      return;
+    }
+
+    final safeOffsets =
+        pageCharOffsets.length == pages.length ? pageCharOffsets : null;
+
+    state = state.copyWith(
+      pages: pages,
+      currentPageIndex: state.currentPageIndex.clamp(0, pages.length - 1),
+      loadingStage: '加载完成，共 ${pages.length} 页',
+      pageContents: pageContents,
+      paginationSettings: paginationSettings,
+      estimatedTotal: null,
+      isEstimated: false,
+      isProgressiveLoading: false,
+      pageCharOffsets: safeOffsets,
+    );
+
+    PaginationCacheService.saveCache(
+      pages: pages,
+      cacheKey: cacheKey,
+      pageCharOffsets: safeOffsets,
+    ).then((_) {
+      debugPrint('💾 已缓存到本地磁盘');
+    });
   }
 
   /// 初始化分页（优化版：支持持久化缓存和渐进式加载）
@@ -559,6 +805,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     double devicePixelRatio = 1.0,
     int initialPageIndex = 0,
   }) async {
+    final requestId = ++_paginationRequestId;
     if (text.isEmpty) {
       state = state.copyWith(
         error: '文本内容为空',
@@ -566,6 +813,8 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       );
       return;
     }
+
+    _cancelPrecisePagination();
 
     // 检查文本长度
     final originalLength = text.length;
@@ -591,15 +840,19 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       paddingBottom: settings.padding.bottom,
       firstLineIndent: settings.firstLineIndent,
       devicePixelRatio: devicePixelRatio,
+      fontFamily: settings.fontFamily,
     );
 
     // 1. 检查内存缓存（🔧 修复：cacheKey变化时强制重新分页）
     final cacheKeyChanged =
         state.cacheKey != null && state.cacheKey != cacheKey;
     if (cacheKeyChanged) {
-      debugPrint('🔄 [参数变化] cacheKey变化，清除所有缓存');
-      // 清除持久化缓存
-      await PaginationCacheService.clearAllCache();
+      debugPrint('🔄 [参数变化] cacheKey变化，删除旧缓存');
+      final oldCacheKey = state.cacheKey;
+      if (oldCacheKey != null && oldCacheKey.isNotEmpty) {
+        await PaginationCacheService.deleteCache(cacheKey: oldCacheKey);
+      }
+      if (_isStaleRequest(requestId)) return;
     } else if (state.cacheKey == cacheKey && state.pages.isNotEmpty) {
       debugPrint('✅ 使用内存缓存，跳过分页');
       return;
@@ -617,6 +870,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     if (!cacheKeyChanged) {
       final cachedData =
           await PaginationCacheService.loadCache(cacheKey: cacheKey);
+      if (_isStaleRequest(requestId)) return;
       if (cachedData != null && cachedData.pages.isNotEmpty) {
         debugPrint('✅ 使用持久化缓存: ${cachedData.pages.length}页');
         // 确保初始页码在有效范围内
@@ -658,11 +912,12 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         text: text,
         screenSize: actualScreenSize,
         settings: settings,
-        devicePixelRatio: devicePixelRatio,
         cacheKey: cacheKey,
         initialPageIndex: initialPageIndex,
+        requestId: requestId,
       );
     } catch (e, stackTrace) {
+      if (_isStaleRequest(requestId)) return;
       state = state.copyWith(
         error: '分页失败: $e\n\n请尝试调整字体大小或重新打开',
         isLoading: false,
@@ -673,15 +928,16 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     }
   }
 
-  /// 一次性全部加载（使用渐进式分页：快速估算 + 后台精确计算）
+  /// 一次性加载（快速采样 + 后台精确分页 + 预取触发）
   Future<void> _paginateDirectAll({
     required String text,
     required Size screenSize,
     required ReaderSettings settings,
-    required double devicePixelRatio,
     required String cacheKey,
+    required int requestId,
     int initialPageIndex = 0,
   }) async {
+    if (_isStaleRequest(requestId)) return;
     state = state.copyWith(
       isLoading: true,
       loadingStage: '快速估算中...',
@@ -695,28 +951,34 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
       debugPrint(
           '   📐 响应式padding: L${responsivePadding.left} R${responsivePadding.right} T${responsivePadding.top} B${responsivePadding.bottom}');
 
-      // ✅ 使用增强分页器（渐进式加载：快速估算 + 后台精确计算）
-      debugPrint('   🚀 使用增强分页器（渐进式加载）');
-      final result = await EnhancedPaginator.paginateProgressive(
+      // ✅ 使用增强分页器（快速采样）
+      debugPrint('   🚀 使用增强分页器（快速采样）');
+      final quickSamplePages = _getSamplePageCount(text);
+      final sampleResult = await EnhancedPaginator.paginateSample(
         text: text,
         screenSize: screenSize,
         fontSize: settings.fontSize,
         lineHeight: settings.lineSpacing,
         padding: responsivePadding, // 🔧 使用响应式padding
         letterSpacing: settings.letterSpacing,
+        fontFamily: settings.fontFamily,
+        fontFamilyFallback: FontCatalog.readerFallbacks(settings.fontFamily),
         supportImages: true, // 🔑 启用图片支持
-        quickSamplePages: 10, // 快速采样前10页
+        quickSamplePages: quickSamplePages, // 快速采样页数
       );
 
-      // 阶段1：使用快速估算结果，立即显示
-      final sampledPages = result.sampledPages;
-      final estimatedTotal = result.estimatedTotal;
+      if (_isStaleRequest(requestId)) return;
+      final sampledPages = sampleResult.pages;
+      final estimatedTotal = sampleResult.estimatedTotal;
       final pageCharOffsets =
-          result.pageCharOffsets.length == sampledPages.length
-              ? result.pageCharOffsets
+          sampleResult.pageCharOffsets.length == sampledPages.length
+              ? sampleResult.pageCharOffsets
               : null;
+      final isComplete = sampleResult.isComplete;
 
-      debugPrint('✅ 快速估算完成: 采样${sampledPages.length}页，估算总页数~$estimatedTotal');
+      debugPrint(
+        '✅ 快速采样完成: 采样${sampledPages.length}页，估算总页数~$estimatedTotal',
+      );
 
       if (sampledPages.isEmpty) {
         throw Exception('快速估算结果为空');
@@ -739,57 +1001,43 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
         paginationSettings: paginationSettings, // 🔧 保存带响应式padding的settings
         cachedText: text,
         cacheKey: cacheKey,
-        loadingStage: '加载完成，约 $estimatedTotal 页',
-        estimatedTotal: estimatedTotal,
-        isEstimated: true, // 标记为估算值
+        loadingStage: isComplete
+            ? '加载完成，共 ${sampledPages.length} 页'
+            : '加载完成，约 $estimatedTotal 页',
+        estimatedTotal: isComplete ? null : estimatedTotal,
+        isEstimated: isComplete ? false : true, // 标记为估算值
         screenSize: screenSize, // 🔧 保存屏幕尺寸
         maxLinesPerPage: maxLinesPerPage, // 🔧 保存每页最大行数
         pageCharOffsets: pageCharOffsets,
       );
 
-      debugPrint('📖 用户可以开始阅读，后台继续精确计算...');
-
-      // 阶段2：等待后台精确计算完成
-      result.preciseCalculationFuture.then((preciseResult) {
-        final pages = preciseResult.pages;
-        final pageContents = preciseResult.pageContents;
-        final pageCharOffsets =
-            preciseResult.pageCharOffsets.length == pages.length
-                ? preciseResult.pageCharOffsets
-                : null;
-
-        debugPrint('✅ 精确计算完成: 实际${pages.length}页');
-
-        // 更新状态为精确值
-        // 🔧 保持使用响应式padding的settings
-        final paginationSettings =
-            settings.copyWith(padding: responsivePadding);
-        state = state.copyWith(
-          pages: pages,
-          currentPageIndex: state.currentPageIndex.clamp(0, pages.length - 1),
-          loadingStage: '加载完成，共 ${pages.length} 页',
-          pageContents: pageContents,
-          paginationSettings: paginationSettings, // 🔧 确保精确计算后也使用相同padding
-          estimatedTotal: null,
-          isEstimated: false, // 标记为精确值
-          pageCharOffsets: pageCharOffsets,
-          // 🔧 保持 screenSize 和 maxLinesPerPage（不覆盖为 null）
+      if (!isComplete) {
+        _pendingPreciseContext = _PrecisePaginationContext(
+          text: text,
+          screenSize: screenSize,
+          settings: paginationSettings,
+          cacheKey: cacheKey,
+          supportImages: true,
         );
 
-        // 保存到持久化缓存
-        PaginationCacheService.saveCache(
-          pages: pages,
-          cacheKey: cacheKey,
-          pageCharOffsets: pageCharOffsets,
-        ).then((_) {
-          debugPrint('💾 已缓存到本地磁盘');
-        });
-      }).catchError((e, stackTrace) {
-        debugPrint('❌ 后台精确计算失败: $e');
-        debugPrint('堆栈: $stackTrace');
-        // 保持使用估算结果，不影响用户阅读
-      });
+        final targetIndex = initialPageIndex.clamp(0, sampledPages.length - 1);
+        if (_shouldEagerPrecisePagination(text)) {
+          final preciseContext = _pendingPreciseContext!;
+          _pendingPreciseContext = null;
+          Future(() async {
+            await _startPrecisePagination(
+              preciseContext,
+              requestId: requestId,
+            );
+          });
+        } else {
+          _maybeStartPrecisePagination(targetIndex, requestId);
+        }
+      }
+
+      debugPrint('📖 用户可以开始阅读');
     } catch (e, stackTrace) {
+      if (_isStaleRequest(requestId)) return;
       debugPrint('❌ 分页失败: $e');
       debugPrint('堆栈: $stackTrace');
       rethrow;
@@ -812,6 +1060,7 @@ class ReaderPaginationNotifier extends StateNotifier<ReaderPaginationState> {
     if (targetIndex != state.currentPageIndex) {
       state = state.copyWith(currentPageIndex: targetIndex);
     }
+    _maybeStartPrecisePagination(targetIndex, _paginationRequestId);
   }
 
   /// 下一页

@@ -14,35 +14,69 @@ import 'text_preprocessor.dart'; // 🔧 导入文本预处理器
 import 'epub_image_extractor.dart';
 import 'book_image_map_service.dart';
 import '../widgets/side_toast.dart';
-// import 'debug_image_files.dart'; // 已删除
 
 class TxtDecodeRequest {
   final Uint8List bytes;
   final String? encodingOverride;
+  final bool allowFallback;
 
   TxtDecodeRequest({
     required this.bytes,
     this.encodingOverride,
+    this.allowFallback = false,
   });
 }
 
-String decodeAndPreprocessTxtInIsolate(TxtDecodeRequest request) {
-  final txtService = EnhancedTxtImportService();
-  String content = txtService.decodeWithOverride(
-    request.bytes,
-    encodingOverride: request.encodingOverride,
+Uint8List _trimBytesForEncoding(Uint8List bytes, String? encodingOverride) {
+  final normalized = EnhancedTxtImportService.normalizeEncoding(
+    encodingOverride,
   );
+  if ((normalized == 'utf16le' || normalized == 'utf16be') &&
+      bytes.length.isOdd) {
+    return bytes.sublist(0, bytes.length - 1);
+  }
+  return bytes;
+}
+
+Map<String, String> decodeAndPreprocessTxtInIsolate(
+  TxtDecodeRequest request,
+) {
+  final txtService = EnhancedTxtImportService();
   final normalized = EnhancedTxtImportService.normalizeEncoding(
     request.encodingOverride,
   );
-  if (normalized == 'auto' && _looksGarbled(content)) {
-    for (final candidate in ['gbk', 'utf16le', 'utf16be']) {
+  final preferredEncoding = normalized == 'auto'
+      ? txtService.detectEncoding(
+          request.bytes,
+          encodingOverride: request.encodingOverride,
+        )
+      : normalized;
+  var resolvedEncoding = preferredEncoding;
+  var content = txtService.decodeWithOverride(
+    _trimBytesForEncoding(request.bytes, preferredEncoding),
+    encodingOverride: preferredEncoding,
+  );
+  if (request.allowFallback && _looksGarbled(content)) {
+    final candidates = <String>[
+      preferredEncoding,
+      'utf8',
+      'gbk',
+      'utf16le',
+      'utf16be',
+    ];
+    final tried = <String>{};
+    for (final candidate in candidates) {
+      if (candidate.isEmpty || tried.contains(candidate)) {
+        continue;
+      }
+      tried.add(candidate);
       final fallback = txtService.decodeWithOverride(
-        request.bytes,
+        _trimBytesForEncoding(request.bytes, candidate),
         encodingOverride: candidate,
       );
       if (!_looksGarbled(fallback)) {
         content = fallback;
+        resolvedEncoding = candidate;
         break;
       }
     }
@@ -57,7 +91,10 @@ String decodeAndPreprocessTxtInIsolate(TxtDecodeRequest request) {
     paragraphSpacing: 0,
   );
 
-  return content;
+  return {
+    'content': content,
+    'encoding': resolvedEncoding,
+  };
 }
 
 bool _looksGarbled(String text) {
@@ -168,6 +205,9 @@ class ReadingRouterService {
       );
       if (previewContent.trim().isEmpty) {
         previewContent = '正在加载全书...';
+      }
+      if (!context.mounted) {
+        return;
       }
       _openReaderPage(
         context,
@@ -330,30 +370,47 @@ class ReadingRouterService {
       bytes,
       encodingOverride: book.textEncoding,
     );
+    final preferredEncoding = isAuto ? detectedEncoding : normalized;
+    var allowFallback = isAuto;
+    if (!allowFallback) {
+      final sampleSize = bytes.length > 128 * 1024 ? 128 * 1024 : bytes.length;
+      final sampleBytes = bytes.sublist(0, sampleSize);
+      final sampleContent = txtService.decodeWithOverride(
+        _trimBytesForEncoding(sampleBytes, preferredEncoding),
+        encodingOverride: preferredEncoding,
+      );
+      if (_looksGarbled(sampleContent)) {
+        allowFallback = true;
+      }
+    }
     if (bytes.length > 512 * 1024) {
       debugPrint('🧵 大文本解码与预处理改为isolate执行');
-      if (isAuto) {
-        await _persistTxtEncoding(book, detectedEncoding);
-      }
-      return await compute(
+      final decodeResult = await compute(
         decodeAndPreprocessTxtInIsolate,
         TxtDecodeRequest(
           bytes: bytes,
-          encodingOverride: detectedEncoding,
+          encodingOverride: preferredEncoding,
+          allowFallback: allowFallback,
         ),
       );
+      final resolvedEncoding = decodeResult['encoding'] ?? preferredEncoding;
+      final content = decodeResult['content'] ?? '';
+      if (isAuto || (allowFallback && resolvedEncoding != normalized)) {
+        await _persistTxtEncoding(book, resolvedEncoding);
+      }
+      return content;
     }
 
     final decodeResult = txtService.decodeWithResult(
       bytes,
-      encodingOverride: book.textEncoding,
+      encodingOverride: preferredEncoding,
     );
     String content = decodeResult.content;
     String resolvedEncoding = isAuto ? decodeResult.encoding : normalized;
-    if (isAuto && _looksGarbled(content)) {
-      for (final candidate in ['gbk', 'utf16le', 'utf16be']) {
+    if (_looksGarbled(content)) {
+      for (final candidate in ['utf8', 'gbk', 'utf16le', 'utf16be']) {
         final fallback = txtService.decodeWithOverride(
-          bytes,
+          _trimBytesForEncoding(bytes, candidate),
           encodingOverride: candidate,
         );
         if (!_looksGarbled(fallback)) {
@@ -363,7 +420,7 @@ class ReadingRouterService {
         }
       }
     }
-    if (isAuto) {
+    if (isAuto || (allowFallback && resolvedEncoding != normalized)) {
       await _persistTxtEncoding(book, resolvedEncoding);
     }
     final preprocessor = TextPreprocessor();
@@ -414,10 +471,10 @@ class ReadingRouterService {
         bytes,
         encodingOverride: effectiveEncoding,
       );
-      if (isAuto && _looksGarbled(content)) {
-        for (final candidate in ['gbk', 'utf16le', 'utf16be']) {
+      if (_looksGarbled(content)) {
+        for (final candidate in ['utf8', 'gbk', 'utf16le', 'utf16be']) {
           final fallback = txtService.decodeWithOverride(
-            bytes,
+            _trimBytesForEncoding(bytes, candidate),
             encodingOverride: candidate,
           );
           if (!_looksGarbled(fallback)) {

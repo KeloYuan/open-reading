@@ -6,22 +6,39 @@ import 'progressive_blur.dart';
 
 class GlassEffectConfig {
   // ============ 模糊强度配置 (sigmaX/sigmaY) ============
+  static const double _appBarBlurBase = 15.0; // 首页、书库、设置页顶栏
+  static const double _navigationBarBlurBase = 15.0; // 底部悬浮式导航栏
+  static const double _readingTopBarBlurBase = 15.0; // 阅读页顶部控制栏
+  static const double _readingBottomBarBlurBase = 15.0; // 阅读页底部控制栏
+  static const double _cardBlurBase = 20.0; // 一般卡片容器
+  static const double _lightCardBlurBase = 8.0; // 轻量级容器（图标背景等）
+  static const double _dialogBlurBase = 30.0; // 对话框和弹窗
+  static const double _modalBlurBase = 25.0; // 底部弹出菜单
+
+  // 全局模糊缩放（性能优化：降低 GPU 压力）
+  static double _blurScale = 0.85;
+
+  static void applyPerformanceMode({required bool reduceEffects}) {
+    _blurScale = reduceEffects ? 0.65 : 0.85;
+  }
+
+  static double _scaled(double value) => value * _blurScale;
 
   // 顶部应用栏 (AppBar)
-  static const double appBarBlur = 15.0; // 首页、书库、设置页顶栏 - 增加模糊强度
+  static double get appBarBlur => _scaled(_appBarBlurBase);
 
   // 导航栏
-  static const double navigationBarBlur = 15.0; // 底部悬浮式导航栏 - 增加模糊强度
+  static double get navigationBarBlur => _scaled(_navigationBarBlurBase);
 
   // 阅读页面控制栏
-  static const double readingTopBarBlur = 15.0; // 阅读页顶部控制栏
-  static const double readingBottomBarBlur = 15.0; // 阅读页底部控制栏
+  static double get readingTopBarBlur => _scaled(_readingTopBarBlurBase);
+  static double get readingBottomBarBlur => _scaled(_readingBottomBarBlurBase);
 
   // 卡片和容器
-  static const double cardBlur = 20.0; // 一般卡片容器
-  static const double lightCardBlur = 8.0; // 轻量级容器（图标背景等）
-  static const double dialogBlur = 30.0; // 对话框和弹窗
-  static const double modalBlur = 25.0; // 底部弹出菜单
+  static double get cardBlur => _scaled(_cardBlurBase);
+  static double get lightCardBlur => _scaled(_lightCardBlurBase);
+  static double get dialogBlur => _scaled(_dialogBlurBase);
+  static double get modalBlur => _scaled(_modalBlurBase);
 
   // ============ 透明度配置 (alpha值: 0.0-1.0) ============
 

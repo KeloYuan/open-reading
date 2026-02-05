@@ -32,7 +32,12 @@ class EnhancedTxtImportService {
     if (encoding == null) return 'auto';
     final normalized = encoding.toLowerCase().replaceAll('-', '').trim();
     if (normalized.isEmpty) return 'auto';
-    if (normalized == 'gb2312' || normalized == 'gbk') return 'gbk';
+    if (normalized == 'gb2312' ||
+        normalized == 'gbk' ||
+        normalized == 'gb18030' ||
+        normalized == 'gb') {
+      return 'gbk';
+    }
     if (normalized == 'utf8') return 'utf8';
     if (normalized == 'utf16le') return 'utf16le';
     if (normalized == 'utf16be') return 'utf16be';
@@ -64,7 +69,10 @@ class EnhancedTxtImportService {
     try {
       switch (encoding) {
         case 'gbk':
-          return TxtDecodeResult(content: gbk.decode(bytes), encoding: 'gbk');
+          return TxtDecodeResult(
+            content: gbk_bytes.decode(bytes),
+            encoding: 'gbk',
+          );
         case 'utf8':
           return TxtDecodeResult(
             content: utf8.decode(bytes, allowMalformed: true),
@@ -164,7 +172,7 @@ class EnhancedTxtImportService {
         final utf8Quality = _contentQualityScore(content);
         // 如果GBK解码质量明显更高，优先GBK
         try {
-          final gbkContent = gbk.decode(bytes);
+          final gbkContent = gbk_bytes.decode(bytes);
           final gbkQuality = _contentQualityScore(gbkContent);
           if (gbkQuality > utf8Quality + 0.15 &&
               _isValidGbkContent(gbkContent)) {
@@ -191,7 +199,7 @@ class EnhancedTxtImportService {
     if (gbkScore > 0.3) {
       // 评分>0.3表示很可能是GBK编码
       try {
-        var content = gbk.decode(bytes);
+        var content = gbk_bytes.decode(bytes);
         // 如果评分很高(>0.8)，直接接受，不做严格验证
         if (gbkScore > 0.8) {
           final chineseRatio = _chineseRatio(content);
@@ -230,7 +238,7 @@ class EnhancedTxtImportService {
     // 5. 强制尝试 GBK（最后的降级方案）
     debugPrint('📊 步骤4: 强制 GBK 解码...');
     try {
-      final content = gbk.decode(bytes);
+      final content = gbk_bytes.decode(bytes);
       if (content.isNotEmpty) {
         debugPrint('⚠️ 强制使用 GBK 解码 (${content.length} 字符)');
         return TxtDecodeResult(content: content, encoding: 'gbk');
@@ -434,7 +442,7 @@ class EnhancedTxtImportService {
         final b2 = bytes[i + 1];
         if (b2 >= 0x40 && b2 <= 0xFE && b2 != 0x7F) {
           try {
-            buffer.write(gbk.decode([b1, b2]));
+            buffer.write(gbk_bytes.decode([b1, b2]));
           } catch (_) {}
           i += 2;
           continue;
@@ -887,7 +895,7 @@ class EnhancedTxtImportService {
           if (lines[j].trim().isEmpty && j > i) {
             // 在空行处分割
             final chapter = Chapter(
-              title: '第${chapterIndex}章',
+              title: '第$chapterIndex章',
               startPage: 0,
               level: 0,
               order: chapters.length,
@@ -907,7 +915,7 @@ class EnhancedTxtImportService {
     // 添加最后一章
     if (chapterStart < lines.length) {
       final chapter = Chapter(
-        title: '第${chapterIndex}章',
+        title: '第$chapterIndex章',
         startPage: 0,
         level: 0,
         order: chapters.length,
@@ -966,7 +974,7 @@ class EnhancedTxtImportService {
     final longer = s1.length > s2.length ? s1 : s2;
     final shorter = s1.length > s2.length ? s2 : s1;
 
-    if (longer.length == 0) return 1.0;
+    if (longer.isEmpty) return 1.0;
 
     final editDistance = _levenshteinDistance(longer, shorter);
     return (longer.length - editDistance) / longer.length;

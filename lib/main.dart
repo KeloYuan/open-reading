@@ -8,8 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as provider;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-// import 'package:google_fonts/google_fonts.dart';
 
+import 'l10n/app_localizations.dart';
 import 'pages/home_page_responsive.dart';
 import 'pages/user_agreement_page.dart';
 import 'utils/app_themes.dart';
@@ -19,6 +19,10 @@ import 'services/data_manager.dart';
 import 'services/reading_engine_coordinator.dart';
 import 'services/book_image_manager.dart';
 import 'package:path_provider/path_provider.dart';
+import 'utils/glass_config.dart';
+import 'services/app_settings_notifier.dart';
+import 'utils/localization_extension.dart';
+import 'utils/font_catalog.dart';
 
 void main() async {
   // 确保可以在 runApp 前安全调用 SystemChrome
@@ -55,38 +59,12 @@ void main() async {
     ),
   );
 
-  // 🗄️ 初始化数据管理器
-  debugPrint('🚀 开始初始化应用数据管理系统');
-  try {
-    await DataManager().initialize();
-    debugPrint('✅ 数据管理系统初始化成功');
-  } catch (e) {
-    debugPrint('❌ 数据管理系统初始化失败: $e');
-    // 即使初始化失败也继续启动应用，在应用内会有错误处理
-  }
-
-  // 初始化阅读引擎协调器
-  try {
-    await ReadingEngineCoordinator().ensureInitialized();
-    debugPrint('✅ 阅读引擎协调器已初始化');
-  } catch (e) {
-    debugPrint('❌ 阅读引擎协调器初始化失败: $e');
-  }
-
-  // 🖼️ 初始化图片管理器
-  try {
-    final appDocDir = await getApplicationDocumentsDirectory();
-    await BookImageManager().initialize(appDocDir.path);
-    debugPrint('✅ 图片管理器已初始化');
-  } catch (e) {
-    debugPrint('❌ 图片管理器初始化失败: $e');
-  }
-
   runApp(
     ProviderScope(
       child: provider.MultiProvider(
         providers: [
           provider.ChangeNotifierProvider(create: (_) => ThemeNotifier()),
+          provider.ChangeNotifierProvider(create: (_) => AppSettingsNotifier()),
           provider.ChangeNotifierProvider(create: (_) => TtsService()),
           provider.ChangeNotifierProvider(create: (_) => ShareService()),
         ],
@@ -95,16 +73,6 @@ void main() async {
     ),
   );
 }
-
-// 使用Flutter内置的调试日志
-void debugLog(String message) {
-  if (kDebugMode) {
-    debugPrint(message);
-  }
-}
-
-// 动态更新系统栏样式的函数 - 只设置样式，不改变UI模式
-// 已移除未使用的 _updateSystemUIOverlay 方法
 
 class ThemeNotifier extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
@@ -127,8 +95,12 @@ class ThemeNotifier extends ChangeNotifier {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     final isDarkMode = prefs.getBool('isDarkMode');
     final appThemeName = prefs.getString('appTheme') ?? 'blue';
+    final enableAnimations = prefs.getBool('enableAnimations') ?? true;
     final customColorValue = prefs.getInt('customAccentColor');
     final globalAccentColorValue = prefs.getInt('globalAccentColor');
+
+    // 根据动画设置降低毛玻璃成本（提升流畅度）
+    GlassEffectConfig.applyPerformanceMode(reduceEffects: !enableAnimations);
 
     if (isDarkMode == null) {
       // 首次启动，使用系统主题
@@ -278,16 +250,71 @@ class XxReadApp extends StatefulWidget {
 
 class _XxReadAppState extends State<XxReadApp> {
   bool? _hasAcceptedAgreement;
+  bool _isBootstrapped = false;
+  String? _bootstrapError;
 
   @override
   void initState() {
     super.initState();
+    _bootstrapServices();
     _checkAgreementStatus();
+  }
+
+  Future<void> _bootstrapServices() async {
+    setState(() {
+      _isBootstrapped = false;
+      _bootstrapError = null;
+    });
+
+    // 🗄️ 初始化数据管理器
+    debugPrint('🚀 开始初始化应用数据管理系统');
+    try {
+      await DataManager().initialize();
+      debugPrint('✅ 数据管理系统初始化成功');
+    } catch (e) {
+      debugPrint('❌ 数据管理系统初始化失败: $e');
+      if (mounted) {
+        setState(() => _bootstrapError = '数据系统初始化失败');
+      }
+      return;
+    }
+
+    // 初始化阅读引擎协调器
+    try {
+      await ReadingEngineCoordinator().ensureInitialized();
+      debugPrint('✅ 阅读引擎协调器已初始化');
+    } catch (e) {
+      debugPrint('❌ 阅读引擎协调器初始化失败: $e');
+      if (mounted) {
+        setState(() => _bootstrapError = '阅读引擎初始化失败');
+      }
+      return;
+    }
+
+    // 🖼️ 初始化图片管理器
+    try {
+      final appDocDir = await getApplicationDocumentsDirectory();
+      await BookImageManager().initialize(appDocDir.path);
+      debugPrint('✅ 图片管理器已初始化');
+    } catch (e) {
+      debugPrint('❌ 图片管理器初始化失败: $e');
+      if (mounted) {
+        setState(() => _bootstrapError = '图片管理器初始化失败');
+      }
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isBootstrapped = true;
+      _bootstrapError = null;
+    });
   }
 
   /// 检查用户是否已同意协议
   Future<void> _checkAgreementStatus() async {
     final hasAccepted = await UserAgreementService.hasUserAcceptedAgreement();
+    if (!mounted) return;
     setState(() {
       _hasAcceptedAgreement = hasAccepted;
     });
@@ -312,28 +339,38 @@ class _XxReadAppState extends State<XxReadApp> {
 
   @override
   Widget build(BuildContext context) {
-    return provider.Consumer<ThemeNotifier>(
-      builder: (context, themeNotifier, child) {
+    return provider.Consumer2<ThemeNotifier, AppSettingsNotifier>(
+      builder: (context, themeNotifier, appSettings, child) {
         // 不在这里更新系统UI，让各页面自行控制
         // 避免与阅读页面的全屏模式冲突
 
         return MaterialApp(
-          title: '小元读书',
+          onGenerateTitle: (context) => context.l10n.appTitle,
           debugShowCheckedModeBanner: false,
           // 🚀 启用高性能渲染，支持120Hz高刷新率
           scrollBehavior: const MaterialScrollBehavior().copyWith(
             physics: const BouncingScrollPhysics(),
           ),
-          theme: _buildLightTheme(themeNotifier.currentAppTheme),
-          darkTheme: _buildDarkTheme(themeNotifier.currentAppTheme),
+          theme: _buildLightTheme(
+            themeNotifier.currentAppTheme,
+            appSettings.appFontFamily,
+          ),
+          darkTheme: _buildDarkTheme(
+            themeNotifier.currentAppTheme,
+            appSettings.appFontFamily,
+          ),
           themeMode: themeNotifier.themeMode,
+          locale: appSettings.locale,
           localizationsDelegates: const [
+            AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          supportedLocales: const [Locale('en'), Locale('zh')],
-          home: _buildHome(),
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => _buildHome(context),
+          ),
           // 移除 builder 中的系统UI更新，让各页面自行控制
           // 避免与阅读页面的全屏模式冲突
         );
@@ -344,10 +381,19 @@ class _XxReadAppState extends State<XxReadApp> {
   // 已移除未使用的 _getEffectiveThemeMode 方法
 
   /// 根据协议状态决定显示哪个页面
-  Widget _buildHome() {
+  Widget _buildHome(BuildContext context) {
+    if (_bootstrapError != null) {
+      return _buildBootstrapErrorPage(context);
+    }
+
+    // 如果还在初始化，显示加载页面
+    if (!_isBootstrapped) {
+      return _buildLoadingPage(context);
+    }
+
     // 如果还在检查协议状态，显示加载页面
     if (_hasAcceptedAgreement == null) {
-      return _buildLoadingPage();
+      return _buildLoadingPage(context);
     }
 
     // 如果未同意协议，显示协议页面
@@ -362,8 +408,46 @@ class _XxReadAppState extends State<XxReadApp> {
     return const HomePageResponsive();
   }
 
+  Widget _buildBootstrapErrorPage(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 48,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                context.l10n.initializationFailed,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _bootstrapError ?? context.l10n.unknownError,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _bootstrapServices,
+                child: Text(context.l10n.retry),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// 构建加载页面
-  Widget _buildLoadingPage() {
+  Widget _buildLoadingPage(BuildContext context) {
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -401,7 +485,7 @@ class _XxReadAppState extends State<XxReadApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                '小元读书',
+                context.l10n.appTitle,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -419,7 +503,7 @@ class _XxReadAppState extends State<XxReadApp> {
     );
   }
 
-  ThemeData _buildLightTheme(AppTheme appTheme) {
+  ThemeData _buildLightTheme(AppTheme appTheme, String? appFontFamily) {
     ColorScheme colorScheme = appTheme.lightColorScheme;
     debugPrint('🎨 构建浅色主题 - 基础主题: ${appTheme.displayName}');
     debugPrint('🎨 基础主色调: ${colorScheme.primary.toString()}');
@@ -441,6 +525,8 @@ class _XxReadAppState extends State<XxReadApp> {
       useMaterial3: true,
       brightness: Brightness.light,
       colorScheme: colorScheme,
+      fontFamily: appFontFamily,
+      fontFamilyFallback: FontCatalog.appFallbacks(appFontFamily),
       // fontFamily: GoogleFonts.notoSansSc().fontFamily, // 中文字体支持
       appBarTheme: const AppBarTheme(
         elevation: 0,
@@ -449,7 +535,7 @@ class _XxReadAppState extends State<XxReadApp> {
     );
   }
 
-  ThemeData _buildDarkTheme(AppTheme appTheme) {
+  ThemeData _buildDarkTheme(AppTheme appTheme, String? appFontFamily) {
     ColorScheme colorScheme = appTheme.darkColorScheme;
 
     // 如果有全局强调色，应用到color scheme
@@ -467,6 +553,8 @@ class _XxReadAppState extends State<XxReadApp> {
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: colorScheme,
+      fontFamily: appFontFamily,
+      fontFamilyFallback: FontCatalog.appFallbacks(appFontFamily),
       // fontFamily: GoogleFonts.notoSansSc().fontFamily, // 中文字体支持
       appBarTheme: const AppBarTheme(
         elevation: 0,

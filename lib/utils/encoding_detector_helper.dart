@@ -201,7 +201,8 @@ class EncodingDetectorHelper {
       'shiftJisPairs': '$sjisPairCount/$sjisTotalPairs',
       'utf8Score': utf8Score,
       'asciiCount': asciiCount,
-      'asciiRatio': (asciiCount / checkLength * 100).toStringAsFixed(1) + '%',
+      'asciiRatio':
+          '${(asciiCount / checkLength * 100).toStringAsFixed(1)}%',
       'controlCharCount': controlCharCount,
     };
   }

@@ -704,8 +704,8 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
         : {'readingTime': 0, 'pagesRead': 0};
     final todayTime = todayData['readingTime'] ?? 0;
     final todayPages = todayData['pagesRead'] ?? 0;
-    final targetTime = 60; // 目标60分钟
-    final targetPages = 20; // 目标20页
+    const int targetTime = 60; // 目标60分钟
+    const int targetPages = 20; // 目标20页
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
@@ -12,11 +13,39 @@ class DatabaseService {
   static Database? _database;
   static const String _dbName = 'xxread_v2.db';
   static const int _dbVersion = 10;
+  static bool _isInitializing = false;
+  static final Completer<Database> _initCompleter = Completer<Database>();
 
   Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+    // 如果数据库已经打开且有效，直接返回
+    if (_database != null) {
+      try {
+        // 验证连接是否有效（iOS后台恢复时可能已失效）
+        await _database!.rawQuery('SELECT 1');
+        return _database!;
+      } catch (e) {
+        debugPrint('⚠️ 数据库连接已失效，重新打开: $e');
+        _database = null;
+      }
+    }
+
+    // 如果正在初始化，等待完成
+    if (_isInitializing) {
+      return _initCompleter.future;
+    }
+
+    // 开始初始化
+    _isInitializing = true;
+    try {
+      _database = await _initDatabase();
+      _initCompleter.complete(_database!);
+      return _database!;
+    } catch (e) {
+      _initCompleter.completeError(e);
+      rethrow;
+    } finally {
+      _isInitializing = false;
+    }
   }
 
   Future<Database> _initDatabase() async {

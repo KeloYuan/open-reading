@@ -305,7 +305,7 @@ ${_cleanContent(noteContent)}
 
   /// 获取分享选项
   List<ShareOption> getShareOptions() {
-    return [
+    return const [
       ShareOption(
         icon: '📄',
         title: '当前页面',

@@ -85,7 +85,10 @@
       "Bash(/Users/xiaoyuan/flutter/bin/flutter analyze:*)",
       "Bash(sips:*)",
       "Bash(identify:*)",
-      "Bash(file:*)"
+      "Bash(file:*)",
+      "Bash(/Users/xiaoyuan/flutter/bin/flutter pub:*)",
+      "Bash(/Users/xiaoyuan/flutter/bin/flutter run:*)",
+      "Bash(/Users/xiaoyuan/flutter/bin/flutter devices:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits",
