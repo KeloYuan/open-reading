@@ -3,17 +3,20 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:epubx/epubx.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:path/path.dart' as path;
 import 'package:xxread/models/book.dart';
 import 'package:xxread/pages/reader_page.dart';
+import 'package:xxread/pages/reader_kernel_page.dart';
 import 'package:xxread/services/books/book_dao.dart';
 import 'package:xxread/services/books/book_storage_repair_service.dart';
 import 'package:xxread/services/books/enhanced_txt_import_service.dart';
 import 'package:xxread/services/pagination/text_preprocessor_helper.dart';
 import 'package:xxread/services/books/epub_image_extractor_service.dart';
 import 'package:xxread/services/books/book_image_map_service.dart';
+import 'package:xxread/utils/system_ui_helper.dart';
 import 'package:xxread/widgets/side_toast.dart';
 
 class TxtDecodeRequest {
@@ -171,7 +174,8 @@ class ReadingRouterService {
     Book book,
   ) async {
     // 先尝试修复路径（应对升级后沙盒绝对路径变化）
-    final repairedBook = await BookStorageRepairService().repairSingleBookIfNeeded(book);
+    final repairedBook =
+        await BookStorageRepairService().repairSingleBookIfNeeded(book);
 
     final file = File(repairedBook.filePath);
     if (!await file.exists()) {
@@ -193,6 +197,12 @@ class ReadingRouterService {
     BuildContext context,
     Book book,
   ) async {
+    final format = book.format.toLowerCase();
+    if (['txt', 'epub', 'mobi', 'azw', 'azw3'].contains(format)) {
+      _openReaderKernelPage(context, book);
+      return;
+    }
+
     String? bookContent = book.cachedContent;
 
     // 调试：检查缓存内容
@@ -209,27 +219,6 @@ class ReadingRouterService {
     if (bookContent != null && bookContent.isNotEmpty) {
       debugPrint('📖 使用缓存内容打开书籍');
       _openReaderPage(context, book, bookContent);
-      return;
-    }
-
-    final format = book.format.toLowerCase();
-    if (format == 'txt') {
-      var previewContent = await _loadTxtPreviewContent(
-        book,
-        maxBytes: 128 * 1024,
-      );
-      if (previewContent.trim().isEmpty) {
-        previewContent = '正在加载全书...';
-      }
-      if (!context.mounted) {
-        return;
-      }
-      _openReaderPage(
-        context,
-        book,
-        previewContent,
-        fullContentLoader: () => _loadFullTxtContent(book),
-      );
       return;
     }
 
@@ -282,6 +271,7 @@ class ReadingRouterService {
     String content, {
     Future<String> Function()? fullContentLoader,
   }) {
+    final hostBrightness = Theme.of(context).brightness;
     final page = ReaderPage(
       bookContent: content,
       bookTitle: book.title,
@@ -311,6 +301,43 @@ class ReadingRouterService {
         },
         transitionDuration: const Duration(milliseconds: 300),
       ),
+    ).then((_) => _restoreHostSystemUI(hostBrightness));
+  }
+
+  static void _openReaderKernelPage(
+    BuildContext context,
+    Book book,
+  ) {
+    final hostBrightness = Theme.of(context).brightness;
+    final page = ReaderKernelPage(book: book);
+
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => page,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = 0.95;
+          const end = 1.0;
+          final tween = Tween(begin: begin, end: end);
+          final scaleAnimation = animation.drive(tween);
+
+          return FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              scale: scaleAnimation,
+              child: child,
+            ),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    ).then((_) => _restoreHostSystemUI(hostBrightness));
+  }
+
+  static void _restoreHostSystemUI(Brightness hostBrightness) {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiHelper.overlayStyleForBrightness(hostBrightness),
     );
   }
 
@@ -450,6 +477,7 @@ class ReadingRouterService {
     return content;
   }
 
+  // ignore: unused_element
   static Future<String> _loadTxtPreviewContent(
     Book book, {
     int maxBytes = 128 * 1024,
