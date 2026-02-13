@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,7 +54,6 @@ class _SettingsPageState extends State<SettingsPage> {
   // WebDAV设置
   final WebDavSyncService _webdavService = WebDavSyncService();
   final IosCloudSyncService _iosCloudSyncService = IosCloudSyncService();
-  final BookDao _bookDao = BookDao();
   bool _isIosCloudSyncing = false;
 
   // 其他设置

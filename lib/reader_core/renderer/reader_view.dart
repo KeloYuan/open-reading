@@ -19,7 +19,7 @@ enum ChapterBoundaryDirection {
   next,
 }
 
-class ReaderView extends StatelessWidget {
+class ReaderView extends StatefulWidget {
   final FlowDoc flowDoc;
   final PagePlan pagePlan;
   final String? chapterPlainText;
@@ -54,49 +54,218 @@ class ReaderView extends StatelessWidget {
   });
 
   @override
+  State<ReaderView> createState() => _ReaderViewState();
+}
+
+class _ReaderViewState extends State<ReaderView> {
+  PageController? _singleController;
+  PageController? _spreadController;
+  bool _programmaticPaging = false;
+
+  int _clampPageIndex(int index) {
+    final pages = widget.pagePlan.pages;
+    if (pages.isEmpty) {
+      return 0;
+    }
+    return index.clamp(0, pages.length - 1).toInt();
+  }
+
+  int _clampSpreadIndexFromPage(int pageIndex) {
+    final spreadCount = (widget.pagePlan.pages.length / 2).ceil();
+    if (spreadCount <= 0) {
+      return 0;
+    }
+    return (pageIndex ~/ 2).clamp(0, spreadCount - 1).toInt();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.layout.columns <= 1) {
+      _singleController =
+          PageController(initialPage: _clampPageIndex(widget.initialPageIndex));
+    } else {
+      _spreadController = PageController(
+        initialPage: _clampSpreadIndexFromPage(widget.initialPageIndex),
+      );
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ReaderView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final columnsChanged = oldWidget.layout.columns != widget.layout.columns;
+    final chapterChanged = oldWidget.pagePlan.chapterId != widget.pagePlan.chapterId ||
+        oldWidget.pagePlan.cacheKey != widget.pagePlan.cacheKey;
+
+    if (columnsChanged) {
+      _singleController?.dispose();
+      _spreadController?.dispose();
+      _singleController = null;
+      _spreadController = null;
+      if (widget.layout.columns <= 1) {
+        _singleController =
+            PageController(initialPage: _clampPageIndex(widget.initialPageIndex));
+      } else {
+        _spreadController = PageController(
+          initialPage: _clampSpreadIndexFromPage(widget.initialPageIndex),
+        );
+      }
+      return;
+    }
+
+    if (widget.layout.columns <= 1) {
+      _singleController ??=
+          PageController(initialPage: _clampPageIndex(widget.initialPageIndex));
+      if (chapterChanged) {
+        _jumpSingleTo(_clampPageIndex(widget.initialPageIndex));
+      } else {
+        _syncSingleFromExternalState();
+      }
+      return;
+    }
+
+    _spreadController ??= PageController(
+      initialPage: _clampSpreadIndexFromPage(widget.initialPageIndex),
+    );
+    if (chapterChanged) {
+      _jumpSpreadTo(_clampSpreadIndexFromPage(widget.initialPageIndex));
+    } else {
+      _syncSpreadFromExternalState();
+    }
+  }
+
+  void _jumpSingleTo(int targetPage) {
+    final controller = _singleController;
+    if (controller == null || !controller.hasClients) {
+      return;
+    }
+    _programmaticPaging = true;
+    controller.jumpToPage(targetPage);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _programmaticPaging = false;
+    });
+  }
+
+  void _jumpSpreadTo(int targetSpread) {
+    final controller = _spreadController;
+    if (controller == null || !controller.hasClients) {
+      return;
+    }
+    _programmaticPaging = true;
+    controller.jumpToPage(targetSpread);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _programmaticPaging = false;
+    });
+  }
+
+  void _syncSingleFromExternalState() {
+    if (_programmaticPaging) {
+      return;
+    }
+    final controller = _singleController;
+    if (controller == null || !controller.hasClients) {
+      return;
+    }
+    final target = _clampPageIndex(widget.initialPageIndex);
+    final current = (controller.page ?? target.toDouble()).round();
+    if (current == target) {
+      return;
+    }
+    _programmaticPaging = true;
+    controller
+        .animateToPage(
+      target,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+    )
+        .whenComplete(() {
+      _programmaticPaging = false;
+    });
+  }
+
+  void _syncSpreadFromExternalState() {
+    if (_programmaticPaging) {
+      return;
+    }
+    final controller = _spreadController;
+    if (controller == null || !controller.hasClients) {
+      return;
+    }
+    final target = _clampSpreadIndexFromPage(widget.initialPageIndex);
+    final current = (controller.page ?? target.toDouble()).round();
+    if (current == target) {
+      return;
+    }
+    _programmaticPaging = true;
+    controller
+        .animateToPage(
+      target,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+    )
+        .whenComplete(() {
+      _programmaticPaging = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _singleController?.dispose();
+    _spreadController?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final pages = pagePlan.pages;
+    final pages = widget.pagePlan.pages;
     if (pages.isEmpty) {
       return const Center(child: Text('No pages'));
     }
 
     final pagePadding = EdgeInsets.fromLTRB(
-      layout.padding.left,
-      layout.padding.top,
-      layout.padding.right,
-      layout.padding.bottom,
+      widget.layout.padding.left,
+      widget.layout.padding.top,
+      widget.layout.padding.right,
+      widget.layout.padding.bottom,
     );
     final maxVisibleLines = math.max(
-        1, (layout.usableHeight / (style.fontSize * style.lineHeight)).floor());
+      1,
+      (widget.layout.usableHeight /
+              (widget.style.fontSize * widget.style.lineHeight))
+          .floor(),
+    );
 
-    if (layout.columns <= 1) {
-      final initial =
-          initialPageIndex.clamp(0, math.max(0, pages.length - 1)).toInt();
+    if (widget.layout.columns <= 1) {
+      _singleController ??=
+          PageController(initialPage: _clampPageIndex(widget.initialPageIndex));
       return NotificationListener<ScrollNotification>(
         onNotification: (notification) =>
-            _handleBoundaryOverscroll(notification, onReachChapterBoundary),
+            _handleBoundaryOverscroll(notification, widget.onReachChapterBoundary),
         child: PageView.builder(
-          controller: PageController(initialPage: initial),
+          controller: _singleController,
           itemCount: pages.length,
-          onPageChanged: (index) => onPageChanged?.call(index),
+          onPageChanged: (index) {
+            widget.onPageChanged?.call(index);
+          },
           itemBuilder: (context, index) {
             final page = pages[index];
             return _PagePane(
               key: ValueKey('page-${page.index}'),
               page: page,
-              style: style,
-              flowDoc: flowDoc,
-              chapterPlainText: chapterPlainText,
-              chapterResources: chapterResources,
-              chapterTitle: currentChapterTitle,
+              style: widget.style,
+              flowDoc: widget.flowDoc,
+              chapterPlainText: widget.chapterPlainText,
+              chapterResources: widget.chapterResources,
+              chapterTitle: widget.currentChapterTitle,
               showChapterTitle: page.index == 0,
               pagePadding: pagePadding,
               maxVisibleLines: maxVisibleLines,
-              pageUsableHeight: layout.usableHeight,
-              pageBackgroundColor: pageBackgroundColor,
-              textColor: textColor,
-              annotations: annotations,
-              onSelectionAction: onSelectionAction,
+              pageUsableHeight: widget.layout.usableHeight,
+              pageBackgroundColor: widget.pageBackgroundColor,
+              textColor: widget.textColor,
+              annotations: widget.annotations,
+              onSelectionAction: widget.onSelectionAction,
             );
           },
         ),
@@ -104,16 +273,17 @@ class ReaderView extends StatelessWidget {
     }
 
     final spreadCount = (pages.length / 2).ceil();
-    final initialSpread =
-        (initialPageIndex ~/ 2).clamp(0, math.max(0, spreadCount - 1)).toInt();
+    _spreadController ??= PageController(
+      initialPage: _clampSpreadIndexFromPage(widget.initialPageIndex),
+    );
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) =>
-          _handleBoundaryOverscroll(notification, onReachChapterBoundary),
+          _handleBoundaryOverscroll(notification, widget.onReachChapterBoundary),
       child: PageView.builder(
-        controller: PageController(initialPage: initialSpread),
+        controller: _spreadController,
         itemCount: spreadCount,
-        onPageChanged: (spread) => onPageChanged
+        onPageChanged: (spread) => widget.onPageChanged
             ?.call((spread * 2).clamp(0, pages.length - 1).toInt()),
         itemBuilder: (context, spreadIndex) {
           final leftIndex = spreadIndex * 2;
@@ -130,41 +300,41 @@ class ReaderView extends StatelessWidget {
                   child: _PagePane(
                     key: ValueKey('page-${left.index}'),
                     page: left,
-                    style: style,
-                    flowDoc: flowDoc,
-                    chapterPlainText: chapterPlainText,
-                    chapterResources: chapterResources,
-                    chapterTitle: currentChapterTitle,
+                    style: widget.style,
+                    flowDoc: widget.flowDoc,
+                    chapterPlainText: widget.chapterPlainText,
+                    chapterResources: widget.chapterResources,
+                    chapterTitle: widget.currentChapterTitle,
                     showChapterTitle: left.index == 0,
                     pagePadding: pagePadding,
                     maxVisibleLines: maxVisibleLines,
-                    pageUsableHeight: layout.usableHeight,
-                    pageBackgroundColor: pageBackgroundColor,
-                    textColor: textColor,
-                    annotations: annotations,
-                    onSelectionAction: onSelectionAction,
+                    pageUsableHeight: widget.layout.usableHeight,
+                    pageBackgroundColor: widget.pageBackgroundColor,
+                    textColor: widget.textColor,
+                    annotations: widget.annotations,
+                    onSelectionAction: widget.onSelectionAction,
                   ),
                 ),
-                SizedBox(width: layout.gutter),
+                SizedBox(width: widget.layout.gutter),
                 Expanded(
                   child: right == null
                       ? const SizedBox.shrink()
                       : _PagePane(
                           key: ValueKey('page-${right.index}'),
                           page: right,
-                          style: style,
-                          flowDoc: flowDoc,
-                          chapterPlainText: chapterPlainText,
-                          chapterResources: chapterResources,
-                          chapterTitle: currentChapterTitle,
+                          style: widget.style,
+                          flowDoc: widget.flowDoc,
+                          chapterPlainText: widget.chapterPlainText,
+                          chapterResources: widget.chapterResources,
+                          chapterTitle: widget.currentChapterTitle,
                           showChapterTitle: right.index == 0,
                           pagePadding: pagePadding,
                           maxVisibleLines: maxVisibleLines,
-                          pageUsableHeight: layout.usableHeight,
-                          pageBackgroundColor: pageBackgroundColor,
-                          textColor: textColor,
-                          annotations: annotations,
-                          onSelectionAction: onSelectionAction,
+                          pageUsableHeight: widget.layout.usableHeight,
+                          pageBackgroundColor: widget.pageBackgroundColor,
+                          textColor: widget.textColor,
+                          annotations: widget.annotations,
+                          onSelectionAction: widget.onSelectionAction,
                         ),
                 ),
               ],
@@ -257,16 +427,23 @@ class _PagePaneState extends State<_PagePane> {
 
   @override
   Widget build(BuildContext context) {
-    final hasTitle = widget.showChapterTitle &&
+    final shouldPromoteTitle = widget.showChapterTitle &&
         (widget.chapterTitle?.trim().isNotEmpty ?? false);
     final blockMap = <String, Block>{for (final b in widget.flowDoc.blocks) b.id: b};
     final textColor = widget.textColor ?? Theme.of(context).colorScheme.onSurface;
     final baseStyle = widget.style.toTextStyle(color: textColor);
     final renderItems = _buildRenderItems(blockMap);
-    if (hasTitle) {
-      _trimLeadingTitleFromItems(renderItems, widget.chapterTitle!);
+    final promotedTitle = shouldPromoteTitle
+        ? (_extractLeadingTitleFromItems(renderItems, widget.chapterTitle!) ??
+            _extractLeadingHeadingFromItems(renderItems) ??
+            _extractFallbackLeadingTextFromItems(renderItems))
+        : null;
+    final hasImageItem = renderItems.any((e) => e.type == _RenderItemType.image);
+    if (promotedTitle != null) {
+      _removeImmediateDuplicateTitle(renderItems, promotedTitle);
     }
-    final hasContent = renderItems.any((e) => e.type != _RenderItemType.space);
+    final hasContent = promotedTitle != null ||
+        renderItems.any((e) => e.type != _RenderItemType.space);
 
     return Container(
       color: widget.pageBackgroundColor ??
@@ -318,15 +495,17 @@ class _PagePaneState extends State<_PagePane> {
                     final maxWidth =
                         constraints.maxWidth.isFinite ? constraints.maxWidth : 360.0;
                     final children = <Widget>[
-                      if (hasTitle)
+                      if (promotedTitle != null)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: Text(
-                            widget.chapterTitle!,
+                            promotedTitle,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: baseStyle.copyWith(
-                              fontSize: (widget.style.fontSize * 1.38).clamp(20, 42),
+                              fontSize: (widget.style.fontSize *
+                                      (hasImageItem ? 1.24 : 1.34))
+                                  .clamp(18, 40),
                               fontWeight: FontWeight.w700,
                               height: 1.25,
                             ),
@@ -391,9 +570,13 @@ class _PagePaneState extends State<_PagePane> {
                       );
                     }
 
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: children,
+                    return SizedBox(
+                      height: constraints.maxHeight,
+                      child: ListView(
+                        physics: const NeverScrollableScrollPhysics(),
+                        padding: EdgeInsets.zero,
+                        children: children,
+                      ),
                     );
                   },
                 ),
@@ -423,19 +606,13 @@ class _PagePaneState extends State<_PagePane> {
         if (end <= start) {
           continue;
         }
-        final margin = (block is Block) ? block.style.margin : null;
-        if (margin != null && margin.top > 0) {
-          items.add(_RenderItem.space(margin.top));
-        }
         items.add(
           _RenderItem.text(
             text: blockText.substring(start, end),
             globalStart: fragment.globalStart,
+            isHeading: block is HeadingBlock,
           ),
         );
-        if (margin != null && margin.bottom > 0) {
-          items.add(_RenderItem.space(margin.bottom));
-        }
         continue;
       }
 
@@ -444,14 +621,7 @@ class _PagePaneState extends State<_PagePane> {
         if (block is! ImageBlock) {
           continue;
         }
-        final margin = block.style.margin;
-        if (margin != null && margin.top > 0) {
-          items.add(_RenderItem.space(margin.top));
-        }
         items.add(_RenderItem.image(block));
-        if (margin != null && margin.bottom > 0) {
-          items.add(_RenderItem.space(margin.bottom));
-        }
         continue;
       }
 
@@ -462,10 +632,11 @@ class _PagePaneState extends State<_PagePane> {
     return items;
   }
 
-  void _trimLeadingTitleFromItems(List<_RenderItem> items, String chapterTitle) {
+  String? _extractLeadingTitleFromItems(
+      List<_RenderItem> items, String chapterTitle) {
     final title = chapterTitle.trim();
     if (title.isEmpty) {
-      return;
+      return null;
     }
     final compactTitle = title.replaceAll(RegExp(r'\s+'), '');
     for (var i = 0; i < items.length; i++) {
@@ -482,7 +653,7 @@ class _PagePaneState extends State<_PagePane> {
       final isLikelyTitle = stripped.startsWith(title) ||
           compactStripped.startsWith(compactTitle);
       if (!isLikelyTitle) {
-        return;
+        return null;
       }
 
       final leading = raw.length - stripped.length;
@@ -509,8 +680,9 @@ class _PagePaneState extends State<_PagePane> {
         }
       }
       if (remove <= 0 || remove > raw.length) {
-        return;
+        return null;
       }
+      final promoted = raw.substring(leading, remove).trim();
 
       var trimmed = raw.substring(remove);
       trimmed = trimmed.replaceFirst(RegExp(r'^[\s:：\-—·•]+'), '');
@@ -523,8 +695,157 @@ class _PagePaneState extends State<_PagePane> {
           globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
         );
       }
+      return promoted.isNotEmpty ? promoted : title;
+    }
+    return null;
+  }
+
+  String? _extractLeadingHeadingFromItems(List<_RenderItem> items) {
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      if (item.type == _RenderItemType.space) {
+        continue;
+      }
+      if (item.type != _RenderItemType.text || !(item.isHeading ?? false)) {
+        break;
+      }
+      final raw = item.text ?? '';
+      final stripped = raw.trimLeft();
+      if (stripped.isEmpty) {
+        continue;
+      }
+      final firstLine = stripped.split('\n').first.trim();
+      if (firstLine.isEmpty) {
+        continue;
+      }
+
+      final leading = raw.length - stripped.length;
+      final remove = leading + firstLine.length;
+      if (remove <= 0 || remove > raw.length) {
+        break;
+      }
+      var trimmed = raw.substring(remove);
+      trimmed = trimmed.replaceFirst(RegExp(r'^[\s:：\-—·•]+'), '');
+      if (trimmed.trim().isEmpty) {
+        items.removeAt(i);
+      } else {
+        final shift = raw.length - trimmed.length;
+        items[i] = _RenderItem.text(
+          text: trimmed,
+          globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
+          isHeading: item.isHeading ?? false,
+        );
+      }
+      return firstLine;
+    }
+    return null;
+  }
+
+  String? _extractFallbackLeadingTextFromItems(List<_RenderItem> items) {
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      if (item.type == _RenderItemType.space) {
+        continue;
+      }
+      if (item.type != _RenderItemType.text) {
+        break;
+      }
+      final raw = item.text ?? '';
+      final stripped = raw.trimLeft();
+      if (stripped.isEmpty) {
+        continue;
+      }
+      final firstLine = stripped.split('\n').first.trim();
+      if (firstLine.isEmpty) {
+        continue;
+      }
+      final isLikelyTitle = firstLine.length <= 34 &&
+          !RegExp(r'[。！？!?；;，,]').hasMatch(firstLine);
+      if (!isLikelyTitle) {
+        return null;
+      }
+
+      final leading = raw.length - stripped.length;
+      final remove = leading + firstLine.length;
+      if (remove <= 0 || remove > raw.length) {
+        return null;
+      }
+      var trimmed = raw.substring(remove);
+      trimmed = trimmed.replaceFirst(RegExp(r'^[\s:：\-—·•]+'), '');
+      if (trimmed.trim().isEmpty) {
+        items.removeAt(i);
+      } else {
+        final shift = raw.length - trimmed.length;
+        items[i] = _RenderItem.text(
+          text: trimmed,
+          globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
+          isHeading: item.isHeading ?? false,
+        );
+      }
+      return firstLine;
+    }
+    return null;
+  }
+
+  void _removeImmediateDuplicateTitle(
+      List<_RenderItem> items, String promotedTitle) {
+    final target = _normalizeTitleToken(promotedTitle);
+    if (target.isEmpty) {
       return;
     }
+
+    var textChecks = 0;
+    for (var i = 0; i < items.length && textChecks < 4; i++) {
+      final item = items[i];
+      if (item.type == _RenderItemType.space) {
+        continue;
+      }
+      if (item.type != _RenderItemType.text) {
+        break;
+      }
+      textChecks += 1;
+
+      final raw = item.text ?? '';
+      final stripped = raw.trimLeft();
+      if (stripped.isEmpty) {
+        continue;
+      }
+
+      final normalized = _normalizeTitleToken(stripped);
+      final duplicate = normalized == target ||
+          (normalized.startsWith(target) &&
+              normalized.length <= target.length + 2);
+      if (!duplicate) {
+        break;
+      }
+
+      if (normalized == target) {
+        items.removeAt(i);
+        return;
+      }
+
+      final prefixPattern = RegExp(
+        '^\\s*${RegExp.escape(promotedTitle)}[\\s:：\\-—·•]*',
+      );
+      final trimmed = raw.replaceFirst(prefixPattern, '');
+      if (trimmed.trim().isEmpty) {
+        items.removeAt(i);
+      } else {
+        final shift = raw.length - trimmed.length;
+        items[i] = _RenderItem.text(
+          text: trimmed,
+          globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
+        );
+      }
+      return;
+    }
+  }
+
+  String _normalizeTitleToken(String value) {
+    return value
+        .trim()
+        .replaceAll(RegExp(r'[\s:：\-—·•]+'), '')
+        .toLowerCase();
   }
 
   Widget _buildImageWidget({
@@ -538,7 +859,7 @@ class _PagePaneState extends State<_PagePane> {
     final isRemote = uri != null &&
         (uri.scheme.toLowerCase() == 'http' ||
             uri.scheme.toLowerCase() == 'https');
-    final maxImageHeight = math.max(96.0, widget.pageUsableHeight * 0.58);
+    final maxImageHeight = math.max(88.0, widget.pageUsableHeight * 0.44);
 
     var targetWidth = maxWidth;
     var targetHeight = imageBlock.height;
@@ -553,7 +874,10 @@ class _PagePaneState extends State<_PagePane> {
       targetHeight = targetWidth * (imageBlock.height! / imageBlock.width!);
     }
     if (targetHeight != null) {
-      targetHeight = targetHeight.clamp(48.0, maxImageHeight).toDouble();
+      targetHeight = targetHeight.clamp(44.0, maxImageHeight).toDouble();
+    } else {
+      targetHeight =
+          (widget.pageUsableHeight * 0.28).clamp(44.0, maxImageHeight).toDouble();
     }
 
     Widget imageChild;
@@ -601,7 +925,7 @@ class _PagePaneState extends State<_PagePane> {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: maxWidth,
@@ -610,7 +934,7 @@ class _PagePaneState extends State<_PagePane> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(6),
           child: Align(
-            alignment: Alignment.centerLeft,
+            alignment: Alignment.center,
             child: imageChild,
           ),
         ),
@@ -930,6 +1254,7 @@ class _RenderItem {
   final _RenderItemType type;
   final String? text;
   final int? globalStart;
+  final bool? isHeading;
   final ImageBlock? imageBlock;
   final double? spaceHeight;
 
@@ -937,6 +1262,7 @@ class _RenderItem {
     required this.type,
     this.text,
     this.globalStart,
+    this.isHeading,
     this.imageBlock,
     this.spaceHeight,
   });
@@ -944,11 +1270,13 @@ class _RenderItem {
   factory _RenderItem.text({
     required String text,
     required int globalStart,
+    bool isHeading = false,
   }) {
     return _RenderItem._(
       type: _RenderItemType.text,
       text: text,
       globalStart: globalStart,
+      isHeading: isHeading,
     );
   }
 

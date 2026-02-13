@@ -1,11 +1,28 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <clocale>
 #ifdef GDK_WINDOWING_X11
-#include <gdk/gdkx.h>
+#include <gdk/gdkx>
 #endif
 
 #include "flutter/generated_plugin_registrant.h"
+
+// Get localized app name based on system locale
+static const char* get_localized_app_name() {
+  // Try to get system locale
+  const char* locale = setlocale(LC_ALL, nullptr);
+  if (locale) {
+    // Check if locale contains Chinese
+    if (strstr(locale, "zh_CN") || strstr(locale, "zh_TW") ||
+        strstr(locale, "zh-Hans") || strstr(locale, "zh-Hant") ||
+        strstr(locale, "Chinese")) {
+      return "小元读书";
+    }
+  }
+  // Default to English
+  return "Origo Reader";
+}
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -37,14 +54,17 @@ static void my_application_activate(GApplication* application) {
     }
   }
 #endif
+
+  const char* app_name = get_localized_app_name();
+
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "小元读书");
+    gtk_header_bar_set_title(header_bar, app_name);
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "小元读书");
+    gtk_window_set_title(window, app_name);
   }
 
   gtk_window_set_default_size(window, 1280, 720);

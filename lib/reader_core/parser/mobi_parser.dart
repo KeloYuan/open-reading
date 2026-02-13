@@ -24,7 +24,7 @@ class MobiParser implements BookParser {
     // Replace this fallback extractor with package:dart_mobi parser when wired in.
     final extractedText = _extractReadableText(bytes);
     if (extractedText.trim().isEmpty) {
-      throw FormatException('MOBI/AZW3 解析失败：未提取到可阅读文本。');
+      throw const FormatException('MOBI/AZW3 解析失败：未提取到可阅读文本。');
     }
 
     final tmpPath = '${Directory.systemTemp.path}/$bookId-mobi.txt';

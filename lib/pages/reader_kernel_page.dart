@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:xxread/models/book.dart' as legacy;
 import 'package:xxread/reader_core/data/reader_models.dart' as core;
@@ -28,10 +30,13 @@ class ReaderKernelPage extends StatefulWidget {
 }
 
 class _ReaderKernelPageState extends State<ReaderKernelPage> {
+  static const String _themePrefKey = 'reader_theme_index_v1';
+  static const double _floatingPanelRadius = 30;
+
   late final ReaderKernelController _controller;
   final _bookDao = BookDao();
   bool _chapterSwitching = false;
-  bool _chromeVisible = true;
+  bool _chromeVisible = false;
   Timer? _immersiveTimer;
   final List<_ReaderThemePreset> _themes = const [
     _ReaderThemePreset(
@@ -52,14 +57,41 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
   ];
   final Set<_BookmarkPoint> _bookmarks = <_BookmarkPoint>{};
   int _themeIndex = 0;
+  int? _activePointer;
+  Offset? _pointerDownPosition;
+  DateTime? _pointerDownTime;
+  bool _pointerMovedTooMuch = false;
 
   @override
   void initState() {
     super.initState();
     _controller = ReaderKernelController();
-    _applyReaderSystemUI(immersive: false);
-    _scheduleAutoImmersive();
-    _open();
+    _applyReaderSystemUI(immersive: true);
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    await _restoreTheme();
+    if (!mounted) {
+      return;
+    }
+    await _open();
+  }
+
+  Future<void> _restoreTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getInt(_themePrefKey);
+    if (saved == null) {
+      return;
+    }
+    final normalized = saved.clamp(0, _themes.length - 1);
+    if (!mounted || normalized == _themeIndex) {
+      return;
+    }
+    setState(() {
+      _themeIndex = normalized;
+    });
+    _applyReaderSystemUI(immersive: !_chromeVisible);
   }
 
   Future<void> _open() async {
@@ -139,8 +171,8 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
     }
   }
 
-  void _handleReaderTapUp(TapUpDetails details, BoxConstraints constraints) {
-    final x = details.localPosition.dx;
+  void _handleReaderTapAt(Offset localPosition, BoxConstraints constraints) {
+    final x = localPosition.dx;
     final leftBoundary = constraints.maxWidth / 3;
     final rightBoundary = constraints.maxWidth * 2 / 3;
     if (x >= leftBoundary && x <= rightBoundary) {
@@ -155,6 +187,86 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
     if (_chromeVisible) {
       _scheduleAutoImmersive();
     }
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    _activePointer = event.pointer;
+    _pointerDownPosition = event.localPosition;
+    _pointerDownTime = DateTime.now();
+    _pointerMovedTooMuch = false;
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (_activePointer != event.pointer) {
+      return;
+    }
+    final start = _pointerDownPosition;
+    if (start == null) {
+      return;
+    }
+    if ((event.localPosition - start).distance > 14) {
+      _pointerMovedTooMuch = true;
+    }
+  }
+
+  void _handlePointerCancel(PointerCancelEvent event) {
+    if (_activePointer == event.pointer) {
+      _resetPointerTracking();
+    }
+  }
+
+  void _handlePointerUp(
+    PointerUpEvent event,
+    BoxConstraints constraints, {
+    required EdgeInsets mediaPadding,
+  }) {
+    if (_activePointer != event.pointer) {
+      return;
+    }
+    final downTime = _pointerDownTime;
+    final start = _pointerDownPosition;
+    final movedTooMuch = _pointerMovedTooMuch;
+    _resetPointerTracking();
+    if (downTime == null || start == null || movedTooMuch) {
+      return;
+    }
+
+    final elapsed = DateTime.now().difference(downTime);
+    if (elapsed > const Duration(milliseconds: 260)) {
+      return;
+    }
+    if (_isTapInControlArea(
+      event.localPosition,
+      constraints,
+      mediaPadding: mediaPadding,
+    )) {
+      return;
+    }
+    _handleReaderTapAt(event.localPosition, constraints);
+  }
+
+  bool _isTapInControlArea(
+    Offset localPosition,
+    BoxConstraints constraints, {
+    required EdgeInsets mediaPadding,
+  }) {
+    if (!_chromeVisible) {
+      return false;
+    }
+    final topControlBottom = mediaPadding.top + 110;
+    if (localPosition.dy <= topControlBottom) {
+      return true;
+    }
+    final bottomControlTop =
+        constraints.maxHeight - (mediaPadding.bottom + 128);
+    return localPosition.dy >= bottomControlTop;
+  }
+
+  void _resetPointerTracking() {
+    _activePointer = null;
+    _pointerDownPosition = null;
+    _pointerDownTime = null;
+    _pointerMovedTooMuch = false;
   }
 
   _ReaderThemePreset get _activeTheme => _themes[_themeIndex % _themes.length];
@@ -185,11 +297,15 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
               final media = MediaQuery.of(context);
               final isLandscape = constraints.maxWidth > constraints.maxHeight;
               final enableSpread = constraints.maxWidth >= 900 && isLandscape;
+              final topInset = media.padding.top;
+              final bottomInset = media.padding.bottom;
+              const topUiReserve = 8.0;
+              const bottomUiReserve = 24.0;
               final padding = EdgeInsets.fromLTRB(
                 16,
-                12 + media.padding.top,
+                topInset + topUiReserve,
                 16,
-                12 + media.padding.bottom,
+                bottomInset + bottomUiReserve,
               );
 
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -201,6 +317,9 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
               });
 
               final reader = ReaderView(
+                key: ValueKey(
+                  'reader-${chapter.chapter.id}-${_controller.layout.columns}',
+                ),
                 flowDoc: chapter.flowDoc,
                 pagePlan: plan,
                 chapterPlainText: chapter.chapter.content,
@@ -223,16 +342,31 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
                 onReachChapterBoundary: _onBoundaryReached,
               );
 
-              return GestureDetector(
+              return Listener(
                 behavior: HitTestBehavior.translucent,
-                onTapUp: (details) => _handleReaderTapUp(details, constraints),
+                onPointerDown: _handlePointerDown,
+                onPointerMove: _handlePointerMove,
+                onPointerCancel: _handlePointerCancel,
+                onPointerUp: (event) => _handlePointerUp(
+                  event,
+                  constraints,
+                  mediaPadding: media.padding,
+                ),
                 child: Stack(
                   children: [
                     Positioned.fill(child: reader),
-                    Positioned.fill(
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
                       child: IgnorePointer(
-                        child: _ReaderTopStatusOverlay(
-                          foreground: _activeTheme.foreground,
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 160),
+                          curve: Curves.easeOut,
+                          opacity: _chromeVisible ? 0 : 1,
+                          child: _ReaderTopStatusOverlay(
+                            foreground: _activeTheme.foreground,
+                          ),
                         ),
                       ),
                     ),
@@ -244,20 +378,18 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
                         ),
                       ),
                     ),
-                    if (_chromeVisible) ...[
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: _buildTopControlBar(),
-                      ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 34,
-                        child: _buildBottomToolbar(),
-                      ),
-                    ],
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: _buildTopControlBarAnimated(),
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 34,
+                      child: _buildBottomToolbarAnimated(),
+                    ),
                   ],
                 ),
               );
@@ -282,16 +414,10 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
         return SafeArea(
           top: false,
           child: Center(
-            child: Container(
+            child: _buildGlassPanel(
               margin: const EdgeInsets.symmetric(horizontal: 12),
               padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-              decoration: BoxDecoration(
-                color: _activeTheme.background.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: foreground.withValues(alpha: 0.18),
-                ),
-              ),
+              radius: _floatingPanelRadius,
               child: IconTheme(
                 data: IconThemeData(color: foreground),
                 child: Wrap(
@@ -353,16 +479,10 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
   Widget _buildTopControlBar() {
     return SafeArea(
       bottom: false,
-      child: Container(
+      child: _buildGlassPanel(
         margin: const EdgeInsets.fromLTRB(10, 34, 10, 0),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: _activeTheme.background.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _activeTheme.foreground.withValues(alpha: 0.18),
-          ),
-        ),
+        radius: _floatingPanelRadius,
         child: Row(
           children: [
             IconButton(
@@ -425,6 +545,75 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
     );
   }
 
+  Widget _buildTopControlBarAnimated() {
+    return IgnorePointer(
+      ignoring: !_chromeVisible,
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        offset: _chromeVisible ? Offset.zero : const Offset(0, -0.22),
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          opacity: _chromeVisible ? 1 : 0,
+          child: _buildTopControlBar(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomToolbarAnimated() {
+    return IgnorePointer(
+      ignoring: !_chromeVisible,
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        offset: _chromeVisible ? Offset.zero : const Offset(0, 0.26),
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          opacity: _chromeVisible ? 1 : 0,
+          child: _buildBottomToolbar(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlassPanel({
+    required Widget child,
+    required EdgeInsets margin,
+    required EdgeInsets padding,
+    double radius = 14,
+  }) {
+    final fg = _activeTheme.foreground;
+    return Container(
+      margin: margin,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            padding: padding,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(color: fg.withValues(alpha: 0.24)),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.20),
+                  Colors.white.withValues(alpha: 0.08),
+                ],
+              ),
+              color: _activeTheme.background.withValues(alpha: 0.50),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildBottomReadingInfoOverlay({
     required ParsedChapter chapter,
     required PagePlan plan,
@@ -444,27 +633,25 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
     final pageNo =
         (_controller.pageIndex + 1).clamp(1, math.max(1, plan.pages.length));
     final pageTotal = math.max(1, plan.pages.length);
+    final media = MediaQuery.of(context);
+    final bottomInset = media.padding.bottom > 0 ? 1.0 : 0.0;
 
     return Align(
       alignment: Alignment.bottomCenter,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        child: SafeArea(
-          top: false,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: _activeTheme.background.withValues(alpha: 0.72),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              '第 $chapterNo/$chapterTotal 章 · 第 $pageNo/$pageTotal 页',
-              style: TextStyle(
-                color: _activeTheme.foreground.withValues(alpha: 0.9),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+        padding: EdgeInsets.fromLTRB(12, 0, 12, bottomInset),
+        child: Text(
+          '第 $chapterNo/$chapterTotal 章 · 第 $pageNo/$pageTotal 页',
+          style: TextStyle(
+            color: _activeTheme.foreground.withValues(alpha: 0.92),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            shadows: [
+              Shadow(
+                color: _activeTheme.background.withValues(alpha: 0.65),
+                blurRadius: 4,
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -527,7 +714,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
     _chapterSwitching = true;
     try {
       if (triggeredByBoundary) {
-        await Future<void>.delayed(const Duration(milliseconds: 280));
+        await Future<void>.delayed(const Duration(milliseconds: 90));
       }
       if (!mounted) {
         return;
@@ -550,6 +737,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
     setState(() {
       _themeIndex = next;
     });
+    unawaited(_persistTheme(next));
     _applyReaderSystemUI(immersive: !_chromeVisible);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('主题：${_themes[next].name}')),
@@ -557,6 +745,11 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
     if (_chromeVisible) {
       _scheduleAutoImmersive();
     }
+  }
+
+  Future<void> _persistTheme(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_themePrefKey, index);
   }
 
   _BookmarkPoint? _currentBookmarkPoint() {
@@ -939,59 +1132,61 @@ class _ReaderTopStatusOverlayState extends State<_ReaderTopStatusOverlay> {
   Widget build(BuildContext context) {
     final fg = widget.foreground;
     final media = MediaQuery.of(context);
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        12,
-        media.padding.top + 2,
-        12,
-        0,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: fg.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              _timeText,
-              style: TextStyle(
-                color: fg.withValues(alpha: 0.9),
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: fg.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  _batteryIcon(),
-                  size: 16,
-                  color: _batteryLevel <= 20
-                      ? Colors.redAccent
-                      : fg.withValues(alpha: 0.9),
+    final statusBarHeight = math.max(media.viewPadding.top, 24.0);
+    return SizedBox(
+      height: statusBarHeight + 24,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(36, 22, 36, 0),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                decoration: BoxDecoration(
+                  color: fg.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  '$_batteryLevel%',
+                child: Text(
+                  _timeText,
                   style: TextStyle(
                     color: fg.withValues(alpha: 0.9),
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-              ],
-            ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                decoration: BoxDecoration(
+                  color: fg.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _batteryIcon(),
+                      size: 15,
+                      color: _batteryLevel <= 20
+                          ? Colors.redAccent
+                          : fg.withValues(alpha: 0.9),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$_batteryLevel%',
+                      style: TextStyle(
+                        color: fg.withValues(alpha: 0.9),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

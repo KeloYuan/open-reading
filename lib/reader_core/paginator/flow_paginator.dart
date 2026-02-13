@@ -12,13 +12,16 @@ typedef PaginationProgress = void Function(List<Page> pages, bool done);
 class FlowPaginator {
   static final Map<String, PagePlan> _memoryCache = <String, PagePlan>{};
   static const double _eps = 0.5;
+  static const double _renderSafetyBottom = 24.0;
+  static const double _estimatedImageVerticalPadding = 4.0;
+  static const String _cacheAlgoVersion = 'v4';
 
   static String buildCacheKey({
     required String chapterId,
     required ReaderStyle style,
     required PageLayout layout,
   }) {
-    return '$chapterId::${layout.cacheSignature()}::${style.cacheSignature()}';
+    return '$chapterId::$_cacheAlgoVersion::${layout.cacheSignature()}::${style.cacheSignature()}';
   }
 
   static PagePlan? getMemoryCache(String key) => _memoryCache[key];
@@ -71,7 +74,11 @@ class FlowPaginator {
     final paragraphCache = <String, _ParagraphLayout>{};
 
     final pageWidth = layout.usableWidth;
-    final pageHeight = layout.usableHeight;
+    final lineGuard = math.max(6.0, style.fontSize * style.lineHeight * 0.45);
+    final pageHeight = math.max(
+      80.0,
+      layout.usableHeight - _renderSafetyBottom - lineGuard,
+    );
 
     double consumedHeight = 0;
     int lastCommittedOffset = 0;
@@ -192,14 +199,27 @@ class FlowPaginator {
           consumedHeight += spacing;
         }
       } else if (block is ImageBlock) {
+        final maxImageHeight = math.max(88.0, pageHeight * 0.44);
         final imageHeight =
-            (block.height ?? (pageHeight * 0.4)).clamp(48, pageHeight);
-        if (consumedHeight + imageHeight > pageHeight &&
+            (block.height ?? (pageHeight * 0.28)).clamp(44.0, maxImageHeight);
+        final spacing = _blockSpacing(block.style);
+        final requiredHeight =
+            imageHeight + _estimatedImageVerticalPadding + spacing;
+        if (consumedHeight + requiredHeight > pageHeight &&
             currentFragments.isNotEmpty) {
           await flushPage();
         }
         currentFragments.add(ImageFragment(blockId: block.id));
-        consumedHeight += imageHeight;
+        consumedHeight += imageHeight + _estimatedImageVerticalPadding;
+        if (spacing > 0) {
+          if (consumedHeight + spacing > pageHeight &&
+              currentFragments.isNotEmpty) {
+            await flushPage();
+          }
+          currentFragments
+              .add(SpaceFragment(blockId: block.id, height: spacing));
+          consumedHeight += spacing;
+        }
       } else if (block is SpaceBlock) {
         if (consumedHeight + block.height > pageHeight &&
             currentFragments.isNotEmpty) {
@@ -434,10 +454,8 @@ class FlowPaginator {
   }
 
   double _blockSpacing(BlockStyle style) {
-    if (style.margin == null) {
-      return 8;
-    }
-    return style.margin!.bottom;
+    final raw = style.margin?.bottom ?? 8.0;
+    return raw.clamp(2.0, 18.0);
   }
 }
 
