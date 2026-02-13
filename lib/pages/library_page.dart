@@ -5,17 +5,19 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/book.dart';
-import '../services/book_dao.dart';
-import '../services/reading_router_service.dart';
-import '../services/pagination_cache_service.dart';
-import '../services/reading_progress_service.dart';
-import '../services/library_event_bus.dart';
+import '../services/books/book_services.dart';
+import '../services/library/library_services.dart';
+import '../services/pagination/pagination_services.dart';
+import '../services/reading/reading_services.dart';
 import '../widgets/side_toast.dart';
 import 'import_book_page.dart';
-import 'home_page_responsive.dart';
-import '../utils/responsive_helper.dart';
+import 'home_layout_constants.dart';
+import 'home_shell_page.dart';
+import '../utils/layout_helper.dart';
 import '../widgets/scrolling_text.dart';
 import '../utils/localization_extension.dart';
+import '../utils/page_style_helper.dart';
+import '../utils/system_ui_helper.dart';
 
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
@@ -29,6 +31,8 @@ class _LibraryPageState extends State<LibraryPage> {
   bool _isLoading = true;
   final _bookDao = BookDao();
   StreamSubscription<void>? _librarySubscription;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -50,6 +54,7 @@ class _LibraryPageState extends State<LibraryPage> {
   @override
   void dispose() {
     _librarySubscription?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -62,21 +67,10 @@ class _LibraryPageState extends State<LibraryPage> {
     if (!_shouldApplySystemUI()) {
       return;
     }
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    SystemChrome.setSystemUIOverlayStyle(
-      SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness:
-            isDarkMode ? Brightness.light : Brightness.dark,
-        statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness:
-            isDarkMode ? Brightness.light : Brightness.dark,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemStatusBarContrastEnforced: false,
-        systemNavigationBarContrastEnforced: false,
-      ),
+    final overlayStyle = SystemUiHelper.overlayStyleForBrightness(
+      Theme.of(context).brightness,
     );
+    SystemChrome.setSystemUIOverlayStyle(overlayStyle);
   }
 
   Future<void> _loadBooks() async {
@@ -105,7 +99,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
     // 在侧边导航栏模式下，不显示 Scaffold 和 AppBar
     if (useRailNavigation) {
-      return _buildContent(context);
+      return _buildContent(context, useRailNavigation: useRailNavigation);
     }
 
     // 手机模式：显示完整的 Scaffold + AppBar
@@ -113,93 +107,228 @@ class _LibraryPageState extends State<LibraryPage> {
       extendBody: true, // 让内容延伸到导航区，配合手势小白条
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text(
-          context.l10n.library,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w600,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        toolbarHeight: 0,
         surfaceTintColor: Colors.transparent,
         scrolledUnderElevation: 0,
-        flexibleSpace: ClipRRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surface.withValues(alpha: 0.8),
-                border: Border(
-                  bottom: BorderSide(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.outline.withValues(alpha: 0.2),
-                    width: 0.5,
-                  ),
-                ),
-              ),
-            ),
-          ),
+        systemOverlayStyle: SystemUiHelper.overlayStyleForBrightness(
+          Theme.of(context).brightness,
         ),
       ),
-      body: _buildContent(context),
-      // 悬浮添加书籍按钮 - 适配平板侧边导航栏
-      floatingActionButton: _buildFloatingActionButton(),
+      body: _buildContent(context, useRailNavigation: useRailNavigation),
+      // 手机端改为顶部“+”按钮入口，宽屏继续保留FAB
+      floatingActionButton: LayoutHelper.getNavigationType(context) == NavigationType.rail
+          ? _buildFloatingActionButton()
+          : null,
     );
   }
 
   // 提取页面内容部分，在两种模式下共用
-  Widget _buildContent(BuildContext context) {
+  Widget _buildContent(BuildContext context, {required bool useRailNavigation}) {
+    final books = _visibleBooks;
+    final palette = PageStyleHelper.palette(context);
     return Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            stops: const [0.0, 0.3, 0.6, 1.0],
-            colors: [
-              Theme.of(
-                context,
-              ).colorScheme.secondaryContainer.withValues(alpha: 0.12),
-              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
-              Theme.of(
-                context,
-              ).colorScheme.primaryContainer.withValues(alpha: 0.08),
-              Theme.of(
-                context,
-              ).colorScheme.tertiaryContainer.withValues(alpha: 0.10),
+          gradient: PageStyleHelper.backgroundGradient(context),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              if (useRailNavigation) ...[
+                _buildTopBar(),
+                const SizedBox(height: 10),
+              ] else ...[
+                const SizedBox(height: kHomeMobileTopBarHeight + 8),
+              ],
+              _buildSearchBar(),
+              const SizedBox(height: 10),
+              _buildShelfSummaryCard(),
+              const SizedBox(height: 8),
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _books.isEmpty
+                        ? _buildEmptyLibrary(compactTop: true)
+                        : books.isEmpty
+                            ? _buildNoSearchResult()
+                            : RefreshIndicator(
+                                onRefresh: _loadBooks,
+                                strokeWidth: 2.5,
+                                displacement: 48,
+                                color: Theme.of(context).colorScheme.primary,
+                                backgroundColor: palette.cardStrong,
+                                child: _buildBooksGrid(books),
+                              ),
+              ),
             ],
           ),
-        ),
-        child: Stack(
-          children: [
-            // 主内容
-            _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _books.isEmpty
-                    ? _buildEmptyLibrary()
-                    : RefreshIndicator(
-                        onRefresh: _loadBooks,
-                        strokeWidth: 2.5,
-                        displacement: 60,
-                        color: Theme.of(context).colorScheme.primary,
-                        backgroundColor: Theme.of(
-                          context,
-                        ).colorScheme.surface.withValues(alpha: 0.9),
-                        child: _buildBooksGrid(),
-                      ),
-            // 顶部自定义 Positioned 已移除，沿用 AppBar 的 flexibleSpace
-          ],
         ),
       );
   }
 
+  List<Book> get _visibleBooks {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return _books;
+    return _books.where((book) {
+      return book.title.toLowerCase().contains(query) ||
+          book.author.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  Widget _buildTopBar() {
+    final palette = PageStyleHelper.palette(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Row(
+        children: [
+          Text(
+            context.l10n.library,
+            style: TextStyle(
+              fontSize: 36,
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.onSurface,
+              height: 1.05,
+            ),
+          ),
+          const Spacer(),
+          InkWell(
+            borderRadius: BorderRadius.circular(22),
+            onTap: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ImportBookPage()),
+              );
+              if (result == true && mounted) {
+                _loadBooks();
+              }
+            },
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: palette.card,
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: Icon(
+                Icons.add_rounded,
+                color: palette.iconMuted,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    final palette = PageStyleHelper.palette(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: palette.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: palette.border,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.search_rounded,
+              size: 18,
+              color: palette.textMuted,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                onChanged: (value) => setState(() => _searchQuery = value),
+                decoration: const InputDecoration(
+                  hintText: '搜索书名、作者',
+                  border: InputBorder.none,
+                  isDense: true,
+                ),
+              ),
+            ),
+            if (_searchQuery.isNotEmpty)
+              InkWell(
+                onTap: () {
+                  _searchController.clear();
+                  setState(() => _searchQuery = '');
+                },
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: palette.textMuted,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShelfSummaryCard() {
+    final palette = PageStyleHelper.palette(context);
+    final total = _books.length;
+    final inReading = _books
+        .where((book) => book.currentPage > 0 && book.currentPage < book.totalPages)
+        .length;
+    final finished = _books.where((book) => book.totalPages > 0 && book.currentPage >= book.totalPages).length;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: palette.hero,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildStatChip('全部 $total', true),
+            _buildStatChip('在读 $inReading', false),
+            _buildStatChip('已读 $finished', false),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatChip(String label, bool active) {
+    final palette = PageStyleHelper.palette(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: active
+            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.16)
+            : palette.cardStrong,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+          color: active
+              ? Theme.of(context).colorScheme.primary
+              : palette.textMuted,
+        ),
+      ),
+    );
+  }
+
   Widget _buildFloatingActionButton() {
-    final isTablet = ResponsiveHelper.isTablet(context);
-    final isDesktop = ResponsiveHelper.isDesktop(context);
+    final isTablet = LayoutHelper.isTablet(context);
+    final isDesktop = LayoutHelper.isDesktop(context);
     final useRailNav = isTablet || isDesktop;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
@@ -254,11 +383,11 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
-  Widget _buildEmptyLibrary() {
-    final topInset = MediaQuery.of(context).padding.top;
+  Widget _buildEmptyLibrary({bool compactTop = false}) {
+    final topInset = compactTop ? 20.0 : MediaQuery.of(context).padding.top + 100;
     return Center(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(40, topInset + 60 + 40, 40, 40),
+        padding: EdgeInsets.fromLTRB(40, topInset, 40, 40),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
           // 毛玻璃效果 - 空书架提示卡片
@@ -347,16 +476,32 @@ class _LibraryPageState extends State<LibraryPage> {
     );
   }
 
-  Widget _buildBooksGrid() {
-    final isDesktop = ResponsiveHelper.isDesktop(context);
-    final isTablet = ResponsiveHelper.isTablet(context);
-    final topInset = MediaQuery.of(context).padding.top;
+  Widget _buildNoSearchResult() {
+    return Center(
+      child: Text(
+        '没有匹配的书籍',
+        style: TextStyle(
+          fontSize: 16,
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBooksGrid(List<Book> books) {
+    final useRail = LayoutHelper.getNavigationType(context) == NavigationType.rail;
+    if (!useRail) {
+      return _buildBooksList(books);
+    }
+
+    final isDesktop = LayoutHelper.isDesktop(context);
+    final isTablet = LayoutHelper.isTablet(context);
 
     // 毛玻璃效果增强 - 网格容器背景
     // 为整个书籍网格添加细微的毛玻璃背景层
 
-    // 使用 ResponsiveHelper 获取响应式列数和纵横比
-    int crossAxisCount = ResponsiveHelper.getBookGridColumns(context);
+    // 使用 LayoutHelper 获取响应式列数和纵横比
+    int crossAxisCount = LayoutHelper.getBookGridColumns(context);
 
     // 根据屏幕类型调整间距
     double spacing;
@@ -406,7 +551,7 @@ class _LibraryPageState extends State<LibraryPage> {
           child: GridView.builder(
             padding: EdgeInsets.fromLTRB(
               16,
-              topInset + 60 + 16,
+              12,
               16,
               // 精确计算悬浮导航栏占用空间：导航栏68px + 边距25px + 底部安全区域(限制最大值) + 10px缓冲
               68 +
@@ -420,9 +565,9 @@ class _LibraryPageState extends State<LibraryPage> {
               mainAxisSpacing: spacing + 8,
               childAspectRatio: childAspectRatio,
             ),
-            itemCount: _books.length,
+            itemCount: books.length,
             itemBuilder: (context, index) {
-              final book = _books[index];
+              final book = books[index];
               return RepaintBoundary(
                 child: _BookCoverItem(
                   book: book,
@@ -441,6 +586,126 @@ class _LibraryPageState extends State<LibraryPage> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildBooksList(List<Book> books) {
+    return ListView.builder(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        8,
+        16,
+        68 + 25 + MediaQuery.of(context).padding.bottom.clamp(0.0, 50.0) + 12,
+      ),
+      itemCount: books.length,
+      itemBuilder: (context, index) {
+        final book = books[index];
+        final progress = book.totalPages > 0
+            ? (book.currentPage / book.totalPages).clamp(0.0, 1.0)
+            : 0.0;
+        final progressText = '${(progress * 100).round()}% · 继续阅读';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: Material(
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.86),
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () async {
+                final fullBook = await _bookDao.getBookById(book.id!);
+                if (fullBook != null && mounted && context.mounted) {
+                  await ReadingRouterService.openBook(context, fullBook);
+                  _loadBooks();
+                }
+              },
+              onLongPress: () => _showBookOptions(book),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 44,
+                      height: 64,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: _buildListCover(context, book),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            book.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            progressText,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.58),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: progress,
+                              minHeight: 5,
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                              valueColor:
+                                  AlwaysStoppedAnimation(Theme.of(context).colorScheme.primary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildListCover(BuildContext context, Book book) {
+    if (book.coverImagePath != null && File(book.coverImagePath!).existsSync()) {
+      return Image.file(
+        File(book.coverImagePath!),
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _buildListDefaultCover(context, book),
+      );
+    }
+    return _buildListDefaultCover(context, book);
+  }
+
+  Widget _buildListDefaultCover(BuildContext context, Book book) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.8),
+            Theme.of(context).colorScheme.secondary.withValues(alpha: 0.6),
+          ],
+        ),
+      ),
+      child: const Icon(Icons.menu_book_rounded, color: Colors.white),
     );
   }
 
@@ -1045,7 +1310,7 @@ class _BookCoverItem extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final isTablet = ResponsiveHelper.isTablet(context);
+          final isTablet = LayoutHelper.isTablet(context);
           final gap = isTablet ? 4.0 : 6.0;
           final textHeight = isTablet ? 26.0 : 36.0;
           final maxWidth = constraints.maxWidth;

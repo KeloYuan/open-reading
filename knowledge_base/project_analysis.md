@@ -32,7 +32,7 @@ lib/
 │   └── book_note.dart
 ├── pages/               # 页面
 │   ├── reader_page.dart         # 阅读页面（核心）
-│   ├── home_page_responsive.dart
+│   ├── home_shell_page.dart
 │   └── library_page.dart
 ├── services/            # 业务逻辑
 │   ├── fast_text_paginator_optimized.dart  # 分页引擎
@@ -53,7 +53,7 @@ lib/
 ### 1. 文本分页引擎
 
 #### 实现文件
-`lib/services/fast_text_paginator_optimized.dart`
+`lib/services/pagination/enhanced_paginator_service.dart`
 
 #### 核心算法：二分查找优化
 ```dart
@@ -148,7 +148,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 1. **SlidePaginationView** - 滑动翻页（PageView）
 2. **ScrollPaginationView** - 滚动翻页（ListView）
 3. **SimulationPaginationView** - 仿真翻页（page_flip）
-4. **CoverPaginationView** - 覆盖翻页
+4. **CoverPaginationPage** - 覆盖翻页
 
 #### 手势交互
 ```

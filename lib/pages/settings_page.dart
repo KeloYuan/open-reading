@@ -1,23 +1,29 @@
 import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
 import '../utils/app_themes.dart';
 import '../l10n/app_localizations.dart';
-import '../services/app_settings_notifier.dart';
+import '../services/books/book_services.dart';
+import '../services/core/core_services.dart';
+import '../services/pagination/pagination_services.dart';
+import '../services/reading/reading_services.dart';
 import '../services/sync/webdav_sync_service.dart';
-import '../services/reading_engine_coordinator.dart';
-import '../services/pagination_cache_service.dart';
-import '../utils/font_catalog.dart';
+import '../utils/font_catalog_helper.dart';
 import '../widgets/side_toast.dart';
-import '../services/book_dao.dart';
 import '../widgets/webdav_config_dialog.dart';
-import 'home_page_responsive.dart';
+import 'home_shell_page.dart';
+import 'home_layout_constants.dart';
 import '../utils/glass_config.dart';
 import '../utils/localization_extension.dart';
+import '../utils/page_style_helper.dart';
+import '../utils/system_ui_helper.dart';
+
+part 'settings_page_cover_actions_part.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -45,9 +51,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // 书源设置
   bool _enableBooksource = false;
+  bool _enableAutoExtractCover = true;
 
   // WebDAV设置
   final WebDavSyncService _webdavService = WebDavSyncService();
+  final BookDao _bookDao = BookDao();
 
   // 其他设置
   bool _enableBatteryOptimization = true;
@@ -84,6 +92,7 @@ class _SettingsPageState extends State<SettingsPage> {
       // TTS设置
       _enableTTS = prefs.getBool('enableTTS') ?? true;
       _enableBooksource = prefs.getBool('enable_booksource') ?? false;
+      _enableAutoExtractCover = prefs.getBool('enableAutoExtractCover') ?? true;
       _ttsSpeed = prefs.getDouble('ttsSpeed') ?? 0.5;
       _ttsVolume = prefs.getDouble('ttsVolume') ?? 1.0;
       _ttsPitch = prefs.getDouble('ttsPitch') ?? 1.0;
@@ -127,6 +136,7 @@ class _SettingsPageState extends State<SettingsPage> {
     // TTS设置
     await prefs.setBool('enableTTS', _enableTTS);
     await prefs.setBool('enable_booksource', _enableBooksource);
+    await prefs.setBool('enableAutoExtractCover', _enableAutoExtractCover);
     await prefs.setDouble('ttsSpeed', _ttsSpeed);
     await prefs.setDouble('ttsVolume', _ttsVolume);
     await prefs.setDouble('ttsPitch', _ttsPitch);
@@ -174,6 +184,9 @@ class _SettingsPageState extends State<SettingsPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         toolbarHeight: 0, // 关闭系统AppBar，使用自绘毛玻璃顶栏
+        systemOverlayStyle: SystemUiHelper.overlayStyleForBrightness(
+          Theme.of(context).brightness,
+        ),
       ),
       body: _buildContent(context, themeNotifier, appSettings, isDarkMode),
     );
@@ -187,501 +200,609 @@ class _SettingsPageState extends State<SettingsPage> {
     bool isDarkMode,
   ) {
     final l10n = context.l10n;
+    final useRailNavigation =
+        NavigationContext.of(context)?.useRailNavigation ?? false;
     return Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            stops: const [0.0, 0.3, 0.7, 1.0],
-            colors: [
-              Theme.of(
-                context,
-              ).colorScheme.primaryContainer.withValues(alpha: 0.12),
-              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
-              Theme.of(
-                context,
-              ).colorScheme.secondaryContainer.withValues(alpha: 0.08),
-              Theme.of(
-                context,
-              ).colorScheme.tertiaryContainer.withValues(alpha: 0.15),
+      decoration: BoxDecoration(
+        gradient: PageStyleHelper.backgroundGradient(context),
+      ),
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          useRailNavigation
+              ? MediaQuery.of(context).padding.top + 8
+              : MediaQuery.of(context).padding.top + kHomeMobileTopBarHeight + 8,
+          16,
+          24,
+        ),
+        children: [
+          if (useRailNavigation) ...[
+            _buildSettingsTopRow(l10n, useRailNavigation),
+            const SizedBox(height: 10),
+          ],
+          _buildSettingsHeroCard(),
+          const SizedBox(height: 14),
+          _buildSectionCard(
+            title: l10n.appearanceSettings,
+            icon: Icons.palette_outlined,
+            children: [
+              _buildThemeToggle(themeNotifier, isDarkMode),
+              _buildAppThemeSelector(themeNotifier),
+              _buildCustomAccentColorSelector(themeNotifier),
+              _buildGlobalAccentColorSelector(themeNotifier),
+              _buildAnimationToggle(),
             ],
           ),
-        ),
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            MediaQuery.of(context).padding.top + 80, // 顶栏高度：状态栏 + 60
-            16,
-            16,
-          ),
-          children: [
-            _buildSectionCard(
-              title: l10n.appearanceSettings,
-              icon: Icons.palette_outlined,
-              children: [
-                _buildThemeToggle(themeNotifier, isDarkMode),
-                _buildAppThemeSelector(themeNotifier),
-                _buildCustomAccentColorSelector(themeNotifier),
-                _buildGlobalAccentColorSelector(themeNotifier),
-                _buildAnimationToggle(),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildSectionCard(
-              title: l10n.readingTips,
-              icon: Icons.info_outline,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
+          const SizedBox(height: 20),
+          _buildSectionCard(
+            title: l10n.readingTips,
+            icon: Icons.info_outline,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
                     color: Theme.of(
                       context,
-                    ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                    ).colorScheme.primary.withValues(alpha: 0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.font_download_rounded,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 32,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      l10n.readingFontSettingsMoved,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      l10n.readingFontSettingsHint,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.7),
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildSectionCard(
+            title: l10n.readingSettings,
+            icon: Icons.book_outlined,
+            children: [
+              _buildReadingEngineSelector(),
+              _buildSwitchSetting(
+                title: '音量键翻页',
+                subtitle: '使用音量键控制翻页',
+                value: _enableVolumeKeyTurn,
+                onChanged: (value) =>
+                    setState(() => _enableVolumeKeyTurn = value),
+                icon: Icons.volume_up,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildSectionCard(
+            title: l10n.bookSourceFeatures,
+            icon: Icons.source,
+            children: [
+              _buildSwitchSetting(
+                title: l10n.enableBookSource,
+                subtitle: l10n.enableBookSourceHint,
+                value: _enableBooksource,
+                onChanged: (value) {
+                  setState(() => _enableBooksource = value);
+                  _saveSettings();
+                  // 通知主页面刷新导航栏
+                  _showRestartDialog();
+                },
+                icon: Icons.cloud_download,
+              ),
+              if (_enableBooksource) ...[
+                Padding(
+                  padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: Colors.amber.shade700,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            l10n.bookSourceEnabledHint,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.amber.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildSectionCard(
+            title: l10n.ttsReading,
+            icon: Icons.record_voice_over,
+            children: [
+              _buildSwitchSetting(
+                title: l10n.enableTts,
+                subtitle: l10n.enableTtsHint,
+                value: _enableTTS,
+                onChanged: (value) => setState(() => _enableTTS = value),
+                icon: Icons.play_circle_outline,
+              ),
+              if (_enableTTS) ...[
+                _buildSliderSetting(
+                  title: l10n.ttsSpeedLabel,
+                  subtitle: l10n.ttsSpeedHint,
+                  value: _ttsSpeed,
+                  min: 0.1,
+                  max: 2.0,
+                  divisions: 19,
+                  onChanged: (value) => setState(() => _ttsSpeed = value),
+                  icon: Icons.speed,
+                  formatter: (value) => '${(value * 100).round()}%',
+                ),
+                _buildSliderSetting(
+                  title: l10n.ttsVolumeLabel,
+                  subtitle: l10n.ttsVolumeHint,
+                  value: _ttsVolume,
+                  min: 0.0,
+                  max: 1.0,
+                  divisions: 10,
+                  onChanged: (value) => setState(() => _ttsVolume = value),
+                  icon: Icons.volume_up,
+                  formatter: (value) => '${(value * 100).round()}%',
+                ),
+                _buildSliderSetting(
+                  title: l10n.ttsPitchLabel,
+                  subtitle: l10n.ttsPitchHint,
+                  value: _ttsPitch,
+                  min: 0.5,
+                  max: 2.0,
+                  divisions: 15,
+                  onChanged: (value) => setState(() => _ttsPitch = value),
+                  icon: Icons.graphic_eq,
+                  formatter: (value) => '${(value * 100).round()}%',
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildSectionCard(
+            title: l10n.cloudSync,
+            icon: Icons.cloud_sync,
+            children: [
+              // WebDAV配置入口
+              _buildActionSetting(
+                title: l10n.webdavConfig,
+                subtitle: _webdavService.isConfigured
+                    ? l10n.webdavConfigured(_webdavService.serverUrl)
+                    : l10n.webdavConfigHint,
+                onTap: _showWebDavConfig,
+                icon: Icons.cloud,
+                trailing: _webdavService.isConfigured
+                    ? const Icon(
+                        Icons.check_circle,
+                        color: Colors.green,
+                        size: 20,
+                      )
+                    : null,
+              ),
+
+              // 同步功能说明
+              if (_webdavService.isConfigured) ...[
+                // 同步状态和时间
+                Container(
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primaryContainer
+                        .withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withValues(alpha: 0.3),
-                      width: 1,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.2),
                     ),
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        Icons.font_download_rounded,
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 32,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        l10n.readingFontSettingsMoved,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        l10n.readingFontSettingsHint,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.7),
-                          fontSize: 14,
-                          height: 1.5,
-                        ),
+                      Row(
+                        children: [
+                          Icon(
+                            _getSyncStatusIcon(_webdavService.status),
+                            size: 16,
+                            color: _getSyncStatusColor(_webdavService.status),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _webdavService.getStatusDescription(),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: _getSyncStatusColor(_webdavService.status),
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_webdavService.lastSyncTime != null)
+                            Text(
+                              '上次: ${_formatSyncTime(_webdavService.lastSyncTime!)}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.6),
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildSectionCard(
-              title: l10n.readingSettings,
-              icon: Icons.book_outlined,
-              children: [
-                _buildReadingEngineSelector(),
-                _buildSwitchSetting(
-                  title: '音量键翻页',
-                  subtitle: '使用音量键控制翻页',
-                  value: _enableVolumeKeyTurn,
-                  onChanged: (value) =>
-                      setState(() => _enableVolumeKeyTurn = value),
-                  icon: Icons.volume_up,
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildSectionCard(
-              title: l10n.bookSourceFeatures,
-              icon: Icons.source,
-              children: [
-                _buildSwitchSetting(
-                  title: l10n.enableBookSource,
-                  subtitle: l10n.enableBookSourceHint,
-                  value: _enableBooksource,
-                  onChanged: (value) {
-                    setState(() => _enableBooksource = value);
-                    _saveSettings();
-                    // 通知主页面刷新导航栏
-                    _showRestartDialog();
-                  },
-                  icon: Icons.cloud_download,
-                ),
-                if (_enableBooksource) ...[
-                  Padding(
-                    padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.amber.withValues(alpha: 0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
+
+                // 同步内容说明
+                Container(
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: Colors.amber.shade700,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              l10n.bookSourceEnabledHint,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.amber.shade700,
-                              ),
+                          Icon(Icons.info_outline,
+                              size: 14,
+                              color: Theme.of(context).colorScheme.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            '同步内容',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.onSurface,
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildSectionCard(
-              title: l10n.ttsReading,
-              icon: Icons.record_voice_over,
-              children: [
-                _buildSwitchSetting(
-                  title: l10n.enableTts,
-                  subtitle: l10n.enableTtsHint,
-                  value: _enableTTS,
-                  onChanged: (value) => setState(() => _enableTTS = value),
-                  icon: Icons.play_circle_outline,
-                ),
-                if (_enableTTS) ...[
-                  _buildSliderSetting(
-                    title: l10n.ttsSpeedLabel,
-                    subtitle: l10n.ttsSpeedHint,
-                    value: _ttsSpeed,
-                    min: 0.1,
-                    max: 2.0,
-                    divisions: 19,
-                    onChanged: (value) => setState(() => _ttsSpeed = value),
-                    icon: Icons.speed,
-                    formatter: (value) => '${(value * 100).round()}%',
-                  ),
-                  _buildSliderSetting(
-                    title: l10n.ttsVolumeLabel,
-                    subtitle: l10n.ttsVolumeHint,
-                    value: _ttsVolume,
-                    min: 0.0,
-                    max: 1.0,
-                    divisions: 10,
-                    onChanged: (value) => setState(() => _ttsVolume = value),
-                    icon: Icons.volume_up,
-                    formatter: (value) => '${(value * 100).round()}%',
-                  ),
-                  _buildSliderSetting(
-                    title: l10n.ttsPitchLabel,
-                    subtitle: l10n.ttsPitchHint,
-                    value: _ttsPitch,
-                    min: 0.5,
-                    max: 2.0,
-                    divisions: 15,
-                    onChanged: (value) => setState(() => _ttsPitch = value),
-                    icon: Icons.graphic_eq,
-                    formatter: (value) => '${(value * 100).round()}%',
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildSectionCard(
-              title: l10n.cloudSync,
-              icon: Icons.cloud_sync,
-              children: [
-                // WebDAV配置入口
-                _buildActionSetting(
-                  title: l10n.webdavConfig,
-                  subtitle: _webdavService.isConfigured
-                      ? l10n.webdavConfigured(_webdavService.serverUrl)
-                      : l10n.webdavConfigHint,
-                  onTap: _showWebDavConfig,
-                  icon: Icons.cloud,
-                  trailing: _webdavService.isConfigured
-                      ? const Icon(
-                          Icons.check_circle,
-                          color: Colors.green,
-                          size: 20,
-                        )
-                      : null,
-                ),
-
-                // 同步功能说明
-                if (_webdavService.isConfigured) ...[
-                  // 同步状态和时间
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          _buildSyncChip('书籍', Icons.book),
+                          _buildSyncChip('书签', Icons.bookmark),
+                          _buildSyncChip('笔记', Icons.note),
+                          _buildSyncChip('进度', Icons.timeline),
+                          _buildSyncChip('统计', Icons.bar_chart),
+                          _buildSyncChip('书源', Icons.source),
+                        ],
                       ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              _getSyncStatusIcon(_webdavService.status),
-                              size: 16,
-                              color: _getSyncStatusColor(_webdavService.status),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _webdavService.getStatusDescription(),
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: _getSyncStatusColor(_webdavService.status),
-                              ),
-                            ),
-                            const Spacer(),
-                            if (_webdavService.lastSyncTime != null)
-                              Text(
-                                '上次: ${_formatSyncTime(_webdavService.lastSyncTime!)}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
+                    ],
                   ),
-
-                  // 同步内容说明
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.info_outline, size: 14, color: Theme.of(context).colorScheme.primary),
-                            const SizedBox(width: 6),
-                            Text(
-                              '同步内容',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: [
-                            _buildSyncChip('书籍', Icons.book),
-                            _buildSyncChip('书签', Icons.bookmark),
-                            _buildSyncChip('笔记', Icons.note),
-                            _buildSyncChip('进度', Icons.timeline),
-                            _buildSyncChip('统计', Icons.bar_chart),
-                            _buildSyncChip('书源', Icons.source),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // 立即同步按钮
-                  _buildActionSetting(
-                    title: '立即同步',
-                    subtitle: '手动同步所有阅读数据',
-                    onTap: _syncNow,
-                    icon: Icons.sync,
-                  ),
-
-                  // 书籍文件同步设置
-                  _buildActionSetting(
-                    title: '书籍文件同步',
-                    subtitle: '选择需要上传到云端的书籍文件',
-                    onTap: _showBookFileSyncDialog,
-                    icon: Icons.upload_file,
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildSectionCard(
-              title: l10n.appSettings,
-              icon: Icons.language,
-              children: [
-                _buildLanguageSelector(appSettings),
-                _buildAppFontSelector(appSettings),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildSectionCard(
-              title: '书籍管理',
-              icon: Icons.library_books,
-              children: [
-                _buildSwitchSetting(
-                  title: '自动提取封面',
-                  subtitle: '导入时自动提取书籍封面',
-                  value: true, // 默认开启
-                  onChanged: (value) {
-                    // TODO: 实现封面提取开关逻辑
-                  },
-                  icon: Icons.image,
                 ),
+
+                // 立即同步按钮
                 _buildActionSetting(
-                  title: '重新提取封面',
-                  subtitle: '为现有书籍重新提取封面',
-                  onTap: _refreshAllCovers,
-                  icon: Icons.refresh,
+                  title: '立即同步',
+                  subtitle: '手动同步所有阅读数据',
+                  onTap: _syncNow,
+                  icon: Icons.sync,
                 ),
+
+                // 书籍文件同步设置
                 _buildActionSetting(
-                  title: '清理封面缓存',
-                  subtitle: '清理无效的封面文件',
-                  onTap: _cleanCoverCache,
-                  icon: Icons.cleaning_services,
+                  title: '书籍文件同步',
+                  subtitle: '选择需要上传到云端的书籍文件',
+                  onTap: _showBookFileSyncDialog,
+                  icon: Icons.upload_file,
                 ),
               ],
-            ),
-            const SizedBox(height: 20),
-            _buildSectionCard(
-              title: '开发者设置',
-              icon: Icons.developer_mode,
-              children: [
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildSectionCard(
+            title: l10n.appSettings,
+            icon: Icons.language,
+            children: [
+              _buildLanguageSelector(appSettings),
+              _buildAppFontSelector(appSettings),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildSectionCard(
+            title: '书籍管理',
+            icon: Icons.library_books,
+            children: [
+              _buildSwitchSetting(
+                title: '自动提取封面',
+                subtitle: '导入时自动提取书籍封面',
+                value: _enableAutoExtractCover,
+                onChanged: (value) {
+                  setState(() => _enableAutoExtractCover = value);
+                  _saveSettings();
+                  showSideToast(
+                    context,
+                    value ? '已开启自动封面提取' : '已关闭自动封面提取',
+                  );
+                },
+                icon: Icons.image,
+              ),
+              _buildActionSetting(
+                title: '重新提取封面',
+                subtitle: '为现有书籍重新提取封面',
+                onTap: _refreshAllCovers,
+                icon: Icons.refresh,
+              ),
+              _buildActionSetting(
+                title: '清理封面缓存',
+                subtitle: '清理无效的封面文件',
+                onTap: _cleanCoverCache,
+                icon: Icons.cleaning_services,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildSectionCard(
+            title: '开发者设置',
+            icon: Icons.developer_mode,
+            children: [
+              _buildSwitchSetting(
+                title: '开发者模式',
+                subtitle: '启用开发者功能和调试选项',
+                value: _enableDeveloperMode,
+                onChanged: (value) {
+                  setState(() => _enableDeveloperMode = value);
+                  _saveSettings();
+                },
+                icon: Icons.code,
+              ),
+              if (_enableDeveloperMode) ...[
                 _buildSwitchSetting(
-                  title: '开发者模式',
-                  subtitle: '启用开发者功能和调试选项',
-                  value: _enableDeveloperMode,
+                  title: '调试日志',
+                  subtitle: '记录详细的应用运行日志',
+                  value: _enableDebugLogging,
                   onChanged: (value) {
-                    setState(() => _enableDeveloperMode = value);
+                    setState(() => _enableDebugLogging = value);
                     _saveSettings();
                   },
-                  icon: Icons.code,
+                  icon: Icons.bug_report,
                 ),
-                if (_enableDeveloperMode) ...[
-                  _buildSwitchSetting(
-                    title: '调试日志',
-                    subtitle: '记录详细的应用运行日志',
-                    value: _enableDebugLogging,
-                    onChanged: (value) {
-                      setState(() => _enableDebugLogging = value);
-                      _saveSettings();
-                    },
-                    icon: Icons.bug_report,
-                  ),
-                  _buildSwitchSetting(
-                    title: '性能监控',
-                    subtitle: '显示阅读引擎性能指标',
-                    value: _enablePerformanceMonitor,
-                    onChanged: (value) {
-                      setState(() => _enablePerformanceMonitor = value);
-                      _saveSettings();
-                    },
-                    icon: Icons.analytics,
-                  ),
-                  _buildSwitchSetting(
-                    title: '内存统计',
-                    subtitle: '显示内存使用情况',
-                    value: _enableMemoryStats,
-                    onChanged: (value) {
-                      setState(() => _enableMemoryStats = value);
-                      _saveSettings();
-                    },
-                    icon: Icons.memory,
-                  ),
-                  _buildSwitchSetting(
-                    title: '显示FPS',
-                    subtitle: '在屏幕上显示帧率信息',
-                    value: _showFPS,
-                    onChanged: (value) {
-                      setState(() => _showFPS = value);
-                      _saveSettings();
-                    },
-                    icon: Icons.monitor,
-                  ),
-                  _buildActionSetting(
-                    title: '缓存统计',
-                    subtitle: '查看分页缓存使用情况',
-                    onTap: _viewCacheStats,
-                    icon: Icons.analytics,
-                  ),
-                  _buildActionSetting(
-                    title: '清除所有缓存',
-                    subtitle: '清除字体度量和分页缓存',
-                    onTap: _clearAllCaches,
-                    icon: Icons.clear_all,
-                  ),
-                  _buildActionSetting(
-                    title: '重置引擎设置',
-                    subtitle: '恢复阅读引擎到默认设置',
-                    onTap: _resetEngineSettings,
-                    icon: Icons.restore,
-                  ),
-                  const Divider(height: 32),
-                  // 测试页面已删除
-                  // _buildActionSetting(
-                  //   title: '🧪 测试稳定分页器',
-                  //   onTap: () {},
-                  //   icon: Icons.science,
-                  // ),
-                ],
+                _buildSwitchSetting(
+                  title: '性能监控',
+                  subtitle: '显示阅读引擎性能指标',
+                  value: _enablePerformanceMonitor,
+                  onChanged: (value) {
+                    setState(() => _enablePerformanceMonitor = value);
+                    _saveSettings();
+                  },
+                  icon: Icons.analytics,
+                ),
+                _buildSwitchSetting(
+                  title: '内存统计',
+                  subtitle: '显示内存使用情况',
+                  value: _enableMemoryStats,
+                  onChanged: (value) {
+                    setState(() => _enableMemoryStats = value);
+                    _saveSettings();
+                  },
+                  icon: Icons.memory,
+                ),
+                _buildSwitchSetting(
+                  title: '显示FPS',
+                  subtitle: '在屏幕上显示帧率信息',
+                  value: _showFPS,
+                  onChanged: (value) {
+                    setState(() => _showFPS = value);
+                    _saveSettings();
+                  },
+                  icon: Icons.monitor,
+                ),
+                _buildActionSetting(
+                  title: '缓存统计',
+                  subtitle: '查看分页缓存使用情况',
+                  onTap: _viewCacheStats,
+                  icon: Icons.analytics,
+                ),
+                _buildActionSetting(
+                  title: '清除所有缓存',
+                  subtitle: '清除字体度量和分页缓存',
+                  onTap: _clearAllCaches,
+                  icon: Icons.clear_all,
+                ),
+                _buildActionSetting(
+                  title: '重置引擎设置',
+                  subtitle: '恢复阅读引擎到默认设置',
+                  onTap: _resetEngineSettings,
+                  icon: Icons.restore,
+                ),
+                const Divider(height: 32),
+                // 测试页面已删除
+                // _buildActionSetting(
+                //   title: '🧪 测试稳定分页器',
+                //   onTap: () {},
+                //   icon: Icons.science,
+                // ),
               ],
-            ),
-            const SizedBox(height: 20),
-            _buildSectionCard(
-              title: '系统设置',
-              icon: Icons.settings_outlined,
-              children: [
-                _buildSwitchSetting(
-                  title: '保持屏幕常亮',
-                  subtitle: '阅读时防止屏幕自动关闭',
-                  value: _keepScreenOn,
-                  onChanged: (value) => setState(() => _keepScreenOn = value),
-                  icon: Icons.stay_current_portrait,
-                ),
-                _buildSwitchSetting(
-                  title: '自动保存',
-                  subtitle: '自动保存阅读进度',
-                  value: _enableAutoSave,
-                  onChanged: (value) => setState(() => _enableAutoSave = value),
-                  icon: Icons.save_outlined,
-                ),
-                _buildSwitchSetting(
-                  title: '电池优化',
-                  subtitle: '启用省电模式',
-                  value: _enableBatteryOptimization,
-                  onChanged: (value) =>
-                      setState(() => _enableBatteryOptimization = value),
-                  icon: Icons.battery_saver,
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildAboutCard(),
-            const SizedBox(height: 100),
-          ],
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildSectionCard(
+            title: '系统设置',
+            icon: Icons.settings_outlined,
+            children: [
+              _buildSwitchSetting(
+                title: '保持屏幕常亮',
+                subtitle: '阅读时防止屏幕自动关闭',
+                value: _keepScreenOn,
+                onChanged: (value) => setState(() => _keepScreenOn = value),
+                icon: Icons.stay_current_portrait,
+              ),
+              _buildSwitchSetting(
+                title: '自动保存',
+                subtitle: '自动保存阅读进度',
+                value: _enableAutoSave,
+                onChanged: (value) => setState(() => _enableAutoSave = value),
+                icon: Icons.save_outlined,
+              ),
+              _buildSwitchSetting(
+                title: '电池优化',
+                subtitle: '启用省电模式',
+                value: _enableBatteryOptimization,
+                onChanged: (value) =>
+                    setState(() => _enableBatteryOptimization = value),
+                icon: Icons.battery_saver,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildAboutCard(),
+          const SizedBox(height: 100),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsTopRow(AppLocalizations l10n, bool useRailNavigation) {
+    final palette = PageStyleHelper.palette(context);
+    return Row(
+      children: [
+        Text(
+          l10n.settings,
+          style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                height: 1.05,
+              ),
         ),
-      );
+        const Spacer(),
+        InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: () => showSideToast(context, '这里可以放帮助说明'),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: palette.card,
+              borderRadius: BorderRadius.circular(22),
+            ),
+            child: Icon(
+              Icons.question_mark_rounded,
+              size: 20,
+              color: palette.iconMuted,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSettingsHeroCard() {
+    final palette = PageStyleHelper.palette(context);
+    final scheme = Theme.of(context).colorScheme;
+    final colors = [
+      scheme.primary,
+      scheme.secondary,
+      scheme.tertiary,
+      scheme.primaryContainer,
+      scheme.secondaryContainer,
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: palette.hero,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: palette.border, width: 0.8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '主题与外观',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '支持调色、主题色与毛玻璃强度',
+            style: TextStyle(
+              fontSize: 13,
+              color: palette.textMuted,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            children: colors
+                .map(
+                  (color) => Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(17),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.22),
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSectionCard({
@@ -689,29 +810,28 @@ class _SettingsPageState extends State<SettingsPage> {
     required IconData icon,
     required List<Widget> children,
   }) {
+    final palette = PageStyleHelper.palette(context);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
-            borderRadius: BorderRadius.circular(20),
+            color: palette.card,
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: Theme.of(
-                context,
-              ).colorScheme.outline.withValues(alpha: 0.2),
+              color: palette.border,
               width: 1,
             ),
           ),
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
                 child: Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(7),
                       decoration: BoxDecoration(
                         color: Theme.of(
                           context,
@@ -721,14 +841,14 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: Icon(
                         icon,
                         color: Theme.of(context).colorScheme.primary,
-                        size: 20,
+                        size: 18,
                       ),
                     ),
                     const SizedBox(width: 12),
                     Text(
                       title,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w700,
                           ),
                     ),
                   ],
@@ -1001,8 +1121,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               const SizedBox(height: 12),
               ...options.map((option) {
-                final isSelected =
-                    appSettings.appFontFamily == option.family;
+                final isSelected = appSettings.appFontFamily == option.family;
                 return ListTile(
                   title: Text(
                     FontCatalog.labelFor(l10n, option),
@@ -2192,49 +2311,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  // 重新提取所有书籍封面
-  Future<void> _refreshAllCovers() async {
-    try {
-      // 显示确认对话框
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('重新提取封面'),
-          content: const Text('此操作将为所有书籍重新提取封面，可能需要较长时间。确定继续吗？'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('确定'),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed == true && mounted) {
-        // TODO: 实现重新提取封面的逻辑
-        showSideToast(context, '封面提取功能正在开发中...');
-      }
-    } catch (e) {
-      if (mounted) {
-        showSideToast(context, '操作失败: $e');
-      }
-    }
-  }
-
-  // 清理封面缓存
-  Future<void> _cleanCoverCache() async {
-    try {
-      // TODO: 实现清理封面缓存的逻辑
-      showSideToast(context, '缓存清理功能正在开发中...');
-    } catch (e) {
-      showSideToast(context, '清理失败: $e');
-    }
-  }
-
   // 构建阅读引擎选择器
   Widget _buildReadingEngineSelector() {
     return Container(
@@ -2528,40 +2604,6 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     );
-  }
-
-  void _showRestartDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.restart_alt, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('需要重启应用'),
-          ],
-        ),
-        content: const Text('书源功能的开启/关闭需要重启应用才能生效。\n\n是否现在重启应用？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('稍后'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // TODO: 实现应用重启功能
-              _showInfoSnackBar('请手动重启应用以应用设置');
-            },
-            child: const Text('重启'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showInfoSnackBar(String message) {
-    showSideToast(context, message);
   }
 
   /// 查看缓存统计
@@ -2908,16 +2950,19 @@ class _SettingsPageState extends State<SettingsPage> {
                     decoration: BoxDecoration(
                       color: Colors.amber.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                      border: Border.all(
+                          color: Colors.amber.withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.info_outline, size: 16, color: Colors.amber),
+                        const Icon(Icons.info_outline,
+                            size: 16, color: Colors.amber),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             '书籍文件较大，建议仅选择重要书籍同步',
-                            style: TextStyle(fontSize: 12, color: Colors.amber.shade700),
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.amber.shade700),
                           ),
                         ),
                       ],
@@ -2951,7 +2996,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       const Spacer(),
                       Text(
                         '已选: ${selectedSet.length}/${allBooks.length}',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],
                   ),
@@ -2970,9 +3016,8 @@ class _SettingsPageState extends State<SettingsPage> {
                               final book = allBooks[index];
                               final isSelected = selectedSet.contains(book.id);
                               final file = File(book.filePath);
-                              final fileSize = file.existsSync()
-                                  ? file.lengthSync()
-                                  : 0;
+                              final fileSize =
+                                  file.existsSync() ? file.lengthSync() : 0;
 
                               return CheckboxListTile(
                                 value: isSelected,
@@ -3025,8 +3070,10 @@ class _SettingsPageState extends State<SettingsPage> {
                                         width: 40,
                                         height: 56,
                                         decoration: BoxDecoration(
-                                          color: Colors.grey.withValues(alpha: 0.2),
-                                          borderRadius: BorderRadius.circular(4),
+                                          color: Colors.grey
+                                              .withValues(alpha: 0.2),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
                                         ),
                                         child: const Icon(
                                           Icons.book,

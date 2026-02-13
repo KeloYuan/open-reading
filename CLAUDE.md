@@ -57,18 +57,18 @@ lib/
 │   └── reader_providers.dart      # 阅读器核心Provider
 ├── pages/                         # 页面组件层 (10个文件)
 │   ├── reader_page.dart           # 阅读页面（核心）
-│   ├── home_page_responsive.dart  # 首页容器
-│   ├── home_content_enhanced.dart # 首页内容
+│   ├── home_shell_page.dart  # 首页容器
+│   ├── home_dashboard_page.dart # 首页内容
 │   ├── library_page.dart          # 书库页面
 │   ├── import_book_page.dart      # 导入书籍页面
 │   ├── settings_page.dart         # 设置页面
 │   ├── book_source_page.dart      # 书源管理页面
 │   ├── detailed_stats_page.dart   # 详细统计页面
 │   ├── user_agreement_page.dart   # 用户协议页面
-│   └── cover_pagination_view.dart # 覆盖翻页视图
+│   └── cover_pagination_page.dart # 覆盖翻页视图
 ├── services/                      # 业务逻辑层 (30+个文件)
 │   ├── app_state_service.dart     # 应用状态服务
-│   ├── data_manager.dart          # 数据管理器
+│   ├── data_service.dart          # 数据管理器
 │   ├── database_service.dart      # 数据库服务
 │   ├── enhanced_database_service.dart # 增强数据库服务
 │   ├── book_dao.dart              # 书籍数据访问
@@ -77,18 +77,18 @@ lib/
 │   ├── reading_stats_dao.dart     # 统计数据访问
 │   ├── book_source_dao.dart       # 书源数据访问
 │   ├── book_import_service.dart   # 书籍导入服务
-│   ├── book_import_isolate.dart   # 导入隔离进程
+│   ├── book_import_isolate_service.dart   # 导入隔离进程
 │   ├── enhanced_txt_import_service.dart  # TXT导入服务
-│   ├── enhanced_paginator.dart    # 核心分页器 v2.0
+│   ├── enhanced_paginator_service.dart    # 核心分页器 v2.0
 │   ├── pagination_cache_service.dart  # 分页缓存
 │   ├── reading_router_service.dart    # 阅读路由
 │   ├── reader_settings_service.dart   # 阅读设置持久化
 │   ├── reading_progress_service.dart  # 阅读进度
-│   ├── text_preprocessor.dart     # 文本预处理
-│   ├── book_image_manager.dart    # 书籍图片缓存
-│   ├── epub_image_extractor.dart  # EPUB图片提取
+│   ├── text_preprocessor_helper.dart     # 文本预处理
+│   ├── book_image_service.dart    # 书籍图片缓存
+│   ├── epub_image_extractor_service.dart  # EPUB图片提取
 │   ├── book_image_map_service.dart # 图片路径映射
-│   ├── cover_generator.dart       # 封面生成
+│   ├── cover_generator_service.dart       # 封面生成
 │   ├── tts_service.dart           # TTS服务入口
 │   ├── tts/                       # TTS模块
 │   │   ├── base_tts.dart          # TTS基类
@@ -98,7 +98,7 @@ lib/
 │       ├── webdav_sync_service.dart # WebDAV同步
 │       └── sync_utils.dart        # 同步工具
 ├── utils/                         # 工具类层 (7个文件)
-│   ├── responsive_helper.dart     # 响应式布局辅助
+│   ├── layout_helper.dart     # 响应式布局辅助
 │   ├── app_themes.dart            # 应用主题
 │   ├── glass_config.dart          # 毛玻璃效果配置
 │   ├── progressive_blur.dart      # 渐进式模糊
@@ -131,7 +131,7 @@ ReadingRouterService.openBook()
 ```
 
 **分页策略：**
-- **EnhancedPaginator** (`lib/services/enhanced_paginator.dart`) - 主要分页器
+- **EnhancedPaginator** (`lib/services/pagination/enhanced_paginator_service.dart`) - 主要分页器
   - 纯二分法实现高性能分页
   - 支持图片混合内容分页
   - 图片独占一页，通过 `<img src="绝对路径" data-height="高度"/>` 标记
@@ -150,7 +150,7 @@ ReadingRouterService.openBook()
 **翻页模式实现：**
 | 模式 | 组件 | 特点 |
 |------|------|------|
-| 覆盖 | `_CoverPaginationView` | 模拟真实翻页效果 |
+| 覆盖 | `_CoverPaginationPage` | 模拟真实翻页效果 |
 | 滑动 | `_SlidePaginationView` | 左右滑动切换 |
 | 滚动 | `_ScrollPaginationView` | 连续滚动 |
 | 仿真 | `_SimulationPaginationView` | 3D翻页动画 |
@@ -313,7 +313,7 @@ TtsService (ChangeNotifier)
 - **禁止随意修改 UI 风格**，未经用户允许不得更改设计、布局、颜色
 - **禁止删除或简化功能**，不能通过删除代码来"解决"问题
 - **保持设计一致性**，维护项目现有的设计语言
-- **响应式设计：** 使用 `ResponsiveHelper` 判断设备类型
+- **响应式设计：** 使用 `LayoutHelper` 判断设备类型
 
 ### Reader Page 构建约束
 
@@ -321,7 +321,7 @@ TtsService (ChangeNotifier)
 - 阅读分页复用 `EnhancedPaginator` 和 `PaginationCacheService`
 - UI 分层：根组件 `ReaderPage` 负责组合子组件；复杂组件独立成私有类
 - 工具栏动画使用 `AnimationController` + `FadeTransition`/`SlideTransition`，禁止使用隐式动画
-- 每种翻页模式封装为独立 widget：`_CoverPaginationView`, `_SlidePaginationView` 等
+- 每种翻页模式封装为独立 widget：`_CoverPaginationPage`, `_SlidePaginationView` 等
 
 ### 数据库操作规范
 
@@ -354,29 +354,29 @@ flutter build apk --debug          # 验证构建
 
 | 文件 | 用途 | 重要程度 |
 |------|------|----------|
-| [lib/services/enhanced_paginator.dart](lib/services/enhanced_paginator.dart) | 核心分页器 v2.0 | ⭐⭐⭐⭐⭐ |
-| [lib/services/pagination_cache_service.dart](lib/services/pagination_cache_service.dart) | 分页缓存服务 | ⭐⭐⭐⭐ |
-| [lib/services/reading_router_service.dart](lib/services/reading_router_service.dart) | 阅读器入口路由 | ⭐⭐⭐⭐ |
-| [lib/services/text_preprocessor.dart](lib/services/text_preprocessor.dart) | 文本预处理 | ⭐⭐⭐ |
+| [lib/services/pagination/enhanced_paginator_service.dart](lib/services/pagination/enhanced_paginator_service.dart) | 核心分页器 v2.0 | ⭐⭐⭐⭐⭐ |
+| [lib/services/pagination/pagination_cache_service.dart](lib/services/pagination/pagination_cache_service.dart) | 分页缓存服务 | ⭐⭐⭐⭐ |
+| [lib/services/reading/reading_router_service.dart](lib/services/reading/reading_router_service.dart) | 阅读器入口路由 | ⭐⭐⭐⭐ |
+| [lib/services/pagination/text_preprocessor_helper.dart](lib/services/pagination/text_preprocessor_helper.dart) | 文本预处理 | ⭐⭐⭐ |
 
 ### 数据层
 
 | 文件 | 用途 | 重要程度 |
 |------|------|----------|
-| [lib/services/database_service.dart](lib/services/database_service.dart) | 数据库版本管理 | ⭐⭐⭐⭐ |
-| [lib/services/book_dao.dart](lib/services/book_dao.dart) | 书籍数据访问 | ⭐⭐⭐⭐ |
-| [lib/services/bookmark_dao.dart](lib/services/bookmark_dao.dart) | 书签数据访问 | ⭐⭐⭐ |
-| [lib/services/book_note_dao.dart](lib/services/book_note_dao.dart) | 笔记数据访问 | ⭐⭐⭐ |
-| [lib/services/reading_stats_dao.dart](lib/services/reading_stats_dao.dart) | 统计数据访问 | ⭐⭐⭐ |
+| [lib/services/core/database_service.dart](lib/services/core/database_service.dart) | 数据库版本管理 | ⭐⭐⭐⭐ |
+| [lib/services/books/book_dao.dart](lib/services/books/book_dao.dart) | 书籍数据访问 | ⭐⭐⭐⭐ |
+| [lib/services/books/bookmark_dao.dart](lib/services/books/bookmark_dao.dart) | 书签数据访问 | ⭐⭐⭐ |
+| [lib/services/books/book_note_dao.dart](lib/services/books/book_note_dao.dart) | 笔记数据访问 | ⭐⭐⭐ |
+| [lib/services/reading/reading_stats_dao.dart](lib/services/reading/reading_stats_dao.dart) | 统计数据访问 | ⭐⭐⭐ |
 
 ### 导入系统
 
 | 文件 | 用途 | 重要程度 |
 |------|------|----------|
-| [lib/services/book_import_service.dart](lib/services/book_import_service.dart) | 书籍导入服务 | ⭐⭐⭐⭐ |
-| [lib/services/enhanced_txt_import_service.dart](lib/services/enhanced_txt_import_service.dart) | TXT导入服务 | ⭐⭐⭐⭐ |
-| [lib/services/epub_image_extractor.dart](lib/services/epub_image_extractor.dart) | EPUB图片提取 | ⭐⭐⭐ |
-| [lib/services/book_image_map_service.dart](lib/services/book_image_map_service.dart) | 图片路径映射 | ⭐⭐⭐ |
+| [lib/services/books/book_import_service.dart](lib/services/books/book_import_service.dart) | 书籍导入服务 | ⭐⭐⭐⭐ |
+| [lib/services/books/enhanced_txt_import_service.dart](lib/services/books/enhanced_txt_import_service.dart) | TXT导入服务 | ⭐⭐⭐⭐ |
+| [lib/services/books/epub_image_extractor_service.dart](lib/services/books/epub_image_extractor_service.dart) | EPUB图片提取 | ⭐⭐⭐ |
+| [lib/services/books/book_image_map_service.dart](lib/services/books/book_image_map_service.dart) | 图片路径映射 | ⭐⭐⭐ |
 
 ### TTS系统
 
@@ -396,8 +396,8 @@ flutter build apk --debug          # 验证构建
 
 | 文件 | 用途 | 重要程度 |
 |------|------|----------|
-| [lib/pages/home_page_responsive.dart](lib/pages/home_page_responsive.dart) | 首页容器 | ⭐⭐⭐⭐ |
-| [lib/pages/home_content_enhanced.dart](lib/pages/home_content_enhanced.dart) | 首页内容 | ⭐⭐⭐⭐ |
+| [lib/pages/home_shell_page.dart](lib/pages/home_shell_page.dart) | 首页容器 | ⭐⭐⭐⭐ |
+| [lib/pages/home_dashboard_page.dart](lib/pages/home_dashboard_page.dart) | 首页内容 | ⭐⭐⭐⭐ |
 | [lib/pages/library_page.dart](lib/pages/library_page.dart) | 书库页面 | ⭐⭐⭐⭐ |
 | [lib/pages/import_book_page.dart](lib/pages/import_book_page.dart) | 导入书籍 | ⭐⭐⭐ |
 | [lib/pages/settings_page.dart](lib/pages/settings_page.dart) | 设置页面 | ⭐⭐⭐ |
@@ -419,7 +419,7 @@ flutter build apk --debug          # 验证构建
 
 | 文件 | 用途 | 重要程度 |
 |------|------|----------|
-| [lib/utils/responsive_helper.dart](lib/utils/responsive_helper.dart) | 响应式布局辅助 | ⭐⭐⭐⭐ |
+| [lib/utils/layout_helper.dart](lib/utils/layout_helper.dart) | 响应式布局辅助 | ⭐⭐⭐⭐ |
 | [lib/utils/app_themes.dart](lib/utils/app_themes.dart) | 应用主题 | ⭐⭐⭐ |
 | [lib/utils/glass_config.dart](lib/utils/glass_config.dart) | 毛玻璃配置 | ⭐⭐⭐ |
 | [lib/utils/progressive_blur.dart](lib/utils/progressive_blur.dart) | 渐进式模糊 | ⭐⭐⭐ |
@@ -470,8 +470,8 @@ flutter build apk --debug          # 验证构建
 **症状：** 平板上修改首页代码后没有变化
 
 **原因：**
-- 首页在侧边导航模式下，`HomeContentEnhanced` 的宽度会被 `NavigationRail` 压缩
-- 原始判断使用 `ResponsiveHelper.isTablet(context)` 依赖 `MediaQuery` 宽度
+- 首页在侧边导航模式下，`HomeDashboardPage` 的宽度会被 `NavigationRail` 压缩
+- 原始判断使用 `LayoutHelper.isTablet(context)` 依赖 `MediaQuery` 宽度
 - 当宽度被导航栏占用后，判断可能变成"非平板"，导致走了手机布局
 
 **修复方式：**

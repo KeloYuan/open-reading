@@ -1,7 +1,7 @@
 # 稳定分页方案实施指南
 
 > ⚠️ 本指南基于旧版 `stable_*` 方案，当前仓库已移除对应文件。
-> 现有实现请以 `lib/services/enhanced_paginator.dart` 与 `lib/pages/reader_page.dart` 为准。
+> 现有实现请以 `lib/services/pagination/enhanced_paginator_service.dart` 与 `lib/pages/reader_page.dart` 为准。
 
 ## 🎯 解决方案概述
 
@@ -9,7 +9,7 @@
 
 ### 核心文件
 
-1. **`lib/services/enhanced_paginator.dart`** - 当前分页器实现
+1. **`lib/services/pagination/enhanced_paginator_service.dart`** - 当前分页器实现
 2. **`lib/pages/reader_page.dart`** - 当前阅读页集成位置
 3. **`knowledge_base/REAL_PROBLEMS_AND_SOLUTIONS.md`** - 问题分析文档
 
@@ -50,7 +50,7 @@ flutter run
 
 ## 📝 集成到您的阅读器
 
-> 注：以下代码示例基于旧版 stable_* 方案，当前实现请对照 `enhanced_paginator.dart` 与 `reader_page.dart` 调整。
+> 注：以下代码示例基于旧版 stable_* 方案，当前实现请对照 `enhanced_paginator_service.dart` 与 `reader_page.dart` 调整。
 
 ### 方案一：完全替换（推荐）
 

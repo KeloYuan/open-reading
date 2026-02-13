@@ -9,7 +9,7 @@
 3. **[IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md)** ⭐⭐⭐⭐⭐ - 实施指南（立即可用）
 
 **当前分页实现参考：**
-- `lib/services/enhanced_paginator.dart` - 分页器实现
+- `lib/services/pagination/enhanced_paginator_service.dart` - 分页器实现
 - `lib/pages/reader_page.dart` - 阅读页集成
 
 ---

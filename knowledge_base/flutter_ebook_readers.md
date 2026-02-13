@@ -170,7 +170,7 @@ class Paginator {
 
 #### 1. 二分查找分页算法
 ```dart
-// lib/services/fast_text_paginator_optimized.dart
+// lib/services/pagination/enhanced_paginator_service.dart
 
 class OptimizedTextPaginator {
   /// 🚀 超快速分页（二分查找 + 批量测量）

@@ -2,8 +2,8 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../services/reading_stats_dao.dart';
-import '../services/book_dao.dart';
+import '../services/books/book_services.dart';
+import '../services/reading/reading_services.dart';
 import '../utils/glass_config.dart';
 import '../models/book.dart';
 
@@ -321,18 +321,12 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
                 colors: [
-                  Theme.of(
-                    context,
-                  ).colorScheme.primaryContainer.withValues(alpha: 0.1),
-                  Theme.of(
-                    context,
-                  ).colorScheme.secondaryContainer.withValues(alpha: 0.1),
-                  Theme.of(
-                    context,
-                  ).colorScheme.tertiaryContainer.withValues(alpha: 0.05),
+                  Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.14),
+                  Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
+                  Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.08),
                 ],
               ),
             ),
@@ -365,7 +359,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 child: Container(
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface.withValues(
-                          alpha: GlassEffectConfig.appBarOpacity,
+                          alpha: 0.78,
                         ),
                     border: Border(
                       bottom: BorderSide(
@@ -401,12 +395,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                             // 标题
                             Expanded(
                               child: Text(
-                                '阅读统计详情',
+                                '详细统计',
                                 style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.w700,
                                   color:
                                       Theme.of(context).colorScheme.onSurface,
+                                  height: 1.1,
                                 ),
                               ),
                             ),
@@ -489,7 +484,11 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                             context,
                           ).colorScheme.onSurface.withValues(alpha: 0.6),
                           indicatorColor: Theme.of(context).colorScheme.primary,
-                          indicatorWeight: 3,
+                          indicatorWeight: 2.5,
+                          labelStyle: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                     ],
@@ -542,28 +541,28 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
         'value': '${_overallStats['totalReadingTime'] ?? 0}',
         'unit': '分钟',
         'icon': Icons.schedule_rounded,
-        'gradient': [const Color(0xFF667EEA), const Color(0xFF764BA2)], // 紫蓝渐变
+        'color': const Color(0xFF3B82F6),
       },
       {
         'title': '总阅读页数',
         'value': '${_overallStats['totalPages'] ?? 0}',
         'unit': '页',
         'icon': Icons.auto_stories_rounded,
-        'gradient': [const Color(0xFF06B6D4), const Color(0xFF3B82F6)], // 青蓝渐变
+        'color': const Color(0xFFF59E0B),
       },
       {
         'title': '阅读书籍数',
         'value': '${_overallStats['totalBooks'] ?? 0}',
         'unit': '本',
         'icon': Icons.library_books_rounded,
-        'gradient': [const Color(0xFFF59E0B), const Color(0xFFEF4444)], // 橙红渐变
+        'color': const Color(0xFF22C55E),
       },
       {
         'title': '连续阅读',
         'value': '${_overallStats['streak'] ?? 0}',
         'unit': '天',
         'icon': Icons.local_fire_department_rounded,
-        'gradient': [const Color(0xFFEC4899), const Color(0xFF8B5CF6)], // 粉紫渐变
+        'color': const Color(0xFFA855F7),
       },
     ];
 
@@ -572,9 +571,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 1.0, // 调整为1:1比例，给卡片更多高度
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
+        childAspectRatio: 1.15,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
       ),
       itemCount: stats.length,
       itemBuilder: (context, index) {
@@ -586,110 +585,53 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
   // 统计卡片 - 现代化重新设计
   Widget _buildStatCard(Map<String, dynamic> stat) {
-    final gradient = stat['gradient'] as List<Color>;
+    final accentColor = stat['color'] as Color;
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: gradient,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: gradient[0].withValues(alpha: 0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.86),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.12),
+            ),
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.2),
-                width: 1.5,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(stat['icon'] as IconData, size: 20, color: accentColor),
               ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 图标容器 - 使用发光效果
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        spreadRadius: 0,
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    stat['icon'] as IconData,
-                    size: 32,
-                    color: Colors.white,
-                  ),
+              const Spacer(),
+              Text(
+                '${stat['value']} ${stat['unit']}',
+                style: TextStyle(
+                  fontSize: 34,
+                  height: 1.0,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
-                const Spacer(),
-                // 数值 - 大字体显示
-                Text(
-                  stat['value'] as String,
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    height: 1.0,
-                    shadows: [
-                      Shadow(
-                        color: Colors.black26,
-                        blurRadius: 8,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                stat['title'] as String,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.62),
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(height: 4),
-                // 单位和标题组合
-                Row(
-                  children: [
-                    Text(
-                      stat['unit'] as String,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withValues(alpha: 0.9),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        stat['title'] as String,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.white.withValues(alpha: 0.75),
-                          fontWeight: FontWeight.w400,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

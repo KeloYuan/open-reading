@@ -1,0 +1,124 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import 'home_mobile_top_bar_widget.dart';
+import '../../utils/system_ui_helper.dart';
+
+/// 通用背景包装器：给普通页面加统一首页背景。
+class HomeGenericPageWrapper extends StatelessWidget {
+  final Widget child;
+
+  const HomeGenericPageWrapper({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+          colors: [
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+            Theme.of(context).colorScheme.secondary.withValues(alpha: 0.12),
+            Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.06),
+            Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.15),
+            Theme.of(context)
+                .colorScheme
+                .secondaryContainer
+                .withValues(alpha: 0.10),
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
+          ],
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// 设置页专用包装器：负责系统栏样式和顶栏叠加。
+class HomeSettingsPageWrapper extends StatefulWidget {
+  final Widget child;
+  final String topBarTitle;
+
+  const HomeSettingsPageWrapper({
+    super.key,
+    required this.child,
+    required this.topBarTitle,
+  });
+
+  @override
+  State<HomeSettingsPageWrapper> createState() => _HomeSettingsPageWrapperState();
+}
+
+class _HomeSettingsPageWrapperState extends State<HomeSettingsPageWrapper> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _applySettingsPageSystemUI();
+  }
+
+  bool _shouldApplySystemUI() {
+    final route = ModalRoute.of(context);
+    return route?.isCurrent ?? true;
+  }
+
+  void _applySettingsPageSystemUI() {
+    if (!_shouldApplySystemUI()) {
+      return;
+    }
+
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+
+    final overlayStyle = SystemUiHelper.overlayStyleForBrightness(
+      Theme.of(context).brightness,
+    );
+    Future.microtask(() {
+      if (!mounted) return;
+      SystemChrome.setSystemUIOverlayStyle(overlayStyle);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _shouldApplySystemUI()) {
+        _applySettingsPageSystemUI();
+      }
+    });
+
+    return Stack(
+      children: [
+        widget.child,
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: HomeMobileTopBarWidget(title: widget.topBarTitle),
+        ),
+      ],
+    );
+  }
+}
+
+/// 保持页面状态，避免 tab 切换导致页面重建。
+class HomeKeepAlivePageWrapper extends StatefulWidget {
+  final Widget child;
+
+  const HomeKeepAlivePageWrapper({super.key, required this.child});
+
+  @override
+  State<HomeKeepAlivePageWrapper> createState() => _HomeKeepAlivePageWrapperState();
+}
+
+class _HomeKeepAlivePageWrapperState extends State<HomeKeepAlivePageWrapper>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}

@@ -218,8 +218,8 @@ for (char in text) {
 - ✅ 性能优化（段落级预处理）
 
 **代码位置**:
-- `lib/services/optimized_stable_paginator.dart`
-- `lib/services/pagination_cache_service.dart`
+- `lib/services/pagination/enhanced_paginator_service.dart`
+- `lib/services/pagination/pagination_cache_service.dart`
 
 **分页流程**:
 ```

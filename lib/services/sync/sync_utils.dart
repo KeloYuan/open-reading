@@ -142,7 +142,8 @@ class SyncUtils {
   /// 生成内容哈希键（用于去重）
   ///
   /// 根据指定字段生成唯一键，用于识别重复记录
-  static String generateHashKey(Map<String, dynamic> data, List<String> fields) {
+  static String generateHashKey(
+      Map<String, dynamic> data, List<String> fields) {
     final buffer = StringBuffer();
     for (final field in fields) {
       final value = data[field];
@@ -245,10 +246,12 @@ class SyncUtils {
     required List<Map<String, dynamic>> localList,
     required List<Map<String, dynamic>> remoteList,
     required String Function(Map<String, dynamic>) keyGenerator,
-    required bool Function(Map<String, dynamic> local, Map<String, dynamic> remote)
+    required bool Function(
+            Map<String, dynamic> local, Map<String, dynamic> remote)
         comparator,
-    Map<String, dynamic> Function(Map<String, dynamic> local,
-        Map<String, dynamic> remote)? merger,
+    Map<String, dynamic> Function(
+            Map<String, dynamic> local, Map<String, dynamic> remote)?
+        merger,
   }) {
     final mergedMap = <String, Map<String, dynamic>>{};
 

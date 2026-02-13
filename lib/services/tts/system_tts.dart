@@ -4,8 +4,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'base_tts.dart';
-import 'tts_preferences.dart';
+import 'package:xxread/services/tts/base_tts.dart';
+import 'package:xxread/services/tts/tts_preferences.dart';
 
 class SystemTts extends BaseTts {
   static final SystemTts _instance = SystemTts._internal();
@@ -201,7 +201,8 @@ class SystemTts extends BaseTts {
       await flutterTts.setVolume(TtsPreferences().volume);
       await flutterTts.setSpeechRate(TtsPreferences().rate);
       await flutterTts.setPitch(TtsPreferences().pitch);
-      debugPrint('   TTS参数设置: 音量=${TtsPreferences().volume}, 语速=${TtsPreferences().rate}, 音调=${TtsPreferences().pitch}');
+      debugPrint(
+          '   TTS参数设置: 音量=${TtsPreferences().volume}, 语速=${TtsPreferences().rate}, 音调=${TtsPreferences().pitch}');
 
       // Android平台需要特殊配置
       if (isAndroid) {
@@ -394,7 +395,8 @@ class SystemTts extends BaseTts {
       await flutterTts.setPitch(pitch);
 
       // 开始朗读
-      debugPrint('🎤 开始朗读: "${_currentVoiceText!.substring(0, _currentVoiceText!.length.clamp(0, 50))}..."');
+      debugPrint(
+          '🎤 开始朗读: "${_currentVoiceText!.substring(0, _currentVoiceText!.length.clamp(0, 50))}..."');
 
       // 调用TTS引擎播放
       final result = await flutterTts.speak(_currentVoiceText!);
@@ -505,7 +507,8 @@ class SystemTts extends BaseTts {
       TtsPreferences().voiceId = voice.id;
 
       // 如果正在播放，重新应用音色
-      if (_currentVoiceText != null && ttsStateNotifier.value == TtsStateEnum.playing) {
+      if (_currentVoiceText != null &&
+          ttsStateNotifier.value == TtsStateEnum.playing) {
         debugPrint('   🔄 重新应用音色到当前播放');
         await stop();
         await Future.delayed(const Duration(milliseconds: 100));
@@ -603,7 +606,8 @@ class SystemTts extends BaseTts {
   @override
   Future<List<TtsVoice>> getVoicesByLanguage(String language) async {
     final allVoices = await getVoices();
-    final filtered = allVoices.where((v) => v.locale.startsWith(language)).toList();
+    final filtered =
+        allVoices.where((v) => v.locale.startsWith(language)).toList();
     debugPrint('🔍 语言 $language 的音色: ${filtered.length} 个');
     return filtered;
   }

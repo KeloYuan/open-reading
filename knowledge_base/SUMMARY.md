@@ -1,7 +1,7 @@
 # 知识库总结 - 真实问题与解决方案
 
 > 注意：文档中提到的 `stable_text_paginator.dart` / `stable_reader_test_page.dart` 已不在当前仓库。
-> 当前实现请以 `lib/services/enhanced_paginator.dart` 与 `lib/pages/reader_page.dart` 为准。
+> 当前实现请以 `lib/services/pagination/enhanced_paginator_service.dart` 与 `lib/pages/reader_page.dart` 为准。
 
 ## 📚 知识库文档列表
 
@@ -76,7 +76,7 @@
 
 我为您创建了：
 
-1. **`lib/services/enhanced_paginator.dart`**
+1. **`lib/services/pagination/enhanced_paginator_service.dart`**
    - 当前分页实现
    - 支持图片与渐进式分页
    - 性能与稳定性权衡后的主版本
@@ -142,7 +142,7 @@
 ❌ 可靠性：差（TextPainter配置不一致）
 ```
 
-### 现有方案（enhanced_paginator.dart）
+### 现有方案（enhanced_paginator_service.dart）
 ```
 ✅ 稳定性：优（参数变化后正常）
 ✅ 可维护性：优（代码简单清晰）

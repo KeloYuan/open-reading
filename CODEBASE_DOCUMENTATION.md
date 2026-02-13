@@ -1,17 +1,21 @@
 # 小元读书 - 代码库索引
 
-> 更新：2025-01-07
+> 更新：2026-02-13
 > 目的：快速理解项目结构、核心流程与关键文件入口
 
 ## 快速入口（从这里开始读）
 
 - `lib/main.dart`：应用入口、主题与 Provider/Riverpod 初始化
-- `lib/pages/reader_page.dart`：阅读器核心 UI（最大文件）
+- `lib/pages/reader_page.dart`：阅读器核心 UI（主结构）
+- `lib/pages/reader_page_toolbar_actions_part.dart`：阅读页工具栏动作拆分
 - `lib/providers/reader_providers.dart`：阅读器核心状态管理
-- `lib/services/enhanced_paginator.dart`：文本分页核心算法
-- `lib/services/pagination_cache_service.dart`：分页缓存
-- `lib/services/reading_router_service.dart`：阅读器入口路由
-- `lib/services/book_import_service.dart`：书籍导入入口
+- `lib/services/pagination/pagination_services.dart`：分页域服务入口
+- `lib/services/reading/reading_services.dart`：阅读域服务入口
+- `lib/services/books/book_services.dart`：书籍域服务入口
+- `lib/services/core/core_services.dart`：核心服务入口
+- `lib/pages/home_shell_page.dart`：首页壳层（导航与页面装配）
+- `lib/pages/home_shell_layout_part.dart`：首页壳层布局/系统栏拆分
+- `lib/pages/home_mobile_dashboard_page.dart`：手机首页内容
 
 ## 架构分层（简化视角）
 
@@ -75,49 +79,71 @@
 
 #### lib/pages/
 - `reader_page.dart`：阅读页（核心）
-- `home_page_responsive.dart`：响应式首页
-- `home_content_enhanced.dart`：首页内容
+- `reader_page_toolbar_actions_part.dart`：阅读页工具栏动作拆分
+- `home_shell_page.dart`：响应式首页壳层
+- `home_shell_layout_part.dart`：首页壳层布局/系统栏拆分
+- `home_mobile_dashboard_page.dart`：手机首页内容
+- `home_dashboard_page.dart`：首页内容（Rail/独立模式复用）
+- `home_dashboard_sections_part.dart`：首页统计区块拆分（卡片/图表/成就）
+- `home_layout_constants.dart`：首页共享布局常量
+- `home_widgets/`：首页可复用 UI 组件（卡片/图表/顶栏）
+  - `home_navigation_item.dart`：导航项模型
+  - `home_bounce_navigation_item.dart`：底部导航按钮动画
+  - `home_page_wrappers.dart`：通用包装器、设置页包装器、KeepAlive 包装器
 - `library_page.dart`：书库管理
 - `import_book_page.dart`：导入页面
 - `settings_page.dart`：设置页面
+- `settings_page_cover_actions_part.dart`：设置页封面相关动作拆分
 - `book_source_page.dart`：书源管理
 - `detailed_stats_page.dart`：阅读统计详情
 - `user_agreement_page.dart`：用户协议
-- `cover_pagination_view.dart`：覆盖翻页视图
+- `cover_pagination_page.dart`：覆盖翻页视图
 
 #### lib/services/
-- `app_state_service.dart`：应用状态
-- `data_manager.dart`：数据初始化与管理
-- `database_service.dart`：数据库服务
-- `enhanced_database_service.dart`：增强数据库服务（事务/健康检查）
-- `book_dao.dart`：书籍 DAO
-- `bookmark_dao.dart`：书签 DAO
-- `book_note_dao.dart`：笔记/高亮 DAO
-- `reading_stats_dao.dart`：统计 DAO
-- `book_source_dao.dart`：书源 DAO
-- `book_source_service.dart`：书源服务
-- `book_import_service.dart`：书籍导入入口
-- `book_import_isolate.dart`：导入 isolate
-- `enhanced_txt_import_service.dart`：TXT 导入增强
-- `text_preprocessor.dart`：文本预处理
-- `enhanced_paginator.dart`：分页器
-- `pagination_cache_service.dart`：分页缓存
-- `reading_router_service.dart`：阅读路由
-- `reader_settings_service.dart`：阅读设置持久化
-- `reading_progress_service.dart`：阅读进度
-- `reading_engine_coordinator.dart`：阅读引擎协调器
-- `reading_theme_manager.dart`：阅读主题管理
-- `page_animation_manager.dart`：翻页动画管理
-- `book_image_manager.dart`：图片缓存
-- `book_image_map_service.dart`：图片路径映射
-- `epub_image_extractor.dart`：EPUB 图片提取
-- `cover_generator.dart`：封面生成
-- `book_cover_fetcher.dart`：封面获取
-- `share_service.dart`：分享
-- `data_backup_service.dart`：数据备份
-- `data_cache_service.dart`：缓存服务
-- `offline_data_service.dart`：离线数据服务
-- `library_event_bus.dart`：书库事件
+- `core/`：核心服务
+  - `core_services.dart`：核心服务聚合入口
+  - `app_settings_service.dart`：应用设置持久化
+  - `app_state_service.dart`：应用状态
+  - `data_service.dart`：数据初始化与管理
+  - `database_service.dart`：数据库服务
+  - `enhanced_database_service.dart`：增强数据库服务（事务/健康检查）
+  - `data_backup_service.dart`：数据备份
+  - `data_cache_service.dart`：缓存服务
+  - `offline_data_service.dart`：离线数据服务
+  - `share_service.dart`：分享
+- `books/`：书籍域服务
+  - `book_services.dart`：书籍域服务聚合入口
+  - `book_dao.dart`：书籍 DAO
+  - `bookmark_dao.dart`：书签 DAO
+  - `book_note_dao.dart`：笔记/高亮 DAO
+  - `book_source_dao.dart`：书源 DAO
+  - `book_source_service.dart`：书源服务
+  - `book_import_service.dart`：书籍导入入口
+  - `book_import_isolate_service.dart`：导入 isolate
+  - `enhanced_txt_import_service.dart`：TXT 导入增强
+  - `book_image_service.dart`：图片缓存
+  - `book_image_map_service.dart`：图片路径映射
+  - `epub_image_extractor_service.dart`：EPUB 图片提取
+  - `cover_generator_service.dart`：封面生成
+  - `book_cover_fetcher_service.dart`：封面获取
+- `pagination/`：分页域服务
+  - `pagination_services.dart`：分页域服务聚合入口
+  - `enhanced_paginator_service.dart`：分页器
+  - `pagination_cache_service.dart`：分页缓存
+  - `pagination_isolate_service.dart`：分页 isolate
+  - `text_preprocessor_helper.dart`：文本预处理
+- `reading/`：阅读域服务
+  - `reading_services.dart`：阅读域服务聚合入口
+  - `reading_router_service.dart`：阅读路由
+  - `reader_settings_service.dart`：阅读设置持久化
+  - `reading_progress_service.dart`：阅读进度
+  - `reading_engine_coordinator.dart`：阅读引擎协调器
+  - `reading_theme_service.dart`：阅读主题管理
+  - `page_animation_service.dart`：翻页动画管理
+  - `reading_stats_dao.dart`：统计 DAO
+- `library/`：书库域服务
+  - `library_services.dart`：书库域服务聚合入口
+  - `library_event_bus_service.dart`：书库事件
 - `tts_service.dart`：TTS 服务入口
 - `tts/`：TTS 子模块
   - `base_tts.dart`
@@ -131,7 +157,7 @@
 - `app_themes.dart`：应用主题
 - `glass_config.dart`：毛玻璃配置
 - `progressive_blur.dart`：渐进式模糊
-- `responsive_helper.dart`：响应式工具
+- `layout_helper.dart`：响应式工具
 - `page_transitions.dart`：页面转场
 - `theme_mixin.dart`：主题 mixin
 - `encoding_detector_helper.dart`：编码检测

@@ -103,7 +103,7 @@
 
 #### ✅ 任务1：文本预处理器（1天）
 
-**文件**: `lib/services/text_preprocessor.dart`
+**文件**: `lib/services/pagination/text_preprocessor_helper.dart`
 
 **子任务**:
 - [x] 1.1 创建 TextPreprocessor 类
@@ -130,7 +130,7 @@
 
 #### ✅ 任务2：增强分页器（2天）
 
-**文件**: `lib/services/enhanced_paginator.dart`
+**文件**: `lib/services/pagination/enhanced_paginator_service.dart`
 
 **子任务**:
 - [x] 2.1 创建 EnhancedPaginator 类
@@ -167,7 +167,7 @@
 
 #### ✅ 任务3：TXT格式适配（0.5天）
 
-**文件**: `lib/services/enhanced_txt_import_service.dart`
+**文件**: `lib/services/books/enhanced_txt_import_service.dart`
 
 **子任务**:
 - [x] 3.1 集成 TextPreprocessor
@@ -211,7 +211,7 @@
 
 #### ✅ 任务5：图片显示支持（0.5天）
 
-**文件**: `lib/services/image_manager.dart`, `lib/services/enhanced_paginator.dart`, `lib/services/reading_router_service.dart`
+**文件**: `lib/services/books/book_image_service.dart`, `lib/services/pagination/enhanced_paginator_service.dart`, `lib/services/reading/reading_router_service.dart`
 
 **子任务**:
 - [x] 5.1 创建 ImageManager 类
@@ -247,7 +247,7 @@
 
 #### ⬜ 任务6：EPUB格式支持（1天）
 
-**文件**: `lib/services/book_import_service.dart`
+**文件**: `lib/services/books/book_import_service.dart`
 
 **子任务**:
 - [ ] 6.1 EPUB提取纯文本
@@ -293,7 +293,7 @@
 
 #### ⬜ 任务8：PDF图片模式支持（0.5天）
 
-**文件**: `lib/services/book_import_service.dart`
+**文件**: `lib/services/books/book_import_service.dart`
 
 **子任务**:
 - [ ] 8.1 PDF提取所有页面为图片

@@ -241,7 +241,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fontJetBrainsMono => 'JetBrains Mono';
 
   @override
-  String get languageSystem => 'Follow system';
+  String get languageSystem => 'Follow System';
 
   @override
   String get languageChinese => 'Chinese';
@@ -272,4 +272,474 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get resetDefault => 'Reset';
+
+  @override
+  String get ttsPanelTitle => 'Text-to-Speech';
+
+  @override
+  String get ttsPreviewEffect => 'Preview Effect';
+
+  @override
+  String get ttsVolume => 'Volume';
+
+  @override
+  String get ttsPitch => 'Pitch';
+
+  @override
+  String get ttsSpeed => 'Speed';
+
+  @override
+  String get ttsPreviousSentence => 'Previous Sentence';
+
+  @override
+  String get ttsNextSentence => 'Next Sentence';
+
+  @override
+  String get ttsTimerStop => 'Timer Stop';
+
+  @override
+  String get ttsTimerOff => 'No Limit';
+
+  @override
+  String ttsTimerMinutes(Object minutes) {
+    return '$minutes minutes';
+  }
+
+  @override
+  String get ttsPlaying => 'Playing';
+
+  @override
+  String get ttsPaused => 'Paused';
+
+  @override
+  String get ttsStopped => 'Stopped';
+
+  @override
+  String get ttsPreviousSentenceFailed => 'Failed to play previous sentence';
+
+  @override
+  String get ttsNextSentenceFailed => 'Failed to play next sentence';
+
+  @override
+  String get ttsEmptyContentError => 'Current page content is empty';
+
+  @override
+  String get ttsPlaybackFailed => 'Playback failed';
+
+  @override
+  String get ttsOperationFailed => 'Operation failed';
+
+  @override
+  String get pageTurningSettings => 'Page Turning';
+
+  @override
+  String get pageTurningMode => 'Page Mode';
+
+  @override
+  String get pageTurningCover => 'Cover';
+
+  @override
+  String get pageTurningSlide => 'Slide';
+
+  @override
+  String get pageTurningScroll => 'Scroll';
+
+  @override
+  String get pageTurningSimulation => 'Simulation';
+
+  @override
+  String get tapZoneSettings => 'Tap Zones';
+
+  @override
+  String get tapZoneNextPage => 'Next Page';
+
+  @override
+  String get tapZonePreviousPage => 'Previous Page';
+
+  @override
+  String get tapZoneMenu => 'Menu';
+
+  @override
+  String get tapZoneLegend => 'Legend';
+
+  @override
+  String get highlightColor => 'Highlight Color';
+
+  @override
+  String get highlightPreview => 'Preview';
+
+  @override
+  String get highlightSampleText => 'This is a sample text,';
+
+  @override
+  String get highlightSampleText2 => 'this part will be highlighted,';
+
+  @override
+  String get highlightSampleText3 => 'showing the highlight effect.';
+
+  @override
+  String get webdavTitle => 'WebDAV Configuration';
+
+  @override
+  String get webdavSetupCloudSync => 'Setup Cloud Sync Service';
+
+  @override
+  String get webdavServerUrl => 'Server URL';
+
+  @override
+  String get webdavUsername => 'Username';
+
+  @override
+  String get webdavPassword => 'Password';
+
+  @override
+  String get webdavEnterServerUrl => 'Please enter server URL';
+
+  @override
+  String get webdavInvalidUrl => 'Please enter a valid URL';
+
+  @override
+  String get webdavEnterUsername => 'Please enter username';
+
+  @override
+  String get webdavEnterPassword => 'Please enter password';
+
+  @override
+  String get webdavConnectionFailed =>
+      'Connection failed, please check settings';
+
+  @override
+  String get webdavTestConnection => 'Test Connection';
+
+  @override
+  String get webdavSaveConfig => 'Save Configuration';
+
+  @override
+  String get webdavClearConfig => 'Clear Configuration';
+
+  @override
+  String get webdavTestSuccess => 'Connection test successful!';
+
+  @override
+  String get webdavTestFailed => 'Connection test failed';
+
+  @override
+  String get webdavConfigSaved => 'WebDAV configuration saved';
+
+  @override
+  String get webdavConfigSaveFailed => 'Failed to save configuration';
+
+  @override
+  String get webdavConfirmClear =>
+      'Are you sure you want to clear WebDAV configuration?';
+
+  @override
+  String get webdavConfigCleared => 'WebDAV configuration cleared';
+
+  @override
+  String get colorLightBlue => 'Light Blue';
+
+  @override
+  String get colorRed => 'Red';
+
+  @override
+  String get colorGreen => 'Green';
+
+  @override
+  String get colorPurple => 'Purple';
+
+  @override
+  String get colorGold => 'Gold';
+
+  @override
+  String get colorOrange => 'Orange';
+
+  @override
+  String get colorYellow => 'Yellow';
+
+  @override
+  String get colorDarkGreen => 'Dark Green';
+
+  @override
+  String get colorCustom => 'Custom';
+
+  @override
+  String get noteTypeHighlight => 'Highlight';
+
+  @override
+  String get noteTypeUnderline => 'Underline';
+
+  @override
+  String get noteTypeNote => 'Note';
+
+  @override
+  String get noteTypeUnknown => 'Unknown';
+
+  @override
+  String get bookFormatTXT => 'TXT';
+
+  @override
+  String get bookFormatEPUB => 'EPUB';
+
+  @override
+  String get bookFormatPDF => 'PDF';
+
+  @override
+  String get importBook => 'Import Book';
+
+  @override
+  String get importFromFiles => 'Import from Files';
+
+  @override
+  String get importNoBooks => 'No books imported yet';
+
+  @override
+  String get importSuccess => 'Book imported successfully';
+
+  @override
+  String get importFailed => 'Import failed';
+
+  @override
+  String get importProcessing => 'Processing book...';
+
+  @override
+  String get author => 'Author';
+
+  @override
+  String get progress => 'Progress';
+
+  @override
+  String get continueReading => 'Continue Reading';
+
+  @override
+  String get recentBooks => 'Recent Books';
+
+  @override
+  String get allBooks => 'All Books';
+
+  @override
+  String get emptyLibrary => 'Library is empty';
+
+  @override
+  String get deleteBook => 'Delete Book';
+
+  @override
+  String get deleteBookConfirm => 'Are you sure you want to delete this book?';
+
+  @override
+  String get bookDeleted => 'Book deleted';
+
+  @override
+  String get userAgreement => 'User Agreement';
+
+  @override
+  String get acceptAgreement => 'I have read and agree';
+
+  @override
+  String get declineAgreement => 'Decline';
+
+  @override
+  String get statsToday => 'Today';
+
+  @override
+  String get statsThisWeek => 'This Week';
+
+  @override
+  String get statsTotal => 'Total';
+
+  @override
+  String statsMinutes(Object minutes) {
+    return '$minutes min';
+  }
+
+  @override
+  String statsHours(Object hours) {
+    return '$hours h';
+  }
+
+  @override
+  String statsBooks(Object count) {
+    return '$count books';
+  }
+
+  @override
+  String get statsConsecutiveDays => 'Consecutive Days';
+
+  @override
+  String get statsFocusTime => 'Focus Time';
+
+  @override
+  String get statsThisWeekTotal => 'This Week Total';
+
+  @override
+  String get statsKeepReading => 'Keep Reading Daily';
+
+  @override
+  String get statsMaxSession => 'Max Session';
+
+  @override
+  String get statsWeeklyTrend => 'Weekly Trend';
+
+  @override
+  String get statsAchievements => 'Achievements';
+
+  @override
+  String get readerToolbarMenu => 'Menu';
+
+  @override
+  String get readerToolbarTOC => 'Table of Contents';
+
+  @override
+  String get readerToolbarSettings => 'Settings';
+
+  @override
+  String get readerAddBookmark => 'Add Bookmark';
+
+  @override
+  String get readerAddNote => 'Add Note';
+
+  @override
+  String get readerShare => 'Share';
+
+  @override
+  String get bookmarkAdded => 'Bookmark added';
+
+  @override
+  String get bookmarkRemoved => 'Bookmark removed';
+
+  @override
+  String get themeBlue => 'Ocean Blue';
+
+  @override
+  String get themePurple => 'Mystic Purple';
+
+  @override
+  String get themeGreen => 'Forest Green';
+
+  @override
+  String get themeOrange => 'Vibrant Orange';
+
+  @override
+  String get themeRed => 'Passionate Red';
+
+  @override
+  String get themeCustom => 'Custom';
+
+  @override
+  String get tapZoneLeftRight => 'Left/Right';
+
+  @override
+  String get tapZoneLeftCenterRight => 'Left/Center/Right';
+
+  @override
+  String get homeTagline => 'Read beautifully';
+
+  @override
+  String get homeReadingStatsTitle => 'Reading Stats';
+
+  @override
+  String get homeTodayReadingMoment => 'Today\'s Reading Moment';
+
+  @override
+  String homeReadMinutesKeepGoing(int minutes) {
+    return 'Read $minutes minutes, keep going';
+  }
+
+  @override
+  String get homeTodayReadingJourneyStart => 'Start your reading journey today';
+
+  @override
+  String get homeTodayReadingKeepRhythm =>
+      'You are on track today, keep the rhythm';
+
+  @override
+  String get homeTodayReadingPrompt => 'Save some time for reading today';
+
+  @override
+  String homeTotalReadingHours(String hours) {
+    return 'Total reading $hours hours';
+  }
+
+  @override
+  String get homeWeeklyReading => 'This Week';
+
+  @override
+  String get homeTotalReading => 'Total Reading';
+
+  @override
+  String get homeLibraryCount => 'Library Books';
+
+  @override
+  String get homeCollectionCount => 'Collection';
+
+  @override
+  String get homeKeyMetrics => 'Key Metrics';
+
+  @override
+  String get homeReadingRhythm => 'Reading Rhythm';
+
+  @override
+  String get homeAchievements => 'Reading Achievements';
+
+  @override
+  String get homeConsecutiveReading => 'Consecutive Reading';
+
+  @override
+  String get homeConsecutiveReadingDesc => 'Keep a daily reading habit';
+
+  @override
+  String get homeFocusDuration => 'Focus Duration';
+
+  @override
+  String get homeFocusDurationDesc => 'Longest single reading session';
+
+  @override
+  String get homeWeeklyTotal => 'Weekly Total';
+
+  @override
+  String get homeWeeklyTotalDesc => 'Reading time this week';
+
+  @override
+  String get homeRecentReading => 'Recent Reading';
+
+  @override
+  String get homeWeeklyTrend => 'Weekly Reading Trend';
+
+  @override
+  String homeBarTooltipMinutes(int minutes) {
+    return '$minutes min';
+  }
+
+  @override
+  String get unitMinute => 'min';
+
+  @override
+  String get unitHour => 'hour';
+
+  @override
+  String get unitBook => 'books';
+
+  @override
+  String get unitDay => 'days';
+
+  @override
+  String get weekdayMonShort => 'Mon';
+
+  @override
+  String get weekdayTueShort => 'Tue';
+
+  @override
+  String get weekdayWedShort => 'Wed';
+
+  @override
+  String get weekdayThuShort => 'Thu';
+
+  @override
+  String get weekdayFriShort => 'Fri';
+
+  @override
+  String get weekdaySatShort => 'Sat';
+
+  @override
+  String get weekdaySunShort => 'Sun';
 }

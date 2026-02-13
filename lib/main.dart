@@ -10,19 +10,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'l10n/app_localizations.dart';
-import 'pages/home_page_responsive.dart';
+import 'pages/home_shell_page.dart';
 import 'pages/user_agreement_page.dart';
+import 'services/books/book_services.dart';
+import 'services/core/core_services.dart';
+import 'services/reading/reading_services.dart';
 import 'utils/app_themes.dart';
 import 'services/tts_service.dart';
-import 'services/share_service.dart';
-import 'services/data_manager.dart';
-import 'services/reading_engine_coordinator.dart';
-import 'services/book_image_manager.dart';
 import 'package:path_provider/path_provider.dart';
 import 'utils/glass_config.dart';
-import 'services/app_settings_notifier.dart';
 import 'utils/localization_extension.dart';
-import 'utils/font_catalog.dart';
+import 'utils/font_catalog_helper.dart';
 
 void main() async {
   // 确保可以在 runApp 前安全调用 SystemChrome
@@ -405,7 +403,7 @@ class _XxReadAppState extends State<XxReadApp> {
     }
 
     // 已同意协议，显示主页面
-    return const HomePageResponsive();
+    return const HomeShellPage();
   }
 
   Widget _buildBootstrapErrorPage(BuildContext context) {
@@ -531,6 +529,16 @@ class _XxReadAppState extends State<XxReadApp> {
       appBarTheme: const AppBarTheme(
         elevation: 0,
         backgroundColor: Colors.transparent,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarIconBrightness: Brightness.dark,
+          systemNavigationBarDividerColor: Colors.transparent,
+          systemStatusBarContrastEnforced: false,
+          systemNavigationBarContrastEnforced: false,
+        ),
       ),
     );
   }
@@ -559,6 +567,16 @@ class _XxReadAppState extends State<XxReadApp> {
       appBarTheme: const AppBarTheme(
         elevation: 0,
         backgroundColor: Colors.transparent,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarIconBrightness: Brightness.light,
+          systemNavigationBarDividerColor: Colors.transparent,
+          systemStatusBarContrastEnforced: false,
+          systemNavigationBarContrastEnforced: false,
+        ),
       ),
     );
   }

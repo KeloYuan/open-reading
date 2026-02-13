@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/book_source.dart';
-import '../services/book_source_service.dart';
+import '../services/books/book_services.dart';
+import '../utils/layout_helper.dart';
+import '../utils/page_style_helper.dart';
 import '../widgets/side_toast.dart';
 
 /// 书源管理页面
@@ -26,6 +28,7 @@ class _BookSourcePageState extends State<BookSourcePage>
   String _selectedGroup = '全部';
   int _selectedType = -1; // -1: 全部, 0: 小说, 1: 漫画, 2: 有声书
   bool _showEnabledOnly = false;
+  bool _showFiltersPanel = false;
   bool _isLoading = true;
 
   late AnimationController _fadeController;
@@ -122,71 +125,76 @@ class _BookSourcePageState extends State<BookSourcePage>
 
   @override
   Widget build(BuildContext context) {
+    final useFab = LayoutHelper.getNavigationType(context) == NavigationType.rail;
+
     return Scaffold(
+      extendBody: true,
       backgroundColor: Colors.transparent,
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.05),
-            ],
-          ),
+          gradient: PageStyleHelper.backgroundGradient(context),
         ),
         child: SafeArea(
+          bottom: false,
           child: Column(
             children: [
               _buildHeader(),
               _buildSearchBar(),
+              _buildSummaryCard(),
               _buildFilters(),
               Expanded(child: _buildContent()),
             ],
           ),
         ),
       ),
-      floatingActionButton: _buildFloatingActionButton(),
+      floatingActionButton: useFab ? _buildFloatingActionButton() : null,
     );
   }
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
       child: Row(
         children: [
-          Icon(
-            Icons.source,
-            size: 32,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '书源管理',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
+                  '书源',
+                  style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        height: 1.05,
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
                 ),
                 if (_stats.isNotEmpty)
                   Text(
-                    '总共 ${_stats['total'] ?? 0} 个书源，已启用 ${_stats['enabled'] ?? 0} 个',
+                    '总共 ${_stats['total'] ?? 0} 个，已启用 ${_stats['enabled'] ?? 0} 个',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: Theme.of(
                             context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.6),
+                          ).colorScheme.onSurfaceVariant.withValues(alpha: 0.72),
                         ),
                   ),
               ],
             ),
           ),
-          IconButton(
-            onPressed: _showMenuDialog,
-            icon: const Icon(Icons.more_vert),
+          _buildHeaderButton(
+            icon: Icons.add_rounded,
+            onTap: _showAddSourceDialog,
+            tooltip: '添加书源',
+          ),
+          const SizedBox(width: 8),
+          _buildHeaderButton(
+            icon: Icons.tune_rounded,
+            onTap: () => setState(() => _showFiltersPanel = !_showFiltersPanel),
+            tooltip: _showFiltersPanel ? '收起筛选' : '展开筛选',
+          ),
+          const SizedBox(width: 8),
+          _buildHeaderButton(
+            icon: Icons.more_horiz_rounded,
+            onTap: _showMenuDialog,
             tooltip: '更多选项',
           ),
         ],
@@ -194,21 +202,55 @@ class _BookSourcePageState extends State<BookSourcePage>
     );
   }
 
+  Widget _buildHeaderButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required String tooltip,
+  }) {
+    final palette = PageStyleHelper.palette(context);
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: palette.card,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Icon(
+            icon,
+            color: palette.iconMuted,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSearchBar() {
+    final palette = PageStyleHelper.palette(context);
     return Container(
+      height: 52,
       margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(12),
+        color: palette.card,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+          color: palette.border,
         ),
       ),
       child: TextField(
         controller: _searchController,
         decoration: InputDecoration(
-          hintText: '搜索书源名称、分组或注释...',
-          prefixIcon: const Icon(Icons.search),
+          hintText: '搜索书源站点',
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            size: 18,
+            color: palette.textMuted,
+          ),
           suffixIcon: _searchController.text.isNotEmpty
               ? IconButton(
                   onPressed: () {
@@ -219,7 +261,7 @@ class _BookSourcePageState extends State<BookSourcePage>
                 )
               : null,
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.all(16),
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
         ),
         onChanged: (_) => _applyFilters(),
       ),
@@ -227,9 +269,13 @@ class _BookSourcePageState extends State<BookSourcePage>
   }
 
   Widget _buildFilters() {
+    if (!_showFiltersPanel) {
+      return const SizedBox(height: 6);
+    }
+
     return Container(
-      height: 60,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
           // 分组筛选
@@ -259,10 +305,46 @@ class _BookSourcePageState extends State<BookSourcePage>
           FilterChip(
             label: const Text('仅启用'),
             selected: _showEnabledOnly,
+            selectedColor:
+                Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
             onSelected: (value) {
               setState(() => _showEnabledOnly = value);
               _applyFilters();
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard() {
+    final palette = PageStyleHelper.palette(context);
+    final total = _stats['total'] ?? _allSources.length;
+    final enabled = _stats['enabled'] ?? _allSources.where((source) => source.enabled).length;
+    final avg = _allSources.isEmpty ? '--' : '320ms';
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: palette.hero,
+          borderRadius: BorderRadius.circular(18),
+        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '在线书源已启用',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            '当前可用 $enabled / $total 个 · 平均响应 $avg',
+            style: TextStyle(
+              fontSize: 13,
+              color: palette.textMuted,
+            ),
           ),
         ],
       ),
@@ -275,12 +357,13 @@ class _BookSourcePageState extends State<BookSourcePage>
     List<String> items,
     void Function(String?) onChanged,
   ) {
+    final palette = PageStyleHelper.palette(context);
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(8),
+        color: palette.card,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+          color: palette.border,
         ),
       ),
       child: DropdownButtonHideUnderline(
@@ -341,7 +424,12 @@ class _BookSourcePageState extends State<BookSourcePage>
     return FadeTransition(
       opacity: _fadeAnimation,
       child: ListView.builder(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          2,
+          16,
+          68 + 25 + MediaQuery.of(context).padding.bottom.clamp(0.0, 50.0) + 12,
+        ),
         itemCount: _filteredSources.length,
         itemBuilder: (context, index) =>
             _buildSourceCard(_filteredSources[index]),
@@ -355,22 +443,22 @@ class _BookSourcePageState extends State<BookSourcePage>
     final surface = colorScheme.surface;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: surface.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.15)),
+        color: surface.withValues(alpha: 0.86),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.12)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: InkWell(
         onTap: () => _showSourceDetail(source),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(

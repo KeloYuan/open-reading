@@ -5,14 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:crypto/crypto.dart';
-import '../services/enhanced_paginator.dart';
-import '../services/pagination_cache_service.dart';
-import '../services/pagination_isolate.dart';
+import '../services/pagination/pagination_services.dart';
+import '../services/reading/reading_services.dart';
 import '../services/tts/system_tts.dart';
 import '../services/tts/base_tts.dart';
-import '../services/reader_settings_service.dart';
 import '../models/page_turning_config.dart';
-import '../utils/font_catalog.dart';
+import '../utils/font_catalog_helper.dart';
 
 /// 翻页模式枚举
 enum PaginationMode {

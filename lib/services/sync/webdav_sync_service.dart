@@ -5,16 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import '../book_dao.dart';
-import '../bookmark_dao.dart';
-import '../book_note_dao.dart';
-import '../reading_stats_dao.dart';
-import '../book_source_dao.dart';
-import '../../models/book.dart';
-import '../../models/bookmark.dart';
-import '../../models/book_note.dart';
-import '../../models/book_source.dart';
-import 'sync_utils.dart';
+import 'package:xxread/services/books/book_dao.dart';
+import 'package:xxread/services/books/bookmark_dao.dart';
+import 'package:xxread/services/books/book_note_dao.dart';
+import 'package:xxread/services/reading/reading_stats_dao.dart';
+import 'package:xxread/services/books/book_source_dao.dart';
+import 'package:xxread/models/book.dart';
+import 'package:xxread/models/bookmark.dart';
+import 'package:xxread/models/book_note.dart';
+import 'package:xxread/models/book_source.dart';
+import 'package:xxread/services/sync/sync_utils.dart';
 
 /// WebDAV同步状态
 enum SyncStatus {
@@ -108,9 +108,8 @@ class WebDavSyncService {
         _lastSyncTime = DateTime.parse(lastSyncStr);
       }
 
-      _isConfigured = _serverUrl.isNotEmpty &&
-          _username.isNotEmpty &&
-          _password.isNotEmpty;
+      _isConfigured =
+          _serverUrl.isNotEmpty && _username.isNotEmpty && _password.isNotEmpty;
 
       if (_isConfigured) {
         _setupDioClient();
@@ -154,8 +153,7 @@ class WebDavSyncService {
 
   /// 设置网络监听
   Future<void> _setupNetworkListener() async {
-    _connectivitySubscription =
-        Connectivity().onConnectivityChanged.listen(
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
       (List<ConnectivityResult> results) {
         final hasNetwork =
             results.any((result) => result != ConnectivityResult.none);
@@ -448,9 +446,8 @@ class WebDavSyncService {
         'device_id': deviceId,
         'device_name': 'xxread',
         'platform': Platform.operatingSystem,
-        'first_sync_time':
-            (await _getFirstSyncTime())?.toIso8601String() ??
-                DateTime.now().toIso8601String(),
+        'first_sync_time': (await _getFirstSyncTime())?.toIso8601String() ??
+            DateTime.now().toIso8601String(),
         'last_sync_time': DateTime.now().toIso8601String(),
       };
 
@@ -698,7 +695,8 @@ class WebDavSyncService {
         );
 
         uploadedCount++;
-        debugPrint('📦 已上传书籍: ${book.title} (${SyncUtils.formatFileSize(fileSize)})');
+        debugPrint(
+            '📦 已上传书籍: ${book.title} (${SyncUtils.formatFileSize(fileSize)})');
       }
 
       debugPrint(
@@ -759,7 +757,8 @@ class WebDavSyncService {
       final response = await _dio.get('xxread/notes/notes.json');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.data);
-        final remoteNotes = (data['notes'] as List).cast<Map<String, dynamic>>();
+        final remoteNotes =
+            (data['notes'] as List).cast<Map<String, dynamic>>();
 
         await _mergeNotes(remoteNotes);
       }
@@ -790,7 +789,8 @@ class WebDavSyncService {
       final response = await _dio.get('xxread/stats/reading_stats.json');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.data);
-        final remoteStats = (data['stats'] as List).cast<Map<String, dynamic>>();
+        final remoteStats =
+            (data['stats'] as List).cast<Map<String, dynamic>>();
 
         await _mergeStats(remoteStats);
       }
@@ -816,7 +816,8 @@ class WebDavSyncService {
   }
 
   /// 合并书签（双向合并，按 bookId+pageNumber 去重）
-  Future<void> _mergeBookmarks(List<Map<String, dynamic>> remoteBookmarks) async {
+  Future<void> _mergeBookmarks(
+      List<Map<String, dynamic>> remoteBookmarks) async {
     int addedCount = 0;
     int mergedCount = 0;
 
@@ -824,7 +825,8 @@ class WebDavSyncService {
     final localMap = <String, Bookmark>{};
 
     for (final bookmark in localBookmarks) {
-      final key = SyncUtils.generateBookmarkKey(bookmark.bookId, bookmark.pageNumber);
+      final key =
+          SyncUtils.generateBookmarkKey(bookmark.bookId, bookmark.pageNumber);
       localMap[key] = bookmark;
     }
 
@@ -919,8 +921,7 @@ class WebDavSyncService {
         final localBook = await _bookDao.getBookById(bookId);
         if (localBook != null) {
           // 比较更新时间，决定是否使用远程进度
-          final localUpdateTime =
-              DateTime.now().toIso8601String(); // 本地更新时间
+          final localUpdateTime = DateTime.now().toIso8601String(); // 本地更新时间
 
           if (remoteUpdateTime != null &&
               SyncUtils.isRemoteNewer(localUpdateTime, remoteUpdateTime)) {

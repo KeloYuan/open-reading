@@ -87,63 +87,51 @@ lib/
 │   └── note.dart                     # 兼容层
 ├── pages/                            # 页面组件
 │   ├── reader_page.dart              # 阅读页面（核心）
-│   ├── home_page_responsive.dart     # 主页（响应式）
-│   ├── home_content_enhanced.dart    # 主页内容
+│   ├── reader_page_toolbar_actions_part.dart # 阅读页工具栏动作拆分
+│   ├── home_shell_page.dart          # 首页壳层（导航 + 页面装配）
+│   ├── home_shell_layout_part.dart   # 首页壳层布局/系统栏拆分
+│   ├── home_mobile_dashboard_page.dart # 手机首页内容（卡片/图表/最近阅读）
+│   ├── home_dashboard_page.dart      # 首页内容（Rail/独立模式复用）
+│   ├── home_dashboard_sections_part.dart # 首页统计区块拆分（卡片/图表/成就）
+│   ├── home_layout_constants.dart    # 首页共享布局常量
+│   ├── home_widgets/                 # 首页可复用 UI 组件
 │   ├── library_page.dart             # 书库页面
 │   ├── import_book_page.dart         # 导入书籍
 │   ├── settings_page.dart            # 设置页面
+│   ├── settings_page_cover_actions_part.dart # 设置页封面动作拆分
 │   ├── book_source_page.dart         # 书源管理
 │   ├── detailed_stats_page.dart      # 统计详情
 │   ├── user_agreement_page.dart      # 用户协议
-│   └── cover_pagination_view.dart    # 覆盖翻页视图
+│   └── cover_pagination_page.dart    # 覆盖翻页视图
 ├── providers/                        # 状态管理
 │   └── reader_providers.dart         # 阅读器核心 Provider
 ├── services/                         # 业务逻辑
-│   ├── database_service.dart         # 数据库服务
-│   ├── enhanced_database_service.dart # 增强数据库服务
-│   ├── book_dao.dart                 # 书籍数据访问
-│   ├── bookmark_dao.dart             # 书签数据访问
-│   ├── book_note_dao.dart            # 笔记/高亮数据访问
-│   ├── reading_stats_dao.dart        # 统计数据访问
-│   ├── book_source_dao.dart          # 书源数据访问
-│   ├── book_import_service.dart      # 书籍导入
-│   ├── enhanced_txt_import_service.dart # TXT 导入
-│   ├── enhanced_paginator.dart       # 核心分页器
-│   ├── pagination_cache_service.dart # 分页缓存
-│   ├── text_preprocessor.dart        # 文本预处理
-│   ├── reading_router_service.dart   # 阅读路由
-│   ├── reader_settings_service.dart  # 阅读设置持久化
-│   ├── reading_progress_service.dart # 阅读进度
-│   ├── book_image_manager.dart       # 图片缓存
-│   ├── epub_image_extractor.dart     # EPUB 图片提取
-│   ├── book_image_map_service.dart   # 图片路径映射
-│   ├── cover_generator.dart          # 封面生成
-│   ├── tts_service.dart              # TTS 服务
-│   ├── tts/                          # TTS 模块
-│   │   ├── base_tts.dart
-│   │   ├── system_tts.dart
-│   │   └── tts_preferences.dart
-│   └── sync/                         # 同步模块
-│       ├── webdav_sync_service.dart
-│       └── sync_utils.dart
+│   ├── core/                         # 核心服务（初始化/数据库/缓存/分享）
+│   ├── books/                        # 书籍域（导入/DAO/封面/书源）
+│   ├── pagination/                   # 分页域
+│   ├── reading/                      # 阅读域（路由/进度/主题/动画）
+│   ├── library/                      # 书库域事件
+│   ├── tts_service.dart              # TTS 服务入口
+│   ├── tts/                          # TTS 模块实现
+│   └── sync/                         # WebDAV 同步
 ├── utils/                            # 工具类
 │   ├── app_themes.dart               # 应用主题
 │   ├── glass_config.dart             # 毛玻璃配置
 │   ├── progressive_blur.dart         # 渐进模糊
-│   ├── responsive_helper.dart        # 响应式辅助
+│   ├── layout_helper.dart            # 响应式辅助
 │   ├── page_transitions.dart         # 页面转场
 │   ├── theme_mixin.dart              # 主题混入
 │   └── encoding_detector_helper.dart # 编码检测
 └── widgets/                          # 自定义组件
     ├── enhanced_text_selection_toolbar.dart # 文本选择工具栏
-    ├── highlight_color_picker.dart    # 高亮颜色
+    ├── highlight_color_picker.dart   # 高亮颜色
     ├── page_turning_settings_sheet.dart # 翻页设置
-    ├── tts_settings_sheet.dart        # TTS 设置
-    ├── toc_widget.dart                # 目录组件
-    ├── side_toast.dart                # 侧边提示
-    ├── tap_zone_diagram.dart          # 点击区域示意
-    ├── scrolling_text.dart            # 滚动文本
-    └── webdav_config_dialog.dart      # WebDAV 配置
+    ├── tts_settings_sheet.dart       # TTS 设置
+    ├── toc_widget.dart               # 目录组件
+    ├── side_toast.dart               # 侧边提示
+    ├── tap_zone_diagram.dart         # 点击区域示意
+    ├── scrolling_text.dart           # 滚动文本
+    └── webdav_config_dialog.dart     # WebDAV 配置
 ```
 
 ## 📚 文档索引
@@ -151,6 +139,26 @@ lib/
 - `CODEBASE_DOCUMENTATION.md` - 项目架构与文件索引
 - `lib/lib-project.md` - lib/ 目录结构速览
 - `knowledge_base/README.md` - 分页与阅读器技术知识库
+
+### 首页代码入口（新手建议）
+- 改手机首页 UI：`lib/pages/home_mobile_dashboard_page.dart`
+- 改底部导航/页面切换：`lib/pages/home_shell_page.dart`
+- 改壳层布局/系统栏行为：`lib/pages/home_shell_layout_part.dart`
+- 改首页通用尺寸常量：`lib/pages/home_layout_constants.dart`
+- 改首页单个卡片/区块：`lib/pages/home_widgets/`
+
+### 首页组件拆分（大扫除后）
+- `lib/pages/home_widgets/home_navigation_item.dart`：导航项模型
+- `lib/pages/home_widgets/home_bounce_navigation_item.dart`：底部导航按钮动效
+- `lib/pages/home_widgets/home_page_wrappers.dart`：通用/设置/KeepAlive 包装器
+- `lib/pages/home_widgets/home_mobile_top_bar_widget.dart`：首页与设置页共用顶部栏
+
+### 服务层入口（大扫除后）
+- `lib/services/core/core_services.dart`：应用基础能力
+- `lib/services/books/book_services.dart`：书籍导入/DAO/封面/书源
+- `lib/services/pagination/pagination_services.dart`：分页与文本预处理
+- `lib/services/reading/reading_services.dart`：阅读流程与统计
+- `lib/services/library/library_services.dart`：书库事件
 
 ## 🚀 快速开始
 
@@ -209,18 +217,18 @@ flutter run --release
 - `ReadingStatsDao` - 统计数据操作
 
 #### 核心页面
-- `HomePageResponsive` - 响应式主页
-- `ReadingPageEnhanced` - 增强阅读页
+- `HomeShellPage` - 响应式主页
+- `ReaderPage` - 阅读页
 - `LibraryPage` - 书库管理
 - `SettingsPage` - 应用设置
 - `DetailedStatsPage` - 数据统计
 
 ### 开发最佳实践
 
-1. **状态管理**: 使用`Provider`进行状态管理
+1. **状态管理**: 使用`Riverpod + Provider`（阅读器状态在 Riverpod）
 2. **数据持久化**: 所有数据通过DAO层操作
 3. **主题适配**: 继承`ThemeMixin`获得主题能力
-4. **响应式设计**: 使用`ResponsiveHelper`适配不同屏幕
+4. **响应式设计**: 使用`LayoutHelper`适配不同屏幕
 5. **错误处理**: 妥善处理异步操作和数据库错误
 
 ### 常用命令
