@@ -10,9 +10,8 @@ import '../utils/app_themes.dart';
 import '../l10n/app_localizations.dart';
 import '../services/books/book_services.dart';
 import '../services/core/core_services.dart';
-import '../services/pagination/pagination_services.dart';
 import '../services/reading/reading_services.dart';
-import '../services/sync/webdav_sync_service.dart';
+import '../services/sync/sync_services.dart';
 import '../utils/font_catalog_helper.dart';
 import '../widgets/side_toast.dart';
 import '../widgets/webdav_config_dialog.dart';
@@ -55,7 +54,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // WebDAV设置
   final WebDavSyncService _webdavService = WebDavSyncService();
+  final IosCloudSyncService _iosCloudSyncService = IosCloudSyncService();
   final BookDao _bookDao = BookDao();
+  bool _isIosCloudSyncing = false;
 
   // 其他设置
   bool _enableBatteryOptimization = true;
@@ -220,8 +221,6 @@ class _SettingsPageState extends State<SettingsPage> {
             _buildSettingsTopRow(l10n, useRailNavigation),
             const SizedBox(height: 10),
           ],
-          _buildSettingsHeroCard(),
-          const SizedBox(height: 14),
           _buildSectionCard(
             title: l10n.appearanceSettings,
             icon: Icons.palette_outlined,
@@ -231,58 +230,6 @@ class _SettingsPageState extends State<SettingsPage> {
               _buildCustomAccentColorSelector(themeNotifier),
               _buildGlobalAccentColorSelector(themeNotifier),
               _buildAnimationToggle(),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _buildSectionCard(
-            title: l10n.readingTips,
-            icon: Icons.info_outline,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.primaryContainer.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.font_download_rounded,
-                      color: Theme.of(context).colorScheme.primary,
-                      size: 32,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      l10n.readingFontSettingsMoved,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      l10n.readingFontSettingsHint,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.7),
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -409,6 +356,26 @@ class _SettingsPageState extends State<SettingsPage> {
             title: l10n.cloudSync,
             icon: Icons.cloud_sync,
             children: [
+              if (Platform.isIOS)
+                _buildActionSetting(
+                  title: 'iCloud/文件夹同步',
+                  subtitle: _isIosCloudSyncing
+                      ? '正在整理书籍、进度、笔记并写入分类目录...'
+                      : '在 iOS 文件 App / iCloud Drive 直接按分类保存副本',
+                  onTap: _isIosCloudSyncing ? () {} : _syncToIosFiles,
+                  icon: Icons.folder_copy_outlined,
+                  trailing: _isIosCloudSyncing
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        )
+                      : null,
+                ),
+
               // WebDAV配置入口
               _buildActionSetting(
                 title: l10n.webdavConfig,
@@ -560,123 +527,6 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 20),
           _buildSectionCard(
-            title: '书籍管理',
-            icon: Icons.library_books,
-            children: [
-              _buildSwitchSetting(
-                title: '自动提取封面',
-                subtitle: '导入时自动提取书籍封面',
-                value: _enableAutoExtractCover,
-                onChanged: (value) {
-                  setState(() => _enableAutoExtractCover = value);
-                  _saveSettings();
-                  showSideToast(
-                    context,
-                    value ? '已开启自动封面提取' : '已关闭自动封面提取',
-                  );
-                },
-                icon: Icons.image,
-              ),
-              _buildActionSetting(
-                title: '重新提取封面',
-                subtitle: '为现有书籍重新提取封面',
-                onTap: _refreshAllCovers,
-                icon: Icons.refresh,
-              ),
-              _buildActionSetting(
-                title: '清理封面缓存',
-                subtitle: '清理无效的封面文件',
-                onTap: _cleanCoverCache,
-                icon: Icons.cleaning_services,
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _buildSectionCard(
-            title: '开发者设置',
-            icon: Icons.developer_mode,
-            children: [
-              _buildSwitchSetting(
-                title: '开发者模式',
-                subtitle: '启用开发者功能和调试选项',
-                value: _enableDeveloperMode,
-                onChanged: (value) {
-                  setState(() => _enableDeveloperMode = value);
-                  _saveSettings();
-                },
-                icon: Icons.code,
-              ),
-              if (_enableDeveloperMode) ...[
-                _buildSwitchSetting(
-                  title: '调试日志',
-                  subtitle: '记录详细的应用运行日志',
-                  value: _enableDebugLogging,
-                  onChanged: (value) {
-                    setState(() => _enableDebugLogging = value);
-                    _saveSettings();
-                  },
-                  icon: Icons.bug_report,
-                ),
-                _buildSwitchSetting(
-                  title: '性能监控',
-                  subtitle: '显示阅读引擎性能指标',
-                  value: _enablePerformanceMonitor,
-                  onChanged: (value) {
-                    setState(() => _enablePerformanceMonitor = value);
-                    _saveSettings();
-                  },
-                  icon: Icons.analytics,
-                ),
-                _buildSwitchSetting(
-                  title: '内存统计',
-                  subtitle: '显示内存使用情况',
-                  value: _enableMemoryStats,
-                  onChanged: (value) {
-                    setState(() => _enableMemoryStats = value);
-                    _saveSettings();
-                  },
-                  icon: Icons.memory,
-                ),
-                _buildSwitchSetting(
-                  title: '显示FPS',
-                  subtitle: '在屏幕上显示帧率信息',
-                  value: _showFPS,
-                  onChanged: (value) {
-                    setState(() => _showFPS = value);
-                    _saveSettings();
-                  },
-                  icon: Icons.monitor,
-                ),
-                _buildActionSetting(
-                  title: '缓存统计',
-                  subtitle: '查看分页缓存使用情况',
-                  onTap: _viewCacheStats,
-                  icon: Icons.analytics,
-                ),
-                _buildActionSetting(
-                  title: '清除所有缓存',
-                  subtitle: '清除字体度量和分页缓存',
-                  onTap: _clearAllCaches,
-                  icon: Icons.clear_all,
-                ),
-                _buildActionSetting(
-                  title: '重置引擎设置',
-                  subtitle: '恢复阅读引擎到默认设置',
-                  onTap: _resetEngineSettings,
-                  icon: Icons.restore,
-                ),
-                const Divider(height: 32),
-                // 测试页面已删除
-                // _buildActionSetting(
-                //   title: '🧪 测试稳定分页器',
-                //   onTap: () {},
-                //   icon: Icons.science,
-                // ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 20),
-          _buildSectionCard(
             title: '系统设置',
             icon: Icons.settings_outlined,
             children: [
@@ -742,66 +592,6 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSettingsHeroCard() {
-    final palette = PageStyleHelper.palette(context);
-    final scheme = Theme.of(context).colorScheme;
-    final colors = [
-      scheme.primary,
-      scheme.secondary,
-      scheme.tertiary,
-      scheme.primaryContainer,
-      scheme.secondaryContainer,
-    ];
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: palette.hero,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: palette.border, width: 0.8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '主题与外观',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '支持调色、主题色与毛玻璃强度',
-            style: TextStyle(
-              fontSize: 13,
-              color: palette.textMuted,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            children: colors
-                .map(
-                  (color) => Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.85),
-                      borderRadius: BorderRadius.circular(17),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.22),
-                      ),
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1866,6 +1656,47 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  // 同步到 iOS 文件 / iCloud Drive
+  Future<void> _syncToIosFiles() async {
+    if (!Platform.isIOS) {
+      showSideToast(context, '该功能仅支持 iOS');
+      return;
+    }
+    if (_isIosCloudSyncing) {
+      return;
+    }
+
+    setState(() => _isIosCloudSyncing = true);
+    try {
+      final result = await _iosCloudSyncService.syncLibrarySnapshot(
+        includeBookFiles: true,
+        preferICloudDrive: true,
+      );
+
+      if (!mounted) return;
+
+      if (!result.success) {
+        showSideToast(context, '同步失败：未能获取目标目录');
+        return;
+      }
+
+      final msg =
+          '已同步到${result.storageLabel}\n书籍 ${result.booksCount} 本，文件复制 ${result.copiedBookFilesCount} 个';
+      showSideToast(context, msg);
+      debugPrint('☁️ iOS 同步目录: ${result.rootPath}');
+      if (result.missingBookFilesCount > 0) {
+        debugPrint('⚠️ 有 ${result.missingBookFilesCount} 本书原文件缺失，已跳过复制');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      showSideToast(context, '同步失败: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isIosCloudSyncing = false);
+      }
+    }
+  }
+
   // 构建滑块设置
   Widget _buildSliderSetting({
     required String title,
@@ -2602,228 +2433,6 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  /// 查看缓存统计
-  void _viewCacheStats() async {
-    try {
-      final stats = await PaginationCacheService.getCacheStats();
-      final count = stats['count'] ?? 0;
-      final sizeMB = stats['totalSizeMB'] ?? '0.00';
-      final oldest = stats['oldestCache'] as String?;
-      final newest = stats['newestCache'] as String?;
-
-      if (!mounted) return;
-
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.analytics, color: Colors.blue),
-              SizedBox(width: 8),
-              Text('缓存统计'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildStatRow(Icons.file_copy, '缓存文件', '$count 个'),
-              _buildStatRow(Icons.storage, '占用空间', '$sizeMB MB'),
-              if (oldest != null)
-                _buildStatRow(
-                  Icons.access_time,
-                  '最旧缓存',
-                  _formatDateTime(oldest),
-                ),
-              if (newest != null)
-                _buildStatRow(
-                  Icons.new_releases,
-                  '最新缓存',
-                  _formatDateTime(newest),
-                ),
-              const Divider(),
-              const Text(
-                '提示：缓存会在30天后自动清理',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('关闭'),
-            ),
-            if (count > 0)
-              TextButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  await PaginationCacheService.clearExpiredCache();
-                  if (!mounted) return;
-                  _showInfoSnackBar('已清理过期缓存');
-                },
-                child: const Text('清理过期'),
-              ),
-          ],
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      _showInfoSnackBar('获取缓存统计失败: $e');
-    }
-  }
-
-  Widget _buildStatRow(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: Colors.grey),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(label),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.blue,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDateTime(String isoString) {
-    try {
-      final dt = DateTime.parse(isoString);
-      return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
-    } catch (e) {
-      return isoString;
-    }
-  }
-
-  /// 清除所有缓存（优化版：包含分页缓存）
-  void _clearAllCaches() async {
-    // 先获取缓存统计信息
-    final stats = await PaginationCacheService.getCacheStats();
-    final cacheCount = stats['count'] ?? 0;
-    final cacheSizeMB = stats['totalSizeMB'] ?? '0';
-
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.clear_all, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('清除缓存'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('这将清除以下缓存数据：'),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Icon(Icons.description, size: 16, color: Colors.grey),
-                const SizedBox(width: 8),
-                Text('分页缓存: $cacheCount 个文件 ($cacheSizeMB MB)'),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Row(
-              children: [
-                Icon(Icons.font_download, size: 16, color: Colors.grey),
-                SizedBox(width: 8),
-                Text('字体度量数据'),
-              ],
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              '清除后首次打开书籍会重新分页，是否继续？',
-              style: TextStyle(color: Colors.orange, fontSize: 13),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              try {
-                // 显示加载提示
-                showSideToast(context, '正在清除缓存...');
-
-                // 清除持久化分页缓存
-                await PaginationCacheService.clearAllCache();
-
-                // 清除SharedPreferences中的缓存
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.remove('cached_font_metrics');
-                await prefs.remove('cached_page_metrics');
-
-                if (!mounted) return;
-
-                // 显示成功消息
-                _showInfoSnackBar('✅ 缓存已清除 ($cacheCount 个文件, $cacheSizeMB MB)');
-              } catch (e) {
-                if (!mounted) return;
-                _showInfoSnackBar('清除缓存失败: $e');
-              }
-            },
-            child: const Text('清除', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 重置引擎设置
-  void _resetEngineSettings() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.restore, color: Colors.red),
-            SizedBox(width: 8),
-            Text('重置设置'),
-          ],
-        ),
-        content: const Text('这将重置阅读引擎到默认设置，是否继续？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              setState(() {
-                // 只使用沉浸式阅读器，无需重置引擎
-                _enablePerformanceMonitor = false;
-                _enableDebugLogging = false;
-                _enableMemoryStats = false;
-                _showFPS = false;
-              });
-              await _saveSettings();
-              _showInfoSnackBar('引擎设置已重置');
-            },
-            child: const Text('重置'),
-          ),
-        ],
       ),
     );
   }

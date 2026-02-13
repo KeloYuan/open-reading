@@ -302,6 +302,17 @@ class _XxReadAppState extends State<XxReadApp> {
       return;
     }
 
+    // 🔧 修复历史绝对路径（升级/重装后可能导致书籍与封面路径失效）
+    try {
+      final repairedCount = await BookStorageRepairService().repairAllBooksIfNeeded();
+      if (repairedCount > 0) {
+        debugPrint('✅ 已完成书籍路径修复: $repairedCount');
+      }
+    } catch (e) {
+      // 路径修复失败不阻塞启动
+      debugPrint('⚠️ 书籍路径修复失败（已忽略，不阻塞启动）: $e');
+    }
+
     if (!mounted) return;
     setState(() {
       _isBootstrapped = true;

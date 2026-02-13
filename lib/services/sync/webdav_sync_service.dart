@@ -14,6 +14,8 @@ import 'package:xxread/models/book.dart';
 import 'package:xxread/models/bookmark.dart';
 import 'package:xxread/models/book_note.dart';
 import 'package:xxread/models/book_source.dart';
+import 'package:xxread/services/sync/webdav_sync_manifest_model.dart';
+import 'package:xxread/services/sync/webdav_sync_path_helper.dart';
 import 'package:xxread/services/sync/sync_utils.dart';
 
 /// WebDAV同步状态
@@ -33,6 +35,7 @@ enum SyncStatus {
 /// - 书籍元数据（差异化字段）
 /// - 书签
 /// - 笔记/高亮
+/// - 批注（从笔记中派生）
 /// - 阅读进度
 /// - 阅读统计
 /// - 书源配置
@@ -339,7 +342,7 @@ class WebDavSyncService {
       }
 
       final fileName = book.contentHash ?? 'book_$bookId.${book.format}';
-      final remotePath = 'xxread/files/$fileName';
+      final remotePath = WebDavSyncPathHelper.buildBookFilePath(fileName);
 
       final fileBytes = await bookFile.readAsBytes();
       await _dio.put(
@@ -411,17 +414,7 @@ class WebDavSyncService {
 
   /// 确保同步目录存在
   Future<void> _ensureSyncDirectories() async {
-    const directories = [
-      'xxread/',
-      'xxread/meta/',
-      'xxread/books/',
-      'xxread/bookmarks/',
-      'xxread/notes/',
-      'xxread/progress/',
-      'xxread/stats/',
-      'xxread/sources/',
-      'xxread/files/',
-    ];
+    const directories = WebDavSyncPathHelper.allDirectories;
 
     for (final dir in directories) {
       try {
@@ -452,7 +445,7 @@ class WebDavSyncService {
       };
 
       await _dio.put(
-        'xxread/meta/device_id.json',
+        WebDavSyncPathHelper.deviceMetaFile,
         data: jsonEncode(deviceMeta),
       );
     } catch (e) {
@@ -463,7 +456,7 @@ class WebDavSyncService {
   /// 获取首次同步时间
   Future<DateTime?> _getFirstSyncTime() async {
     try {
-      final response = await _dio.get('xxread/meta/device_id.json');
+      final response = await _dio.get(WebDavSyncPathHelper.deviceMetaFile);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.data);
         return DateTime.parse(data['first_sync_time']);
@@ -480,11 +473,13 @@ class WebDavSyncService {
       _uploadBooks(),
       _uploadBookmarks(),
       _uploadNotes(),
+      _uploadHighlightsAndAnnotations(),
       _uploadProgress(),
       _uploadStats(),
       _uploadSources(),
     ]);
 
+    await _uploadSyncManifest();
     await _uploadBookFiles();
   }
 
@@ -514,7 +509,7 @@ class WebDavSyncService {
       };
 
       final jsonData = jsonEncode(booksData);
-      await _dio.put('xxread/books/books.json', data: jsonData);
+      await _dio.put(WebDavSyncPathHelper.booksFile, data: jsonData);
 
       debugPrint('📚 已上传 ${books.length} 本书籍的元数据');
     } catch (e) {
@@ -535,7 +530,7 @@ class WebDavSyncService {
       };
 
       final jsonData = jsonEncode(bookmarksData);
-      await _dio.put('xxread/bookmarks/bookmarks.json', data: jsonData);
+      await _dio.put(WebDavSyncPathHelper.bookmarksFile, data: jsonData);
 
       debugPrint('🔖 已上传 ${bookmarks.length} 个书签');
     } catch (e) {
@@ -556,11 +551,58 @@ class WebDavSyncService {
       };
 
       final jsonData = jsonEncode(notesData);
-      await _dio.put('xxread/notes/notes.json', data: jsonData);
+      await _dio.put(WebDavSyncPathHelper.notesFile, data: jsonData);
 
       debugPrint('📝 已上传 ${notes.length} 条笔记');
     } catch (e) {
       debugPrint('上传笔记失败: $e');
+    }
+  }
+
+  /// 上传高亮与批注（由当前 notes 派生，方便未来独立升级数据结构）
+  Future<void> _uploadHighlightsAndAnnotations() async {
+    try {
+      final notes = await _noteDao.getAllNotes();
+      final deviceId = await SyncUtils.getDeviceId();
+      final now = DateTime.now().toIso8601String();
+
+      final highlights = notes
+          .where((n) => n.type == 'highlight' || n.type == 'underline')
+          .map((n) => n.toMap())
+          .toList();
+      final annotations = notes
+          .where((n) => n.type == 'note' || (n.readerNote?.isNotEmpty ?? false))
+          .map((n) => n.toMap())
+          .toList();
+
+      final highlightsData = {
+        'version': 1,
+        'device_id': deviceId,
+        'timestamp': now,
+        'highlights': highlights,
+      };
+      final annotationsData = {
+        'version': 1,
+        'device_id': deviceId,
+        'timestamp': now,
+        'annotations': annotations,
+      };
+
+      await Future.wait([
+        _dio.put(
+          WebDavSyncPathHelper.highlightsFile,
+          data: jsonEncode(highlightsData),
+        ),
+        _dio.put(
+          WebDavSyncPathHelper.annotationsFile,
+          data: jsonEncode(annotationsData),
+        ),
+      ]);
+
+      debugPrint('✨ 已上传 ${highlights.length} 条高亮');
+      debugPrint('🗒️ 已上传 ${annotations.length} 条批注');
+    } catch (e) {
+      debugPrint('上传高亮/批注失败: $e');
     }
   }
 
@@ -585,7 +627,7 @@ class WebDavSyncService {
       };
 
       final jsonData = jsonEncode(progressData);
-      await _dio.put('xxread/progress/progress.json', data: jsonData);
+      await _dio.put(WebDavSyncPathHelper.progressFile, data: jsonData);
 
       debugPrint('📄 已上传 ${books.length} 本书籍的阅读进度');
     } catch (e) {
@@ -606,7 +648,7 @@ class WebDavSyncService {
       };
 
       final jsonData = jsonEncode(statsData);
-      await _dio.put('xxread/stats/reading_stats.json', data: jsonData);
+      await _dio.put(WebDavSyncPathHelper.statsFile, data: jsonData);
 
       debugPrint('📊 已上传 ${stats.length} 条阅读统计');
     } catch (e) {
@@ -627,11 +669,52 @@ class WebDavSyncService {
       };
 
       final jsonData = jsonEncode(sourcesData);
-      await _dio.put('xxread/sources/book_sources.json', data: jsonData);
+      await _dio.put(WebDavSyncPathHelper.sourcesFile, data: jsonData);
 
       debugPrint('📡 已上传 ${sources.length} 个书源');
     } catch (e) {
       debugPrint('上传书源失败: $e');
+    }
+  }
+
+  /// 上传同步清单，统一描述“这次同步包含了什么”
+  Future<void> _uploadSyncManifest() async {
+    try {
+      final books = await _bookDao.getAllBooks();
+      final bookmarks = await _bookmarkDao.getAllBookmarks();
+      final notes = await _noteDao.getAllNotes();
+      final stats = await _statsDao.getAllStats();
+      final sources = await BookSourceDao.getAll();
+
+      final highlightsCount = notes
+          .where((n) => n.type == 'highlight' || n.type == 'underline')
+          .length;
+      final annotationsCount = notes
+          .where((n) => n.type == 'note' || (n.readerNote?.isNotEmpty ?? false))
+          .length;
+
+      final manifest = WebDavSyncManifestModel(
+        schemaVersion: 1,
+        appName: 'xxread',
+        deviceId: await SyncUtils.getDeviceId(),
+        generatedAt: DateTime.now(),
+        booksCount: books.length,
+        bookmarksCount: bookmarks.length,
+        notesCount: notes.length,
+        highlightsCount: highlightsCount,
+        annotationsCount: annotationsCount,
+        progressCount: books.length,
+        statsCount: stats.length,
+        sourcesCount: sources.length,
+        selectedBookFilesCount: _selectedBooksForSync.length,
+      );
+
+      await _dio.put(
+        WebDavSyncPathHelper.syncManifestFile,
+        data: jsonEncode(manifest.toJson()),
+      );
+    } catch (e) {
+      debugPrint('上传同步清单失败: $e');
     }
   }
 
@@ -674,7 +757,7 @@ class WebDavSyncService {
         }
 
         final fileName = book.contentHash ?? 'book_${book.id}.${book.format}';
-        final remotePath = 'xxread/files/$fileName';
+        final remotePath = WebDavSyncPathHelper.buildBookFilePath(fileName);
 
         try {
           await _dio.head(remotePath);
@@ -722,7 +805,7 @@ class WebDavSyncService {
   /// 下载书籍列表
   Future<void> _downloadBooks() async {
     try {
-      final response = await _dio.get('xxread/books/books.json');
+      final response = await _dio.get(WebDavSyncPathHelper.booksFile);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.data);
         final remoteBooks =
@@ -738,7 +821,7 @@ class WebDavSyncService {
   /// 下载书签
   Future<void> _downloadBookmarks() async {
     try {
-      final response = await _dio.get('xxread/bookmarks/bookmarks.json');
+      final response = await _dio.get(WebDavSyncPathHelper.bookmarksFile);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.data);
         final remoteBookmarks =
@@ -754,7 +837,7 @@ class WebDavSyncService {
   /// 下载笔记
   Future<void> _downloadNotes() async {
     try {
-      final response = await _dio.get('xxread/notes/notes.json');
+      final response = await _dio.get(WebDavSyncPathHelper.notesFile);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.data);
         final remoteNotes =
@@ -770,7 +853,7 @@ class WebDavSyncService {
   /// 下载阅读进度
   Future<void> _downloadProgress() async {
     try {
-      final response = await _dio.get('xxread/progress/progress.json');
+      final response = await _dio.get(WebDavSyncPathHelper.progressFile);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.data);
         final remoteProgress =
@@ -786,7 +869,7 @@ class WebDavSyncService {
   /// 下载阅读统计
   Future<void> _downloadStats() async {
     try {
-      final response = await _dio.get('xxread/stats/reading_stats.json');
+      final response = await _dio.get(WebDavSyncPathHelper.statsFile);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.data);
         final remoteStats =
@@ -802,7 +885,7 @@ class WebDavSyncService {
   /// 下载书源
   Future<void> _downloadSources() async {
     try {
-      final response = await _dio.get('xxread/sources/book_sources.json');
+      final response = await _dio.get(WebDavSyncPathHelper.sourcesFile);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.data);
         final remoteSources =

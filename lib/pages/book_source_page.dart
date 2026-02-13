@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../models/book_source.dart';
 import '../services/books/book_services.dart';
-import '../utils/layout_helper.dart';
 import '../utils/page_style_helper.dart';
+import '../utils/system_ui_helper.dart';
 import '../widgets/side_toast.dart';
+import 'home_layout_constants.dart';
+import 'home_shell_page.dart';
 
 /// 书源管理页面
 /// 提供书源搜索、管理、导入导出功能
@@ -125,34 +127,58 @@ class _BookSourcePageState extends State<BookSourcePage>
 
   @override
   Widget build(BuildContext context) {
-    final useFab = LayoutHelper.getNavigationType(context) == NavigationType.rail;
+    final navContext = NavigationContext.of(context);
+    final useRailNavigation = navContext?.useRailNavigation ?? false;
+
+    if (useRailNavigation) {
+      return _buildContent(useRailNavigation: true);
+    }
 
     return Scaffold(
       extendBody: true,
+      extendBodyBehindAppBar: true,
       backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: PageStyleHelper.backgroundGradient(context),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              _buildHeader(),
-              _buildSearchBar(),
-              _buildSummaryCard(),
-              _buildFilters(),
-              Expanded(child: _buildContent()),
-            ],
-          ),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        toolbarHeight: 0,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
+        systemOverlayStyle: SystemUiHelper.overlayStyleForBrightness(
+          Theme.of(context).brightness,
         ),
       ),
-      floatingActionButton: useFab ? _buildFloatingActionButton() : null,
+      body: _buildContent(useRailNavigation: false),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildContent({required bool useRailNavigation}) {
     return Container(
+      decoration: BoxDecoration(
+        gradient: PageStyleHelper.backgroundGradient(context),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            if (useRailNavigation) ...[
+              _buildRailHeader(),
+            ] else ...[
+              const SizedBox(height: kHomeMobileTopBarHeight + 8),
+              _buildMobileActionsRow(),
+            ],
+            _buildSearchBar(),
+            _buildSummaryCard(),
+            _buildFilters(),
+            Expanded(child: _buildSourceList()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRailHeader() {
+    return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
       child: Row(
         children: [
@@ -167,38 +193,73 @@ class _BookSourcePageState extends State<BookSourcePage>
                         height: 1.05,
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
-                ),
+                      ),
                 if (_stats.isNotEmpty)
-                  Text(
-                    '总共 ${_stats['total'] ?? 0} 个，已启用 ${_stats['enabled'] ?? 0} 个',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurfaceVariant.withValues(alpha: 0.72),
-                        ),
-                  ),
+                  _buildStatsText(),
               ],
             ),
           ),
-          _buildHeaderButton(
-            icon: Icons.add_rounded,
-            onTap: _showAddSourceDialog,
-            tooltip: '添加书源',
-          ),
-          const SizedBox(width: 8),
-          _buildHeaderButton(
-            icon: Icons.tune_rounded,
-            onTap: () => setState(() => _showFiltersPanel = !_showFiltersPanel),
-            tooltip: _showFiltersPanel ? '收起筛选' : '展开筛选',
-          ),
-          const SizedBox(width: 8),
-          _buildHeaderButton(
-            icon: Icons.more_horiz_rounded,
-            onTap: _showMenuDialog,
-            tooltip: '更多选项',
-          ),
+          _buildActionsButtons(),
         ],
       ),
+    );
+  }
+
+  Widget _buildMobileActionsRow() {
+    final palette = PageStyleHelper.palette(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: _stats.isNotEmpty
+                ? _buildStatsText()
+                : Text(
+                    '管理与筛选在线书源',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: palette.textMuted,
+                        ),
+                  ),
+          ),
+          _buildActionsButtons(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionsButtons() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildHeaderButton(
+          icon: Icons.add_rounded,
+          onTap: _showAddSourceDialog,
+          tooltip: '添加书源',
+        ),
+        const SizedBox(width: 8),
+        _buildHeaderButton(
+          icon: Icons.tune_rounded,
+          onTap: () => setState(() => _showFiltersPanel = !_showFiltersPanel),
+          tooltip: _showFiltersPanel ? '收起筛选' : '展开筛选',
+        ),
+        const SizedBox(width: 8),
+        _buildHeaderButton(
+          icon: Icons.more_horiz_rounded,
+          onTap: _showMenuDialog,
+          tooltip: '更多选项',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatsText() {
+    return Text(
+      '总共 ${_stats['total'] ?? 0} 个，已启用 ${_stats['enabled'] ?? 0} 个',
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(
+              context,
+            ).colorScheme.onSurfaceVariant.withValues(alpha: 0.72),
+          ),
     );
   }
 
@@ -387,7 +448,7 @@ class _BookSourcePageState extends State<BookSourcePage>
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildSourceList() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -623,14 +684,6 @@ class _BookSourcePageState extends State<BookSourcePage>
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildFloatingActionButton() {
-    return FloatingActionButton(
-      onPressed: _showAddSourceDialog,
-      tooltip: '添加书源',
-      child: const Icon(Icons.add),
     );
   }
 

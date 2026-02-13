@@ -9,6 +9,7 @@ import 'package:path/path.dart' as path;
 import 'package:xxread/models/book.dart';
 import 'package:xxread/pages/reader_page.dart';
 import 'package:xxread/services/books/book_dao.dart';
+import 'package:xxread/services/books/book_storage_repair_service.dart';
 import 'package:xxread/services/books/enhanced_txt_import_service.dart';
 import 'package:xxread/services/pagination/text_preprocessor_helper.dart';
 import 'package:xxread/services/books/epub_image_extractor_service.dart';
@@ -169,7 +170,22 @@ class ReadingRouterService {
     BuildContext context,
     Book book,
   ) async {
-    await _navigateToReader(context, book);
+    // 先尝试修复路径（应对升级后沙盒绝对路径变化）
+    final repairedBook = await BookStorageRepairService().repairSingleBookIfNeeded(book);
+
+    final file = File(repairedBook.filePath);
+    if (!await file.exists()) {
+      if (context.mounted) {
+        showSideToast(context, '书籍文件不存在，可能已被移动或删除。请重新导入或从 WebDAV 恢复。');
+      }
+      debugPrint('❌ 打开失败，书籍文件不存在: ${repairedBook.filePath}');
+      return;
+    }
+
+    if (!context.mounted) {
+      return;
+    }
+    await _navigateToReader(context, repairedBook);
   }
 
   /// 导航到沉浸式阅读器（带流畅加载动画）

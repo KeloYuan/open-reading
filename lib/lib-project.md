@@ -16,6 +16,8 @@
 - `lib/pages/home_shell_layout_part.dart`：首页壳层布局/系统栏拆分
 - `lib/pages/home_mobile_dashboard_page.dart`：手机首页内容（UI）
 - `lib/pages/home_dashboard_sections_part.dart`：首页统计区块拆分（卡片/图表/成就）
+- `lib/services/sync/sync_services.dart`：同步域入口（WebDAV）
+- `lib/services/sync/ios_cloud_sync_service.dart`：iOS 文件/iCloud Drive 分类快照同步
 
 ## 目录概览
 
@@ -43,3 +45,6 @@ lib/
 - 首页可视化区块拆分在 `lib/pages/home_widgets/`，每个文件对应一个 UI 区块，便于新手按模块改。
 - 设置页封面操作已拆分到 `lib/pages/settings_page_cover_actions_part.dart`，避免单文件过大。
 - 壳层相关拆分文件：`home_navigation_item.dart`、`home_bounce_navigation_item.dart`、`home_page_wrappers.dart`。
+- WebDAV 同步路径规范集中在 `lib/services/sync/webdav_sync_path_helper.dart`。
+- WebDAV 同步清单模型在 `lib/services/sync/webdav_sync_manifest_model.dart`，用于描述书籍/进度/笔记/高亮/批注的数据覆盖范围。
+- iOS 可通过设置页触发“iCloud/文件夹同步”，直接在 iCloud Documents / 文件目录下按分类保存副本（books/progress/notes/...）。

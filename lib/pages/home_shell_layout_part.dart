@@ -353,10 +353,12 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
         icon: Icons.add_rounded,
         onTap: _navigateToImport,
       );
+    } else if (currentPage is BookSourcePage) {
+      trailing = null;
     } else if (currentPage is SettingsPage) {
       trailing = null;
     } else {
-      // 其他页（如书源）不强行覆盖标题，避免和页面自身顶部冲突。
+      // 其他自定义页不强行覆盖标题，避免和页面自身顶部冲突。
       return const SizedBox.shrink();
     }
 
