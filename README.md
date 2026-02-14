@@ -1,5 +1,6 @@
 # 小元读书 (Origo Reader)
 
+## 这个仓库会发Release，源代码会在APP上架App Store后开源
 优雅的 Flutter 跨平台电子书阅读器，支持多种书籍格式，提供舒适的阅读体验。
 
 ![Flutter](https://img.shields.io/badge/Flutter-3.35.3-blue)

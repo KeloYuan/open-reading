@@ -83,29 +83,22 @@ class ReadingStatsDao {
   }
 
   Future<Map<String, int>> getSummaryStats() async {
-    final db = await dbService.database;
     final today = DateTime.now();
     final weekStart = today.subtract(Duration(days: today.weekday - 1));
+    final weekStartKey = _dateKey(weekStart);
+    final todayKey = _dateKey(today);
+    final durationByDate = await _loadMergedDurationByDate();
 
-    final totalResult = await db
-        .rawQuery('SELECT SUM(durationInSeconds) as total FROM reading_stats');
-    final totalDuration = (totalResult.first['total'] as int?) ?? 0;
-
-    final todayResult = await db.query(
-      'reading_stats',
-      columns: ['durationInSeconds'],
-      where: 'date = ?',
-      whereArgs: [_dateKey(today)],
-    );
-    final todayDuration = todayResult.isNotEmpty
-        ? (todayResult.first['durationInSeconds'] as int)
-        : 0;
-
-    final weekResult = await db.rawQuery(
-      'SELECT SUM(durationInSeconds) as total FROM reading_stats WHERE date >= ?',
-      [_dateKey(weekStart)],
-    );
-    final weekDuration = (weekResult.first['total'] as int?) ?? 0;
+    final totalDuration =
+        durationByDate.values.fold<int>(0, (sum, value) => sum + value);
+    final todayDuration = durationByDate[todayKey] ?? 0;
+    final weekDuration = durationByDate.entries.fold<int>(0, (sum, entry) {
+      if (entry.key.compareTo(weekStartKey) >= 0 &&
+          entry.key.compareTo(todayKey) <= 0) {
+        return sum + entry.value;
+      }
+      return sum;
+    });
 
     return {
       'total': totalDuration,
@@ -115,19 +108,17 @@ class ReadingStatsDao {
   }
 
   Future<List<Map<String, dynamic>>> getWeeklyChartData() async {
-    final db = await dbService.database;
+    final endDate = DateTime.now();
+    final startDate = endDate.subtract(const Duration(days: 6));
+    final durationByDate = await _loadMergedDurationByDate(
+      startDate: _dateKey(startDate),
+      endDate: _dateKey(endDate),
+    );
     final chartData = <Map<String, dynamic>>[];
     for (int i = 6; i >= 0; i--) {
       final date = DateTime.now().subtract(Duration(days: i));
       final dateString = _dateKey(date);
-      final result = await db.query(
-        'reading_stats',
-        columns: ['durationInSeconds'],
-        where: 'date = ?',
-        whereArgs: [dateString],
-      );
-      final duration =
-          result.isNotEmpty ? (result.first['durationInSeconds'] as int) : 0;
+      final duration = durationByDate[dateString] ?? 0;
       chartData.add({
         'day': date.weekday,
         'duration': duration,
@@ -139,16 +130,15 @@ class ReadingStatsDao {
   Future<Map<String, dynamic>> getAchievementStats() async {
     final db = await dbService.database;
     final today = DateTime.now();
+    final durationByDate = await _loadMergedDurationByDate(
+      startDate: _dateKey(today.subtract(const Duration(days: 365))),
+      endDate: _dateKey(today),
+    );
 
     int consecutiveDays = 0;
     for (int i = 0; i < 365; i++) {
       final date = today.subtract(Duration(days: i));
-      final result = await db.query(
-        'reading_stats',
-        where: 'date = ? AND durationInSeconds > 0',
-        whereArgs: [_dateKey(date)],
-      );
-      if (result.isNotEmpty) {
+      if ((durationByDate[_dateKey(date)] ?? 0) > 0) {
         consecutiveDays++;
       } else {
         break;
@@ -199,17 +189,10 @@ class ReadingStatsDao {
     final db = await dbService.database;
     final startDateStr = _dateKey(startDate);
     final endDateStr = _dateKey(endDate);
-
-    final durationRows = await db.query(
-      'reading_stats',
-      where: 'date >= ? AND date <= ?',
-      whereArgs: [startDateStr, endDateStr],
-      orderBy: 'date ASC',
+    final durationByDate = await _loadMergedDurationByDate(
+      startDate: startDateStr,
+      endDate: endDateStr,
     );
-    final durationByDate = <String, int>{
-      for (final row in durationRows)
-        row['date'] as String: (row['durationInSeconds'] as int?) ?? 0,
-    };
 
     final pagesRows = await db.rawQuery(
       '''
@@ -322,22 +305,15 @@ class ReadingStatsDao {
 
   /// 阅读强度热力图（最近91天）- 基于真实 daily duration。
   Future<Map<String, double>> getReadingIntensityHeatmap() async {
-    final db = await dbService.database;
     final endDate = DateTime.now();
     final startDate = endDate.subtract(const Duration(days: 91));
-
-    final result = await db.query(
-      'reading_stats',
-      where: 'date >= ? AND date <= ?',
-      whereArgs: [_dateKey(startDate), _dateKey(endDate)],
+    final durationByDate = await _loadMergedDurationByDate(
+      startDate: _dateKey(startDate),
+      endDate: _dateKey(endDate),
     );
-
-    final dateToMinutes = <String, int>{};
-    for (final row in result) {
-      final date = row['date'] as String;
-      final minutes = ((row['durationInSeconds'] as int?) ?? 0) ~/ 60;
-      dateToMinutes[date] = minutes;
-    }
+    final dateToMinutes = <String, int>{
+      for (final entry in durationByDate.entries) entry.key: entry.value ~/ 60,
+    };
 
     final maxMinutes = dateToMinutes.values.isEmpty
         ? 1
@@ -456,8 +432,87 @@ class ReadingStatsDao {
 
   /// 获取所有阅读统计（用于同步）- 保持兼容旧同步结构。
   Future<List<Map<String, dynamic>>> getAllStats() async {
+    final mergedByDate = await _loadMergedDurationByDate();
+    final dates = mergedByDate.keys.toList()..sort((a, b) => b.compareTo(a));
+    return dates
+        .map(
+          (date) => <String, dynamic>{
+            'date': date,
+            'durationInSeconds': mergedByDate[date] ?? 0,
+          },
+        )
+        .toList(growable: false);
+  }
+
+  Future<Map<String, int>> _loadMergedDurationByDate({
+    String? startDate,
+    String? endDate,
+  }) async {
     final db = await dbService.database;
-    return db.query('reading_stats', orderBy: 'date DESC');
+    final args = <Object?>[];
+    final whereClause = _buildDateRangeClause(
+      startDate: startDate,
+      endDate: endDate,
+      args: args,
+    );
+
+    final statsRows = await db.rawQuery(
+      '''
+      SELECT date, SUM(durationInSeconds) as totalDuration
+      FROM reading_stats
+      $whereClause
+      GROUP BY date
+      ''',
+      args,
+    );
+    final statsByDate = <String, int>{};
+    for (final row in statsRows) {
+      final date = (row['date'] ?? '').toString();
+      if (date.isEmpty) continue;
+      final duration = (row['totalDuration'] as num?)?.toInt() ?? 0;
+      if (duration <= 0) continue;
+      statsByDate[date] = duration;
+    }
+
+    final sessionRows = await db.rawQuery(
+      '''
+      SELECT date, SUM(durationInSeconds) as totalDuration
+      FROM reading_sessions
+      $whereClause
+      GROUP BY date
+      ''',
+      args,
+    );
+    for (final row in sessionRows) {
+      final date = (row['date'] ?? '').toString();
+      if (date.isEmpty) continue;
+      final duration = (row['totalDuration'] as num?)?.toInt() ?? 0;
+      if (duration <= 0) continue;
+      // 会话明细优先，避免旧的 daily 聚合被重复累加后污染展示。
+      statsByDate[date] = duration;
+    }
+
+    return statsByDate;
+  }
+
+  String _buildDateRangeClause({
+    String? startDate,
+    String? endDate,
+    required List<Object?> args,
+  }) {
+    final clauses = <String>[];
+    if (startDate != null && startDate.isNotEmpty) {
+      clauses.add('date >= ?');
+      args.add(startDate);
+    }
+    if (endDate != null && endDate.isNotEmpty) {
+      clauses.add('date <= ?');
+      args.add(endDate);
+    }
+    if (clauses.isEmpty) {
+      return '';
+    }
+    return 'WHERE ${clauses.join(' AND ')}';
   }
 
   Future<void> _upsertReadingDuration({

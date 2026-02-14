@@ -1,0 +1,72 @@
+[
+  {
+    "bookSourceName": "得间小说(兼容版)",
+    "bookSourceUrl": "https://wechat.idejian.com",
+    "header": {
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+    },
+    "respondTime": 20000,
+    "ruleSearch": {
+      "url": "https://wechat.idejian.com/api/wechat/search/do?keyword={{key}}&page={{page}}",
+      "bookList": "body.books",
+      "name": "bookName",
+      "author": "author",
+      "intro": "desc",
+      "coverUrl": "picUrl",
+      "bookUrl": "url"
+    },
+    "ruleToc": {
+      "chapterList": ".catalog_list li",
+      "chapterName": "a span@text",
+      "chapterUrl": "a@href"
+    },
+    "ruleContent": {
+      "content": "div.h5_mainbody + div.h5_mainbody@text"
+    }
+  },
+  {
+    "bookSourceName": "铅笔小说(兼容版)",
+    "bookSourceUrl": "https://www.23qb.com",
+    "respondTime": 20000,
+    "ruleSearch": {
+      "url": "/search.html?searchkey={{key}}",
+      "bookList": ".module-search-item",
+      "name": "a[title]@title",
+      "author": "",
+      "intro": "",
+      "coverUrl": "",
+      "bookUrl": "a[title]@href"
+    },
+    "ruleToc": {
+      "chapterList": ".module-row-info",
+      "chapterName": "a.module-row-text@title",
+      "chapterUrl": "a.module-row-text@href"
+    },
+    "ruleContent": {
+      "content": ".article-content@text"
+    }
+  },
+  {
+    "bookSourceName": "00小说网(兼容版)",
+    "bookSourceUrl": "https://www.00shu.la",
+    "respondTime": 20000,
+    "ruleSearch": {
+      "url": "/modules/article/search.php?q={{key}}",
+      "bookList": "tr#nr",
+      "name": "td.odd a@text",
+      "author": "",
+      "intro": "",
+      "coverUrl": "",
+      "bookUrl": "td.odd a@href"
+    },
+    "ruleToc": {
+      "chapterList": "#list dd",
+      "chapterName": "a@text",
+      "chapterUrl": "a@href"
+    },
+    "ruleContent": {
+      "content": "#content@html",
+      "replaceRegex": "##最新网址：.*"
+    }
+  }
+]

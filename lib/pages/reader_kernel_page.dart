@@ -42,6 +42,7 @@ class ReaderKernelPage extends StatefulWidget {
 
 class _ReaderKernelPageState extends State<ReaderKernelPage>
     with WidgetsBindingObserver {
+  static const String _volumeKeyTurnPrefKey = 'enableVolumeKeyTurn';
   static const String _themePrefKey = 'reader_theme_index_v1';
   static const String _ttsEnabledPrefKey = 'reader_tts_enabled_v1';
   static const String _readerFontPrefKey = 'reader_font_family_v1';
@@ -51,6 +52,8 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   static const double _floatingPanelRadius = 30;
   static const MethodChannel _readerUIChannel =
       MethodChannel('com.niki.xxread/reader_ui');
+  static const MethodChannel _readerKeysChannel =
+      MethodChannel('com.niki.xxread/reader_keys');
 
   late final ReaderKernelController _controller;
   final _bookDao = BookDao();
@@ -146,7 +149,10 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   int _lastPersistedCurrentPage = -1;
   int _lastPersistedTotalPages = -1;
   bool _exitingReader = false;
+  bool _exitFlushScheduled = false;
   bool _ttsEnabled = true;
+  bool _enableVolumeKeyTurn = true;
+  DateTime? _lastVolumeKeyTurnAt;
   String? _pendingReaderFontFamily;
   core.ReaderStyle? _pendingReaderStyle;
 
@@ -158,6 +164,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _readerKeysChannel.setMethodCallHandler(_handleReaderKeyCall);
     _controller = ReaderKernelController();
     _lastPersistedCurrentPage = widget.book.currentPage;
     _lastPersistedTotalPages = widget.book.totalPages;
@@ -169,6 +176,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   Future<void> _bootstrap() async {
     await _restoreTheme();
     await _restoreTtsPreference();
+    await _restoreVolumeKeyTurnPreference();
     await _restoreReaderFontPreference();
     await _restoreReaderTypographyPreference();
     if (!mounted) {
@@ -202,6 +210,12 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     setState(() {
       _ttsEnabled = enabled;
     });
+  }
+
+  Future<void> _restoreVolumeKeyTurnPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    _enableVolumeKeyTurn = prefs.getBool(_volumeKeyTurnPrefKey) ?? true;
+    await _syncVolumeKeyPagingEnabled();
   }
 
   Future<void> _restoreReaderFontPreference() async {
@@ -588,8 +602,12 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     _immersiveTimer?.cancel();
     _statsFlushTimer?.cancel();
     _bookProgressTimer?.cancel();
-    unawaited(_persistBookProgress(force: true));
-    unawaited(_flushReadingStats(force: true, resetWindow: false));
+    unawaited(_disableVolumeKeyPaging());
+    _readerKeysChannel.setMethodCallHandler(null);
+    if (!_exitFlushScheduled) {
+      unawaited(_persistBookProgress(force: true));
+      unawaited(_flushReadingStats(force: true, resetWindow: false));
+    }
     _applyHostSystemUI();
     _controller.dispose();
     super.dispose();
@@ -599,6 +617,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _markReadingInteraction();
+      unawaited(_restoreVolumeKeyTurnPreference());
       return;
     }
     if (state == AppLifecycleState.inactive ||
@@ -829,6 +848,63 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     _readerUIChannel.invokeMethod<void>('setReaderImmersive', <String, dynamic>{
       'enabled': enabled,
     }).catchError((_) {});
+  }
+
+  Future<void> _syncVolumeKeyPagingEnabled() async {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return;
+    }
+    try {
+      await _readerKeysChannel.invokeMethod<void>(
+        'setVolumePagingEnabled',
+        <String, dynamic>{'enabled': _enableVolumeKeyTurn},
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Reader] sync volume key paging failed: $e');
+      }
+    }
+  }
+
+  Future<void> _disableVolumeKeyPaging() async {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return;
+    }
+    try {
+      await _readerKeysChannel.invokeMethod<void>(
+        'setVolumePagingEnabled',
+        const <String, dynamic>{'enabled': false},
+      );
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  Future<dynamic> _handleReaderKeyCall(MethodCall call) async {
+    if (!mounted || call.method != 'onVolumeKey' || !_enableVolumeKeyTurn) {
+      return;
+    }
+    // 防抖：避免系统长按或重复分发造成连续多次翻页。
+    final now = DateTime.now();
+    if (_lastVolumeKeyTurnAt != null &&
+        now.difference(_lastVolumeKeyTurnAt!) <
+            const Duration(milliseconds: 120)) {
+      return;
+    }
+    _lastVolumeKeyTurnAt = now;
+
+    final arguments = call.arguments;
+    if (arguments is! Map) {
+      return;
+    }
+    final direction = arguments['direction']?.toString();
+    if (direction == 'next') {
+      unawaited(_stepPageForward());
+      return;
+    }
+    if (direction == 'previous') {
+      unawaited(_stepPageBackward());
+    }
   }
 
   void _scheduleAutoImmersive() {
@@ -1579,8 +1655,9 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     }
     _exitingReader = true;
     try {
-      await _persistBookProgress(force: true);
-      await _flushReadingStats(force: true, resetWindow: false);
+      _exitFlushScheduled = true;
+      unawaited(_persistBookProgress(force: true));
+      unawaited(_flushReadingStats(force: true, resetWindow: false));
       if (!mounted) return;
       Navigator.of(context).pop();
     } finally {

@@ -422,7 +422,6 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 decoration: BoxDecoration(
-                  color: scheme.surface.withValues(alpha: 0.84),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: scheme.outline.withValues(alpha: 0.2),

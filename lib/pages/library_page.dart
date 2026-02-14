@@ -20,6 +20,12 @@ import '../utils/page_style_helper.dart';
 import '../utils/system_ui_helper.dart';
 import '../widgets/app_brand_icon.dart';
 
+enum _LibraryFilter {
+  all,
+  reading,
+  finished,
+}
+
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
 
@@ -34,6 +40,7 @@ class _LibraryPageState extends State<LibraryPage> {
   StreamSubscription<void>? _librarySubscription;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  _LibraryFilter _selectedFilter = _LibraryFilter.all;
 
   @override
   void initState() {
@@ -172,12 +179,53 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   List<Book> get _visibleBooks {
+    final filteredByStatus =
+        _books.where((book) => _matchesSelectedFilter(book)).toList();
     final query = _searchQuery.trim().toLowerCase();
-    if (query.isEmpty) return _books;
-    return _books.where((book) {
+    if (query.isEmpty) return filteredByStatus;
+    return filteredByStatus.where((book) {
       return book.title.toLowerCase().contains(query) ||
           book.author.toLowerCase().contains(query);
     }).toList();
+  }
+
+  bool _matchesSelectedFilter(Book book) {
+    switch (_selectedFilter) {
+      case _LibraryFilter.all:
+        return true;
+      case _LibraryFilter.reading:
+        return _isReadingBook(book);
+      case _LibraryFilter.finished:
+        return _isFinishedBook(book);
+    }
+  }
+
+  bool _isFinishedBook(Book book) {
+    if (book.totalPages <= 0) {
+      return false;
+    }
+    return book.currentPage >= book.totalPages;
+  }
+
+  bool _isReadingBook(Book book) {
+    return book.currentPage > 0 && !_isFinishedBook(book);
+  }
+
+  Rect? _resolveRectFromKey(GlobalKey key) {
+    final keyContext = key.currentContext;
+    if (keyContext == null) {
+      return null;
+    }
+    final renderObject = keyContext.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) {
+      return null;
+    }
+    final size = renderObject.size;
+    if (size.isEmpty) {
+      return null;
+    }
+    final origin = renderObject.localToGlobal(Offset.zero);
+    return origin & size;
   }
 
   Widget _buildTopBar() {
@@ -279,14 +327,8 @@ class _LibraryPageState extends State<LibraryPage> {
   Widget _buildShelfSummaryCard() {
     final palette = PageStyleHelper.palette(context);
     final total = _books.length;
-    final inReading = _books
-        .where((book) =>
-            book.currentPage > 0 && book.currentPage < book.totalPages)
-        .length;
-    final finished = _books
-        .where((book) =>
-            book.totalPages > 0 && book.currentPage >= book.totalPages)
-        .length;
+    final inReading = _books.where(_isReadingBook).length;
+    final finished = _books.where(_isFinishedBook).length;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -301,33 +343,60 @@ class _LibraryPageState extends State<LibraryPage> {
           spacing: 8,
           runSpacing: 8,
           children: [
-            _buildStatChip('全部 $total', true),
-            _buildStatChip('在读 $inReading', false),
-            _buildStatChip('已读 $finished', false),
+            _buildStatChip(
+              label: '全部 $total',
+              active: _selectedFilter == _LibraryFilter.all,
+              onTap: () => setState(() => _selectedFilter = _LibraryFilter.all),
+            ),
+            _buildStatChip(
+              label: '在读 $inReading',
+              active: _selectedFilter == _LibraryFilter.reading,
+              onTap: () =>
+                  setState(() => _selectedFilter = _LibraryFilter.reading),
+            ),
+            _buildStatChip(
+              label: '已读 $finished',
+              active: _selectedFilter == _LibraryFilter.finished,
+              onTap: () =>
+                  setState(() => _selectedFilter = _LibraryFilter.finished),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatChip(String label, bool active) {
+  Widget _buildStatChip({
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
     final palette = PageStyleHelper.palette(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: active
-            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.16)
-            : palette.cardStrong,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-          color: active
-              ? Theme.of(context).colorScheme.primary
-              : palette.textMuted,
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: active
+                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.16)
+                : palette.cardStrong,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+              color: active
+                  ? Theme.of(context).colorScheme.primary
+                  : palette.textMuted,
+            ),
+          ),
         ),
       ),
     );
@@ -490,9 +559,18 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Widget _buildNoSearchResult() {
+    final hasSearch = _searchQuery.trim().isNotEmpty;
+    final message = hasSearch
+        ? '没有匹配的书籍'
+        : switch (_selectedFilter) {
+            _LibraryFilter.reading => '当前没有在读书籍',
+            _LibraryFilter.finished => '当前没有已读书籍',
+            _LibraryFilter.all => '暂无书籍',
+          };
+
     return Center(
       child: Text(
-        '没有匹配的书籍',
+        message,
         style: TextStyle(
           fontSize: 16,
           color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
@@ -584,11 +662,15 @@ class _LibraryPageState extends State<LibraryPage> {
               return RepaintBoundary(
                 child: _BookCoverItem(
                   book: book,
-                  onTap: () async {
+                  onTap: (sourceRect) async {
                     final fullBook = await _bookDao.getBookById(book.id!);
                     if (fullBook != null && mounted && context.mounted) {
                       // 直接打开沉浸式阅读器
-                      await ReadingRouterService.openBook(context, fullBook);
+                      await ReadingRouterService.openBook(
+                        context,
+                        fullBook,
+                        sourceRect: sourceRect,
+                      );
                       _loadBooks();
                     }
                   },
@@ -613,6 +695,7 @@ class _LibraryPageState extends State<LibraryPage> {
       itemCount: books.length,
       itemBuilder: (context, index) {
         final book = books[index];
+        final coverKey = GlobalKey();
         final progress = book.totalPages > 0
             ? (book.currentPage / book.totalPages).clamp(0.0, 1.0)
             : 0.0;
@@ -627,9 +710,14 @@ class _LibraryPageState extends State<LibraryPage> {
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
               onTap: () async {
+                final sourceRect = _resolveRectFromKey(coverKey);
                 final fullBook = await _bookDao.getBookById(book.id!);
                 if (fullBook != null && mounted && context.mounted) {
-                  await ReadingRouterService.openBook(context, fullBook);
+                  await ReadingRouterService.openBook(
+                    context,
+                    fullBook,
+                    sourceRect: sourceRect,
+                  );
                   _loadBooks();
                 }
               },
@@ -639,6 +727,7 @@ class _LibraryPageState extends State<LibraryPage> {
                 child: Row(
                   children: [
                     SizedBox(
+                      key: coverKey,
                       width: 44,
                       height: 64,
                       child: ClipRRect(
@@ -1323,7 +1412,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
 class _BookCoverItem extends StatelessWidget {
   final Book book;
-  final VoidCallback onTap;
+  final Future<void> Function(Rect? sourceRect) onTap;
   final VoidCallback onLongPress;
 
   const _BookCoverItem({
@@ -1336,9 +1425,10 @@ class _BookCoverItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final progress =
         book.currentPage / (book.totalPages > 0 ? book.totalPages : 1);
+    final coverKey = GlobalKey();
 
     return InkWell(
-      onTap: onTap,
+      onTap: () => unawaited(onTap(_resolveCoverRect(coverKey))),
       onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(12),
       child: LayoutBuilder(
@@ -1358,6 +1448,7 @@ class _BookCoverItem extends StatelessWidget {
             children: [
               // 书籍封面区域 - 3:4比例，但不超过可用高度
               SizedBox(
+                key: coverKey,
                 width: double.infinity,
                 height: coverHeight,
                 child: Container(
@@ -1488,6 +1579,23 @@ class _BookCoverItem extends StatelessWidget {
         },
       ),
     );
+  }
+
+  Rect? _resolveCoverRect(GlobalKey key) {
+    final keyContext = key.currentContext;
+    if (keyContext == null) {
+      return null;
+    }
+    final renderObject = keyContext.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) {
+      return null;
+    }
+    final size = renderObject.size;
+    if (size.isEmpty) {
+      return null;
+    }
+    final origin = renderObject.localToGlobal(Offset.zero);
+    return origin & size;
   }
 
   Widget _buildCoverImage(BuildContext context, Book book) {

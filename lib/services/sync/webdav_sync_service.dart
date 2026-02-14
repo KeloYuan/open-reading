@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:xxread/services/books/book_dao.dart';
@@ -534,11 +537,14 @@ class WebDavSyncService {
       final remotePath = WebDavSyncPathHelper.buildBookFilePath(fileName);
 
       final fileBytes = await bookFile.readAsBytes();
-      await _dio.put(
-        remotePath,
-        data: fileBytes,
-        options: Options(
-          headers: {'Content-Type': 'application/octet-stream'},
+      await _retryRequest(
+        label: '上传书籍文件 ${book.title}',
+        action: () => _dio.put(
+          remotePath,
+          data: fileBytes,
+          options: Options(
+            headers: {'Content-Type': 'application/octet-stream'},
+          ),
         ),
       );
 
@@ -1037,20 +1043,22 @@ class WebDavSyncService {
 
   /// 下载远程数据
   Future<void> _downloadRemoteData() async {
-    await Future.wait([
-      _downloadBooks(),
-      _downloadBookmarks(),
-      _downloadNotes(),
-      _downloadProgress(),
-      _downloadStats(),
-      _downloadSources(),
-    ]);
+    // 下载阶段允许部分失败：当服务端短暂 503/超时时，不阻断整次同步。
+    await _runSyncStage('下载书籍列表', _downloadBooks, optional: true);
+    await _runSyncStage('下载书签', _downloadBookmarks, optional: true);
+    await _runSyncStage('下载笔记', _downloadNotes, optional: true);
+    await _runSyncStage('下载阅读进度', _downloadProgress, optional: true);
+    await _runSyncStage('下载阅读统计', _downloadStats, optional: true);
+    await _runSyncStage('下载书源', _downloadSources, optional: true);
   }
 
   /// 下载书籍列表
   Future<void> _downloadBooks() async {
     try {
-      final response = await _dio.get(WebDavSyncPathHelper.booksFile);
+      final response = await _retryRequest(
+        label: '下载书籍列表',
+        action: () => _dio.get(WebDavSyncPathHelper.booksFile),
+      );
       if (response.statusCode == 200) {
         final data = _asJsonMap(response.data);
         final remoteBooks = _asJsonList(data['books']);
@@ -1069,7 +1077,10 @@ class WebDavSyncService {
   /// 下载书签
   Future<void> _downloadBookmarks() async {
     try {
-      final response = await _dio.get(WebDavSyncPathHelper.bookmarksFile);
+      final response = await _retryRequest(
+        label: '下载书签',
+        action: () => _dio.get(WebDavSyncPathHelper.bookmarksFile),
+      );
       if (response.statusCode == 200) {
         final data = _asJsonMap(response.data);
         final remoteBookmarks = _asJsonList(data['bookmarks']);
@@ -1088,7 +1099,10 @@ class WebDavSyncService {
   /// 下载笔记
   Future<void> _downloadNotes() async {
     try {
-      final response = await _dio.get(WebDavSyncPathHelper.notesFile);
+      final response = await _retryRequest(
+        label: '下载笔记',
+        action: () => _dio.get(WebDavSyncPathHelper.notesFile),
+      );
       if (response.statusCode == 200) {
         final data = _asJsonMap(response.data);
         final remoteNotes = _asJsonList(data['notes']);
@@ -1107,7 +1121,10 @@ class WebDavSyncService {
   /// 下载阅读进度
   Future<void> _downloadProgress() async {
     try {
-      final response = await _dio.get(WebDavSyncPathHelper.progressFile);
+      final response = await _retryRequest(
+        label: '下载阅读进度',
+        action: () => _dio.get(WebDavSyncPathHelper.progressFile),
+      );
       if (response.statusCode == 200) {
         final data = _asJsonMap(response.data);
         final remoteProgress = _asJsonList(data['progress']);
@@ -1126,7 +1143,10 @@ class WebDavSyncService {
   /// 下载阅读统计
   Future<void> _downloadStats() async {
     try {
-      final response = await _dio.get(WebDavSyncPathHelper.statsFile);
+      final response = await _retryRequest(
+        label: '下载阅读统计',
+        action: () => _dio.get(WebDavSyncPathHelper.statsFile),
+      );
       if (response.statusCode == 200) {
         final data = _asJsonMap(response.data);
         final remoteStats = _asJsonList(data['stats']);
@@ -1145,7 +1165,10 @@ class WebDavSyncService {
   /// 下载书源
   Future<void> _downloadSources() async {
     try {
-      final response = await _dio.get(WebDavSyncPathHelper.sourcesFile);
+      final response = await _retryRequest(
+        label: '下载书源',
+        action: () => _dio.get(WebDavSyncPathHelper.sourcesFile),
+      );
       if (response.statusCode == 200) {
         final data = _asJsonMap(response.data);
         final remoteSources = _asJsonList(data['sources']);
@@ -1332,47 +1355,87 @@ class WebDavSyncService {
     debugPrint('📄 阅读进度合并完成: 更新 $updatedCount');
   }
 
-  /// 合并阅读统计（同日期累加）
+  /// 合并阅读统计（幂等合并，避免重复同步造成累加暴涨）
   Future<void> _mergeStats(List<Map<String, dynamic>> remoteStats) async {
-    int mergedCount = 0;
+    int insertedCount = 0;
+    int updatedCount = 0;
+    int dedupedCount = 0;
+    int unchangedCount = 0;
+    final db = await _statsDao.dbService.database;
 
     for (final stat in remoteStats) {
       try {
-        final date = stat['date'] as String;
-        final remoteDuration = stat['durationInSeconds'] as int;
+        final rawDate = (stat['date'] ?? '').toString().trim();
+        if (rawDate.isEmpty) {
+          continue;
+        }
+        final date = rawDate.contains('T')
+            ? rawDate.split('T').first
+            : (rawDate.length > 10 ? rawDate.substring(0, 10) : rawDate);
+        final remoteDuration =
+            (stat['durationInSeconds'] as num?)?.toInt() ?? 0;
+        if (remoteDuration <= 0) {
+          continue;
+        }
 
-        final db = await _statsDao.dbService.database;
         final existing = await db.query(
           'reading_stats',
           where: 'date = ?',
           whereArgs: [date],
+          orderBy: 'id ASC',
         );
 
-        if (existing.isNotEmpty) {
-          // 累加时长
-          final localDuration = existing.first['durationInSeconds'] as int;
-          final newDuration = localDuration + remoteDuration;
-
-          await db.update(
-            'reading_stats',
-            {'durationInSeconds': newDuration},
-            where: 'date = ?',
-            whereArgs: [date],
-          );
-          mergedCount++;
-        } else {
-          // 插入新记录
+        if (existing.isEmpty) {
           await db.insert('reading_stats', {
             'date': date,
             'durationInSeconds': remoteDuration,
           });
+          insertedCount++;
+          continue;
+        }
+
+        final keepId = existing.first['id'] as int?;
+        var localBest = 0;
+        for (final row in existing) {
+          final value = (row['durationInSeconds'] as num?)?.toInt() ?? 0;
+          if (value > localBest) {
+            localBest = value;
+          }
+        }
+        final mergedDuration =
+            remoteDuration > localBest ? remoteDuration : localBest;
+
+        if (keepId != null) {
+          await db.update(
+            'reading_stats',
+            {'durationInSeconds': mergedDuration},
+            where: 'id = ?',
+            whereArgs: [keepId],
+          );
+        }
+
+        if (existing.length > 1) {
+          await db.delete(
+            'reading_stats',
+            where: 'date = ? AND id != ?',
+            whereArgs: [date, keepId ?? -1],
+          );
+          dedupedCount += existing.length - 1;
+        }
+
+        if (mergedDuration > localBest) {
+          updatedCount++;
+        } else {
+          unchangedCount++;
         }
       } catch (e) {
         debugPrint('合并统计失败: $e');
       }
     }
 
-    debugPrint('📊 阅读统计合并完成: 累加 $mergedCount');
+    debugPrint(
+      '📊 阅读统计合并完成: 新增 $insertedCount, 更新 $updatedCount, 去重 $dedupedCount, 保持不变 $unchangedCount',
+    );
   }
 
   /// 合并书源（按 URL 去重，双向合并）
@@ -1457,16 +1520,38 @@ class WebDavSyncService {
       }
 
       if (localBook == null) {
-        // 远程书籍在本地不存在，检查文件是否存在
-        if (book.filePath.isNotEmpty && await File(book.filePath).exists()) {
-          await _bookDao.insertBook(book);
+        // 新设备场景：本地没有这本书时，尝试从 WebDAV 远端 files/ 拉取书籍文件。
+        final resolvedPath = await _resolveLocalBookFilePath(
+          remoteBook: book,
+          localBook: null,
+        );
+        if (resolvedPath == null) {
+          debugPrint('⏭️ 跳过仅元数据书籍（远端文件不可用）: ${book.title}');
+          continue;
         }
+        final insertBook = book.copyWith(id: null, filePath: resolvedPath);
+        final insertedId = await _bookDao.insertBook(insertBook);
+        final inserted = insertBook.copyWith(id: insertedId);
+        localById[insertedId] = inserted;
+        if ((inserted.contentHash ?? '').trim().isNotEmpty) {
+          localByHash[inserted.contentHash!.trim()] = inserted;
+        }
+        localByPath[_normalizePathKey(inserted.filePath)] = inserted;
+        debugPrint('📥 已恢复远端书籍: ${inserted.title}');
       } else {
         // 合并数据
-        final mergedBook = _mergeBookData(localBook, book);
+        var mergedBook = _mergeBookData(localBook, book);
+        final resolvedPath = await _resolveLocalBookFilePath(
+          remoteBook: book,
+          localBook: localBook,
+        );
+        if (resolvedPath != null && resolvedPath != localBook.filePath) {
+          mergedBook = mergedBook.copyWith(filePath: resolvedPath);
+        }
         if (mergedBook.currentPage != localBook.currentPage ||
             mergedBook.totalPages != localBook.totalPages ||
-            mergedBook.contentHash != localBook.contentHash) {
+            mergedBook.contentHash != localBook.contentHash ||
+            mergedBook.filePath != localBook.filePath) {
           await _bookDao.updateBook(mergedBook);
           if (mergedBook.id != null) {
             localById[mergedBook.id!] = mergedBook;
@@ -1478,6 +1563,115 @@ class WebDavSyncService {
         }
       }
     }
+  }
+
+  Future<String?> _resolveLocalBookFilePath({
+    required Book remoteBook,
+    required Book? localBook,
+  }) async {
+    // 1) 本地已有可用文件，直接使用。
+    if (localBook != null && localBook.filePath.isNotEmpty) {
+      final file = File(localBook.filePath);
+      if (await file.exists()) {
+        return localBook.filePath;
+      }
+    }
+
+    // 2) 旧路径在当前设备仍可用（同设备恢复场景）。
+    if (remoteBook.filePath.isNotEmpty) {
+      final existing = File(remoteBook.filePath);
+      if (await existing.exists()) {
+        return remoteBook.filePath;
+      }
+    }
+
+    // 3) 从 WebDAV files/ 下载到当前设备 documents/books。
+    final bytes = await _downloadRemoteBookBytes(remoteBook);
+    if (bytes == null || bytes.isEmpty) {
+      return null;
+    }
+
+    final docsDir = await getApplicationDocumentsDirectory();
+    final booksDir = Directory(p.join(docsDir.path, 'books'));
+    if (!await booksDir.exists()) {
+      await booksDir.create(recursive: true);
+    }
+
+    final extension = _normalizeBookExtension(remoteBook.format);
+    final stem = _localBookFileStem(remoteBook);
+    final localPath = p.join(booksDir.path, '$stem$extension');
+    final localFile = File(localPath);
+    await localFile.writeAsBytes(bytes, flush: true);
+    return localPath;
+  }
+
+  Future<List<int>?> _downloadRemoteBookBytes(Book remoteBook) async {
+    final candidates = <String>{
+      if ((remoteBook.contentHash ?? '').trim().isNotEmpty)
+        (remoteBook.contentHash ?? '').trim(),
+      if ((remoteBook.contentHash ?? '').trim().isNotEmpty)
+        '${(remoteBook.contentHash ?? '').trim()}${_normalizeBookExtension(remoteBook.format)}',
+      if (remoteBook.id != null)
+        'book_${remoteBook.id}.${remoteBook.format.toLowerCase()}',
+      if (remoteBook.filePath.trim().isNotEmpty)
+        p.basename(remoteBook.filePath.trim()),
+    };
+
+    for (final fileName in candidates) {
+      if (fileName.trim().isEmpty) {
+        continue;
+      }
+      final remotePath = WebDavSyncPathHelper.buildBookFilePath(fileName);
+      try {
+        final response = await _retryRequest<Response<dynamic>>(
+          label: '下载书籍文件 ${remoteBook.title}',
+          action: () => _dio.get<dynamic>(
+            remotePath,
+            options: Options(responseType: ResponseType.bytes),
+          ),
+        );
+        if (response.statusCode == 200 && response.data != null) {
+          final data = response.data;
+          if (data is List<int>) {
+            return data;
+          }
+          if (data is Uint8List) {
+            return data;
+          }
+          if (data is List) {
+            return data.cast<int>();
+          }
+        }
+      } catch (e) {
+        if (_isRemoteFileMissing(e)) {
+          continue;
+        }
+        debugPrint('下载远端书籍文件失败(${remoteBook.title}/$fileName): $e');
+      }
+    }
+    return null;
+  }
+
+  String _normalizeBookExtension(String format) {
+    final normalized = format.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return '.txt';
+    }
+    return normalized.startsWith('.') ? normalized : '.$normalized';
+  }
+
+  String _localBookFileStem(Book book) {
+    final hash = (book.contentHash ?? '').trim();
+    if (hash.isNotEmpty) {
+      return hash;
+    }
+    final idPart = book.id?.toString() ?? 'remote';
+    final titlePart = book.title
+        .trim()
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+        .replaceAll(RegExp(r'\s+'), '_');
+    final compactTitle = titlePart.isEmpty ? 'book' : titlePart;
+    return '${idPart}_$compactTitle';
   }
 
   /// 合并书籍数据（以阅读进度更大的为准）
@@ -1596,7 +1790,7 @@ class WebDavSyncService {
       await action();
     } catch (e) {
       final friendly = '$stageName失败：${_toFriendlySyncError(e)}';
-      if (optional) {
+      if (optional || _isTemporarySyncIssue(e)) {
         _lastSyncWarnings.add(friendly);
         debugPrint('⚠️ $friendly');
         return;
@@ -1649,6 +1843,22 @@ class WebDavSyncService {
     return false;
   }
 
+  bool _isTemporarySyncIssue(Object error) {
+    if (_isRetryableError(error)) {
+      return true;
+    }
+    final text = error.toString();
+    if (text.contains('503') ||
+        text.contains('502') ||
+        text.contains('504') ||
+        text.contains('429') ||
+        text.contains('timeout') ||
+        text.contains('connection')) {
+      return true;
+    }
+    return false;
+  }
+
   String _toFriendlySyncError(Object error) {
     if (error is DioException) {
       final code = error.response?.statusCode;
@@ -1679,11 +1889,20 @@ class WebDavSyncService {
     }
 
     final text = error.toString();
-    if (text.contains('503')) {
+    if (text.contains('503') || text.contains('status code of 503')) {
       return '服务器暂时不可用（503），请稍后重试';
+    }
+    if (text.contains('502') || text.contains('504')) {
+      return '服务器暂时不可用，请稍后重试';
+    }
+    if (text.contains('429')) {
+      return '请求过于频繁（429），请稍后再试';
     }
     if (text.contains('401') || text.contains('403')) {
       return '认证失败，请检查 WebDAV 账号或密码';
+    }
+    if (text.contains('DioException [bad response]')) {
+      return '服务器响应异常，请稍后重试';
     }
     if (text.length > 120) {
       return text.substring(0, 120);

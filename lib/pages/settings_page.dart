@@ -1,16 +1,16 @@
 import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
+import 'package:icons_plus/icons_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../main.dart';
 import '../utils/app_themes.dart';
 import '../l10n/app_localizations.dart';
 import '../services/books/book_services.dart';
 import '../services/core/core_services.dart';
-import '../services/reading/reading_services.dart';
 import '../services/sync/sync_services.dart';
 import '../widgets/side_toast.dart';
 import '../widgets/webdav_config_dialog.dart';
@@ -37,12 +37,6 @@ class _SettingsPageState extends State<SettingsPage> {
   int _autoSaveInterval = 30;
   bool _disableGlassEffects = false;
 
-  // TTS设置
-  bool _enableTTS = true;
-  double _ttsSpeed = 0.5;
-  double _ttsVolume = 1.0;
-  double _ttsPitch = 1.0;
-
   // 阅读设置
   bool _enablePageAnimation = true;
   bool _enableVolumeKeyTurn = true;
@@ -66,7 +60,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _enablePerformanceMonitor = false;
   bool _enableMemoryStats = false;
   bool _showFPS = false;
-  String _appVersion = '--';
+  String _appVersion = '520.1314';
 
   @override
   void initState() {
@@ -101,13 +95,8 @@ class _SettingsPageState extends State<SettingsPage> {
       _keepScreenOn = prefs.getBool('keepScreenOn') ?? false;
       _autoSaveInterval = prefs.getInt('autoSaveInterval') ?? 30;
 
-      // TTS设置
-      _enableTTS = prefs.getBool('enableTTS') ?? true;
       _enableBooksource = prefs.getBool('enable_booksource') ?? true;
       _enableAutoExtractCover = prefs.getBool('enableAutoExtractCover') ?? true;
-      _ttsSpeed = prefs.getDouble('ttsSpeed') ?? 0.5;
-      _ttsVolume = prefs.getDouble('ttsVolume') ?? 1.0;
-      _ttsPitch = prefs.getDouble('ttsPitch') ?? 1.0;
 
       // 阅读设置
       _enablePageAnimation = prefs.getBool('enablePageAnimation') ?? true;
@@ -143,17 +132,8 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _loadAppVersion() async {
-    try {
-      final info = await PackageInfo.fromPlatform();
-      if (!mounted) return;
-      final version = info.version.trim();
-      setState(() {
-        _appVersion = version.isEmpty ? '--' : version;
-      });
-    } catch (_) {
-      // keep fallback label
-    }
+  void _loadAppVersion() {
+    _appVersion = '520.1314';
   }
 
   Future<void> _saveSettings() async {
@@ -163,13 +143,8 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setBool('keepScreenOn', _keepScreenOn);
     await prefs.setInt('autoSaveInterval', _autoSaveInterval);
 
-    // TTS设置
-    await prefs.setBool('enableTTS', _enableTTS);
     await prefs.setBool('enable_booksource', _enableBooksource);
     await prefs.setBool('enableAutoExtractCover', _enableAutoExtractCover);
-    await prefs.setDouble('ttsSpeed', _ttsSpeed);
-    await prefs.setDouble('ttsVolume', _ttsVolume);
-    await prefs.setDouble('ttsPitch', _ttsPitch);
 
     // 阅读设置
     await prefs.setBool('enablePageAnimation', _enablePageAnimation);
@@ -282,7 +257,6 @@ class _SettingsPageState extends State<SettingsPage> {
             title: l10n.readingSettings,
             icon: Icons.book_outlined,
             children: [
-              _buildReadingEngineSelector(),
               _buildSwitchSetting(
                 title: '音量键翻页',
                 subtitle: '使用音量键控制翻页',
@@ -343,55 +317,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       ],
                     ),
                   ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 20),
-          _buildSectionCard(
-            title: l10n.ttsReading,
-            icon: Icons.record_voice_over,
-            children: [
-              _buildSwitchSetting(
-                title: l10n.enableTts,
-                subtitle: l10n.enableTtsHint,
-                value: _enableTTS,
-                onChanged: (value) => setState(() => _enableTTS = value),
-                icon: Icons.play_circle_outline,
-              ),
-              if (_enableTTS) ...[
-                _buildSliderSetting(
-                  title: l10n.ttsSpeedLabel,
-                  subtitle: l10n.ttsSpeedHint,
-                  value: _ttsSpeed,
-                  min: 0.1,
-                  max: 2.0,
-                  divisions: 19,
-                  onChanged: (value) => setState(() => _ttsSpeed = value),
-                  icon: Icons.speed,
-                  formatter: (value) => '${(value * 100).round()}%',
-                ),
-                _buildSliderSetting(
-                  title: l10n.ttsVolumeLabel,
-                  subtitle: l10n.ttsVolumeHint,
-                  value: _ttsVolume,
-                  min: 0.0,
-                  max: 1.0,
-                  divisions: 10,
-                  onChanged: (value) => setState(() => _ttsVolume = value),
-                  icon: Icons.volume_up,
-                  formatter: (value) => '${(value * 100).round()}%',
-                ),
-                _buildSliderSetting(
-                  title: l10n.ttsPitchLabel,
-                  subtitle: l10n.ttsPitchHint,
-                  value: _ttsPitch,
-                  min: 0.5,
-                  max: 2.0,
-                  divisions: 15,
-                  onChanged: (value) => setState(() => _ttsPitch = value),
-                  icon: Icons.graphic_eq,
-                  formatter: (value) => '${(value * 100).round()}%',
                 ),
               ],
             ],
@@ -552,16 +477,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ],
                   ),
-                ),
-
-                // 立即同步按钮
-                _buildActionSetting(
-                  title: '自动同步',
-                  subtitle: _webdavService.autoSync
-                      ? '已开启，每 ${_webdavService.syncInterval} 分钟同步一次'
-                      : '已关闭，仅手动同步',
-                  onTap: _showWebDavConfig,
-                  icon: Icons.schedule,
                 ),
 
                 // 立即同步按钮
@@ -1436,6 +1351,60 @@ class _SettingsPageState extends State<SettingsPage> {
                             ).colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
                     ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '作者：小元Niki',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withValues(alpha: 0.6),
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: _openGithubRepo,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              OctIcons.mark_github,
+                              size: 14,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withValues(alpha: 0.7),
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'GitHub仓库地址：https://github.com/KeloYuan/Origo-Reader',
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.85),
+                                      decoration: TextDecoration.underline,
+                                      decorationColor: Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.6),
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       '兄弟萌，情人节快乐！我喜欢哈基怡',
@@ -1536,6 +1505,14 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _openGithubRepo() async {
+    final uri = Uri.parse('https://github.com/KeloYuan/Origo-Reader');
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && mounted) {
+      showSideToast(context, '无法打开 GitHub 链接', icon: Icons.error_outline);
+    }
   }
 
   void _showCustomAccentColorModal(ThemeNotifier themeNotifier) {
@@ -1805,7 +1782,10 @@ class _SettingsPageState extends State<SettingsPage> {
         if (success) {
           showSideToast(context, '同步成功');
         } else {
-          final reason = _webdavService.lastErrorMessage;
+          var reason = _webdavService.lastErrorMessage.trim();
+          if (reason.startsWith('同步失败:')) {
+            reason = reason.substring('同步失败:'.length).trim();
+          }
           showSideToast(
             context,
             reason.isNotEmpty ? '同步失败: $reason' : '同步失败',
@@ -1858,105 +1838,6 @@ class _SettingsPageState extends State<SettingsPage> {
         setState(() => _isIosCloudSyncing = false);
       }
     }
-  }
-
-  // 构建滑块设置
-  Widget _buildSliderSetting({
-    required String title,
-    required String subtitle,
-    required double value,
-    required double min,
-    required double max,
-    int? divisions,
-    required Function(double) onChanged,
-    required IconData icon,
-    String Function(double)? formatter,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 1),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.secondary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.secondary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            title,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyLarge
-                                ?.copyWith(fontWeight: FontWeight.w500),
-                          ),
-                          Text(
-                            formatter?.call(value) ?? value.toStringAsFixed(1),
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.6),
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 4,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-              ),
-              child: Slider(
-                value: value,
-                min: min,
-                max: max,
-                divisions: divisions,
-                onChanged: (newValue) {
-                  onChanged(newValue);
-                  _saveSettings();
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   // 构建操作设置
@@ -2301,311 +2182,6 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           );
         },
-      ),
-    );
-  }
-
-  // 构建阅读引擎选择器
-  Widget _buildReadingEngineSelector() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 1),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _showReadingEngineModal(),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: AppBrandIcon(
-                    size: 16,
-                    borderRadius: 4,
-                    border: Border.all(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withValues(alpha: 0.24),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '阅读引擎',
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
-                      ),
-                      Text(
-                        '沉浸式阅读器',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.6),
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.4),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // 显示阅读引擎选择对话框
-  void _showReadingEngineModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return Container(
-            height: MediaQuery.of(context).size.height * 0.65,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-            ),
-            child: Column(
-              children: [
-                // 拖拽指示条
-                Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 20),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                // 标题
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    children: [
-                      AppBrandIcon(
-                        size: 24,
-                        borderRadius: 7,
-                        border: Border.all(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withValues(alpha: 0.24),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        '选择阅读引擎',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Text(
-                    '选择适合您的阅读方式，各引擎特点不同',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.7),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // 引擎选项
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    children: [
-                      _buildEngineOption(
-                        engine: ReadingEngineType.immersive,
-                        title: '沉浸式阅读器',
-                        subtitle: '全新体验，推荐使用',
-                        description:
-                            '• 90%屏幕利用率\n• 三种翻页模式\n• TTS语音朗读\n• 流畅的阅读体验',
-                        icon: Icons.auto_awesome_rounded,
-                        color: Colors.blue,
-                        isRecommended: true,
-                        setModalState: setModalState,
-                      ),
-                    ],
-                  ),
-                ),
-                // 底部按钮
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    24,
-                    16,
-                    24,
-                    MediaQuery.of(context).padding.bottom + 16,
-                  ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text(
-                        '完成',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  // 构建引擎选项
-  Widget _buildEngineOption({
-    required ReadingEngineType engine,
-    required String title,
-    required String subtitle,
-    required String description,
-    required IconData icon,
-    required Color color,
-    required bool isRecommended,
-    required StateSetter setModalState,
-  }) {
-    // 只有一个引擎，总是选中状态
-    return GestureDetector(
-      onTap: () {
-        // 只有一个引擎，无需切换
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: color,
-            width: 2,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, color: color, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            title,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ),
-                          if (isRecommended) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.green,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                '推荐',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.7),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.check_circle, color: color, size: 24),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              description,
-              style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.6),
-                height: 1.4,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -224,16 +224,15 @@ class _UserAgreementPageState extends State<UserAgreementPage>
   Widget _buildContent() {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.fromLTRB(24, 14, 24, 24),
         child: Column(
           children: [
-            const Spacer(flex: 1),
             // 应用图标和标题
             _buildHeader(),
-            const SizedBox(height: 40),
+            const SizedBox(height: 20),
             // 协议内容卡片
             Expanded(
-              flex: 6,
+              flex: 7,
               child: _showContent
                   ? SlideTransition(
                       position: _slideAnimation,
@@ -241,14 +240,14 @@ class _UserAgreementPageState extends State<UserAgreementPage>
                     )
                   : const SizedBox.shrink(),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             // 底部按钮
             if (_showContent)
               SlideTransition(
                 position: _slideAnimation,
                 child: _buildButtons(),
               ),
-            const Spacer(flex: 1),
+            const SizedBox(height: 12),
           ],
         ),
       ),

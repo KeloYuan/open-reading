@@ -20,10 +20,10 @@ class BookSourcePage extends StatefulWidget {
   const BookSourcePage({super.key});
 
   @override
-  State<BookSourcePage> createState() => _BookSourcePageState();
+  State<BookSourcePage> createState() => BookSourcePageState();
 }
 
-class _BookSourcePageState extends State<BookSourcePage>
+class BookSourcePageState extends State<BookSourcePage>
     with TickerProviderStateMixin {
   final BookSourceService _sourceService = BookSourceService();
   final TextEditingController _searchController = TextEditingController();
@@ -131,6 +131,23 @@ class _BookSourcePageState extends State<BookSourcePage>
     });
   }
 
+  bool get isFiltersPanelVisible => _showFiltersPanel;
+
+  void handleTopBarAdd() {
+    if (!mounted) return;
+    _showAddSourceDialog();
+  }
+
+  void handleTopBarToggleFilters() {
+    if (!mounted) return;
+    setState(() => _showFiltersPanel = !_showFiltersPanel);
+  }
+
+  void handleTopBarMore() {
+    if (!mounted) return;
+    _showMenuDialog();
+  }
+
   @override
   Widget build(BuildContext context) {
     final navContext = NavigationContext.of(context);
@@ -171,7 +188,7 @@ class _BookSourcePageState extends State<BookSourcePage>
               _buildRailHeader(),
             ] else ...[
               const SizedBox(height: kHomeMobileTopBarHeight + 8),
-              _buildMobileActionsRow(),
+              _buildMobileStatsRow(),
             ],
             _buildSearchBar(),
             _buildSummaryCard(),
@@ -210,23 +227,20 @@ class _BookSourcePageState extends State<BookSourcePage>
     );
   }
 
-  Widget _buildMobileActionsRow() {
+  Widget _buildMobileStatsRow() {
     final palette = PageStyleHelper.palette(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: Row(
         children: [
-          Expanded(
-            child: _stats.isNotEmpty
-                ? _buildStatsText()
-                : Text(
-                    '管理与筛选在线书源',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: palette.textMuted,
-                        ),
-                  ),
-          ),
-          _buildActionsButtons(),
+          _stats.isNotEmpty
+              ? _buildStatsText()
+              : Text(
+                  '管理与筛选在线书源',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: palette.textMuted,
+                      ),
+                ),
         ],
       ),
     );
@@ -476,7 +490,7 @@ class _BookSourcePageState extends State<BookSourcePage>
             ),
             const SizedBox(height: 8),
             Text(
-              _allSources.isEmpty ? '点击右下角按钮添加书源' : '请调整筛选条件',
+              _allSources.isEmpty ? '点击右上角按钮添加书源' : '请调整筛选条件',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(
                       context,

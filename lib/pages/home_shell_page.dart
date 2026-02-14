@@ -92,6 +92,8 @@ class _HomeShellPageState extends State<HomeShellPage> {
   late PageController _pageController;
   bool _booksourceEnabled = true;
   AppLocalizations? _l10n;
+  final GlobalKey<BookSourcePageState> _bookSourcePageKey =
+      GlobalKey<BookSourcePageState>();
 
   // 导航项单一数据源：
   // - 底部导航（手机）和侧边栏（平板/桌面）都读这里。
@@ -150,7 +152,7 @@ class _HomeShellPageState extends State<HomeShellPage> {
           icon: Icons.source_outlined,
           selectedIcon: Icons.source,
           label: l10n?.bookSource ?? 'Sources',
-          page: const BookSourcePage(),
+          page: BookSourcePage(key: _bookSourcePageKey),
         ),
       );
     }

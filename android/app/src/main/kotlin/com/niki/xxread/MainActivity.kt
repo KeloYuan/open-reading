@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.view.KeyEvent
 import androidx.core.view.WindowCompat
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -13,6 +14,9 @@ import android.util.Log
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.niki.xxread/fullscreen"
+    private val READER_KEYS_CHANNEL = "com.niki.xxread/reader_keys"
+    private var readerKeysChannel: MethodChannel? = null
+    @Volatile private var volumePagingEnabled: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +56,48 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+
+        readerKeysChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            READER_KEYS_CHANNEL,
+        ).apply {
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "setVolumePagingEnabled" -> {
+                        val enabled = call.argument<Boolean>("enabled") ?: false
+                        volumePagingEnabled = enabled
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (volumePagingEnabled &&
+            (event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN ||
+                event.keyCode == KeyEvent.KEYCODE_VOLUME_UP)
+        ) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                val direction = if (event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+                    "next"
+                } else {
+                    "previous"
+                }
+                try {
+                    readerKeysChannel?.invokeMethod(
+                        "onVolumeKey",
+                        mapOf("direction" to direction),
+                    )
+                } catch (e: Exception) {
+                    Log.w("xxread", "dispatch volume key failed: ${e.message}")
+                }
+            }
+            // 消费事件，避免系统弹出音量面板，保持阅读沉浸。
+            return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun hideSystemUI() {
