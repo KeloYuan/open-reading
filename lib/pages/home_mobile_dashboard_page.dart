@@ -1,13 +1,17 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../models/book.dart';
 import '../services/books/book_services.dart';
 import '../services/core/core_services.dart';
+import '../services/library/library_event_bus_service.dart';
 import '../services/reading/reading_services.dart';
 import '../utils/layout_helper.dart';
 import '../utils/page_transitions.dart';
+import '../widgets/app_brand_icon.dart';
+import '../widgets/side_toast.dart';
 import 'detailed_stats_page.dart';
 import 'home_layout_constants.dart';
 
@@ -90,7 +94,8 @@ class _HomePalette {
       accentColor: scheme.primary,
       softAccentColor: scheme.primary.withValues(alpha: isDark ? 0.76 : 0.62),
       inactiveDotColor: scheme.outline.withValues(alpha: isDark ? 0.38 : 0.30),
-      coverPlaceholderColor: scheme.primary.withValues(alpha: isDark ? 0.66 : 0.56),
+      coverPlaceholderColor:
+          scheme.primary.withValues(alpha: isDark ? 0.66 : 0.56),
       refreshBackgroundColor: scheme.surface,
     );
   }
@@ -100,39 +105,74 @@ class HomeMobileDashboardPage extends StatefulWidget {
   const HomeMobileDashboardPage({super.key});
 
   @override
-  State<HomeMobileDashboardPage> createState() => _HomeMobileDashboardPageState();
+  State<HomeMobileDashboardPage> createState() =>
+      _HomeMobileDashboardPageState();
 }
 
 class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
   final _statsDao = ReadingStatsDao();
   final _bookDao = BookDao();
+  final _planService = ReadingPlanService();
   final _appStateService = AppStateService();
+  StreamSubscription<void>? _libraryChangedSubscription;
 
   _HomePalette get _palette => _HomePalette.fromTheme(Theme.of(context));
 
   Map<String, int> _summaryStats = {};
   List<Map<String, dynamic>> _weeklyData = [];
   List<Book> _recentBooks = [];
+  ReadingPlanSnapshot? _readingPlan;
+  Book? _recommendedPlanBook;
   bool _isLoading = true;
+  Timer? _focusTimer;
+  DateTime? _focusEndTime;
+  Duration _focusRemaining = Duration.zero;
+  static const int _focusMinutes = 25;
 
   @override
   void initState() {
     super.initState();
     _loadAllStats();
+    _libraryChangedSubscription = LibraryEventBus().stream.listen((_) {
+      if (!mounted) return;
+      _loadAllStats();
+    });
+  }
+
+  @override
+  void dispose() {
+    _libraryChangedSubscription?.cancel();
+    _focusTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadAllStats() async {
     setState(() => _isLoading = true);
     try {
-      final summary = await _statsDao.getSummaryStats();
-      final weekly = await _statsDao.getWeeklyChartData();
-      final recentBooks = await _loadRecentBooks();
+      final summaryFuture = _statsDao.getSummaryStats();
+      final weeklyFuture = _statsDao.getWeeklyChartData();
+      final recentBooksFuture = _loadRecentBooks();
+      final planFuture = _planService.loadSnapshot();
+
+      final summary = await summaryFuture;
+      final weekly = await weeklyFuture;
+      final recentBooks = await recentBooksFuture;
+      final plan = await planFuture;
+
+      Book? recommendedBook;
+      final planBookId = plan.recommendedBookId;
+      if (planBookId != null) {
+        recommendedBook = await _bookDao.getBookById(planBookId);
+      }
+      recommendedBook ??= recentBooks.isNotEmpty ? recentBooks.first : null;
 
       if (!mounted) return;
       setState(() {
         _summaryStats = summary;
         _weeklyData = weekly;
         _recentBooks = recentBooks;
+        _readingPlan = plan;
+        _recommendedPlanBook = recommendedBook;
         _isLoading = false;
       });
     } catch (_) {
@@ -143,20 +183,45 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
 
   Future<List<Book>> _loadRecentBooks() async {
     try {
+      final orderedBookIds = await _statsDao.getRecentBookIds(limit: 5);
+      final books = <Book>[];
+      final seen = <int>{};
+
+      for (final id in orderedBookIds) {
+        final book = await _bookDao.getBookById(id);
+        if (book != null) {
+          books.add(book);
+          seen.add(id);
+        }
+      }
+
       if (!_appStateService.isInitialized) {
         await _appStateService.initialize();
       }
       final appState = _appStateService.currentState;
       final recentBooksList = appState.readingState.recentBooks;
-      final books = <Book>[];
 
       for (final recentBook in recentBooksList.take(5)) {
+        if (seen.contains(recentBook.bookId)) continue;
         final book = await _bookDao.getBookById(recentBook.bookId);
         if (book != null) {
           books.add(book);
+          seen.add(recentBook.bookId);
         }
+        if (books.length >= 5) break;
       }
-      return books;
+
+      if (books.isNotEmpty) {
+        return books.take(5).toList(growable: false);
+      }
+
+      final allBooks = await _bookDao.getAllBooks();
+      final fallback = allBooks.where((book) => book.currentPage > 0).toList()
+        ..sort((a, b) => b.importDate.compareTo(a.importDate));
+      if (fallback.isNotEmpty) {
+        return fallback.take(5).toList(growable: false);
+      }
+      return const [];
     } catch (_) {
       return [];
     }
@@ -166,7 +231,11 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
     MediaQueryData mediaQuery, {
     required bool useRailNavigation,
   }) {
-    final safeBottom = mediaQuery.padding.bottom.clamp(0.0, kHomeMobileSafeBottomMax);
+    final horizontalPadding = useRailNavigation
+        ? (mediaQuery.size.width >= 1440 ? 34.0 : 24.0)
+        : 16.0;
+    final safeBottom =
+        mediaQuery.padding.bottom.clamp(0.0, kHomeMobileSafeBottomMax);
     final contentBottomPadding = safeBottom +
         kHomeMobileFloatingNavHeight +
         kHomeMobileFloatingNavBottomGap +
@@ -174,22 +243,17 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
 
     return _HomeContentMetrics(
       refreshEdgeOffset: mediaQuery.padding.top,
-      horizontalPadding: 16,
+      horizontalPadding: horizontalPadding,
       contentTopPadding: useRailNavigation
           ? mediaQuery.padding.top + 8
           : mediaQuery.padding.top + kHomeMobileTopBarHeight + 8,
       contentBottomPadding: contentBottomPadding,
-      sectionSpacing: 10,
+      sectionSpacing: useRailNavigation ? 12 : 10,
     );
   }
 
   int get _todayMinutes => (_summaryStats['today'] ?? 0) ~/ 60;
   int get _totalMinutes => (_summaryStats['total'] ?? 0) ~/ 60;
-
-  String get _totalHoursLabel {
-    final hours = _totalMinutes / 60.0;
-    return hours.toStringAsFixed(1);
-  }
 
   String _formatThousand(int number) {
     final raw = number.toString();
@@ -202,14 +266,15 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
       return const [1, 1, 1, 0.6, 0, 0, 0];
     }
 
-    final values = _weeklyData
-        .take(7)
-        .map((item) {
-          final raw = item['readingTime'] ?? item['duration'] ?? item['minutes'] ?? item['value'] ?? 0;
-          if (raw is num) return raw.toDouble();
-          return double.tryParse(raw.toString()) ?? 0;
-        })
-        .toList(growable: false);
+    final values = _weeklyData.take(7).map((item) {
+      final raw = item['readingTime'] ??
+          item['duration'] ??
+          item['minutes'] ??
+          item['value'] ??
+          0;
+      if (raw is num) return raw.toDouble();
+      return double.tryParse(raw.toString()) ?? 0;
+    }).toList(growable: false);
 
     while (values.length < 7) {
       values.add(0);
@@ -218,19 +283,14 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
     final maxValue = values.reduce((a, b) => a > b ? a : b);
     if (maxValue <= 0) return const [1, 1, 1, 0.6, 0, 0, 0];
 
-    return values.map((v) => (v / maxValue).clamp(0.0, 1.0)).toList(growable: false);
+    return values
+        .map((v) => (v / maxValue).clamp(0.0, 1.0))
+        .toList(growable: false);
   }
 
   int _weekPercent(List<double> dots) {
     final active = dots.where((v) => v > 0.3).length;
     return ((active / 7) * 100).round();
-  }
-
-  int _planDoneCount() {
-    final weekMinutes = (_summaryStats['week'] ?? 0) ~/ 60;
-    if (weekMinutes <= 0) return 0;
-    final done = (weekMinutes / 30).floor();
-    return done.clamp(0, 8);
   }
 
   void _openStats() {
@@ -239,20 +299,139 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
 
   Future<void> _openBook(Book book) async {
     await ReadingRouterService.openBook(context, book);
+    if (!mounted) return;
+    await _loadAllStats();
+  }
+
+  void _startFocusTimer() {
+    _focusTimer?.cancel();
+    final end = DateTime.now().add(const Duration(minutes: _focusMinutes));
+
+    setState(() {
+      _focusEndTime = end;
+      _focusRemaining = end.difference(DateTime.now());
+    });
+
+    _focusTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      final remaining = end.difference(DateTime.now());
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (remaining.inSeconds <= 0) {
+        timer.cancel();
+        setState(() {
+          _focusEndTime = null;
+          _focusRemaining = Duration.zero;
+        });
+        showSideToast(context, '25 分钟专注已完成，做得很好。',
+            icon: Icons.emoji_events_rounded);
+        _loadAllStats();
+      } else {
+        setState(() {
+          _focusRemaining = remaining;
+        });
+      }
+    });
+  }
+
+  void _cancelFocusTimer() {
+    _focusTimer?.cancel();
+    setState(() {
+      _focusEndTime = null;
+      _focusRemaining = Duration.zero;
+    });
+  }
+
+  Future<void> _showGoalPicker() async {
+    final currentGoal = _readingPlan?.dailyGoalMinutes ??
+        await _planService.getDailyGoalMinutes();
+    if (!mounted) return;
+
+    const options = [15, 20, 30, 45, 60, 90, 120, 150, 180];
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outline
+                        .withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.flag_circle_outlined,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '每日阅读目标',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: options.map((value) {
+                    final isSelected = value == currentGoal;
+                    return ChoiceChip(
+                      label: Text('$value 分钟'),
+                      selected: isSelected,
+                      onSelected: (_) => Navigator.pop(context, value),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selected == null) {
+      return;
+    }
+    await _planService.setDailyGoalMinutes(selected);
+    await _loadAllStats();
   }
 
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
-    final useRailNavigation = LayoutHelper.getNavigationType(context) == NavigationType.rail;
+    final useRailNavigation =
+        LayoutHelper.getNavigationType(context) == NavigationType.rail;
     final metrics = _computeMetrics(
       mediaQuery,
       useRailNavigation: useRailNavigation,
     );
     final dots = _normalizedWeekDots();
     final weekPercent = _weekPercent(dots);
-    final planDone = _planDoneCount();
-    final firstBook = _recentBooks.isNotEmpty ? _recentBooks.first : null;
+    final planDone = _readingPlan?.completedTasks ?? 0;
+    final planTotal = _readingPlan?.totalTasks ?? 3;
+    final contentMaxWidth = useRailNavigation
+        ? (mediaQuery.size.width >= 1600 ? 1140.0 : 980.0)
+        : double.infinity;
     final palette = _palette;
 
     return Container(
@@ -277,6 +456,9 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
               backgroundColor: palette.refreshBackgroundColor,
               edgeOffset: metrics.refreshEdgeOffset,
               child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
                 padding: EdgeInsets.fromLTRB(
                   metrics.horizontalPadding,
                   metrics.contentTopPadding,
@@ -284,29 +466,40 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
                   metrics.contentBottomPadding,
                 ),
                 children: [
-                  if (useRailNavigation) ...[
-                    _buildTopRow(),
-                    SizedBox(height: metrics.sectionSpacing),
-                  ],
-                  _buildSearchBar(),
-                  SizedBox(height: metrics.sectionSpacing),
-                  _buildHeroCard(),
-                  SizedBox(height: metrics.sectionSpacing),
-                  _buildSectionLabel('今日速览'),
-                  SizedBox(height: metrics.sectionSpacing),
-                  _buildSummaryRow(),
-                  SizedBox(height: metrics.sectionSpacing),
-                  _buildHeaderRow('今日阅读计划', '$planDone / 8'),
-                  SizedBox(height: metrics.sectionSpacing),
-                  _buildPlanCard(),
-                  SizedBox(height: metrics.sectionSpacing),
-                  _buildSectionLabel('阅读进度'),
-                  SizedBox(height: metrics.sectionSpacing),
-                  _buildWeekCard(dots, weekPercent),
-                  SizedBox(height: metrics.sectionSpacing),
-                  _buildHeaderRow('最近阅读', '查看全部', action: _openStats),
-                  SizedBox(height: metrics.sectionSpacing),
-                  _buildRecentCard(firstBook),
+                  Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (useRailNavigation) ...[
+                            _buildTopRow(),
+                            SizedBox(height: metrics.sectionSpacing),
+                          ],
+                          _buildHeroCard(),
+                          SizedBox(height: metrics.sectionSpacing),
+                          _buildSectionLabel('今日速览'),
+                          SizedBox(height: metrics.sectionSpacing),
+                          _buildSummaryRow(),
+                          SizedBox(height: metrics.sectionSpacing),
+                          _buildHeaderRow('今日阅读计划', '$planDone / $planTotal'),
+                          SizedBox(height: metrics.sectionSpacing),
+                          _buildPlanCard(),
+                          SizedBox(height: metrics.sectionSpacing),
+                          _buildSectionLabel('阅读进度'),
+                          SizedBox(height: metrics.sectionSpacing),
+                          _buildWeekCard(dots, weekPercent),
+                          SizedBox(height: metrics.sectionSpacing),
+                          _buildHeaderRow('最近阅读', '查看全部', action: _openStats),
+                          SizedBox(height: metrics.sectionSpacing),
+                          _buildRecentCard(
+                            _recentBooks.take(3).toList(growable: false),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -347,38 +540,34 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
     );
   }
 
-  Widget _buildSearchBar() {
-    final palette = _palette;
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: palette.cardColor,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.search, size: 18, color: palette.secondaryTextColor),
-          const SizedBox(width: 8),
-          Text(
-            '搜索书籍、笔记、章节',
-            style: TextStyle(
-              fontSize: 14,
-              color: palette.secondaryTextColor,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildHeroCard() {
     final palette = _palette;
+    final plan = _readingPlan;
+    final weekMinutes = (_summaryStats['week'] ?? 0) ~/ 60;
+    final streak = plan?.streakDays ?? (_summaryStats['streak'] ?? 0);
+    final title = plan == null
+        ? '正在同步你的阅读计划'
+        : plan.isGoalCompleted
+            ? '今日目标已完成，建议做一次阅读复盘'
+            : '还差 ${plan.remainingMinutes} 分钟即可完成今日目标';
+    final recommendedBookTitle = _recommendedPlanBook?.title;
+    final recommendationText = recommendedBookTitle == null
+        ? '从书架选一本想继续的书，先完成 1 个专注番茄。'
+        : '优先继续《$recommendedBookTitle》，完成后再切换其他书籍。';
+
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: palette.heroColor,
-        borderRadius: BorderRadius.circular(20),
+      decoration: _frostedCardDecoration(
+        radius: 20,
+        stronger: true,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            palette.heroColor.withValues(alpha: 0.92),
+            palette.heroColor.withValues(alpha: 0.72),
+          ],
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,36 +575,124 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
           Row(
             children: [
               Icon(
-                Icons.auto_stories_rounded,
+                Icons.tips_and_updates_rounded,
                 size: 20,
                 color: palette.accentColor,
               ),
               const SizedBox(width: 10),
               Text(
-                '今日阅读时光',
+                '今日行动建议',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                   color: palette.primaryTextColor,
                 ),
               ),
+              const Spacer(),
+              if (plan != null)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: palette.accentColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${(plan.completionRate * 100).round()}% 进度',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: palette.accentColor,
+                    ),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 6),
           Text(
-            '已阅读 $_todayMinutes 分钟，继续保持',
+            title,
             style: TextStyle(
               fontSize: 14,
               color: palette.secondaryTextColor,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: palette.primaryTextColor.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                AppBrandIcon(
+                  size: 18,
+                  borderRadius: 5,
+                  border: Border.all(
+                    color: palette.accentColor.withValues(alpha: 0.24),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    recommendationText,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: palette.secondaryTextColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildHeroChip(
+                icon: Icons.local_fire_department_outlined,
+                text: '连读 $streak 天',
+              ),
+              _buildHeroChip(
+                icon: Icons.calendar_view_week_outlined,
+                text: '本周 $weekMinutes 分钟',
+              ),
+              _buildHeroChip(
+                icon: Icons.flag_outlined,
+                text:
+                    plan == null ? '计划加载中' : '目标 ${plan.dailyGoalMinutes} 分钟/天',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeroChip({
+    required IconData icon,
+    required String text,
+  }) {
+    final palette = _palette;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: palette.primaryTextColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: palette.secondaryTextColor),
+          const SizedBox(width: 4),
           Text(
-            '累计 $_totalHoursLabel 小时',
+            text,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: palette.accentColor,
+              color: palette.secondaryTextColor,
             ),
           ),
         ],
@@ -436,6 +713,42 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
     );
   }
 
+  BoxDecoration _frostedCardDecoration({
+    Gradient? gradient,
+    double radius = 18,
+    bool stronger = false,
+  }) {
+    final palette = _palette;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    return BoxDecoration(
+      color: gradient == null ? palette.cardColor : null,
+      gradient: gradient,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+        color: isDark
+            ? Colors.white.withValues(alpha: stronger ? 0.14 : 0.10)
+            : Colors.white.withValues(alpha: stronger ? 0.68 : 0.55),
+        width: 1.1,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.08),
+          blurRadius: stronger ? 24 : 16,
+          offset: Offset(0, stronger ? 12 : 8),
+        ),
+      ],
+    );
+  }
+
+  String _formatDurationShort(Duration value) {
+    final minutes = value.inMinutes;
+    final seconds = value.inSeconds % 60;
+    final mm = minutes.toString().padLeft(2, '0');
+    final ss = seconds.toString().padLeft(2, '0');
+    return '$mm:$ss';
+  }
+
   Widget _buildSummaryRow() {
     final palette = _palette;
     return Row(
@@ -446,9 +759,16 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
             onTap: _openStats,
             child: Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: palette.cardColor,
-                borderRadius: BorderRadius.circular(18),
+              decoration: _frostedCardDecoration(
+                radius: 18,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    palette.cardColor,
+                    palette.cardColor.withValues(alpha: 0.72),
+                  ],
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -482,9 +802,16 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
             onTap: _openStats,
             child: Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: palette.cardColor,
-                borderRadius: BorderRadius.circular(18),
+              decoration: _frostedCardDecoration(
+                radius: 18,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    palette.cardColor,
+                    palette.cardColor.withValues(alpha: 0.72),
+                  ],
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -515,7 +842,8 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
     );
   }
 
-  Widget _buildHeaderRow(String title, String trailing, {VoidCallback? action}) {
+  Widget _buildHeaderRow(String title, String trailing,
+      {VoidCallback? action}) {
     final palette = _palette;
     final trailingColor =
         action == null ? palette.secondaryTextColor : palette.accentColor;
@@ -548,29 +876,318 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
 
   Widget _buildPlanCard() {
     final palette = _palette;
+    final plan = _readingPlan;
+
+    if (plan == null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: _frostedCardDecoration(radius: 20),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.4,
+                color: palette.accentColor,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '正在生成今日阅读计划...',
+              style: TextStyle(
+                fontSize: 14,
+                color: palette.secondaryTextColor,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final progress = plan.completionRate.clamp(0.0, 1.0);
+    final progressPercent = (progress * 100).round();
+    final isFocusActive = _focusEndTime != null;
+    final focusProgress = isFocusActive
+        ? ((_focusMinutes * 60 - _focusRemaining.inSeconds) /
+                (_focusMinutes * 60))
+            .clamp(0.0, 1.0)
+        : 0.0;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: palette.cardColor,
-        borderRadius: BorderRadius.circular(18),
+      padding: const EdgeInsets.all(14),
+      decoration: _frostedCardDecoration(
+        radius: 20,
+        stronger: true,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            palette.cardColor,
+            palette.cardColor.withValues(alpha: 0.72),
+          ],
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '✓ 阅读 30 分钟',
-            style: TextStyle(
-              fontSize: 14,
-              color: palette.primaryTextColor,
+          Row(
+            children: [
+              SizedBox(
+                width: 86,
+                height: 86,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox.expand(
+                      child: CircularProgressIndicator(
+                        value: progress,
+                        strokeWidth: 8,
+                        backgroundColor:
+                            palette.inactiveDotColor.withValues(alpha: 0.55),
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(palette.accentColor),
+                      ),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$progressPercent%',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: palette.primaryTextColor,
+                            height: 1.0,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '完成',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: palette.secondaryTextColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      plan.isGoalCompleted
+                          ? '今日目标已达成'
+                          : '还差 ${plan.remainingMinutes} 分钟',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: palette.primaryTextColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '已读 ${plan.todayReadMinutes} / ${plan.dailyGoalMinutes} 分钟',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: palette.secondaryTextColor,
+                      ),
+                    ),
+                    if (!plan.isGoalCompleted) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '约 ${plan.suggestedSessionsToFinish} 次专注可完成今日目标',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: palette.accentColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildPlanMetricBadge(
+                icon: Icons.local_fire_department_outlined,
+                label: '连击',
+                value: '${plan.streakDays}天',
+              ),
+              _buildPlanMetricBadge(
+                icon: Icons.calendar_view_week_outlined,
+                label: '周达标',
+                value: '${plan.weekAchievedDays}天',
+              ),
+              _buildPlanMetricBadge(
+                icon: Icons.timer_outlined,
+                label: '专注',
+                value: '${plan.focusSessionsToday}次',
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...plan.tasks.map((task) => _buildPlanTaskRow(task)),
+          if (isFocusActive) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: palette.accentColor.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: palette.accentColor.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '专注倒计时 ${_formatDurationShort(_focusRemaining)}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: palette.accentColor,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: LinearProgressIndicator(
+                      minHeight: 6,
+                      value: focusProgress,
+                      backgroundColor:
+                          palette.accentColor.withValues(alpha: 0.2),
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(palette.accentColor),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _recommendedPlanBook == null
+                      ? null
+                      : () => _openBook(_recommendedPlanBook!),
+                  icon: const AppBrandIcon(size: 18, borderRadius: 5),
+                  label: Text(_recommendedPlanBook == null ? '去书库阅读' : '继续阅读'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed:
+                      isFocusActive ? _cancelFocusTimer : _startFocusTimer,
+                  icon: Icon(
+                    isFocusActive ? Icons.stop_circle_outlined : Icons.timer,
+                    size: 18,
+                  ),
+                  label: Text(isFocusActive ? '结束专注' : '专注25分钟'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _showGoalPicker,
+              icon: const Icon(Icons.tune_rounded, size: 16),
+              label: Text('调整目标：${plan.dailyGoalMinutes} 分钟'),
             ),
           ),
-          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlanMetricBadge({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    final palette = _palette;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: palette.primaryTextColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: palette.secondaryTextColor),
+          const SizedBox(width: 6),
           Text(
-            '• 早读复盘',
+            '$label $value',
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
               color: palette.secondaryTextColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlanTaskRow(ReadingPlanTask task) {
+    final palette = _palette;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(
+            task.completed
+                ? Icons.check_circle_rounded
+                : Icons.radio_button_unchecked_rounded,
+            size: 18,
+            color: task.completed ? Colors.green : palette.secondaryTextColor,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  task.title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: palette.primaryTextColor,
+                  ),
+                ),
+                Text(
+                  task.detail,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: palette.secondaryTextColor,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -593,9 +1210,16 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
       onTap: _openStats,
       child: Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: palette.cardColor,
-          borderRadius: BorderRadius.circular(18),
+        decoration: _frostedCardDecoration(
+          radius: 18,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              palette.cardColor,
+              palette.cardColor.withValues(alpha: 0.72),
+            ],
+          ),
         ),
         child: Column(
           children: [
@@ -640,76 +1264,115 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
     );
   }
 
-  Widget _buildRecentCard(Book? book) {
+  Widget _buildRecentCard(List<Book> books) {
     final palette = _palette;
-    final title = book?.title.isNotEmpty == true ? book!.title : '掌控习惯';
-    final progress = (book != null && book.totalPages > 0)
-        ? ((book.currentPage / book.totalPages) * 100).clamp(0, 100).toStringAsFixed(0)
-        : '62';
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: book == null ? null : () => _openBook(book),
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: palette.cardColor,
-            borderRadius: BorderRadius.circular(18),
+    if (books.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: _frostedCardDecoration(
+          radius: 18,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              palette.cardColor,
+              palette.cardColor.withValues(alpha: 0.72),
+            ],
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: palette.coverPlaceholderColor,
-                  borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          '暂无最近阅读记录，去书库打开一本书开始阅读吧。',
+          style: TextStyle(
+            fontSize: 14,
+            color: palette.secondaryTextColor,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: books.map((book) {
+        final progress = book.totalPages > 0
+            ? ((book.currentPage / book.totalPages) * 100)
+                .clamp(0, 100)
+                .toStringAsFixed(0)
+            : '0';
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () => _openBook(book),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: _frostedCardDecoration(
+                  radius: 18,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      palette.cardColor,
+                      palette.cardColor.withValues(alpha: 0.72),
+                    ],
+                  ),
                 ),
-                child: (book != null && book.coverImagePath != null && book.coverImagePath!.isNotEmpty)
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.file(
-                          File(book.coverImagePath!),
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const SizedBox.shrink();
-                          },
-                        ),
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: palette.primaryTextColor,
+                    Container(
+                      width: 44,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: palette.coverPlaceholderColor,
+                        borderRadius: BorderRadius.circular(10),
                       ),
+                      child: (book.coverImagePath != null &&
+                              book.coverImagePath!.isNotEmpty)
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.file(
+                                File(book.coverImagePath!),
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const SizedBox.shrink();
+                                },
+                              ),
+                            )
+                          : null,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '阅读进度 $progress%',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: palette.secondaryTextColor,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            book.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: palette.primaryTextColor,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '阅读进度 $progress%',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: palette.secondaryTextColor,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      }).toList(growable: false),
     );
   }
 }

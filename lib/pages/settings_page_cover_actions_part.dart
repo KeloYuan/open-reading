@@ -22,7 +22,7 @@ extension _SettingsPageCoverActions on _SettingsPageState {
             onPressed: () {
               Navigator.pop(context);
               // Flutter 在 iOS 上不推荐主动退出应用，统一提示用户手动重启。
-              _showInfoSnackBar('请手动重启应用以应用设置');
+              _showInfoPopup('请手动重启应用以应用设置');
             },
             child: const Text('重启'),
           ),
@@ -31,7 +31,7 @@ extension _SettingsPageCoverActions on _SettingsPageState {
     );
   }
 
-  void _showInfoSnackBar(String message) {
+  void _showInfoPopup(String message) {
     showSideToast(context, message);
   }
 }

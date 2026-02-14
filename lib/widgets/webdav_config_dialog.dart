@@ -1,5 +1,7 @@
-﻿import 'dart:ui';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+
 import '../services/sync/webdav_sync_service.dart';
 import 'side_toast.dart';
 
@@ -12,14 +14,20 @@ class WebDavConfigDialog extends StatefulWidget {
 }
 
 class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
+  static const List<int> _syncIntervals = [5, 10, 15, 30, 60, 120, 240, 720];
+
   final _formKey = GlobalKey<FormState>();
   final _serverUrlController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-
   final WebDavSyncService _syncService = WebDavSyncService();
+
   bool _isPasswordVisible = false;
-  bool _isConfiguring = false;
+  bool _isWorking = false;
+  bool _autoSync = true;
+  int _syncInterval = 30;
+  String? _statusMessage;
+  bool _statusIsError = false;
 
   @override
   void initState() {
@@ -32,6 +40,8 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
       _serverUrlController.text = _syncService.serverUrl;
       _usernameController.text = _syncService.username;
     }
+    _autoSync = _syncService.autoSync;
+    _syncInterval = _syncService.syncInterval;
   }
 
   @override
@@ -44,21 +54,64 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final targetWidth = screenWidth >= 1200
+        ? 900.0
+        : screenWidth >= 960
+            ? 820.0
+            : screenWidth >= 760
+                ? 700.0
+                : screenWidth - 20;
+
     return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+      filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
       child: Dialog(
         backgroundColor: Colors.transparent,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 400),
-          margin: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: _getDialogBackgroundColor(),
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [_buildHeader(), _buildForm(), _buildActions()],
+        shadowColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 18),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+            child: Container(
+              width: targetWidth,
+              constraints: BoxConstraints(maxHeight: screenHeight * 0.9),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    _getDialogSurfaceColor(),
+                    _getDialogSurfaceColor().withValues(alpha: 0.7),
+                  ],
+                ),
+                border: Border.all(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.15)
+                      : Colors.white.withValues(alpha: 0.55),
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.16),
+                    blurRadius: 28,
+                    offset: const Offset(0, 16),
+                  ),
+                ],
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildHeader(),
+                    _buildForm(),
+                    if (_statusMessage != null) _buildStatusBanner(),
+                    _buildActions(),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -85,7 +138,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'WebDAV配置',
+                  'WebDAV 配置',
                   style: TextStyle(
                     color: _getTextColor(),
                     fontSize: 20,
@@ -94,8 +147,8 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '设置云端同步服务',
-                  style: TextStyle(color: _getSubtitleColor(), fontSize: 14),
+                  '配置服务器后可同步书籍、书签、进度和书源',
+                  style: TextStyle(color: _getSubtitleColor(), fontSize: 13),
                 ),
               ],
             ),
@@ -106,7 +159,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
   }
 
   Widget _buildForm() {
-    return Container(
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Form(
         key: _formKey,
@@ -115,51 +168,156 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
             _buildTextField(
               controller: _serverUrlController,
               label: '服务器地址',
-              hint: 'https://example.com/webdav',
+              hint: 'https://example.com/webdav/',
               icon: Icons.link,
               validator: (value) {
-                if (value?.isEmpty ?? true) {
+                final text = value?.trim() ?? '';
+                if (text.isEmpty) {
                   return '请输入服务器地址';
                 }
-                if (!value!.startsWith('http')) {
-                  return '请输入有效的URL';
+                final uri = Uri.tryParse(text);
+                if (uri == null ||
+                    !(uri.scheme == 'http' || uri.scheme == 'https')) {
+                  return '请输入有效的 http/https 地址';
                 }
                 return null;
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             _buildTextField(
               controller: _usernameController,
               label: '用户名',
               hint: '输入用户名',
               icon: Icons.person,
               validator: (value) {
-                if (value?.isEmpty ?? true) {
+                if (value?.trim().isEmpty ?? true) {
                   return '请输入用户名';
                 }
                 return null;
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             _buildTextField(
               controller: _passwordController,
               label: '密码',
-              hint: '输入密码',
+              hint: _syncService.isConfigured ? '留空表示保持不变' : '输入密码',
               icon: Icons.lock,
               isPassword: true,
               validator: (value) {
                 if (_syncService.isConfigured) {
-                  // 如果已配置且密码为空，使用现有密码
                   return null;
                 }
-                if (value?.isEmpty ?? true) {
+                if (value?.trim().isEmpty ?? true) {
                   return '请输入密码';
                 }
                 return null;
               },
             ),
+            const SizedBox(height: 14),
+            _buildSyncPreferenceCard(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSyncPreferenceCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _getFieldBackgroundColor(),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.white.withValues(alpha: 0.55),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.schedule, color: _getIconColor(), size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '自动同步',
+                  style: TextStyle(
+                    color: _getTextColor(),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Switch(
+                value: _autoSync,
+                onChanged: _isWorking
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _autoSync = value;
+                        });
+                      },
+              ),
+            ],
+          ),
+          Text(
+            _autoSync ? '按间隔自动同步，仍可手动同步' : '关闭后仅支持手动同步',
+            style: TextStyle(color: _getSubtitleColor(), fontSize: 12),
+          ),
+          if (_autoSync) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _syncIntervals.map((minutes) {
+                final selected = minutes == _syncInterval;
+                return ChoiceChip(
+                  label: Text('$minutes 分钟'),
+                  selected: selected,
+                  onSelected: _isWorking
+                      ? null
+                      : (_) {
+                          setState(() {
+                            _syncInterval = minutes;
+                          });
+                        },
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBanner() {
+    final color = _statusIsError ? Colors.red : Colors.green;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _statusIsError ? Icons.error_outline : Icons.check_circle_outline,
+            color: color,
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _statusMessage ?? '',
+              style: TextStyle(color: color, fontSize: 12),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -215,41 +373,15 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
   }
 
   Widget _buildActions() {
-    return Container(
+    return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          // 状态显示
-          if (_syncService.status == SyncStatus.failed) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.error, color: Colors.red, size: 16),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '配置或连接失败，请检查设置',
-                      style: TextStyle(color: Colors.red, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          // 操作按钮
           Row(
             children: [
-              // 测试连接按钮
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _isConfiguring ? null : _testConnection,
+                  onPressed: _isWorking ? null : _testConnection,
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(color: _getIconColor()),
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -257,7 +389,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: _isConfiguring
+                  child: _isWorking
                       ? const SizedBox(
                           width: 16,
                           height: 16,
@@ -267,11 +399,9 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
                 ),
               ),
               const SizedBox(width: 12),
-
-              // 保存按钮
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _isConfiguring ? null : _saveConfiguration,
+                  onPressed: _isWorking ? null : _saveConfiguration,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
@@ -285,15 +415,12 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
               ),
             ],
           ),
-
           const SizedBox(height: 12),
-
-          // 取消和清除按钮
           Row(
             children: [
               Expanded(
                 child: TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: _isWorking ? null : () => Navigator.pop(context),
                   child: Text(
                     '取消',
                     style: TextStyle(color: _getSubtitleColor()),
@@ -304,7 +431,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextButton(
-                    onPressed: _clearConfiguration,
+                    onPressed: _isWorking ? null : _clearConfiguration,
                     child: const Text(
                       '清除配置',
                       style: TextStyle(color: Colors.red),
@@ -325,34 +452,31 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
     }
 
     setState(() {
-      _isConfiguring = true;
+      _isWorking = true;
+      _statusMessage = null;
     });
 
-    try {
-      final password = _passwordController.text.isNotEmpty
-          ? _passwordController.text
-          : ''; // 如果已配置，可能需要现有密码
+    final success = await _syncService.testConnectionWith(
+      serverUrl: _serverUrlController.text.trim(),
+      username: _usernameController.text.trim(),
+      password: _passwordController.text.trim(),
+    );
 
-      final success = await _syncService.configure(
-        serverUrl: _serverUrlController.text.trim(),
-        username: _usernameController.text.trim(),
-        password: password,
-      );
-
-      if (success && mounted) {
-        showSideToast(context, '连接测试成功！');
-      }
-    } catch (e) {
-      if (mounted) {
-        showSideToast(context, '连接测试失败: $e');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isConfiguring = false;
-        });
-      }
+    if (!mounted) {
+      return;
     }
+
+    setState(() {
+      _isWorking = false;
+      _statusIsError = !success;
+      _statusMessage = success
+          ? '连接测试成功'
+          : (_syncService.lastErrorMessage.isNotEmpty
+              ? _syncService.lastErrorMessage
+              : '连接测试失败');
+    });
+
+    showSideToast(context, _statusMessage!);
   }
 
   Future<void> _saveConfiguration() async {
@@ -361,35 +485,36 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
     }
 
     setState(() {
-      _isConfiguring = true;
+      _isWorking = true;
+      _statusMessage = null;
     });
 
-    try {
-      final password = _passwordController.text.isNotEmpty
-          ? _passwordController.text
-          : ''; // 如果已配置，可能需要现有密码
+    final success = await _syncService.configure(
+      serverUrl: _serverUrlController.text.trim(),
+      username: _usernameController.text.trim(),
+      password: _passwordController.text.trim(),
+      autoSync: _autoSync,
+      syncInterval: _syncInterval,
+    );
 
-      final success = await _syncService.configure(
-        serverUrl: _serverUrlController.text.trim(),
-        username: _usernameController.text.trim(),
-        password: password,
-      );
-
-      if (success && mounted) {
-        Navigator.pop(context, true);
-        showSideToast(context, 'WebDAV配置已保存');
-      }
-    } catch (e) {
-      if (mounted) {
-        showSideToast(context, '保存配置失败: $e');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isConfiguring = false;
-        });
-      }
+    if (!mounted) {
+      return;
     }
+
+    if (success) {
+      showSideToast(context, 'WebDAV 配置已保存');
+      Navigator.pop(context, true);
+      return;
+    }
+
+    setState(() {
+      _isWorking = false;
+      _statusIsError = true;
+      _statusMessage = _syncService.lastErrorMessage.isNotEmpty
+          ? _syncService.lastErrorMessage
+          : '保存失败，请检查配置后重试';
+    });
+    showSideToast(context, _statusMessage!);
   }
 
   Future<void> _clearConfiguration() async {
@@ -397,7 +522,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('确认清除'),
-        content: const Text('确定要清除WebDAV配置吗？这将删除所有同步设置。'),
+        content: const Text('确定要清除 WebDAV 配置吗？这将删除同步设置。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -414,18 +539,16 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
 
     if (confirmed == true) {
       await _syncService.clearConfiguration();
-      if (mounted) {
-        Navigator.pop(context, false);
-        showSideToast(context, 'WebDAV配置已清除');
-      }
+      if (!mounted) return;
+      showSideToast(context, 'WebDAV 配置已清除');
+      Navigator.pop(context, true);
     }
   }
 
-  // 主题颜色辅助方法
-  Color _getDialogBackgroundColor() {
+  Color _getDialogSurfaceColor() {
     return Theme.of(context).brightness == Brightness.dark
-        ? Colors.grey[900]!
-        : Colors.white;
+        ? const Color(0xCC1A1E2A)
+        : const Color(0xCCF6FAFF);
   }
 
   Color _getTextColor() {
@@ -436,8 +559,8 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
 
   Color _getSubtitleColor() {
     return Theme.of(context).brightness == Brightness.dark
-        ? Colors.grey[400]!
-        : Colors.grey[600]!;
+        ? Colors.grey[300]!
+        : Colors.black.withValues(alpha: 0.62);
   }
 
   Color _getIconColor() {
@@ -448,7 +571,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
 
   Color _getFieldBackgroundColor() {
     return Theme.of(context).brightness == Brightness.dark
-        ? Colors.grey[800]!
-        : Colors.grey[100]!;
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.white.withValues(alpha: 0.52);
   }
 }

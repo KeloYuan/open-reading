@@ -136,8 +136,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
       MapEntry('上午 09:00-11:59', sumRange(9, 11)),
       MapEntry('下午 12:00-17:59', sumRange(12, 17)),
       MapEntry('晚上 18:00-21:59', sumRange(18, 21)),
-      MapEntry('深夜 22:00-04:59',
-          sumRange(22, 23) + sumRange(0, 4)),
+      MapEntry('深夜 22:00-04:59', sumRange(22, 23) + sumRange(0, 4)),
     ];
 
     ranges.sort((a, b) => b.value.compareTo(a.value));
@@ -309,7 +308,8 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
       final realStats = book.id != null ? bookReadingStats[book.id!] : null;
       final readingTime = (realStats?['durationMinutes'] as int?) ?? 0;
       final pagesFromSessions = (realStats?['pagesRead'] as int?) ?? 0;
-      final pagesRead = pagesFromSessions > 0 ? pagesFromSessions : book.currentPage;
+      final pagesRead =
+          pagesFromSessions > 0 ? pagesFromSessions : book.currentPage;
 
       bookStats.add({
         'book': book,
@@ -342,8 +342,10 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
         : await _statsDao.getBookReadingStats();
     final sorted = [...books];
     sorted.sort((a, b) {
-      final aMs = a.id != null ? (perBook[a.id!]?['lastReadMs'] as int?) ?? 0 : 0;
-      final bMs = b.id != null ? (perBook[b.id!]?['lastReadMs'] as int?) ?? 0 : 0;
+      final aMs =
+          a.id != null ? (perBook[a.id!]?['lastReadMs'] as int?) ?? 0 : 0;
+      final bMs =
+          b.id != null ? (perBook[b.id!]?['lastReadMs'] as int?) ?? 0 : 0;
       if (aMs == bMs) {
         return b.currentPage.compareTo(a.currentPage);
       }
@@ -354,231 +356,370 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        toolbarHeight: 0, // 设置高度为0，让毛玻璃标题栏在body中实现
-      ),
-      // 渐变背景
-      body: Stack(
-        children: [
-          // 主内容区域
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                stops: const [0.0, 0.22, 0.48, 0.74, 1.0],
-                colors: [
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
-                  Theme.of(context).colorScheme.secondary.withValues(alpha: 0.10),
-                  Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.07),
-                  Theme.of(context)
-                      .colorScheme
-                      .primaryContainer
-                      .withValues(alpha: 0.12),
-                  Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
-                ],
-              ),
-            ),
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : PageView(
-                    controller: _pageController,
-                    onPageChanged: (index) {
-                      _tabController.animateTo(index);
-                    },
-                    children: [
-                      _buildOverviewTab(),
-                      _buildChartsTab(),
-                      _buildBooksTab(),
-                      _buildAchievementsTab(),
-                    ],
-                  ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            stops: const [0.0, 0.22, 0.48, 0.74, 1.0],
+            colors: [
+              scheme.primary.withValues(alpha: 0.08),
+              scheme.secondary.withValues(alpha: 0.10),
+              scheme.tertiary.withValues(alpha: 0.07),
+              scheme.primaryContainer.withValues(alpha: 0.12),
+              scheme.surface.withValues(alpha: 0.98),
+            ],
           ),
-          // 毛玻璃AppBar - 使用与首页相同的实现方式
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: ClipRRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(
-                  sigmaX: GlassEffectConfig.appBarBlur,
-                  sigmaY: GlassEffectConfig.appBarBlur,
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              _buildTopBar(),
+              const SizedBox(height: 10),
+              _buildTabBarContainer(),
+              const SizedBox(height: 10),
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : PageView(
+                        controller: _pageController,
+                        onPageChanged: (index) {
+                          _tabController.animateTo(index);
+                        },
+                        children: [
+                          _buildOverviewTab(),
+                          _buildChartsTab(),
+                          _buildBooksTab(),
+                          _buildAchievementsTab(),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1040),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(
+                sigmaX: GlassEffectConfig.appBarBlur,
+                sigmaY: GlassEffectConfig.appBarBlur,
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                decoration: BoxDecoration(
+                  color: scheme.surface.withValues(alpha: 0.84),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: scheme.outline.withValues(alpha: 0.2),
+                    width: 0.8,
+                  ),
                 ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface.withValues(
-                          alpha: 0.82,
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '详细统计',
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface,
+                          height: 1.0,
                         ),
-                    border: Border(
-                      bottom: BorderSide(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.outline.withValues(alpha: 0.2),
-                        width: 0.5,
                       ),
                     ),
+                    _buildTimeRangeSelector(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimeRangeSelector() {
+    final scheme = Theme.of(context).colorScheme;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: scheme.primary.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: scheme.primary.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: PopupMenuButton<String>(
+            initialValue: _selectedTimeRange,
+            onSelected: (value) {
+              setState(() => _selectedTimeRange = value);
+            },
+            icon: Icon(
+              Icons.date_range,
+              color: scheme.primary,
+              size: 20,
+            ),
+            itemBuilder: (context) => ['7天', '30天', '90天', '1年', '全部']
+                .map((range) => PopupMenuItem(value: range, child: Text(range)))
+                .toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabBarContainer() {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1040),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: scheme.surface.withValues(alpha: 0.76),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: scheme.outline.withValues(alpha: 0.14),
+                    width: 0.8,
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min, // 自适应高度
-                    children: [
-                      // 标题栏部分
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          16,
-                          MediaQuery.of(context).padding.top + 8,
-                          16,
-                          8,
-                        ),
-                        child: Row(
-                          children: [
-                            // 返回按钮
-                            IconButton(
-                              icon: const Icon(Icons.arrow_back),
-                              onPressed: () => Navigator.of(context).pop(),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              iconSize: 24,
-                            ),
-                            const SizedBox(width: 16),
-                            // 标题
-                            Expanded(
-                              child: Text(
-                                '详细统计',
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w700,
-                                  color:
-                                      Theme.of(context).colorScheme.onSurface,
-                                  height: 1.0,
-                                ),
-                              ),
-                            ),
-                            // 时间范围选择
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: BackdropFilter(
-                                filter:
-                                    ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(
-                                      context,
-                                    )
-                                        .colorScheme
-                                        .primary
-                                        .withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: Theme.of(
-                                        context,
-                                      )
-                                          .colorScheme
-                                          .primary
-                                          .withValues(alpha: 0.2),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: PopupMenuButton<String>(
-                                    initialValue: _selectedTimeRange,
-                                    onSelected: (value) {
-                                      setState(() => _selectedTimeRange = value);
-                                    },
-                                    icon: Icon(
-                                      Icons.date_range,
-                                      color:
-                                          Theme.of(context).colorScheme.primary,
-                                      size: 20,
-                                    ),
-                                    itemBuilder: (context) =>
-                                        ['7天', '30天', '90天', '1年', '全部']
-                                            .map(
-                                              (range) => PopupMenuItem(
-                                                  value: range,
-                                                  child: Text(range)),
-                                            )
-                                            .toList(),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // TabBar部分
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.transparent,
-                          border: Border(
-                            top: BorderSide(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.outline.withValues(alpha: 0.1),
-                              width: 0.5,
-                            ),
-                          ),
-                        ),
-                        child: TabBar(
-                          controller: _tabController,
-                          tabs: const [
-                            Tab(text: '总览'),
-                            Tab(text: '图表'),
-                            Tab(text: '书籍'),
-                            Tab(text: '成就'),
-                          ],
-                          labelColor: Theme.of(context).colorScheme.primary,
-                          unselectedLabelColor: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.6),
-                          indicatorColor: Theme.of(context).colorScheme.primary,
-                          indicatorWeight: 2.5,
-                          labelStyle: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ],
+                ),
+                child: TabBar(
+                  controller: _tabController,
+                  tabs: const [
+                    Tab(text: '总览'),
+                    Tab(text: '图表'),
+                    Tab(text: '书籍'),
+                    Tab(text: '成就'),
+                  ],
+                  labelColor: scheme.primary,
+                  unselectedLabelColor:
+                      scheme.onSurface.withValues(alpha: 0.62),
+                  indicatorColor: scheme.primary,
+                  indicatorWeight: 2.5,
+                  labelStyle: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
                   ),
                 ),
               ),
             ),
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabScrollBody({required Widget child}) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1040),
+          child: child,
+        ),
       ),
     );
   }
 
   // 总览标签页
   Widget _buildOverviewTab() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        MediaQuery.of(context).padding.top +
-            120, // 状态栏高度 + AppBar + TabBar + 间距
-        16,
-        20,
+    return _buildTabScrollBody(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final useTwoColumns = constraints.maxWidth >= 900;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildOverviewHeroPanel(),
+              const SizedBox(height: 20),
+              _buildStatsGrid(),
+              const SizedBox(height: 20),
+              if (useTwoColumns) ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildTodayProgress()),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildReadingHabits()),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildRecentBooks(),
+              ] else ...[
+                _buildTodayProgress(),
+                const SizedBox(height: 20),
+                _buildRecentBooks(),
+                const SizedBox(height: 20),
+                _buildReadingHabits(),
+              ],
+            ],
+          );
+        },
       ),
-      child: Column(
+    );
+  }
+
+  Widget _buildOverviewHeroPanel() {
+    final scheme = Theme.of(context).colorScheme;
+    final totalReadingMinutes = _overallStats['totalReadingTime'] ?? 0;
+    final totalHours = (totalReadingMinutes / 60.0).toStringAsFixed(1);
+    final streakDays = _overallStats['streak'] ?? 0;
+    final todayMinutes = _dailyStats.isNotEmpty
+        ? (_dailyStats.last['readingTime'] as int?) ?? 0
+        : 0;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: scheme.outline.withValues(alpha: 0.18),
+              width: 1,
+            ),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                scheme.primaryContainer.withValues(alpha: 0.28),
+                scheme.secondaryContainer.withValues(alpha: 0.20),
+                scheme.surface.withValues(alpha: 0.84),
+              ],
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.insights_rounded,
+                      color: scheme.primary,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '阅读总览',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ),
+                  Text(
+                    _selectedTimeRange,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                '累计 $totalHours 小时',
+                style: TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.onSurface,
+                  height: 1.0,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '保持节奏，你已经连续阅读 $streakDays 天',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: scheme.onSurface.withValues(alpha: 0.72),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildOverviewChip(
+                      Icons.schedule_rounded, '总时长', '$totalReadingMinutes 分钟'),
+                  _buildOverviewChip(
+                      Icons.today_rounded, '今日阅读', '$todayMinutes 分钟'),
+                  _buildOverviewChip(
+                      Icons.timer_outlined, '平均单次', _avgSessionDurationLabel),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverviewChip(IconData icon, String label, String value) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: scheme.outline.withValues(alpha: 0.15),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // 核心统计卡片网格
-          _buildStatsGrid(),
-          const SizedBox(height: 20),
-
-          // 今日阅读进度
-          _buildTodayProgress(),
-          const SizedBox(height: 20),
-
-          // 最近阅读书籍
-          _buildRecentBooks(),
-          const SizedBox(height: 20),
-
-          // 阅读习惯分析
-          _buildReadingHabits(),
+          Icon(icon, size: 14, color: scheme.primary),
+          const SizedBox(width: 6),
+          Text(
+            '$label · $value',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurface.withValues(alpha: 0.78),
+            ),
+          ),
         ],
       ),
     );
@@ -645,10 +786,12 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.86),
+            color:
+                Theme.of(context).colorScheme.surface.withValues(alpha: 0.86),
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.12),
+              color:
+                  Theme.of(context).colorScheme.outline.withValues(alpha: 0.12),
             ),
           ),
           child: Column(
@@ -661,7 +804,8 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                   color: accentColor.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(stat['icon'] as IconData, size: 20, color: accentColor),
+                child: Icon(stat['icon'] as IconData,
+                    size: 20, color: accentColor),
               ),
               const Spacer(),
               Text(
@@ -678,7 +822,10 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 stat['title'] as String,
                 style: TextStyle(
                   fontSize: 13,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.62),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.62),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1088,15 +1235,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
   // 图表标签页
   Widget _buildChartsTab() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        MediaQuery.of(context).padding.top +
-            120, // 状态栏高度 + AppBar + TabBar + 间距
-        16,
-        20,
-      ),
+    return _buildTabScrollBody(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 统计类型选择
           _buildStatTypeSelector(),
@@ -1772,15 +1913,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
   // 书籍标签页
   Widget _buildBooksTab() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        MediaQuery.of(context).padding.top +
-            120, // 状态栏高度 + AppBar + TabBar + 间距
-        16,
-        20,
-      ),
+    return _buildTabScrollBody(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 书籍统计摘要
           _buildBooksSummary(),
@@ -1906,7 +2041,8 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
   // 书籍排行榜
   Widget _buildBooksRanking() {
-    final hasRealDuration = _bookStats.any((e) => (e['readingTime'] as int) > 0);
+    final hasRealDuration =
+        _bookStats.any((e) => (e['readingTime'] as int) > 0);
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
@@ -2080,15 +2216,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
   // 成就标签页
   Widget _buildAchievementsTab() {
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        MediaQuery.of(context).padding.top +
-            120, // 状态栏高度 + AppBar + TabBar + 间距
-        16,
-        20,
-      ),
+    return _buildTabScrollBody(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // 成就总览
           _buildAchievementsOverview(),
@@ -2450,7 +2580,8 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     );
     final weekMinutes = _windowedDailyStats
         .skip(math.max(0, _windowedDailyStats.length - 7))
-        .fold<int>(0, (sum, item) => sum + ((item['readingTime'] as int?) ?? 0));
+        .fold<int>(
+            0, (sum, item) => sum + ((item['readingTime'] as int?) ?? 0));
     final weekPages = _windowedDailyStats
         .skip(math.max(0, _windowedDailyStats.length - 7))
         .fold<int>(0, (sum, item) => sum + ((item['pagesRead'] as int?) ?? 0));
@@ -2488,7 +2619,6 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 20),
-
               _buildGoalProgress(
                 '本月阅读时长',
                 '20小时',
@@ -2498,7 +2628,6 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 valueUnit: '小时',
               ),
               const SizedBox(height: 16),
-
               _buildGoalProgress(
                 '本周阅读时长',
                 '10小时',
@@ -2508,7 +2637,6 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 valueUnit: '小时',
               ),
               const SizedBox(height: 16),
-
               _buildGoalProgress(
                 '近7天日均页数',
                 '30页',
@@ -2531,11 +2659,12 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     double max,
     Color color, {
     String valueUnit = '',
-  }
-  ) {
+  }) {
     final progress = (current / max).clamp(0.0, 1.0);
-    final displayValue = current >= 10 ? current.toStringAsFixed(0) : current.toStringAsFixed(1);
-    final valueText = valueUnit.isEmpty ? displayValue : '$displayValue$valueUnit';
+    final displayValue =
+        current >= 10 ? current.toStringAsFixed(0) : current.toStringAsFixed(1);
+    final valueText =
+        valueUnit.isEmpty ? displayValue : '$displayValue$valueUnit';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2673,13 +2802,22 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
       1.5,
       (speedData.map((e) => e.y).reduce(math.max) * 1.25),
     );
-    final yInterval = maxY <= 1.5 ? 0.25 : maxY <= 3 ? 0.5 : 1.0;
+    final yGridInterval = maxY <= 1.5
+        ? 0.25
+        : maxY <= 3
+            ? 0.5
+            : 1.0;
+    final yLabelInterval = maxY <= 1.5
+        ? 0.5
+        : maxY <= 3
+            ? 1.0
+            : 2.0;
 
     return LineChartData(
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
-        horizontalInterval: yInterval,
+        horizontalInterval: yGridInterval,
         getDrawingHorizontalLine: (value) {
           return FlLine(
             color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
@@ -2718,14 +2856,19 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
         leftTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            interval: yInterval,
+            interval: yLabelInterval,
             getTitlesWidget: (double value, TitleMeta meta) {
+              if (value == 0) {
+                return const SizedBox.shrink();
+              }
               return Text(
-                '${value.toStringAsFixed(1)}页/分',
-                style: Theme.of(context).textTheme.bodySmall,
+                value.toStringAsFixed(1),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontSize: 10,
+                    ),
               );
             },
-            reservedSize: 50,
+            reservedSize: 40,
           ),
         ),
       ),

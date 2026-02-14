@@ -21,12 +21,13 @@ import 'package:path_provider/path_provider.dart';
 import 'utils/glass_config.dart';
 import 'utils/localization_extension.dart';
 import 'utils/font_catalog_helper.dart';
+import 'widgets/app_brand_icon.dart';
 
 void main() async {
   // 确保可以在 runApp 前安全调用 SystemChrome
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🚀 启用120Hz高刷新率支持
+  // 🚀 启用高刷新率支持
   if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
     // 检查并启用设备的最高刷新率
     SystemChrome.setApplicationSwitcherDescription(
@@ -35,6 +36,14 @@ void main() async {
         primaryColor: 0xFF1976D2,
       ),
     );
+    if (Platform.isAndroid) {
+      const fullscreenChannel = MethodChannel('com.niki.xxread/fullscreen');
+      try {
+        await fullscreenChannel.invokeMethod<void>('enableHighRefreshRate');
+      } catch (_) {
+        // 部分机型不支持动态切换高刷，忽略异常
+      }
+    }
   }
 
   // 在桌面平台上初始化 sqflite_common_ffi
@@ -93,12 +102,14 @@ class ThemeNotifier extends ChangeNotifier {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     final isDarkMode = prefs.getBool('isDarkMode');
     final appThemeName = prefs.getString('appTheme') ?? 'blue';
-    final enableAnimations = prefs.getBool('enableAnimations') ?? true;
     final customColorValue = prefs.getInt('customAccentColor');
     final globalAccentColorValue = prefs.getInt('globalAccentColor');
 
     // 根据动画设置降低毛玻璃成本（提升流畅度）
-    GlassEffectConfig.applyPerformanceMode(reduceEffects: !enableAnimations);
+    GlassEffectConfig.applyPerformanceMode(reduceEffects: false);
+    if (prefs.getBool('enableAnimations') != true) {
+      await prefs.setBool('enableAnimations', true);
+    }
 
     if (isDarkMode == null) {
       // 首次启动，使用系统主题
@@ -304,9 +315,17 @@ class _XxReadAppState extends State<XxReadApp> {
 
     // 🔧 修复历史绝对路径（升级/重装后可能导致书籍与封面路径失效）
     try {
-      final repairedCount = await BookStorageRepairService().repairAllBooksIfNeeded();
+      final repairedCount =
+          await BookStorageRepairService().repairAllBooksIfNeeded();
       if (repairedCount > 0) {
         debugPrint('✅ 已完成书籍路径修复: $repairedCount');
+      }
+
+      // 清理历史残留的临时/无效文件，避免占用存储
+      final removedCount =
+          await BookStorageRepairService().cleanupUnusedStorageArtifacts();
+      if (removedCount > 0) {
+        debugPrint('✅ 已清理无用存储文件: $removedCount');
       }
     } catch (e) {
       // 路径修复失败不阻塞启动
@@ -475,8 +494,9 @@ class _XxReadAppState extends State<XxReadApp> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 60,
-                height: 60,
+                width: 68,
+                height: 68,
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -484,12 +504,11 @@ class _XxReadAppState extends State<XxReadApp> {
                       Theme.of(context).colorScheme.secondary,
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(15),
+                  borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Icon(
-                  Icons.auto_stories_rounded,
-                  color: Colors.white,
-                  size: 30,
+                child: const AppBrandIcon(
+                  size: 56,
+                  borderRadius: 13,
                 ),
               ),
               const SizedBox(height: 20),

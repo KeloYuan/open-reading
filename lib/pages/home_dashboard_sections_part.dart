@@ -41,10 +41,15 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
                       ).colorScheme.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(
-                      Icons.auto_stories,
-                      color: Theme.of(context).colorScheme.primary,
+                    child: AppBrandIcon(
                       size: 28,
+                      borderRadius: 8,
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.24),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -164,7 +169,8 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              color:
+                  Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -186,10 +192,15 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
                                 .withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Icon(
-                            Icons.auto_stories,
-                            color: Theme.of(context).colorScheme.primary,
+                          child: AppBrandIcon(
                             size: 22,
+                            borderRadius: 6,
+                            border: Border.all(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withValues(alpha: 0.24),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -208,17 +219,22 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
                       children: [
                         Text(
                           '$todayMinutes',
-                          style:
-                              Theme.of(context).textTheme.displaySmall?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                          style: Theme.of(context)
+                              .textTheme
+                              .displaySmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                         ),
                         const SizedBox(width: 8),
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Text(
                             context.l10n.unitMinute,
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(
                                   color: Theme.of(context)
                                       .colorScheme
                                       .onSurface
@@ -266,7 +282,8 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
               ),
               const SizedBox(width: 24),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
                   color: Theme.of(context)
                       .colorScheme
@@ -274,8 +291,10 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
                       .withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color:
-                        Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outline
+                        .withValues(alpha: 0.15),
                   ),
                 ),
                 child: Column(
@@ -289,9 +308,10 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
                     const SizedBox(height: 8),
                     Text(
                       '$_bookCount',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                      style:
+                          Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                     ),
                     Text(
                       context.l10n.homeCollectionCount,
@@ -381,7 +401,8 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
             color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              color:
+                  Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),
@@ -447,7 +468,8 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
             ),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              color:
+                  Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
               width: 1,
             ),
           ),

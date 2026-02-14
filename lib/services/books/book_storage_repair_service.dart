@@ -41,6 +41,33 @@ class BookStorageRepairService {
     return repairedCount;
   }
 
+  /// 清理不再使用的临时文件与失效图片映射文件（保守策略）
+  ///
+  /// 仅删除：
+  /// - `books/`、`covers/` 目录下明确的临时文件后缀
+  /// - `book_images/` 中没有对应书籍ID的 `image_map_*.json`
+  Future<int> cleanupUnusedStorageArtifacts() async {
+    final docsDir = await getApplicationDocumentsDirectory();
+    final booksDir = Directory(p.join(docsDir.path, 'books'));
+    final coversDir = Directory(p.join(docsDir.path, 'covers'));
+    final imagesDir = Directory(p.join(docsDir.path, 'book_images'));
+
+    final books = await _bookDao.getAllBooks();
+    final existingBookIds = books.map((e) => e.id).whereType<int>().toSet();
+
+    int removed = 0;
+    removed += await _cleanupTempFiles(booksDir);
+    removed += await _cleanupTempFiles(coversDir);
+    removed += await _cleanupOrphanImageMaps(imagesDir, existingBookIds);
+
+    if (removed > 0) {
+      debugPrint('🧹 清理无用存储文件完成: removed=$removed');
+    } else {
+      debugPrint('✅ 存储清理完成，无需删除文件');
+    }
+    return removed;
+  }
+
   Future<Book> repairSingleBookIfNeeded(Book book) async {
     // 没有数据库ID时无法回写，只做读取校验
     if (book.id == null) {
@@ -124,7 +151,8 @@ class BookStorageRepairService {
       for (final file in candidates) {
         final stem = p.basenameWithoutExtension(file.path);
         final ext = p.extension(file.path).toLowerCase();
-        if (ext == oldExt && (stem == oldStem || stem.startsWith('${oldStem}_'))) {
+        if (ext == oldExt &&
+            (stem == oldStem || stem.startsWith('${oldStem}_'))) {
           return file.path;
         }
       }
@@ -134,5 +162,80 @@ class BookStorageRepairService {
 
     // 找不到时返回 null，调用方可清理无效路径
     return null;
+  }
+
+  Future<int> _cleanupTempFiles(Directory dir) async {
+    if (!await dir.exists()) {
+      return 0;
+    }
+    int removed = 0;
+    try {
+      final entries = dir.listSync(followLinks: false);
+      for (final entry in entries) {
+        if (entry is! File) {
+          continue;
+        }
+        final fileName = p.basename(entry.path).toLowerCase();
+        if (!_isDisposableTempFile(fileName)) {
+          continue;
+        }
+        try {
+          await entry.delete();
+          removed++;
+        } catch (e) {
+          debugPrint('⚠️ 删除临时文件失败: ${entry.path}, $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ 扫描临时文件失败: ${dir.path}, $e');
+    }
+    return removed;
+  }
+
+  bool _isDisposableTempFile(String fileName) {
+    return fileName.endsWith('.tmp') ||
+        fileName.endsWith('.temp') ||
+        fileName.endsWith('.download') ||
+        fileName.endsWith('.partial') ||
+        fileName.endsWith('.crdownload') ||
+        fileName.startsWith('tmp_') ||
+        fileName.startsWith('.~') ||
+        fileName == '.ds_store';
+  }
+
+  Future<int> _cleanupOrphanImageMaps(
+    Directory imagesDir,
+    Set<int> existingBookIds,
+  ) async {
+    if (!await imagesDir.exists()) {
+      return 0;
+    }
+    int removed = 0;
+    final pattern = RegExp(r'^image_map_(\d+)\.json$', caseSensitive: false);
+    try {
+      final entries = imagesDir.listSync(followLinks: false);
+      for (final entry in entries) {
+        if (entry is! File) {
+          continue;
+        }
+        final match = pattern.firstMatch(p.basename(entry.path));
+        if (match == null) {
+          continue;
+        }
+        final bookId = int.tryParse(match.group(1) ?? '');
+        if (bookId == null || existingBookIds.contains(bookId)) {
+          continue;
+        }
+        try {
+          await entry.delete();
+          removed++;
+        } catch (e) {
+          debugPrint('⚠️ 删除失效图片映射失败: ${entry.path}, $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ 扫描图片映射失败: ${imagesDir.path}, $e');
+    }
+    return removed;
   }
 }

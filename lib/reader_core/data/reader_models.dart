@@ -86,6 +86,7 @@ class ReaderStyle {
 
   ReaderStyle copyWith({
     String? fontFamily,
+    bool clearFontFamily = false,
     double? fontSize,
     FontWeight? fontWeight,
     bool? italic,
@@ -95,7 +96,7 @@ class ReaderStyle {
     Locale? locale,
   }) {
     return ReaderStyle(
-      fontFamily: fontFamily ?? this.fontFamily,
+      fontFamily: clearFontFamily ? null : (fontFamily ?? this.fontFamily),
       fontSize: fontSize ?? this.fontSize,
       fontWeight: fontWeight ?? this.fontWeight,
       italic: italic ?? this.italic,

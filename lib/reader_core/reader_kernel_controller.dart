@@ -21,7 +21,7 @@ class ReaderKernelController extends ChangeNotifier {
     AIService? aiService,
     FlowPaginator? paginator,
   })  : _storage = storage ?? ReaderStorage(),
-        _aiService = aiService ?? MockAIService(),
+        _aiService = aiService ?? ReaderHttpAIService(),
         _paginator = paginator ?? FlowPaginator();
 
   final ReaderStorage _storage;
@@ -561,6 +561,46 @@ class ReaderKernelController extends ChangeNotifier {
       ),
     );
     notifyListeners();
+  }
+
+  Future<AIProviderSettings> loadAiSettings([AIProviderType? provider]) async {
+    final aiService = _aiService;
+    if (aiService is ConfigurableAIService) {
+      return aiService.loadSettings(provider);
+    }
+    return AIProviderSettings.defaults(provider ?? AIProviderType.minimax);
+  }
+
+  Future<void> saveAiSettings(AIProviderSettings settings) async {
+    final aiService = _aiService;
+    if (aiService is! ConfigurableAIService) {
+      return;
+    }
+    await aiService.saveSettings(settings);
+  }
+
+  Future<String> askAiChat({
+    required List<AIChatMessage> history,
+    required String pageText,
+  }) async {
+    final parsed = currentParsedChapter;
+    final book = _parsedBook?.book;
+    if (parsed == null || book == null) {
+      throw const AIServiceException('请先打开书籍后再使用 AI');
+    }
+
+    final answer = await _aiService.chat(
+      history: history,
+      pageText: pageText,
+      meta: AIRequestMeta(
+        bookId: book.id,
+        chapterId: parsed.chapter.id,
+        pageIndex: _pageIndex,
+      ),
+    );
+    _lastAiAnswer = answer;
+    notifyListeners();
+    return answer;
   }
 
   String pageText(Page page) {

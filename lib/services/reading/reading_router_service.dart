@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:xxread/models/book.dart';
 import 'package:xxread/pages/reader_kernel_page.dart';
+import 'package:xxread/services/books/book_dao.dart';
 import 'package:xxread/services/books/book_storage_repair_service.dart';
+import 'package:xxread/services/core/app_state_service.dart';
+import 'package:xxread/services/library/library_event_bus_service.dart';
 import 'package:xxread/utils/system_ui_helper.dart';
 import 'package:xxread/widgets/side_toast.dart';
 
@@ -57,17 +60,19 @@ class ReadingRouterService {
       return;
     }
 
-    _openReaderKernelPage(context, book);
+    await _openReaderKernelPage(context, book);
   }
 
-  static void _openReaderKernelPage(
+  static Future<void> _openReaderKernelPage(
     BuildContext context,
     Book book,
-  ) {
+  ) async {
     final hostBrightness = Theme.of(context).brightness;
     final page = ReaderKernelPage(book: book);
+    await _recordRecentReading(book);
+    if (!context.mounted) return;
 
-    Navigator.push(
+    await Navigator.push(
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => page,
@@ -87,7 +92,11 @@ class ReadingRouterService {
         },
         transitionDuration: const Duration(milliseconds: 300),
       ),
-    ).then((_) => _restoreHostSystemUI(hostBrightness));
+    );
+
+    _restoreHostSystemUI(hostBrightness);
+    await _recordRecentReadingFromDatabase(book.id);
+    LibraryEventBus().notifyLibraryChanged();
   }
 
   static void _restoreHostSystemUI(Brightness hostBrightness) {
@@ -95,5 +104,34 @@ class ReadingRouterService {
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiHelper.overlayStyleForBrightness(hostBrightness),
     );
+  }
+
+  static Future<void> _recordRecentReading(Book book) async {
+    final bookId = book.id;
+    if (bookId == null) return;
+    try {
+      final appState = AppStateService();
+      if (!appState.isInitialized) {
+        await appState.initialize();
+      }
+      await appState.setCurrentBook(bookId, book.title, book.currentPage);
+    } catch (e) {
+      debugPrint('⚠️ 更新最近阅读失败: $e');
+    }
+  }
+
+  static Future<void> _recordRecentReadingFromDatabase(int? bookId) async {
+    if (bookId == null) return;
+    try {
+      final latest = await BookDao().getBookById(bookId);
+      if (latest == null) return;
+      final appState = AppStateService();
+      if (!appState.isInitialized) {
+        await appState.initialize();
+      }
+      await appState.setCurrentBook(bookId, latest.title, latest.currentPage);
+    } catch (e) {
+      debugPrint('⚠️ 回写最近阅读失败: $e');
+    }
   }
 }

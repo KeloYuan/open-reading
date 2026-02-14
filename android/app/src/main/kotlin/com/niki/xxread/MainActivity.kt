@@ -9,6 +9,7 @@ import android.view.WindowInsetsController
 import androidx.core.view.WindowCompat
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.util.Log
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.niki.xxread/fullscreen"
@@ -40,6 +41,10 @@ class MainActivity : FlutterActivity() {
                 }
                 "showSystemUI" -> {
                     showSystemUI()
+                    result.success(null)
+                }
+                "enableHighRefreshRate" -> {
+                    enableHighRefreshRate()
                     result.success(null)
                 }
                 else -> {
@@ -91,6 +96,34 @@ class MainActivity : FlutterActivity() {
                 or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
             )
+        }
+    }
+
+    private fun enableHighRefreshRate() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M) {
+            return
+        }
+        try {
+            val display = windowManager.defaultDisplay
+            val modes = display.supportedModes
+            if (modes.isEmpty()) {
+                return
+            }
+
+            val currentMode = display.mode
+            val bestMode = modes
+                .filter { it.physicalWidth == currentMode.physicalWidth && it.physicalHeight == currentMode.physicalHeight }
+                .maxByOrNull { it.refreshRate }
+                ?: modes.maxByOrNull { it.refreshRate }
+                ?: return
+
+            val attrs = window.attributes
+            if (attrs.preferredDisplayModeId != bestMode.modeId) {
+                attrs.preferredDisplayModeId = bestMode.modeId
+                window.attributes = attrs
+            }
+        } catch (e: Exception) {
+            Log.w("xxread", "enableHighRefreshRate failed: ${e.message}")
         }
     }
 }

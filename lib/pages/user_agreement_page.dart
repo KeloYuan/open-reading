@@ -1,6 +1,7 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../widgets/app_brand_icon.dart';
 
 /// 用户协议页面
 ///
@@ -126,7 +127,17 @@ class _UserAgreementPageState extends State<UserAgreementPage>
 
   /// 构建动态背景
   Widget _buildAnimatedBackground() {
+    final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final startColor = Color.alphaBlend(
+      scheme.primary.withValues(alpha: isDark ? 0.28 : 0.12),
+      scheme.surface,
+    );
+    final midColor = Color.alphaBlend(
+      scheme.secondary.withValues(alpha: isDark ? 0.22 : 0.10),
+      scheme.surface,
+    );
+    final endColor = scheme.surface;
 
     return AnimatedBuilder(
       animation: _scaleAnimation,
@@ -138,28 +149,18 @@ class _UserAgreementPageState extends State<UserAgreementPage>
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                stops: const [0.0, 0.4, 0.7, 1.0],
-                colors: isDark
-                    ? [
-                        // 深色主题：优雅的深紫到深蓝渐变
-                        const Color(0xFF1a1a2e),
-                        const Color(0xFF16213e),
-                        const Color(0xFF0f3460),
-                        const Color(0xFF0a1929),
-                      ]
-                    : [
-                        // 浅色主题：温馨的粉紫到蓝色渐变
-                        const Color(0xFFe0c3fc),
-                        const Color(0xFF8ec5fc),
-                        const Color(0xFFb8d5f0),
-                        const Color(0xFFf5f7fa),
-                      ],
+                stops: const [0.0, 0.3, 0.7, 1.0],
+                colors: [
+                  startColor,
+                  midColor,
+                  scheme.tertiaryContainer
+                      .withValues(alpha: isDark ? 0.22 : 0.16),
+                  endColor,
+                ],
               ),
             ),
-            // 添加装饰圆圈
             child: Stack(
               children: [
-                // 左上角装饰圆
                 Positioned(
                   top: -100,
                   left: -100,
@@ -170,17 +171,13 @@ class _UserAgreementPageState extends State<UserAgreementPage>
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          Theme.of(context)
-                              .colorScheme
-                              .primary
-                              .withValues(alpha: 0.2),
+                          scheme.primary.withValues(alpha: 0.20),
                           Colors.transparent,
                         ],
                       ),
                     ),
                   ),
                 ),
-                // 右下角装饰圆
                 Positioned(
                   bottom: -150,
                   right: -150,
@@ -191,10 +188,24 @@ class _UserAgreementPageState extends State<UserAgreementPage>
                       shape: BoxShape.circle,
                       gradient: RadialGradient(
                         colors: [
-                          Theme.of(context)
-                              .colorScheme
-                              .secondary
-                              .withValues(alpha: 0.15),
+                          scheme.secondary.withValues(alpha: 0.18),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 120,
+                  right: -70,
+                  child: Container(
+                    width: 220,
+                    height: 220,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          scheme.tertiary.withValues(alpha: 0.12),
                           Colors.transparent,
                         ],
                       ),
@@ -246,95 +257,55 @@ class _UserAgreementPageState extends State<UserAgreementPage>
 
   /// 构建页面头部（应用图标和标题）
   Widget _buildHeader() {
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       children: [
-        // 应用图标 - 增强版
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            // 发光效果背景
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.4),
-                    Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.0),
-                  ],
-                ),
+        Container(
+          width: 96,
+          height: 96,
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: scheme.surface.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: scheme.outline.withValues(alpha: 0.24)),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.primary.withValues(alpha: 0.18),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
               ),
-            ),
-            // 主图标容器
-            Container(
-              width: 90,
-              height: 90,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF667eea), Color(0xFF764ba2)],
-                ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF667eea).withValues(alpha: 0.5),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.auto_stories_rounded,
-                color: Colors.white,
-                size: 48,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        // 应用标题
-        ShaderMask(
-          shaderCallback: (bounds) => const LinearGradient(
-            colors: [
-              Color(0xFF667eea),
-              Color(0xFF764ba2),
             ],
-          ).createShader(bounds),
-          child: Text(
-            '小元读书',
-            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  fontSize: 32,
-                ),
+          ),
+          child: const AppBrandIcon(
+            size: 80,
+            borderRadius: 20,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 18),
+        Text(
+          '小元读书',
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface,
+                letterSpacing: 0.3,
+              ),
+        ),
+        const SizedBox(height: 10),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
           decoration: BoxDecoration(
-            color:
-                Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+            color: scheme.primaryContainer.withValues(alpha: 0.42),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color:
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+              color: scheme.primary.withValues(alpha: 0.22),
               width: 1,
             ),
           ),
           child: Text(
-            '✨ 优雅的阅读体验',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontWeight: FontWeight.w500,
+            '沉浸阅读 · AI 助手 · 云端同步',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: scheme.primary,
+                  fontWeight: FontWeight.w600,
                 ),
           ),
         ),
@@ -344,6 +315,7 @@ class _UserAgreementPageState extends State<UserAgreementPage>
 
   /// 构建协议内容卡片
   Widget _buildAgreementCard() {
+    final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
@@ -351,7 +323,7 @@ class _UserAgreementPageState extends State<UserAgreementPage>
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.15),
+            color: scheme.primary.withValues(alpha: isDark ? 0.22 : 0.12),
             blurRadius: 30,
             offset: const Offset(0, 15),
           ),
@@ -385,8 +357,8 @@ class _UserAgreementPageState extends State<UserAgreementPage>
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        const Color(0xFF667eea).withValues(alpha: 0.1),
-                        const Color(0xFF764ba2).withValues(alpha: 0.05),
+                        scheme.primary.withValues(alpha: 0.12),
+                        scheme.secondary.withValues(alpha: 0.08),
                       ],
                     ),
                     borderRadius: const BorderRadius.only(
@@ -399,25 +371,19 @@ class _UserAgreementPageState extends State<UserAgreementPage>
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [
-                              Color(0xFF667eea),
-                              Color(0xFF764ba2),
-                            ],
-                          ),
+                          color: scheme.primary.withValues(alpha: 0.16),
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF667eea)
-                                  .withValues(alpha: 0.3),
+                              color: scheme.primary.withValues(alpha: 0.20),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
                           ],
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.verified_user_rounded,
-                          color: Colors.white,
+                          color: scheme.primary,
                           size: 24,
                         ),
                       ),
@@ -472,10 +438,11 @@ class _UserAgreementPageState extends State<UserAgreementPage>
 
   /// 构建协议内容文本
   Widget _buildAgreementContent() {
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 欢迎信息 - 更精美的展示
+        // 欢迎信息
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -483,40 +450,39 @@ class _UserAgreementPageState extends State<UserAgreementPage>
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                const Color(0xFF667eea).withValues(alpha: 0.1),
-                const Color(0xFF764ba2).withValues(alpha: 0.05),
+                scheme.primary.withValues(alpha: 0.12),
+                scheme.secondary.withValues(alpha: 0.08),
               ],
             ),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: const Color(0xFF667eea).withValues(alpha: 0.2),
+              color: scheme.primary.withValues(alpha: 0.20),
               width: 1,
             ),
           ),
           child: Column(
             children: [
-              const Text(
-                '🎉',
-                style: TextStyle(fontSize: 48),
+              AppBrandIcon(
+                size: 54,
+                borderRadius: 14,
+                border:
+                    Border.all(color: scheme.primary.withValues(alpha: 0.20)),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Text(
                 '欢迎使用小元读书',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF667eea),
+                      fontWeight: FontWeight.w700,
+                      color: scheme.primary,
                     ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
               Text(
-                '该应用为开发版，不代表最终结果，仅供测试使用。\n无法使用的功能正在努力开发中 💪',
+                '为保证你获得稳定、可预期的阅读体验，请先阅读并同意以下协议内容。',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       height: 1.6,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .onSurface
-                          .withValues(alpha: 0.8),
+                      color: scheme.onSurface.withValues(alpha: 0.8),
                     ),
                 textAlign: TextAlign.center,
               ),
@@ -528,31 +494,31 @@ class _UserAgreementPageState extends State<UserAgreementPage>
 
         // 功能特色列表
         _buildFeatureItem(
-          icon: Icons.menu_book_rounded,
+          icon: Icons.layers_rounded,
           title: '多格式支持',
           description: 'EPUB、PDF、TXT、MOBI等多种格式',
-          gradient: const [Color(0xFF667eea), Color(0xFF764ba2)],
+          accent: scheme.primary,
         ),
         const SizedBox(height: 12),
         _buildFeatureItem(
           icon: Icons.palette_rounded,
           title: '个性化阅读',
           description: '自定义字体、颜色、排版等阅读体验',
-          gradient: const [Color(0xFFf093fb), Color(0xFff5576c)],
+          accent: scheme.secondary,
         ),
         const SizedBox(height: 12),
         _buildFeatureItem(
           icon: Icons.cloud_sync_rounded,
           title: 'WebDAV同步',
           description: '支持WebDAV云端同步，多设备阅读进度同步',
-          gradient: const [Color(0xFF4facfe), Color(0xFF00f2fe)],
+          accent: scheme.tertiary,
         ),
         const SizedBox(height: 12),
         _buildFeatureItem(
           icon: Icons.record_voice_over_rounded,
           title: 'TTS朗读',
           description: '智能语音朗读，解放双眼，听书更自由',
-          gradient: const [Color(0xFF43e97b), Color(0xFF38f9d7)],
+          accent: scheme.primary,
         ),
 
         const SizedBox(height: 24),
@@ -565,13 +531,13 @@ class _UserAgreementPageState extends State<UserAgreementPage>
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                const Color(0xFF667eea).withValues(alpha: 0.15),
-                const Color(0xFF764ba2).withValues(alpha: 0.1),
+                scheme.primary.withValues(alpha: 0.16),
+                scheme.secondary.withValues(alpha: 0.10),
               ],
             ),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: const Color(0xFF667eea).withValues(alpha: 0.3),
+              color: scheme.primary.withValues(alpha: 0.3),
               width: 1.5,
             ),
           ),
@@ -580,12 +546,12 @@ class _UserAgreementPageState extends State<UserAgreementPage>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF667eea).withValues(alpha: 0.2),
+                  color: scheme.primary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.tips_and_updates_rounded,
-                  color: Color(0xFF667eea),
+                  color: scheme.primary,
                   size: 24,
                 ),
               ),
@@ -611,15 +577,15 @@ class _UserAgreementPageState extends State<UserAgreementPage>
     required IconData icon,
     required String title,
     required String description,
-    required List<Color> gradient,
+    required Color accent,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.58),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: gradient[0].withValues(alpha: 0.2),
+          color: accent.withValues(alpha: 0.24),
           width: 1,
         ),
       ),
@@ -628,11 +594,11 @@ class _UserAgreementPageState extends State<UserAgreementPage>
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: gradient),
+              color: accent.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(10),
               boxShadow: [
                 BoxShadow(
-                  color: gradient[0].withValues(alpha: 0.3),
+                  color: accent.withValues(alpha: 0.20),
                   blurRadius: 8,
                   offset: const Offset(0, 4),
                 ),
@@ -640,7 +606,7 @@ class _UserAgreementPageState extends State<UserAgreementPage>
             ),
             child: Icon(
               icon,
-              color: Colors.white,
+              color: accent,
               size: 24,
             ),
           ),
@@ -706,29 +672,30 @@ class _UserAgreementPageState extends State<UserAgreementPage>
     required VoidCallback onPressed,
     required bool isPrimary,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       height: 56,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
         gradient: isPrimary
-            ? const LinearGradient(
+            ? LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Color(0xFF667eea),
-                  Color(0xFF764ba2),
+                  scheme.primary,
+                  scheme.secondary,
                 ],
               )
             : null,
         boxShadow: isPrimary
             ? [
                 BoxShadow(
-                  color: const Color(0xFF667eea).withValues(alpha: 0.5),
+                  color: scheme.primary.withValues(alpha: 0.32),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
                 BoxShadow(
-                  color: const Color(0xFF764ba2).withValues(alpha: 0.3),
+                  color: scheme.secondary.withValues(alpha: 0.22),
                   blurRadius: 15,
                   offset: const Offset(0, 4),
                 ),

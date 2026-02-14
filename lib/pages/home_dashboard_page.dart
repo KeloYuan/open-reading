@@ -8,6 +8,7 @@ import '../services/reading/reading_services.dart';
 import '../utils/glass_config.dart';
 import '../utils/layout_helper.dart';
 import '../utils/localization_extension.dart';
+import '../widgets/app_brand_icon.dart';
 import 'detailed_stats_page.dart';
 import 'home_shell_page.dart';
 
@@ -121,83 +122,79 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
   Widget _buildContent(BuildContext context) {
     final navContext = NavigationContext.of(context);
     final useRailNavigation = navContext?.useRailNavigation ?? false;
-    final isTablet =
-        useRailNavigation || LayoutHelper.isTablet(context);
+    final isTablet = useRailNavigation || LayoutHelper.isTablet(context);
     if (isTablet) {
       return _buildTabletContent(context);
     }
 
     return Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-            colors: [
-              // 使用主题的主色调创建更丰富的渐变
-              Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
-              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.12),
-              Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.06),
-              Theme.of(
-                context,
-              ).colorScheme.primaryContainer.withValues(alpha: 0.15),
-              Theme.of(
-                context,
-              ).colorScheme.secondaryContainer.withValues(alpha: 0.10),
-              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
-            ],
-          ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+          colors: [
+            // 使用主题的主色调创建更丰富的渐变
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+            Theme.of(context).colorScheme.secondary.withValues(alpha: 0.12),
+            Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.06),
+            Theme.of(
+              context,
+            ).colorScheme.primaryContainer.withValues(alpha: 0.15),
+            Theme.of(
+              context,
+            ).colorScheme.secondaryContainer.withValues(alpha: 0.10),
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
+          ],
         ),
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: _loadAllStats,
-                child: SafeArea(
-                  child: ListView(
-                    padding: EdgeInsets.fromLTRB(
-                      LayoutHelper.getHorizontalPadding(context),
-                      LayoutHelper.getValue(
-                        context,
-                        mobile: 20.0,
-                        tablet: 24.0,
-                        desktop: 28.0,
-                      ),
-                      LayoutHelper.getHorizontalPadding(context),
-                      LayoutHelper.getValue(
-                        context,
-                        mobile: 24.0 + MediaQuery.of(context).padding.bottom,
-                        tablet: 32.0 + MediaQuery.of(context).padding.bottom,
-                        desktop: 40.0 + MediaQuery.of(context).padding.bottom,
-                      ),
+      ),
+      child: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _loadAllStats,
+              child: SafeArea(
+                child: ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    LayoutHelper.getHorizontalPadding(context),
+                    LayoutHelper.getValue(
+                      context,
+                      mobile: 20.0,
+                      tablet: 24.0,
+                      desktop: 28.0,
                     ),
-                    children: [
-                      _buildWelcomeCard(),
-                      // iOS端使用Transform.translate抵消系统默认间距，Android端添加间距
-                      if (!kIsWeb && !Platform.isIOS)
-                        const SizedBox(height: 28),
-                      _buildOptimizedSummaryCards(),
-                      // iOS端使用Transform.translate抵消系统默认间距，Android端添加间距
-                      if (!kIsWeb && !Platform.isIOS)
-                        const SizedBox(height: 32),
-                      _buildOptimizedWeeklyChartCard(),
-                      // iOS端使用Transform.translate抵消系统默认间距，Android端添加间距
-                      if (!kIsWeb && !Platform.isIOS)
-                        const SizedBox(height: 32),
-                      _buildOptimizedRecentActivity(),
-                      SizedBox(
-                        height: LayoutHelper.getValue(
-                          context,
-                          mobile: 48.0,
-                          largeMobile: 56.0,
-                          tablet: 64.0,
-                          desktop: 72.0,
-                        ),
-                      ), // 底部留白
-                    ],
+                    LayoutHelper.getHorizontalPadding(context),
+                    LayoutHelper.getValue(
+                      context,
+                      mobile: 24.0 + MediaQuery.of(context).padding.bottom,
+                      tablet: 32.0 + MediaQuery.of(context).padding.bottom,
+                      desktop: 40.0 + MediaQuery.of(context).padding.bottom,
+                    ),
                   ),
+                  children: [
+                    _buildWelcomeCard(),
+                    // iOS端使用Transform.translate抵消系统默认间距，Android端添加间距
+                    if (!kIsWeb && !Platform.isIOS) const SizedBox(height: 28),
+                    _buildOptimizedSummaryCards(),
+                    // iOS端使用Transform.translate抵消系统默认间距，Android端添加间距
+                    if (!kIsWeb && !Platform.isIOS) const SizedBox(height: 32),
+                    _buildOptimizedWeeklyChartCard(),
+                    // iOS端使用Transform.translate抵消系统默认间距，Android端添加间距
+                    if (!kIsWeb && !Platform.isIOS) const SizedBox(height: 32),
+                    _buildOptimizedRecentActivity(),
+                    SizedBox(
+                      height: LayoutHelper.getValue(
+                        context,
+                        mobile: 48.0,
+                        largeMobile: 56.0,
+                        tablet: 64.0,
+                        desktop: 72.0,
+                      ),
+                    ), // 底部留白
+                  ],
                 ),
               ),
-      );
+            ),
+    );
   }
 
   Widget _buildTabletContent(BuildContext context) {
@@ -277,8 +274,6 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
             ),
     );
   }
-
-
 }
 
 class _StatCard extends StatelessWidget {

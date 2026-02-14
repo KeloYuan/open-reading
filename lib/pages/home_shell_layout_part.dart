@@ -278,12 +278,18 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surface.withValues(
-                            alpha: GlassEffectConfig.navigationBarOpacity,
-                          ),
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surface
+                              .withValues(
+                                alpha: GlassEffectConfig.navigationBarOpacity,
+                              ),
                           borderRadius: BorderRadius.circular(60),
                           border: Border.all(
-                            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.15),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .outline
+                                .withValues(alpha: 0.15),
                             width: 0.5,
                           ),
                           boxShadow: [
@@ -302,7 +308,8 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
                         child: Row(
                           mainAxisSize: MainAxisSize.max,
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: _navigationItems.asMap().entries.map((entry) {
+                          children:
+                              _navigationItems.asMap().entries.map((entry) {
                             final index = entry.key;
                             final item = entry.value;
                             final isSelected = _selectedIndex == index;
@@ -387,14 +394,16 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
           color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.84),
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.12),
+            color:
+                Theme.of(context).colorScheme.outline.withValues(alpha: 0.12),
             width: 0.5,
           ),
         ),
         child: Icon(
           icon,
           size: 20,
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.78),
+          color:
+              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.78),
         ),
       ),
     );
@@ -493,10 +502,9 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.auto_stories_rounded,
-              color: Colors.white,
-              size: 28,
+            child: const AppBrandIcon(
+              size: 40,
+              borderRadius: 12,
             ),
           ),
           if (LayoutHelper.getValue(

@@ -27,12 +27,37 @@ class Bookmark {
   }
 
   factory Bookmark.fromMap(Map<String, dynamic> map) {
+    final createDateRaw = map['createDate'];
+    DateTime parsedCreateDate;
+    if (createDateRaw is int) {
+      parsedCreateDate = DateTime.fromMillisecondsSinceEpoch(createDateRaw);
+    } else if (createDateRaw is num) {
+      parsedCreateDate =
+          DateTime.fromMillisecondsSinceEpoch(createDateRaw.toInt());
+    } else if (createDateRaw is String) {
+      final asInt = int.tryParse(createDateRaw);
+      if (asInt != null) {
+        parsedCreateDate = DateTime.fromMillisecondsSinceEpoch(asInt);
+      } else {
+        parsedCreateDate = DateTime.tryParse(createDateRaw) ?? DateTime.now();
+      }
+    } else {
+      parsedCreateDate = DateTime.now();
+    }
+
+    int toInt(dynamic value, {int fallback = 0}) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value) ?? fallback;
+      return fallback;
+    }
+
     return Bookmark(
       id: map['id'],
-      bookId: map['bookId'],
-      pageNumber: map['pageNumber'],
+      bookId: toInt(map['bookId']),
+      pageNumber: toInt(map['pageNumber']),
       note: map['note'] ?? '',
-      createDate: DateTime.fromMillisecondsSinceEpoch(map['createDate']),
+      createDate: parsedCreateDate,
       cfi: map['cfi'],
     );
   }

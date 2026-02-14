@@ -1,6 +1,12 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/book_source.dart';
+import 'online_book_search_page.dart';
 import '../services/books/book_services.dart';
 import '../utils/page_style_helper.dart';
 import '../utils/system_ui_helper.dart';
@@ -193,9 +199,8 @@ class _BookSourcePageState extends State<BookSourcePage>
                         height: 1.05,
                         color: Theme.of(context).colorScheme.onSurface,
                       ),
-                      ),
-                if (_stats.isNotEmpty)
-                  _buildStatsText(),
+                ),
+                if (_stats.isNotEmpty) _buildStatsText(),
               ],
             ),
           ),
@@ -381,17 +386,18 @@ class _BookSourcePageState extends State<BookSourcePage>
   Widget _buildSummaryCard() {
     final palette = PageStyleHelper.palette(context);
     final total = _stats['total'] ?? _allSources.length;
-    final enabled = _stats['enabled'] ?? _allSources.where((source) => source.enabled).length;
+    final enabled = _stats['enabled'] ??
+        _allSources.where((source) => source.enabled).length;
     final avg = _allSources.isEmpty ? '--' : '320ms';
 
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(16, 10, 16, 6),
       padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: palette.hero,
-          borderRadius: BorderRadius.circular(18),
-        ),
+      decoration: BoxDecoration(
+        color: palette.hero,
+        borderRadius: BorderRadius.circular(18),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -617,6 +623,12 @@ class _BookSourcePageState extends State<BookSourcePage>
                   ),
                   Row(
                     children: [
+                      if (source.hasSearch)
+                        IconButton(
+                          onPressed: () => _openSourceSearch(source),
+                          icon: const Icon(Icons.manage_search),
+                          tooltip: '搜索书籍',
+                        ),
                       IconButton(
                         onPressed: () => _testSource(source),
                         icon: const Icon(Icons.speed),
@@ -730,16 +742,177 @@ class _BookSourcePageState extends State<BookSourcePage>
     }
   }
 
-  void _testSource(BookSource source) {
-    _showToast('书源测试功能开发中...');
+  void _openSourceSearch(BookSource source) {
+    if (!source.enabled) {
+      _showToast('请先启用该书源');
+      return;
+    }
+    if (!source.hasSearch) {
+      _showToast('该书源未配置搜索规则');
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => OnlineBookSearchPage(source: source),
+      ),
+    );
+  }
+
+  Future<void> _testSource(BookSource source) async {
+    if (source.bookSourceUrl.trim().isEmpty) {
+      _showToast('书源地址为空');
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 12),
+            Text('正在测试连接...'),
+          ],
+        ),
+      ),
+    );
+
+    final result = await _sourceService.testSource(source);
+    if (!mounted) return;
+    Navigator.of(context).pop();
+
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(result.success ? '连接成功' : '连接失败'),
+        content: Text('${result.message}\n响应时间：${result.responseTime}ms'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSourceDetail(BookSource source) {
-    _showToast('书源详情功能开发中...');
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text(
+                  source.bookSourceName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  source.bookSourceUrl,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: Icon(
+                  source.enabled
+                      ? Icons.check_circle_outline
+                      : Icons.pause_circle_outline,
+                  color: source.enabled ? Colors.green : Colors.orange,
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.manage_search),
+                title: const Text('搜索该书源'),
+                subtitle: const Text('按规则搜索书籍、查看目录与正文'),
+                enabled: source.enabled && source.hasSearch,
+                onTap: () {
+                  Navigator.pop(context);
+                  _openSourceSearch(source);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.speed),
+                title: const Text('测试连接'),
+                subtitle: const Text('检查书源地址可达性'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _testSource(source);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy_all_outlined),
+                title: const Text('复制书源 JSON'),
+                subtitle: const Text('可用于分享或备份'),
+                onTap: () async {
+                  await Clipboard.setData(
+                    ClipboardData(text: jsonEncode(source.toJson())),
+                  );
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  _showToast('已复制到剪贴板');
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showAddSourceDialog() {
-    _showToast('添加书源功能开发中...');
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.paste),
+                title: const Text('粘贴 JSON 导入'),
+                subtitle: const Text('支持单个或批量书源 JSON'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showImportJsonDialog();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.link),
+                title: const Text('从 URL 导入'),
+                subtitle: const Text('输入书源分享链接'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showImportUrlDialog();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder_open),
+                title: const Text('从文件导入'),
+                subtitle: const Text('选择本地 .json / .txt 书源文件'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _importFromFile();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showMenuDialog() {
@@ -755,7 +928,7 @@ class _BookSourcePageState extends State<BookSourcePage>
               title: const Text('导入书源'),
               onTap: () {
                 Navigator.pop(context);
-                _showToast('导入书源功能开发中...');
+                _showAddSourceDialog();
               },
             ),
             ListTile(
@@ -763,7 +936,15 @@ class _BookSourcePageState extends State<BookSourcePage>
               title: const Text('导出书源'),
               onTap: () {
                 Navigator.pop(context);
-                _showToast('导出书源功能开发中...');
+                _showExportDialog();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_sweep_outlined),
+              title: const Text('清空全部书源'),
+              onTap: () {
+                Navigator.pop(context);
+                _confirmDeleteAllSources();
               },
             ),
             ListTile(
@@ -784,6 +965,188 @@ class _BookSourcePageState extends State<BookSourcePage>
         ],
       ),
     );
+  }
+
+  Future<void> _showImportJsonDialog() async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('粘贴书源 JSON'),
+        content: SizedBox(
+          width: 520,
+          child: TextField(
+            controller: controller,
+            minLines: 8,
+            maxLines: 16,
+            decoration: const InputDecoration(
+              hintText: '粘贴 JSON 内容',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('导入'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    final text = controller.text.trim();
+    if (text.isEmpty) {
+      _showToast('请输入 JSON 内容');
+      return;
+    }
+
+    final result = await _sourceService.importFromJson(text);
+    if (!mounted) return;
+    _showImportResult(result);
+  }
+
+  Future<void> _showImportUrlDialog() async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('从 URL 导入书源'),
+        content: SizedBox(
+          width: 520,
+          child: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              hintText: 'https://...',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('导入'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    final url = controller.text.trim();
+    if (url.isEmpty) {
+      _showToast('请输入 URL');
+      return;
+    }
+
+    final result = await _sourceService.importFromUrl(url);
+    if (!mounted) return;
+    _showImportResult(result);
+  }
+
+  Future<void> _importFromFile() async {
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['json', 'txt'],
+      );
+      if (picked == null) return;
+      final path = picked.files.single.path;
+      if (path == null || path.isEmpty) {
+        _showToast('无法读取文件路径');
+        return;
+      }
+
+      final result = await _sourceService.importFromFile(File(path));
+      if (!mounted) return;
+      _showImportResult(result);
+    } catch (e) {
+      _showToast('文件导入失败: $e');
+    }
+  }
+
+  void _showImportResult(ImportResult result) {
+    if (result.success > 0) {
+      _showToast('导入成功 ${result.success}/${result.total}');
+      _loadData();
+    } else {
+      final message = result.errors.isNotEmpty ? result.errors.first : '导入失败';
+      _showToast(message);
+    }
+  }
+
+  Future<void> _showExportDialog() async {
+    final jsonText = await _sourceService.exportToJson();
+    if (!mounted) return;
+
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('导出书源 JSON'),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              jsonText,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: jsonText));
+              if (context.mounted) {
+                Navigator.pop(context);
+              }
+              _showToast('已复制 JSON');
+            },
+            child: const Text('复制'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteAllSources() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认清空'),
+        content: const Text('将删除当前所有书源，是否继续？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('清空'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    final ok = await _sourceService.deleteAllSources();
+    if (!mounted) return;
+    if (ok) {
+      _showToast('已清空书源');
+      _loadData();
+    } else {
+      _showToast('清空失败');
+    }
   }
 
   void _showToast(String message) {

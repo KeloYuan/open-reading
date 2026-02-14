@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../../utils/localization_extension.dart';
+import '../../widgets/app_brand_icon.dart';
 
 /// 手机首页顶部欢迎卡片。
 ///
@@ -66,10 +67,15 @@ class HomeMobileHeroCardWidget extends StatelessWidget {
                           .withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(
-                      Icons.auto_stories,
-                      color: Theme.of(context).colorScheme.primary,
+                    child: AppBrandIcon(
                       size: 22,
+                      borderRadius: 6,
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.24),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),

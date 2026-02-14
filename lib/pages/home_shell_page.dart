@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,6 +19,7 @@ import '../utils/glass_config.dart';
 import '../utils/system_ui_helper.dart';
 import '../utils/localization_extension.dart';
 import '../l10n/app_localizations.dart';
+import '../widgets/app_brand_icon.dart';
 
 part 'home_shell_layout_part.dart';
 
@@ -89,7 +90,7 @@ class _HomeShellPageState extends State<HomeShellPage> {
   // 所有导航点击、PageView 切换，最终都更新这个值。
   int _selectedIndex = 0;
   late PageController _pageController;
-  bool _booksourceEnabled = false;
+  bool _booksourceEnabled = true;
   AppLocalizations? _l10n;
 
   // 导航项单一数据源：
@@ -112,7 +113,7 @@ class _HomeShellPageState extends State<HomeShellPage> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _booksourceEnabled = prefs.getBool('enable_booksource') ?? false;
+      _booksourceEnabled = prefs.getBool('enable_booksource') ?? true;
     });
     _initializeNavigationItems();
   }
@@ -223,7 +224,4 @@ class _HomeShellPageState extends State<HomeShellPage> {
       child: content,
     );
   }
-
-
-
 }

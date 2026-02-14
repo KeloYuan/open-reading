@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,9 +12,9 @@ import '../services/books/book_services.dart';
 import '../services/core/core_services.dart';
 import '../services/reading/reading_services.dart';
 import '../services/sync/sync_services.dart';
-import '../utils/font_catalog_helper.dart';
 import '../widgets/side_toast.dart';
 import '../widgets/webdav_config_dialog.dart';
+import '../widgets/app_brand_icon.dart';
 import 'home_shell_page.dart';
 import 'home_layout_constants.dart';
 import '../utils/glass_config.dart';
@@ -31,7 +32,6 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  bool _enableAnimations = true;
   bool _enableAutoSave = true;
   bool _keepScreenOn = false;
   int _autoSaveInterval = 30;
@@ -48,7 +48,7 @@ class _SettingsPageState extends State<SettingsPage> {
   // 只使用沉浸式阅读器，不需要引擎选择
 
   // 书源设置
-  bool _enableBooksource = false;
+  bool _enableBooksource = true;
   bool _enableAutoExtractCover = true;
 
   // WebDAV设置
@@ -57,7 +57,6 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _isIosCloudSyncing = false;
 
   // 其他设置
-  bool _enableBatteryOptimization = true;
   bool _enableFullscreen = false;
 
   // 开发者设置
@@ -66,12 +65,26 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _enablePerformanceMonitor = false;
   bool _enableMemoryStats = false;
   bool _showFPS = false;
+  String _appVersion = '--';
 
   @override
   void initState() {
     super.initState();
+    _webdavService.statusNotifier.addListener(_onWebDavStatusChanged);
+    _loadAppVersion();
     _loadSettings();
     // 状态栏设置现在由_SettingsPageWrapper处理
+  }
+
+  @override
+  void dispose() {
+    _webdavService.statusNotifier.removeListener(_onWebDavStatusChanged);
+    super.dispose();
+  }
+
+  void _onWebDavStatusChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   @override
@@ -83,14 +96,13 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadSettings() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
-      _enableAnimations = prefs.getBool('enableAnimations') ?? true;
       _enableAutoSave = prefs.getBool('enableAutoSave') ?? true;
       _keepScreenOn = prefs.getBool('keepScreenOn') ?? false;
       _autoSaveInterval = prefs.getInt('autoSaveInterval') ?? 30;
 
       // TTS设置
       _enableTTS = prefs.getBool('enableTTS') ?? true;
-      _enableBooksource = prefs.getBool('enable_booksource') ?? false;
+      _enableBooksource = prefs.getBool('enable_booksource') ?? true;
       _enableAutoExtractCover = prefs.getBool('enableAutoExtractCover') ?? true;
       _ttsSpeed = prefs.getDouble('ttsSpeed') ?? 0.5;
       _ttsVolume = prefs.getDouble('ttsVolume') ?? 1.0;
@@ -103,8 +115,6 @@ class _SettingsPageState extends State<SettingsPage> {
       // 引擎选择相关配置已移除，只使用沉浸式阅读器
 
       // 其他设置
-      _enableBatteryOptimization =
-          prefs.getBool('enableBatteryOptimization') ?? true;
       _enableFullscreen = prefs.getBool('enableFullscreen') ?? false;
 
       // 开发者设置
@@ -116,18 +126,38 @@ class _SettingsPageState extends State<SettingsPage> {
       _showFPS = prefs.getBool('showFPS') ?? false;
     });
 
+    if (prefs.getBool('enableAnimations') != true) {
+      await prefs.setBool('enableAnimations', true);
+    }
+
     // 依据动画设置动态调整毛玻璃强度
     GlassEffectConfig.applyPerformanceMode(
-      reduceEffects: !_enableAnimations,
+      reduceEffects: false,
     );
 
     // 初始化WebDAV服务
     await _webdavService.initialize();
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      final version = info.version.trim();
+      setState(() {
+        _appVersion = version.isEmpty ? '--' : version;
+      });
+    } catch (_) {
+      // keep fallback label
+    }
   }
 
   Future<void> _saveSettings() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('enableAnimations', _enableAnimations);
+    await prefs.setBool('enableAnimations', true);
     await prefs.setBool('enableAutoSave', _enableAutoSave);
     await prefs.setBool('keepScreenOn', _keepScreenOn);
     await prefs.setInt('autoSaveInterval', _autoSaveInterval);
@@ -146,10 +176,6 @@ class _SettingsPageState extends State<SettingsPage> {
     // 引擎选择相关配置已移除，只使用沉浸式阅读器
 
     // 其他设置
-    await prefs.setBool(
-      'enableBatteryOptimization',
-      _enableBatteryOptimization,
-    );
     await prefs.setBool('enableFullscreen', _enableFullscreen);
 
     // 开发者设置
@@ -210,7 +236,9 @@ class _SettingsPageState extends State<SettingsPage> {
           16,
           useRailNavigation
               ? MediaQuery.of(context).padding.top + 8
-              : MediaQuery.of(context).padding.top + kHomeMobileTopBarHeight + 8,
+              : MediaQuery.of(context).padding.top +
+                  kHomeMobileTopBarHeight +
+                  8,
           16,
           24,
         ),
@@ -223,11 +251,10 @@ class _SettingsPageState extends State<SettingsPage> {
             title: l10n.appearanceSettings,
             icon: Icons.palette_outlined,
             children: [
-              _buildThemeToggle(themeNotifier, isDarkMode),
+              _buildThemeToggle(themeNotifier),
               _buildAppThemeSelector(themeNotifier),
               _buildCustomAccentColorSelector(themeNotifier),
               _buildGlobalAccentColorSelector(themeNotifier),
-              _buildAnimationToggle(),
             ],
           ),
           const SizedBox(height: 20),
@@ -444,6 +471,17 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                         ],
                       ),
+                      if (_webdavService.status == SyncStatus.failed &&
+                          _webdavService.lastErrorMessage.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _webdavService.lastErrorMessage,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -498,6 +536,16 @@ class _SettingsPageState extends State<SettingsPage> {
 
                 // 立即同步按钮
                 _buildActionSetting(
+                  title: '自动同步',
+                  subtitle: _webdavService.autoSync
+                      ? '已开启，每 ${_webdavService.syncInterval} 分钟同步一次'
+                      : '已关闭，仅手动同步',
+                  onTap: _showWebDavConfig,
+                  icon: Icons.schedule,
+                ),
+
+                // 立即同步按钮
+                _buildActionSetting(
                   title: '立即同步',
                   subtitle: '手动同步所有阅读数据',
                   onTap: _syncNow,
@@ -507,7 +555,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 // 书籍文件同步设置
                 _buildActionSetting(
                   title: '书籍文件同步',
-                  subtitle: '选择需要上传到云端的书籍文件',
+                  subtitle:
+                      '已选 ${_webdavService.getBooksSelectedForSync().length} 本，选择需要上传到云端的书籍文件',
                   onTap: _showBookFileSyncDialog,
                   icon: Icons.upload_file,
                 ),
@@ -520,7 +569,6 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.language,
             children: [
               _buildLanguageSelector(appSettings),
-              _buildAppFontSelector(appSettings),
             ],
           ),
           const SizedBox(height: 20),
@@ -541,14 +589,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 value: _enableAutoSave,
                 onChanged: (value) => setState(() => _enableAutoSave = value),
                 icon: Icons.save_outlined,
-              ),
-              _buildSwitchSetting(
-                title: '电池优化',
-                subtitle: '启用省电模式',
-                value: _enableBatteryOptimization,
-                onChanged: (value) =>
-                    setState(() => _enableBatteryOptimization = value),
-                icon: Icons.battery_saver,
               ),
             ],
           ),
@@ -650,13 +690,13 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildThemeToggle(ThemeNotifier themeNotifier, bool isDarkMode) {
-    return _buildSwitchSetting(
+  Widget _buildThemeToggle(ThemeNotifier themeNotifier) {
+    final mode = themeNotifier.themeMode;
+    return _buildActionSetting(
       title: '夜间模式',
-      subtitle: isDarkMode ? '当前为夜间模式' : '当前为日间模式',
-      value: isDarkMode,
-      onChanged: (value) => themeNotifier.toggleTheme(value),
-      icon: isDarkMode ? Icons.dark_mode : Icons.light_mode,
+      subtitle: '当前：${_themeModeLabel(mode)}',
+      onTap: () => _showThemeModeModal(themeNotifier),
+      icon: _themeModeIcon(mode),
     );
   }
 
@@ -722,18 +762,202 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildAnimationToggle() {
-    return _buildSwitchSetting(
-      title: '动画效果',
-      subtitle: '开启页面切换动画',
-      value: _enableAnimations,
-      onChanged: (value) {
-        setState(() => _enableAnimations = value);
-        GlassEffectConfig.applyPerformanceMode(
-          reduceEffects: !value,
+  String _themeModeLabel(ThemeMode mode) {
+    final l10n = context.l10n;
+    switch (mode) {
+      case ThemeMode.system:
+        return l10n.systemMode;
+      case ThemeMode.dark:
+        return l10n.darkMode;
+      case ThemeMode.light:
+        return l10n.lightMode;
+    }
+  }
+
+  IconData _themeModeIcon(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.system:
+        return Icons.brightness_auto;
+      case ThemeMode.dark:
+        return Icons.dark_mode;
+      case ThemeMode.light:
+        return Icons.light_mode;
+    }
+  }
+
+  void _showThemeModeModal(ThemeNotifier themeNotifier) {
+    final l10n = context.l10n;
+    final options =
+        <({ThemeMode mode, String label, String hint, IconData icon})>[
+      (
+        mode: ThemeMode.system,
+        label: l10n.systemMode,
+        hint: '跟随系统外观自动切换',
+        icon: Icons.brightness_auto,
+      ),
+      (
+        mode: ThemeMode.light,
+        label: l10n.lightMode,
+        hint: '始终使用浅色外观',
+        icon: Icons.light_mode,
+      ),
+      (
+        mode: ThemeMode.dark,
+        label: l10n.darkMode,
+        hint: '始终使用深色外观',
+        icon: Icons.dark_mode,
+      ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) {
+        return Container(
+          decoration: BoxDecoration(
+            color: Theme.of(modalContext).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 14),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(modalContext)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 2, 24, 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _themeModeIcon(themeNotifier.themeMode),
+                        color: Theme.of(modalContext).colorScheme.primary,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '夜间模式',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(modalContext).colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ...options.map((item) {
+                  final selected = themeNotifier.themeMode == item.mode;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () {
+                          themeNotifier.setThemeMode(item.mode);
+                          Navigator.of(modalContext).pop();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: selected
+                                  ? Theme.of(modalContext).colorScheme.primary
+                                  : Theme.of(modalContext)
+                                      .colorScheme
+                                      .outline
+                                      .withValues(alpha: 0.35),
+                              width: selected ? 1.6 : 1,
+                            ),
+                            color: selected
+                                ? Theme.of(modalContext)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.08)
+                                : Colors.transparent,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                item.icon,
+                                color: selected
+                                    ? Theme.of(modalContext).colorScheme.primary
+                                    : Theme.of(modalContext)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.75),
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.label,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: selected
+                                            ? Theme.of(
+                                                modalContext,
+                                              ).colorScheme.primary
+                                            : Theme.of(
+                                                modalContext,
+                                              ).colorScheme.onSurface,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      item.hint,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Theme.of(modalContext)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.62),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (selected)
+                                Icon(
+                                  Icons.check_circle,
+                                  color: Theme.of(modalContext)
+                                      .colorScheme
+                                      .primary,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
         );
       },
-      icon: Icons.animation,
     );
   }
 
@@ -747,19 +971,6 @@ class _SettingsPageState extends State<SettingsPage> {
       subtitle: currentLabel,
       icon: Icons.translate,
       onTap: () => _showLanguageModal(appSettings),
-    );
-  }
-
-  Widget _buildAppFontSelector(AppSettingsNotifier appSettings) {
-    final l10n = context.l10n;
-    final selectedOption =
-        FontCatalog.appFontForFamily(appSettings.appFontFamily);
-
-    return _buildActionSetting(
-      title: l10n.appFont,
-      subtitle: FontCatalog.labelFor(l10n, selectedOption),
-      icon: Icons.font_download_outlined,
-      onTap: () => _showAppFontModal(appSettings),
     );
   }
 
@@ -845,84 +1056,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       : null,
                   onTap: () {
                     appSettings.setLocaleCode(option.code);
-                    Navigator.pop(context);
-                  },
-                );
-              }),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showAppFontModal(AppSettingsNotifier appSettings) {
-    final l10n = context.l10n;
-    const options = FontCatalog.appFonts;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                margin: const EdgeInsets.only(top: 12, bottom: 16),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .onSurface
-                      .withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.font_download_outlined,
-                      color: Theme.of(context).colorScheme.primary,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      l10n.appFont,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              ...options.map((option) {
-                final isSelected = appSettings.appFontFamily == option.family;
-                return ListTile(
-                  title: Text(
-                    FontCatalog.labelFor(l10n, option),
-                    style: TextStyle(fontFamily: option.family),
-                  ),
-                  trailing: isSelected
-                      ? Icon(
-                          Icons.check_circle,
-                          color: Theme.of(context).colorScheme.primary,
-                        )
-                      : null,
-                  onTap: () {
-                    appSettings.setAppFontFamily(option.family);
                     Navigator.pop(context);
                   },
                 );
@@ -1254,10 +1387,15 @@ class _SettingsPageState extends State<SettingsPage> {
                         ).colorScheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(
-                        Icons.auto_stories,
-                        color: Theme.of(context).colorScheme.primary,
+                      child: AppBrandIcon(
                         size: 32,
+                        borderRadius: 8,
+                        border: Border.all(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.28),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -1269,7 +1407,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'v1.0.0',
+                      'v$_appVersion',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(
                               context,
@@ -1278,7 +1416,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '一款简洁高效的电子书阅读应用，支持多种格式和个性化设置，助您畅享阅读时光。',
+                      '兄弟萌，情人节快乐！我喜欢哈基怡',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Theme.of(
@@ -1628,24 +1766,29 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // WebDAV配置对话框
   Future<void> _showWebDavConfig() async {
-    final result = await showDialog<bool>(
+    await showDialog<bool>(
       context: context,
       builder: (context) => const WebDavConfigDialog(),
     );
-
-    if (result == true) {
+    if (mounted) {
       setState(() {});
     }
   }
 
   // 立即同步
   Future<void> _syncNow() async {
-    setState(() {});
-
     try {
       final success = await _webdavService.manualSync();
       if (mounted) {
-        showSideToast(context, success ? '同步成功' : '同步失败');
+        if (success) {
+          showSideToast(context, '同步成功');
+        } else {
+          final reason = _webdavService.lastErrorMessage;
+          showSideToast(
+            context,
+            reason.isNotEmpty ? '同步失败: $reason' : '同步失败',
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -2160,10 +2303,15 @@ class _SettingsPageState extends State<SettingsPage> {
                     ).colorScheme.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Icon(
-                    Icons.auto_stories,
+                  child: AppBrandIcon(
                     size: 16,
-                    color: Theme.of(context).colorScheme.primary,
+                    borderRadius: 4,
+                    border: Border.all(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.24),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -2238,10 +2386,15 @@ class _SettingsPageState extends State<SettingsPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.auto_stories,
-                        color: Theme.of(context).colorScheme.primary,
+                      AppBrandIcon(
                         size: 24,
+                        borderRadius: 7,
+                        border: Border.all(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.24),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Text(
@@ -2280,7 +2433,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         subtitle: '全新体验，推荐使用',
                         description:
                             '• 90%屏幕利用率\n• 三种翻页模式\n• TTS语音朗读\n• 流畅的阅读体验',
-                        icon: Icons.auto_stories,
+                        icon: Icons.auto_awesome_rounded,
                         color: Colors.blue,
                         isRecommended: true,
                         setModalState: setModalState,
@@ -2520,7 +2673,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   /// 显示书籍文件同步选择对话框
   Future<void> _showBookFileSyncDialog() async {
-    final selectedBooks = _webdavService.getBooksSelectedForSync();
+    final selectedSet = _webdavService.getBooksSelectedForSync();
     final bookDao = BookDao();
     final allBooks = await bookDao.getAllBooks();
 
@@ -2530,8 +2683,6 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          final selectedSet = <int>{...selectedBooks};
-
           return AlertDialog(
             title: const Row(
               children: [
@@ -2585,7 +2736,12 @@ class _SettingsPageState extends State<SettingsPage> {
                           if (selectedSet.length == allBooks.length) {
                             selectedSet.clear();
                           } else {
-                            selectedSet.addAll(allBooks.map((b) => b.id!));
+                            selectedSet.addAll(
+                              allBooks
+                                  .map((b) => b.id)
+                                  .whereType<int>()
+                                  .toList(),
+                            );
                           }
                           setDialogState(() {});
                         },
@@ -2629,6 +2785,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               return CheckboxListTile(
                                 value: isSelected,
                                 onChanged: (value) {
+                                  if (book.id == null) return;
                                   if (value == true) {
                                     selectedSet.add(book.id!);
                                   } else {
@@ -2706,14 +2863,19 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
               FilledButton(
                 onPressed: () async {
-                  // 保存选择
-                  for (final bookId in selectedSet) {
-                    await _webdavService.setBookForSync(bookId, true);
+                  final previousSet = _webdavService.getBooksSelectedForSync();
+                  for (final book in allBooks) {
+                    final bookId = book.id;
+                    if (bookId == null) continue;
+                    final shouldSync = selectedSet.contains(bookId);
+                    if (previousSet.contains(bookId) != shouldSync) {
+                      await _webdavService.setBookForSync(bookId, shouldSync);
+                    }
                   }
                   if (!context.mounted) return;
                   setState(() {});
                   Navigator.pop(context);
-                  _showInfoSnackBar('已选择 ${selectedSet.length} 本书籍进行文件同步');
+                  _showInfoPopup('已选择 ${selectedSet.length} 本书籍进行文件同步');
                 },
                 child: const Text('保存'),
               ),

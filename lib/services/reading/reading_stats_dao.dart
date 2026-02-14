@@ -166,6 +166,31 @@ class ReadingStatsDao {
     };
   }
 
+  /// 最近阅读书籍（真实）：基于 reading_sessions 的最近结束时间排序。
+  Future<List<int>> getRecentBookIds({int limit = 5}) async {
+    final db = await dbService.database;
+    final safeLimit = limit.clamp(1, 50);
+    final rows = await db.rawQuery(
+      '''
+      SELECT bookId, MAX(endTimeMs) AS lastEnd
+      FROM reading_sessions
+      WHERE bookId IS NOT NULL AND bookId > 0
+      GROUP BY bookId
+      ORDER BY lastEnd DESC
+      LIMIT $safeLimit
+      ''',
+    );
+
+    final ids = <int>[];
+    for (final row in rows) {
+      final id = row['bookId'] as int?;
+      if (id != null && id > 0) {
+        ids.add(id);
+      }
+    }
+    return ids;
+  }
+
   /// 每日统计（真实）：时长来自 reading_stats；页数/当日阅读书籍数来自 reading_sessions。
   Future<List<Map<String, dynamic>>> getDailyStatsRange(
     DateTime startDate,
@@ -216,7 +241,8 @@ class ReadingStatsDao {
 
     final rows = <Map<String, dynamic>>[];
     final totalDays = endDate
-            .difference(DateTime(startDate.year, startDate.month, startDate.day))
+            .difference(
+                DateTime(startDate.year, startDate.month, startDate.day))
             .inDays +
         1;
     for (var i = 0; i < totalDays; i++) {
@@ -364,7 +390,8 @@ class ReadingStatsDao {
   /// 阅读会话概览（真实）。
   Future<Map<String, int>> getSessionSummary({int recentDays = 90}) async {
     final db = await dbService.database;
-    final startDate = _dateKey(DateTime.now().subtract(Duration(days: recentDays)));
+    final startDate =
+        _dateKey(DateTime.now().subtract(Duration(days: recentDays)));
     final rows = await db.rawQuery(
       '''
       SELECT
@@ -389,6 +416,42 @@ class ReadingStatsDao {
       'avgSessionMinutes': avgMinutes,
       'maxSessionMinutes': (maxDurationSeconds / 60).round(),
     };
+  }
+
+  /// 获取某一天的会话次数（可设置最小时长门槛）。
+  Future<int> getSessionCountForDay(
+    DateTime date, {
+    int minDurationSeconds = 0,
+  }) async {
+    final db = await dbService.database;
+    final rows = await db.rawQuery(
+      '''
+      SELECT COUNT(*) as count
+      FROM reading_sessions
+      WHERE date = ? AND durationInSeconds >= ?
+      ''',
+      [_dateKey(date), minDurationSeconds],
+    );
+    return (rows.first['count'] as int?) ?? 0;
+  }
+
+  /// 最近 N 天的平均单次会话时长（分钟）。
+  Future<double> getAverageSessionMinutes({int days = 30}) async {
+    final db = await dbService.database;
+    final startDate = _dateKey(DateTime.now().subtract(Duration(days: days)));
+    final rows = await db.rawQuery(
+      '''
+      SELECT AVG(durationInSeconds) as avgDurationSeconds
+      FROM reading_sessions
+      WHERE date >= ? AND durationInSeconds > 0
+      ''',
+      [startDate],
+    );
+    final avgSeconds = rows.first['avgDurationSeconds'];
+    if (avgSeconds is num && avgSeconds > 0) {
+      return avgSeconds / 60.0;
+    }
+    return 0;
   }
 
   /// 获取所有阅读统计（用于同步）- 保持兼容旧同步结构。

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 /// 书源数据模型
@@ -96,6 +98,9 @@ class BookSource {
 
   /// 工厂方法：从JSON创建书源
   factory BookSource.fromJson(Map<String, dynamic> json) {
+    final searchUrlFallback = (json['searchUrl'] ?? '').toString();
+    final exploreUrlFallback = (json['exploreUrl'] ?? '').toString();
+
     return BookSource(
       id: json['bookSourceUrl'] ?? '', // 使用URL作为ID
       bookSourceName: json['bookSourceName'] ?? '',
@@ -109,24 +114,20 @@ class BookSource {
       lastUpdateTime:
           json['lastUpdateTime'] ?? DateTime.now().millisecondsSinceEpoch,
       weight: json['weight'] ?? 0,
-      ruleSearch: json['ruleSearch'] != null
-          ? RuleSearch.fromJson(json['ruleSearch'])
+      ruleSearch: _parseRuleSearch(json['ruleSearch'], searchUrlFallback),
+      ruleExplore: _parseRuleExplore(json['ruleExplore'], exploreUrlFallback),
+      ruleBookInfo: _toRuleMap(json['ruleBookInfo']) != null
+          ? RuleBookInfo.fromJson(_toRuleMap(json['ruleBookInfo'])!)
           : null,
-      ruleExplore: json['ruleExplore'] != null
-          ? RuleExplore.fromJson(json['ruleExplore'])
+      ruleToc: _toRuleMap(json['ruleToc']) != null
+          ? RuleToc.fromJson(_toRuleMap(json['ruleToc'])!)
           : null,
-      ruleBookInfo: json['ruleBookInfo'] != null
-          ? RuleBookInfo.fromJson(json['ruleBookInfo'])
+      ruleContent: _toRuleMap(json['ruleContent']) != null
+          ? RuleContent.fromJson(_toRuleMap(json['ruleContent'])!)
           : null,
-      ruleToc: json['ruleToc'] != null
-          ? RuleToc.fromJson(json['ruleToc'])
-          : null,
-      ruleContent: json['ruleContent'] != null
-          ? RuleContent.fromJson(json['ruleContent'])
-          : null,
-      variableMap: Map<String, String>.from(json['variableMap'] ?? {}),
-      httpConfig: Map<String, String>.from(json['httpConfig'] ?? {}),
-      header: Map<String, String>.from(json['header'] ?? {}),
+      variableMap: _toStringMap(json['variableMap']),
+      httpConfig: _toStringMap(json['httpConfig']),
+      header: _toStringMap(json['header']),
       loginUrl: json['loginUrl'],
       loginUi: json['loginUi'],
       respondTime: json['respondTime'] ?? 180000,
@@ -146,6 +147,8 @@ class BookSource {
       'enabledExplore': enabledExplore,
       'lastUpdateTime': lastUpdateTime,
       'weight': weight,
+      if (ruleSearch?.url.isNotEmpty ?? false) 'searchUrl': ruleSearch!.url,
+      if (ruleExplore?.url.isNotEmpty ?? false) 'exploreUrl': ruleExplore!.url,
       'ruleSearch': ruleSearch?.toJson(),
       'ruleExplore': ruleExplore?.toJson(),
       'ruleBookInfo': ruleBookInfo?.toJson(),
@@ -227,6 +230,74 @@ class BookSource {
       loginUi: map['login_ui'],
       respondTime: map['respond_time'] ?? 180000,
     );
+  }
+
+  static RuleSearch? _parseRuleSearch(dynamic raw, String fallbackUrl) {
+    final map = _toRuleMap(raw);
+    if (map == null) return null;
+
+    final normalized = Map<String, dynamic>.from(map);
+    if ((normalized['url'] ?? '').toString().isEmpty &&
+        fallbackUrl.isNotEmpty) {
+      normalized['url'] = fallbackUrl;
+    }
+    return RuleSearch.fromJson(normalized);
+  }
+
+  static RuleExplore? _parseRuleExplore(dynamic raw, String fallbackUrl) {
+    final map = _toRuleMap(raw);
+    if (map == null) return null;
+
+    final normalized = Map<String, dynamic>.from(map);
+    if ((normalized['url'] ?? '').toString().isEmpty &&
+        fallbackUrl.isNotEmpty) {
+      normalized['url'] = fallbackUrl;
+    }
+    return RuleExplore.fromJson(normalized);
+  }
+
+  static Map<String, dynamic>? _toRuleMap(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) {
+      return raw.map((key, value) => MapEntry(key.toString(), value));
+    }
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+        if (decoded is Map) {
+          return decoded.map((key, value) => MapEntry(key.toString(), value));
+        }
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  static Map<String, String> _toStringMap(dynamic raw) {
+    if (raw == null) return <String, String>{};
+    if (raw is Map) {
+      return raw.map(
+        (key, value) => MapEntry(key.toString(), value?.toString() ?? ''),
+      );
+    }
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) {
+          return decoded.map(
+            (key, value) => MapEntry(key.toString(), value?.toString() ?? ''),
+          );
+        }
+      } catch (_) {
+        return <String, String>{};
+      }
+    }
+    return <String, String>{};
   }
 
   /// 获取书源类型名称

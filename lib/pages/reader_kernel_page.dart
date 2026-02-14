@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -6,9 +7,12 @@ import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:xxread/models/book.dart' as legacy;
+import 'package:xxread/models/bookmark.dart' as legacy_bookmark;
+import 'package:xxread/reader_core/ai/ai_service.dart';
 import 'package:xxread/reader_core/data/reader_models.dart' as core;
 import 'package:xxread/reader_core/paginator/page_plan.dart' hide Page;
 import 'package:xxread/reader_core/parser/parser_models.dart';
@@ -16,8 +20,13 @@ import 'package:xxread/reader_core/reader_kernel_controller.dart';
 import 'package:xxread/reader_core/renderer/reader_view.dart';
 import 'package:xxread/reader_core/selection/reader_selection.dart';
 import 'package:xxread/services/books/book_dao.dart';
+import 'package:xxread/services/books/bookmark_dao.dart';
 import 'package:xxread/services/reading/reading_stats_dao.dart';
+import 'package:xxread/services/tts_service.dart';
+import 'package:xxread/utils/font_catalog_helper.dart';
+import 'package:xxread/utils/localization_extension.dart';
 import 'package:xxread/utils/system_ui_helper.dart';
+import 'package:xxread/widgets/side_toast.dart';
 
 class ReaderKernelPage extends StatefulWidget {
   final legacy.Book book;
@@ -34,12 +43,18 @@ class ReaderKernelPage extends StatefulWidget {
 class _ReaderKernelPageState extends State<ReaderKernelPage>
     with WidgetsBindingObserver {
   static const String _themePrefKey = 'reader_theme_index_v1';
+  static const String _ttsEnabledPrefKey = 'reader_tts_enabled_v1';
+  static const String _readerFontPrefKey = 'reader_font_family_v1';
+  static const String _readerTypographyPrefKey = 'reader_typography_v1';
+  static const String _bookmarkPrefKeyPrefix = 'reader_bookmarks_v1';
+  static const String _bookmarkCfiPrefix = 'rk|';
   static const double _floatingPanelRadius = 30;
   static const MethodChannel _readerUIChannel =
       MethodChannel('com.niki.xxread/reader_ui');
 
   late final ReaderKernelController _controller;
   final _bookDao = BookDao();
+  final _bookmarkDao = BookmarkDao();
   final _statsDao = ReadingStatsDao();
   bool _chapterSwitching = false;
   ChapterBoundaryDirection? _chapterTransitionDirection;
@@ -105,6 +120,10 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   bool _bookProgressSaving = false;
   int _lastPersistedCurrentPage = -1;
   int _lastPersistedTotalPages = -1;
+  bool _exitingReader = false;
+  bool _ttsEnabled = true;
+  String? _pendingReaderFontFamily;
+  core.ReaderStyle? _pendingReaderStyle;
 
   static const Duration _statsFlushInterval = Duration(seconds: 20);
   static const Duration _statsIdleThreshold = Duration(seconds: 70);
@@ -124,6 +143,9 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
 
   Future<void> _bootstrap() async {
     await _restoreTheme();
+    await _restoreTtsPreference();
+    await _restoreReaderFontPreference();
+    await _restoreReaderTypographyPreference();
     if (!mounted) {
       return;
     }
@@ -146,6 +168,68 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     _applyReaderSystemUI(immersive: !_chromeVisible);
   }
 
+  Future<void> _restoreTtsPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool(_ttsEnabledPrefKey) ?? true;
+    if (!mounted || enabled == _ttsEnabled) {
+      return;
+    }
+    setState(() {
+      _ttsEnabled = enabled;
+    });
+  }
+
+  Future<void> _restoreReaderFontPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    final family = prefs.getString(_readerFontPrefKey);
+    _pendingReaderFontFamily =
+        (family == null || family.isEmpty) ? null : family;
+  }
+
+  Future<void> _restoreReaderTypographyPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_readerTypographyPrefKey);
+    if (raw == null || raw.trim().isEmpty) {
+      return;
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return;
+      }
+      final map = decoded.cast<String, dynamic>();
+
+      double? toDouble(dynamic value) {
+        if (value is double) return value;
+        if (value is num) return value.toDouble();
+        if (value is String) return double.tryParse(value);
+        return null;
+      }
+
+      final fontSize = toDouble(map['fontSize'])?.clamp(12.0, 40.0);
+      final lineHeight = toDouble(map['lineHeight'])?.clamp(1.1, 3.0);
+      final letterSpacing = toDouble(map['letterSpacing'])?.clamp(0.0, 3.0);
+      TextAlign? textAlign;
+      final alignRaw = map['textAlign'];
+      if (alignRaw is int &&
+          alignRaw >= 0 &&
+          alignRaw < TextAlign.values.length) {
+        textAlign = TextAlign.values[alignRaw];
+      }
+
+      _pendingReaderStyle = _controller.style.copyWith(
+        fontSize: fontSize,
+        lineHeight: lineHeight,
+        letterSpacing: letterSpacing,
+        textAlign: textAlign,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Reader] restore typography failed: $e');
+      }
+    }
+  }
+
   Future<void> _open() async {
     final fallbackId = widget.book.filePath.hashCode.abs().toString();
     await _controller.openBook(
@@ -156,10 +240,321 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
       format: widget.book.format,
       textEncoding: widget.book.textEncoding,
     );
+    var targetStyle = _controller.style;
+    if (_pendingReaderFontFamily != _controller.style.fontFamily) {
+      targetStyle = targetStyle.copyWith(
+        fontFamily: _pendingReaderFontFamily,
+        clearFontFamily: _pendingReaderFontFamily == null,
+      );
+    }
+    if (_pendingReaderStyle != null) {
+      final pending = _pendingReaderStyle!;
+      targetStyle = targetStyle.copyWith(
+        fontSize: pending.fontSize,
+        lineHeight: pending.lineHeight,
+        letterSpacing: pending.letterSpacing,
+        textAlign: pending.textAlign,
+      );
+    }
+    if (targetStyle.cacheSignature() != _controller.style.cacheSignature()) {
+      await _controller.updateStyle(targetStyle);
+    }
+    await _restoreBookmarks();
     _lastTrackedChapterId = _controller.currentParsedChapter?.chapter.id;
     _lastTrackedPageIndex = _controller.pageIndex;
     _markReadingInteraction();
     _schedulePersistBookProgress(immediate: true);
+  }
+
+  String _bookmarkStorageKey() {
+    final fallbackId = widget.book.filePath.hashCode.abs().toString();
+    final bookKey = (widget.book.id ?? fallbackId).toString();
+    return '$_bookmarkPrefKeyPrefix::$bookKey';
+  }
+
+  int? get _legacyBookId => widget.book.id;
+
+  Future<void> _restoreBookmarks() async {
+    final parsedBook = _controller.parsedBook;
+    if (parsedBook == null) {
+      return;
+    }
+    final restored = <_BookmarkPoint>{};
+    restored.addAll(await _loadBookmarksFromPrefs(parsedBook));
+    restored.addAll(await _loadBookmarksFromDatabase(parsedBook));
+
+    if (!mounted) {
+      _bookmarks
+        ..clear()
+        ..addAll(restored);
+    } else {
+      setState(() {
+        _bookmarks
+          ..clear()
+          ..addAll(restored);
+      });
+    }
+    await _persistBookmarks(syncDatabase: true);
+  }
+
+  Future<Set<_BookmarkPoint>> _loadBookmarksFromPrefs(
+    ParsedBook parsedBook,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_bookmarkStorageKey());
+    if (raw == null || raw.trim().isEmpty) {
+      return <_BookmarkPoint>{};
+    }
+    final restored = <_BookmarkPoint>{};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        return restored;
+      }
+      final chapterIndexById = <String, int>{};
+      for (int i = 0; i < parsedBook.chapters.length; i++) {
+        chapterIndexById[parsedBook.chapters[i].chapter.id] = i;
+      }
+      for (final item in decoded) {
+        if (item is! Map) {
+          continue;
+        }
+        final map = item.cast<dynamic, dynamic>();
+        String chapterId = (map['chapterId'] ?? '').toString();
+        int? chapterIndex = _parseIntSafe(map['chapterIndex']);
+        final anchorOffset = _parseIntSafe(map['anchorOffset']) ?? 0;
+
+        if (chapterId.isEmpty &&
+            chapterIndex != null &&
+            chapterIndex >= 0 &&
+            chapterIndex < parsedBook.chapters.length) {
+          chapterId = parsedBook.chapters[chapterIndex].chapter.id;
+        }
+        if (chapterId.isEmpty) {
+          continue;
+        }
+
+        chapterIndex ??= chapterIndexById[chapterId];
+        if (chapterIndex == null ||
+            chapterIndex < 0 ||
+            chapterIndex >= parsedBook.chapters.length) {
+          continue;
+        }
+        restored.add(
+          _BookmarkPoint(
+            chapterIndex: chapterIndex,
+            chapterId: chapterId,
+            anchorOffset: math.max(0, anchorOffset),
+          ),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Reader] restore bookmarks from prefs failed: $e');
+      }
+    }
+    return restored;
+  }
+
+  Future<Set<_BookmarkPoint>> _loadBookmarksFromDatabase(
+    ParsedBook parsedBook,
+  ) async {
+    final bookId = _legacyBookId;
+    if (bookId == null) {
+      return <_BookmarkPoint>{};
+    }
+    final points = <_BookmarkPoint>{};
+    try {
+      final rows = await _bookmarkDao.getBookmarksForBook(bookId);
+      for (final row in rows) {
+        final point = _pointFromBookmarkRecord(row, parsedBook);
+        if (point != null) {
+          points.add(point);
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Reader] restore bookmarks from db failed: $e');
+      }
+    }
+    return points;
+  }
+
+  Future<void> _persistBookmarks({bool syncDatabase = true}) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_bookmarks.isEmpty) {
+      await prefs.remove(_bookmarkStorageKey());
+      if (syncDatabase) {
+        await _syncBookmarksToDatabase();
+      }
+      return;
+    }
+    final payload = _bookmarks
+        .map(
+          (item) => <String, dynamic>{
+            'chapterId': item.chapterId,
+            'chapterIndex': item.chapterIndex,
+            'anchorOffset': item.anchorOffset,
+          },
+        )
+        .toList();
+    await prefs.setString(_bookmarkStorageKey(), jsonEncode(payload));
+    if (syncDatabase) {
+      await _syncBookmarksToDatabase();
+    }
+  }
+
+  Future<void> _syncBookmarksToDatabase() async {
+    final parsedBook = _controller.parsedBook;
+    final bookId = _legacyBookId;
+    if (parsedBook == null || bookId == null) {
+      return;
+    }
+    try {
+      final rows = await _bookmarkDao.getBookmarksForBook(bookId);
+      final managedInDb = <_BookmarkPoint, legacy_bookmark.Bookmark>{};
+      int removedCount = 0;
+      int insertedCount = 0;
+      for (final row in rows) {
+        final point = _pointFromBookmarkRecord(row, parsedBook);
+        if (point != null) {
+          managedInDb[point] = row;
+        }
+      }
+
+      final desired = _bookmarks.toSet();
+      for (final entry in managedInDb.entries) {
+        if (!desired.contains(entry.key) && entry.value.id != null) {
+          await _bookmarkDao.deleteBookmark(entry.value.id!);
+          removedCount++;
+        }
+      }
+
+      for (final point in desired) {
+        if (!managedInDb.containsKey(point)) {
+          await _bookmarkDao.insertBookmark(
+            _bookmarkRecordFromPoint(point, bookId),
+          );
+          insertedCount++;
+        }
+      }
+      if (kDebugMode) {
+        debugPrint(
+          '[Reader] bookmark db sync done bookId=$bookId desired=${desired.length} '
+          'inserted=$insertedCount removed=$removedCount',
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[Reader] sync bookmarks to db failed: $e');
+      }
+    }
+  }
+
+  legacy_bookmark.Bookmark _bookmarkRecordFromPoint(
+    _BookmarkPoint point,
+    int bookId,
+  ) {
+    return legacy_bookmark.Bookmark(
+      bookId: bookId,
+      pageNumber: _stableBookmarkPageNumber(point),
+      note: '',
+      cfi: _encodeBookmarkCfi(point),
+    );
+  }
+
+  _BookmarkPoint? _pointFromBookmarkRecord(
+    legacy_bookmark.Bookmark bookmark,
+    ParsedBook parsedBook,
+  ) {
+    final cfi = bookmark.cfi;
+    if (cfi == null || cfi.isEmpty) {
+      return null;
+    }
+    final map = _decodeBookmarkCfi(cfi);
+    if (map == null) {
+      return null;
+    }
+
+    String chapterId = (map['chapterId'] ?? '').toString();
+    int? chapterIndex = _parseIntSafe(map['chapterIndex']);
+    final anchorOffset = _parseIntSafe(map['anchorOffset']) ?? 0;
+    if (chapterId.isEmpty &&
+        chapterIndex != null &&
+        chapterIndex >= 0 &&
+        chapterIndex < parsedBook.chapters.length) {
+      chapterId = parsedBook.chapters[chapterIndex].chapter.id;
+    }
+    if (chapterId.isEmpty) {
+      return null;
+    }
+
+    chapterIndex ??= parsedBook.chapters
+        .indexWhere((element) => element.chapter.id == chapterId);
+    if (chapterIndex < 0 || chapterIndex >= parsedBook.chapters.length) {
+      return null;
+    }
+
+    return _BookmarkPoint(
+      chapterIndex: chapterIndex,
+      chapterId: chapterId,
+      anchorOffset: math.max(0, anchorOffset),
+    );
+  }
+
+  String _encodeBookmarkCfi(_BookmarkPoint point) {
+    final payload = jsonEncode({
+      'chapterId': point.chapterId,
+      'chapterIndex': point.chapterIndex,
+      'anchorOffset': point.anchorOffset,
+    });
+    return '$_bookmarkCfiPrefix${base64Url.encode(utf8.encode(payload))}';
+  }
+
+  Map<String, dynamic>? _decodeBookmarkCfi(String rawCfi) {
+    if (rawCfi.startsWith(_bookmarkCfiPrefix)) {
+      final encoded = rawCfi.substring(_bookmarkCfiPrefix.length);
+      try {
+        final decoded = utf8.decode(base64Url.decode(encoded));
+        final map = jsonDecode(decoded);
+        if (map is Map<String, dynamic>) {
+          return map;
+        }
+        if (map is Map) {
+          return map.cast<String, dynamic>();
+        }
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  int _stableBookmarkPageNumber(_BookmarkPoint point) {
+    int hash = 0x811C9DC5;
+    for (final unit in point.chapterId.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0x7fffffff;
+    }
+    hash ^= point.anchorOffset;
+    hash = (hash * 0x01000193) & 0x7fffffff;
+    if (hash <= 0) {
+      hash = 1;
+    }
+    return hash;
+  }
+
+  int? _parseIntSafe(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String) {
+      return int.tryParse(value);
+    }
+    return null;
   }
 
   @override
@@ -245,7 +640,10 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     final bookId = widget.book.id;
     final parsedBook = _controller.parsedBook;
     final plan = _controller.pagePlan;
-    if (bookId == null || parsedBook == null || plan == null || plan.pages.isEmpty) {
+    if (bookId == null ||
+        parsedBook == null ||
+        plan == null ||
+        plan.pages.isEmpty) {
       return;
     }
     if (_bookProgressSaving && !force) {
@@ -627,180 +1025,188 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _activeTheme.background,
-      extendBody: true,
-      body: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          if (_controller.loading && _controller.pagePlan == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        await _handleExitReader();
+      },
+      child: Scaffold(
+        backgroundColor: _activeTheme.background,
+        extendBody: true,
+        body: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            if (_controller.loading && _controller.pagePlan == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          if (_controller.error != null && _controller.pagePlan == null) {
-            return Center(child: Text(_controller.error!));
-          }
+            if (_controller.error != null && _controller.pagePlan == null) {
+              return Center(child: Text(_controller.error!));
+            }
 
-          final chapter = _controller.currentParsedChapter;
-          final plan = _controller.pagePlan;
-          if (chapter == null || plan == null) {
-            return const Center(child: Text('暂无内容'));
-          }
+            final chapter = _controller.currentParsedChapter;
+            final plan = _controller.pagePlan;
+            if (chapter == null || plan == null) {
+              return const Center(child: Text('暂无内容'));
+            }
 
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final media = MediaQuery.of(context);
-              final isLandscape = constraints.maxWidth > constraints.maxHeight;
-              final enableSpread = constraints.maxWidth >= 900 && isLandscape;
-              final platform = Theme.of(context).platform;
-              final isAndroid = platform == TargetPlatform.android;
-              // Use viewPadding to keep pagination area stable when chrome toggles.
-              final topInset = media.viewPadding.top;
-              final bottomInset = media.viewPadding.bottom;
-              const topUiReserve = 8.0;
-              // Keep a dedicated footer-safe lane for bottom page label to avoid text overlap.
-              final bottomUiReserve = isAndroid ? 32.0 : 28.0;
-              final padding = EdgeInsets.fromLTRB(
-                16,
-                topInset + topUiReserve,
-                16,
-                bottomInset + bottomUiReserve,
-              );
-
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _controller.updateViewport(
-                  viewport: Size(constraints.maxWidth, constraints.maxHeight),
-                  padding: padding,
-                  enableSpread: enableSpread,
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final media = MediaQuery.of(context);
+                final isLandscape =
+                    constraints.maxWidth > constraints.maxHeight;
+                final enableSpread = constraints.maxWidth >= 900 && isLandscape;
+                final platform = Theme.of(context).platform;
+                final isAndroid = platform == TargetPlatform.android;
+                // Use viewPadding to keep pagination area stable when chrome toggles.
+                final topInset = media.viewPadding.top;
+                final bottomInset = media.viewPadding.bottom;
+                const topUiReserve = 8.0;
+                // Keep a dedicated footer-safe lane for bottom page label to avoid text overlap.
+                final bottomUiReserve = isAndroid ? 32.0 : 28.0;
+                final padding = EdgeInsets.fromLTRB(
+                  16,
+                  topInset + topUiReserve,
+                  16,
+                  bottomInset + bottomUiReserve,
                 );
-              });
 
-              final readerIdentity =
-                  'reader-${chapter.chapter.id}-${_controller.layout.columns}';
-              final readerKey = ValueKey(readerIdentity);
-              final reader = ReaderView(
-                key: readerKey,
-                flowDoc: chapter.flowDoc,
-                pagePlan: plan,
-                chapterPlainText: chapter.chapter.content,
-                chapterResources: chapter.resources,
-                currentChapterTitle: chapter.chapter.title,
-                pageBackgroundColor: _activeTheme.background,
-                textColor: _activeTheme.foreground,
-                style: _controller.style,
-                layout: _controller.layout,
-                annotations: _controller.annotations,
-                initialPageIndex: _controller.pageIndex,
-                onPageChanged: (index) {
-                  _markReadingInteraction();
-                  _trackPageTurn(index);
-                  _controller.setPageIndex(index);
-                  if (!_chromeVisible) {
-                    _syncIOSReaderImmersive(true);
-                  }
-                  if (_chromeVisible) {
-                    _scheduleAutoImmersive();
-                  }
-                },
-                onSelectionAction: (payload) =>
-                    _onSelectionAction(context, payload),
-                onReachChapterBoundary: _onBoundaryReached,
-              );
-              final animatedReader = AnimatedSwitcher(
-                duration: const Duration(milliseconds: 280),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeOutCubic,
-                layoutBuilder: (currentChild, previousChildren) {
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: <Widget>[
-                      ...previousChildren,
-                      if (currentChild != null) currentChild,
-                    ],
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _controller.updateViewport(
+                    viewport: Size(constraints.maxWidth, constraints.maxHeight),
+                    padding: padding,
+                    enableSpread: enableSpread,
                   );
-                },
-                transitionBuilder: (child, animation) {
-                  final direction = _chapterTransitionDirection;
-                  if (direction == null) {
-                    return FadeTransition(opacity: animation, child: child);
-                  }
-                  final sign =
-                      direction == ChapterBoundaryDirection.next ? 1.0 : -1.0;
-                  final isIncoming = child.key == readerKey;
-                  final slideTween = Tween<Offset>(
-                    begin: Offset(isIncoming ? 0.12 * sign : 0, 0),
-                    end: Offset(isIncoming ? 0 : -0.12 * sign, 0),
-                  );
-                  return ClipRect(
-                    child: FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: slideTween.animate(animation),
-                        child: child,
-                      ),
-                    ),
-                  );
-                },
-                child: KeyedSubtree(
+                });
+
+                final readerIdentity =
+                    'reader-${chapter.chapter.id}-${_controller.layout.columns}';
+                final readerKey = ValueKey(readerIdentity);
+                final reader = ReaderView(
                   key: readerKey,
-                  child: reader,
-                ),
-              );
+                  flowDoc: chapter.flowDoc,
+                  pagePlan: plan,
+                  chapterPlainText: chapter.chapter.content,
+                  chapterResources: chapter.resources,
+                  currentChapterTitle: chapter.chapter.title,
+                  pageBackgroundColor: _activeTheme.background,
+                  textColor: _activeTheme.foreground,
+                  style: _controller.style,
+                  layout: _controller.layout,
+                  annotations: _controller.annotations,
+                  initialPageIndex: _controller.pageIndex,
+                  onPageChanged: (index) {
+                    _markReadingInteraction();
+                    _trackPageTurn(index);
+                    _controller.setPageIndex(index);
+                    if (!_chromeVisible) {
+                      _syncIOSReaderImmersive(true);
+                    }
+                    if (_chromeVisible) {
+                      _scheduleAutoImmersive();
+                    }
+                  },
+                  onSelectionAction: (payload) =>
+                      _onSelectionAction(context, payload),
+                  onReachChapterBoundary: _onBoundaryReached,
+                );
+                final animatedReader = AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 280),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeOutCubic,
+                  layoutBuilder: (currentChild, previousChildren) {
+                    return Stack(
+                      fit: StackFit.expand,
+                      children: <Widget>[
+                        ...previousChildren,
+                        if (currentChild != null) currentChild,
+                      ],
+                    );
+                  },
+                  transitionBuilder: (child, animation) {
+                    final direction = _chapterTransitionDirection;
+                    if (direction == null) {
+                      return FadeTransition(opacity: animation, child: child);
+                    }
+                    final sign =
+                        direction == ChapterBoundaryDirection.next ? 1.0 : -1.0;
+                    final isIncoming = child.key == readerKey;
+                    final slideTween = Tween<Offset>(
+                      begin: Offset(isIncoming ? 0.12 * sign : 0, 0),
+                      end: Offset(isIncoming ? 0 : -0.12 * sign, 0),
+                    );
+                    return ClipRect(
+                      child: FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: slideTween.animate(animation),
+                          child: child,
+                        ),
+                      ),
+                    );
+                  },
+                  child: KeyedSubtree(
+                    key: readerKey,
+                    child: reader,
+                  ),
+                );
 
-              return Listener(
-                behavior: HitTestBehavior.translucent,
-                onPointerDown: _handlePointerDown,
-                onPointerMove: _handlePointerMove,
-                onPointerCancel: _handlePointerCancel,
-                onPointerUp: (event) => _handlePointerUp(
-                  event,
-                  constraints,
-                  mediaPadding: media.padding,
-                ),
-                child: Stack(
-                  children: [
-                    Positioned.fill(child: animatedReader),
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: IgnorePointer(
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 160),
-                          curve: Curves.easeOut,
-                          opacity: _chromeVisible ? 0 : 1,
-                          child: _ReaderTopStatusOverlay(
-                            foreground: _activeTheme.foreground,
+                return Listener(
+                  behavior: HitTestBehavior.translucent,
+                  onPointerDown: _handlePointerDown,
+                  onPointerMove: _handlePointerMove,
+                  onPointerCancel: _handlePointerCancel,
+                  onPointerUp: (event) => _handlePointerUp(
+                    event,
+                    constraints,
+                    mediaPadding: media.padding,
+                  ),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(child: animatedReader),
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: IgnorePointer(
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 160),
+                            curve: Curves.easeOut,
+                            opacity: _chromeVisible ? 0 : 1,
+                            child: _ReaderTopStatusOverlay(
+                              foreground: _activeTheme.foreground,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: _buildBottomReadingInfoOverlay(
-                          chapter: chapter,
-                          plan: plan,
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: _buildBottomReadingInfoOverlay(
+                            chapter: chapter,
+                            plan: plan,
+                          ),
                         ),
                       ),
-                    ),
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: _buildTopControlBarAnimated(),
-                    ),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 34,
-                      child: _buildBottomToolbarAnimated(),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: _buildTopControlBarAnimated(),
+                      ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 34,
+                        child: _buildBottomToolbarAnimated(),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -896,7 +1302,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                 Icons.arrow_back,
                 color: _activeTheme.foreground,
               ),
-              onPressed: () => Navigator.of(context).maybePop(),
+              onPressed: () => _handleExitReader(),
             ),
             Expanded(
               child: AnimatedBuilder(
@@ -920,17 +1326,15 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                 Icons.auto_awesome,
                 color: _activeTheme.foreground,
               ),
-              onPressed: () async {
-                await _controller.analyzeCurrentPage();
-                if (!mounted) return;
-                _showAiSheetFromState(_controller.lastAiAnswer ?? 'AI 暂无回答');
-                _scheduleAutoImmersive();
-              },
+              onPressed: () => _showAiChatSheet(),
             ),
             IconButton(
-              tooltip: '更多',
-              icon: Icon(Icons.more_horiz, color: _activeTheme.foreground),
-              onPressed: () => _showEncodingSheet(context),
+              tooltip: 'TTS',
+              icon: Icon(
+                Icons.record_voice_over_rounded,
+                color: _activeTheme.foreground,
+              ),
+              onPressed: () => _showTtsSheet(context),
             ),
           ],
         ),
@@ -1043,7 +1447,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
       child: Padding(
         padding: EdgeInsets.fromLTRB(12, 0, 12, bottomInset + mobileLift),
         child: Text(
-          '第 $chapterNo/$chapterTotal 章 · 第 $pageNo/$pageTotal 页',
+          '第 $chapterNo/$chapterTotal 块 · 第 $pageNo/$pageTotal 页',
           style: TextStyle(
             color: _activeTheme.foreground.withValues(alpha: 0.92),
             fontSize: 12,
@@ -1144,6 +1548,21 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     }
   }
 
+  Future<void> _handleExitReader() async {
+    if (_exitingReader || !mounted) {
+      return;
+    }
+    _exitingReader = true;
+    try {
+      await _persistBookProgress(force: true);
+      await _flushReadingStats(force: true, resetWindow: false);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } finally {
+      _exitingReader = false;
+    }
+  }
+
   void _setTheme(
     int index, {
     bool showSnackBar = false,
@@ -1158,9 +1577,8 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     unawaited(_persistTheme(next));
     _applyReaderSystemUI(immersive: !_chromeVisible);
     if (showSnackBar) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('主题：${_themes[next].name}')),
-      );
+      showSideToast(context, '主题：${_themes[next].name}',
+          icon: Icons.palette_rounded);
     }
     if (_chromeVisible) {
       _scheduleAutoImmersive();
@@ -1170,6 +1588,290 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   Future<void> _persistTheme(int index) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_themePrefKey, index);
+  }
+
+  Future<void> _setReaderFontFamily(String? family) async {
+    if (!mounted) {
+      return;
+    }
+    final normalized = (family == null || family.isEmpty) ? null : family;
+    if (_controller.style.fontFamily == normalized) {
+      return;
+    }
+    await _controller.updateStyle(
+      _controller.style.copyWith(
+        fontFamily: normalized,
+        clearFontFamily: normalized == null,
+      ),
+    );
+    _pendingReaderFontFamily = normalized;
+    final prefs = await SharedPreferences.getInstance();
+    if (normalized == null) {
+      await prefs.remove(_readerFontPrefKey);
+      return;
+    }
+    await prefs.setString(_readerFontPrefKey, normalized);
+  }
+
+  Future<void> _applyTypographyStyle(core.ReaderStyle nextStyle) async {
+    await _controller.updateStyle(nextStyle);
+    await _persistTypographyStyle(nextStyle);
+  }
+
+  Future<void> _persistTypographyStyle(core.ReaderStyle style) async {
+    final prefs = await SharedPreferences.getInstance();
+    final payload = <String, dynamic>{
+      'fontSize': style.fontSize,
+      'lineHeight': style.lineHeight,
+      'letterSpacing': style.letterSpacing,
+      'textAlign': style.textAlign.index,
+    };
+    await prefs.setString(_readerTypographyPrefKey, jsonEncode(payload));
+  }
+
+  Future<void> _setTtsEnabled(bool enabled) async {
+    if (!mounted) {
+      return;
+    }
+    final ttsService = Provider.of<TtsService>(context, listen: false);
+    setState(() {
+      _ttsEnabled = enabled;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_ttsEnabledPrefKey, enabled);
+    if (!enabled) {
+      await ttsService.stop();
+    }
+  }
+
+  String _currentPageTextForTts() {
+    final plan = _controller.pagePlan;
+    if (plan == null || plan.pages.isEmpty) {
+      return '';
+    }
+    final pageIndex = _controller.pageIndex.clamp(0, plan.pages.length - 1);
+    final page = plan.pages[pageIndex];
+    final pageText = _controller.pageText(page).trim();
+    if (pageText.isEmpty) {
+      return '';
+    }
+    final chapterTitle =
+        _controller.currentParsedChapter?.chapter.title.trim() ?? '';
+    if (chapterTitle.isEmpty) {
+      return pageText;
+    }
+    return '$chapterTitle。\n$pageText';
+  }
+
+  Future<void> _playCurrentPageTts() async {
+    if (!_ttsEnabled) {
+      showSideToast(context, '请先在 TTS 菜单中启用朗读',
+          icon: Icons.record_voice_over_rounded);
+      return;
+    }
+    final ttsService = Provider.of<TtsService>(context, listen: false);
+    if (!ttsService.isInitialized) {
+      await ttsService.initialize();
+    }
+    if (!ttsService.isInitialized) {
+      if (!mounted) return;
+      showSideToast(
+        context,
+        ttsService.lastError ?? 'TTS不可用，请重试初始化',
+        icon: Icons.error_outline_rounded,
+      );
+      return;
+    }
+    final text = _currentPageTextForTts();
+    if (text.isEmpty) {
+      if (!mounted) return;
+      showSideToast(context, '本页暂无可朗读文本', icon: Icons.info_outline_rounded);
+      return;
+    }
+    await ttsService.speak(text);
+  }
+
+  Future<void> _togglePauseResumeTts(TtsService ttsService) async {
+    if (ttsService.isPlaying && !ttsService.isPaused) {
+      await ttsService.pause();
+      return;
+    }
+    if (ttsService.isPaused) {
+      await ttsService.resume();
+      return;
+    }
+    await _playCurrentPageTts();
+  }
+
+  Future<void> _showTtsSheet(BuildContext context) async {
+    await _showReaderBottomSheet<void>(
+      context: context,
+      title: 'TTS 朗读',
+      maxHeightFactor: 0.74,
+      builder: (_) {
+        return Consumer<TtsService>(
+          builder: (context, ttsService, __) {
+            final fg = _activeTheme.foreground;
+            final statusText = ttsService.isInitializing
+                ? '引擎初始化中'
+                : !ttsService.isInitialized
+                    ? '不可用'
+                    : !_ttsEnabled
+                        ? '已关闭'
+                        : ttsService.isPaused
+                            ? '已暂停'
+                            : ttsService.isPlaying
+                                ? '朗读中'
+                                : '待机';
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      color: Colors.white.withValues(alpha: 0.08),
+                      border: Border.all(
+                        color: fg.withValues(alpha: 0.16),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.graphic_eq_rounded,
+                          color: fg.withValues(alpha: 0.92),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            '状态：$statusText',
+                            style: TextStyle(
+                              color: fg.withValues(alpha: 0.90),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Switch.adaptive(
+                          value: _ttsEnabled,
+                          onChanged: (value) {
+                            unawaited(_setTtsEnabled(value));
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (ttsService.lastError?.trim().isNotEmpty ?? false) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.redAccent.withValues(alpha: 0.12),
+                        border: Border.all(
+                          color: Colors.redAccent.withValues(alpha: 0.30),
+                        ),
+                      ),
+                      child: Text(
+                        '错误：${ttsService.lastError}',
+                        style: TextStyle(
+                          color: fg.withValues(alpha: 0.90),
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.tonalIcon(
+                        onPressed: _ttsEnabled ? _playCurrentPageTts : null,
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        label: const Text('朗读本页'),
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: _ttsEnabled
+                            ? () => _togglePauseResumeTts(ttsService)
+                            : null,
+                        icon: Icon(
+                          ttsService.isPlaying && !ttsService.isPaused
+                              ? Icons.pause_rounded
+                              : Icons.play_circle_outline_rounded,
+                        ),
+                        label: Text(
+                          ttsService.isPlaying && !ttsService.isPaused
+                              ? '暂停'
+                              : '继续',
+                        ),
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: _ttsEnabled ? () => ttsService.stop() : null,
+                        icon: const Icon(Icons.stop_rounded),
+                        label: const Text('停止'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            unawaited(ttsService.retryInitialize()),
+                        icon: Icon(
+                          Icons.refresh_rounded,
+                          color: fg.withValues(alpha: 0.90),
+                        ),
+                        label: Text(
+                          ttsService.isInitializing ? '初始化中' : '重试初始化',
+                          style: TextStyle(
+                            color: fg.withValues(alpha: 0.90),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '语速 ${ttsService.speechRate.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      color: fg.withValues(alpha: 0.86),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Slider(
+                    value: ttsService.speechRate.clamp(0.2, 0.9),
+                    min: 0.2,
+                    max: 0.9,
+                    divisions: 14,
+                    onChanged: _ttsEnabled
+                        ? (value) => unawaited(ttsService.setSpeechRate(value))
+                        : null,
+                  ),
+                  Text(
+                    '音量 ${ttsService.speechVolume.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      color: fg.withValues(alpha: 0.86),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Slider(
+                    value: ttsService.speechVolume.clamp(0.0, 1.0),
+                    min: 0.0,
+                    max: 1.0,
+                    divisions: 10,
+                    onChanged: _ttsEnabled
+                        ? (value) => unawaited(ttsService.setVolume(value))
+                        : null,
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (_chromeVisible) {
+      _scheduleAutoImmersive();
+    }
   }
 
   _BookmarkPoint? _currentBookmarkPoint() {
@@ -1208,8 +1910,13 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
         _bookmarks.add(current);
       }
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(existed ? '已移除书签' : '已添加书签')),
+    unawaited(_persistBookmarks());
+    showSideToast(
+      context,
+      existed ? '已移除书签' : '已添加书签',
+      icon: existed
+          ? Icons.bookmark_remove_rounded
+          : Icons.bookmark_added_rounded,
     );
     if (_chromeVisible) {
       _scheduleAutoImmersive();
@@ -1227,7 +1934,8 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     if (parsedBook == null) {
       return;
     }
-    if (point.chapterIndex < 0 || point.chapterIndex >= parsedBook.chapters.length) {
+    if (point.chapterIndex < 0 ||
+        point.chapterIndex >= parsedBook.chapters.length) {
       return;
     }
 
@@ -1289,87 +1997,95 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
       barrierColor: Colors.black.withValues(alpha: 0.20),
       isScrollControlled: true,
       builder: (sheetContext) {
-        final maxHeight = MediaQuery.of(sheetContext).size.height * maxHeightFactor;
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-            child: _buildGlassPanel(
-              margin: EdgeInsets.zero,
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-              radius: _floatingPanelRadius,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: maxHeight),
-                child: Theme(
-                  data: Theme.of(sheetContext).copyWith(
-                    dividerColor: fg.withValues(alpha: 0.14),
-                    iconTheme: IconThemeData(color: fg.withValues(alpha: 0.92)),
-                    listTileTheme: ListTileThemeData(
-                      iconColor: fg.withValues(alpha: 0.92),
-                      textColor: fg.withValues(alpha: 0.94),
-                    ),
-                    textTheme: Theme.of(sheetContext).textTheme.apply(
-                          bodyColor: fg.withValues(alpha: 0.94),
-                          displayColor: fg.withValues(alpha: 0.94),
-                        ),
-                    chipTheme: Theme.of(sheetContext).chipTheme.copyWith(
-                          backgroundColor: fg.withValues(alpha: 0.10),
-                          selectedColor: fg.withValues(alpha: 0.20),
-                          disabledColor: fg.withValues(alpha: 0.06),
-                          side: BorderSide(
-                            color: fg.withValues(alpha: 0.18),
-                          ),
-                          labelStyle: TextStyle(
-                            color: fg.withValues(alpha: 0.90),
-                            fontWeight: FontWeight.w600,
-                          ),
-                          checkmarkColor: fg.withValues(alpha: 0.96),
-                          showCheckmark: false,
-                          shape: const StadiumBorder(),
-                        ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 42,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: fg.withValues(alpha: 0.28),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
+        final media = MediaQuery.of(sheetContext);
+        final maxHeight = media.size.height * maxHeightFactor;
+        final keyboardInset = media.viewInsets.bottom;
+        return AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: EdgeInsets.only(bottom: keyboardInset),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              child: _buildGlassPanel(
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                radius: _floatingPanelRadius,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: maxHeight),
+                  child: Theme(
+                    data: Theme.of(sheetContext).copyWith(
+                      dividerColor: fg.withValues(alpha: 0.14),
+                      iconTheme:
+                          IconThemeData(color: fg.withValues(alpha: 0.92)),
+                      listTileTheme: ListTileThemeData(
+                        iconColor: fg.withValues(alpha: 0.92),
+                        textColor: fg.withValues(alpha: 0.94),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              title,
-                              style: TextStyle(
-                                color: fg.withValues(alpha: 0.95),
-                                fontWeight: FontWeight.w700,
+                      textTheme: Theme.of(sheetContext).textTheme.apply(
+                            bodyColor: fg.withValues(alpha: 0.94),
+                            displayColor: fg.withValues(alpha: 0.94),
+                          ),
+                      chipTheme: Theme.of(sheetContext).chipTheme.copyWith(
+                            backgroundColor: fg.withValues(alpha: 0.10),
+                            selectedColor: fg.withValues(alpha: 0.20),
+                            disabledColor: fg.withValues(alpha: 0.06),
+                            side: BorderSide(
+                              color: fg.withValues(alpha: 0.18),
+                            ),
+                            labelStyle: TextStyle(
+                              color: fg.withValues(alpha: 0.90),
+                              fontWeight: FontWeight.w600,
+                            ),
+                            checkmarkColor: fg.withValues(alpha: 0.96),
+                            showCheckmark: false,
+                            shape: const StadiumBorder(),
+                          ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 42,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: fg.withValues(alpha: 0.28),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: TextStyle(
+                                  color: fg.withValues(alpha: 0.95),
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
-                          ),
-                          IconButton(
-                            tooltip: '关闭',
-                            icon: const Icon(Icons.close_rounded),
-                            color: fg.withValues(alpha: 0.90),
-                            onPressed: () => Navigator.of(sheetContext).pop(),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Flexible(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(18),
-                          child: ColoredBox(
-                            color: bg.withValues(alpha: 0.16),
-                            child: builder(sheetContext),
+                            IconButton(
+                              tooltip: '关闭',
+                              icon: const Icon(Icons.close_rounded),
+                              color: fg.withValues(alpha: 0.90),
+                              onPressed: () => Navigator.of(sheetContext).pop(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Flexible(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(18),
+                            child: ColoredBox(
+                              color: bg.withValues(alpha: 0.16),
+                              child: builder(sheetContext),
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1378,57 +2094,6 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
         );
       },
     );
-  }
-
-  Future<void> _switchEncoding(String encoding) async {
-    final normalized = encoding == 'auto' ? null : encoding;
-    if (widget.book.id != null) {
-      await _bookDao.updateBookTextEncoding(widget.book.id!, normalized);
-    }
-    await _controller.reloadWithEncoding(normalized);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已切换编码：${encoding.toUpperCase()}')),
-    );
-  }
-
-  Future<void> _showEncodingSheet(BuildContext context) async {
-    const options = <MapEntry<String, String>>[
-      MapEntry('自动识别', 'auto'),
-      MapEntry('UTF-8', 'utf8'),
-      MapEntry('GBK / GB2312', 'gbk'),
-      MapEntry('UTF-16 LE', 'utf16le'),
-      MapEntry('UTF-16 BE', 'utf16be'),
-    ];
-    await _showReaderBottomSheet<void>(
-      context: context,
-      title: '文本编码',
-      maxHeightFactor: 0.62,
-      builder: (sheetContext) {
-        return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-          itemCount: options.length,
-          separatorBuilder: (context, index) => Divider(
-            height: 1,
-            color: _activeTheme.foreground.withValues(alpha: 0.08),
-          ),
-          itemBuilder: (context, index) {
-            final option = options[index];
-            return ListTile(
-              leading: const Icon(Icons.code_rounded),
-              title: Text(option.key),
-              onTap: () async {
-                Navigator.of(sheetContext).pop();
-                await _switchEncoding(option.value);
-              },
-            );
-          },
-        );
-      },
-    );
-    if (_chromeVisible) {
-      _scheduleAutoImmersive();
-    }
   }
 
   Future<void> _showTocSheet(BuildContext context) async {
@@ -1442,55 +2107,36 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
       title: '目录',
       maxHeightFactor: 0.80,
       builder: (sheetContext) {
-        return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-          itemCount: toc.length,
-          itemBuilder: (context, index) {
-            final item = toc[index];
-            return ListTile(
-              contentPadding: EdgeInsets.only(
-                left: 12 + (item.level * 14),
-                right: 12,
-              ),
-              leading: Text(
-                '${index + 1}',
-                style: TextStyle(
-                  color: _activeTheme.foreground.withValues(alpha: 0.55),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              title: Text(
-                item.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onTap: () async {
-                Navigator.of(sheetContext).pop();
-                final chapterIndex = _controller.parsedBook!.chapters.indexWhere(
-                  (c) => c.chapter.id == item.chapterId,
-                );
-                if (chapterIndex >= 0) {
-                  final currentChapterIndex = _controller.chapterIndex;
-                  if (chapterIndex > currentChapterIndex) {
-                    _setChapterTransitionDirection(
-                      ChapterBoundaryDirection.next,
-                    );
-                  } else if (chapterIndex < currentChapterIndex) {
-                    _setChapterTransitionDirection(
-                      ChapterBoundaryDirection.previous,
-                    );
-                  } else {
-                    _setChapterTransitionDirection(null);
-                  }
-                  await _controller.jumpToChapter(
-                    chapterIndex,
-                    anchorOffset: 0,
-                  );
-                  await _controller.setPageIndex(0);
-                  _scheduleClearChapterTransitionDirection();
-                }
-              },
+        return _ReaderTocSheetPanel(
+          toc: toc,
+          currentChapterId: _controller.currentParsedChapter?.chapter.id,
+          foreground: _activeTheme.foreground,
+          background: _activeTheme.background,
+          onTapItem: (item) async {
+            Navigator.of(sheetContext).pop();
+            final chapterIndex = _controller.parsedBook!.chapters.indexWhere(
+              (c) => c.chapter.id == item.chapterId,
             );
+            if (chapterIndex >= 0) {
+              final currentChapterIndex = _controller.chapterIndex;
+              if (chapterIndex > currentChapterIndex) {
+                _setChapterTransitionDirection(
+                  ChapterBoundaryDirection.next,
+                );
+              } else if (chapterIndex < currentChapterIndex) {
+                _setChapterTransitionDirection(
+                  ChapterBoundaryDirection.previous,
+                );
+              } else {
+                _setChapterTransitionDirection(null);
+              }
+              await _controller.jumpToChapter(
+                chapterIndex,
+                anchorOffset: 0,
+              );
+              await _controller.setPageIndex(0);
+              _scheduleClearChapterTransitionDirection();
+            }
           },
         );
       },
@@ -1579,10 +2225,10 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     }
 
     if (payload.action == ReaderSelectionAction.askAi) {
-      await _controller.askSelectionAi(
-          payload.text, payload.globalStart, payload.globalEnd);
-      if (!context.mounted) return;
-      _showAiSheet(context, _controller.lastAiAnswer ?? 'AI 暂无回答');
+      final selected = payload.text.trim();
+      final question =
+          selected.isEmpty ? null : '请解释这段内容，并给我 3 条可执行建议：\n$selected';
+      await _showAiChatSheet(initialQuestion: question);
       return;
     }
 
@@ -1631,13 +2277,12 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
               builder: (context, _) {
                 final style = _controller.style;
                 final fg = _activeTheme.foreground;
-                final sectionTextStyle = Theme.of(context)
-                    .textTheme
-                    .labelLarge
-                    ?.copyWith(
-                      color: fg.withValues(alpha: 0.90),
-                      fontWeight: FontWeight.w600,
-                    );
+                final bg = _activeTheme.background;
+                final sectionTextStyle =
+                    Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: fg.withValues(alpha: 0.90),
+                          fontWeight: FontWeight.w600,
+                        );
                 return SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
                   child: Column(
@@ -1648,13 +2293,19 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                         label: '字号',
                         valueText: style.fontSize.toStringAsFixed(1),
                         foreground: fg,
-                        onDecrease: () => _controller.updateStyle(
-                          style.copyWith(
-                              fontSize: (style.fontSize - 1).clamp(12, 40)),
+                        onDecrease: () => unawaited(
+                          _applyTypographyStyle(
+                            style.copyWith(
+                              fontSize: (style.fontSize - 1).clamp(12, 40),
+                            ),
+                          ),
                         ),
-                        onIncrease: () => _controller.updateStyle(
-                          style.copyWith(
-                              fontSize: (style.fontSize + 1).clamp(12, 40)),
+                        onIncrease: () => unawaited(
+                          _applyTypographyStyle(
+                            style.copyWith(
+                              fontSize: (style.fontSize + 1).clamp(12, 40),
+                            ),
+                          ),
                         ),
                       ),
                       _buildStepAdjustRow(
@@ -1662,15 +2313,21 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                         label: '行距',
                         valueText: style.lineHeight.toStringAsFixed(2),
                         foreground: fg,
-                        onDecrease: () => _controller.updateStyle(
-                          style.copyWith(
+                        onDecrease: () => unawaited(
+                          _applyTypographyStyle(
+                            style.copyWith(
                               lineHeight:
-                                  (style.lineHeight - 0.1).clamp(1.1, 3.0)),
+                                  (style.lineHeight - 0.1).clamp(1.1, 3.0),
+                            ),
+                          ),
                         ),
-                        onIncrease: () => _controller.updateStyle(
-                          style.copyWith(
+                        onIncrease: () => unawaited(
+                          _applyTypographyStyle(
+                            style.copyWith(
                               lineHeight:
-                                  (style.lineHeight + 0.1).clamp(1.1, 3.0)),
+                                  (style.lineHeight + 0.1).clamp(1.1, 3.0),
+                            ),
+                          ),
                         ),
                       ),
                       _buildStepAdjustRow(
@@ -1678,64 +2335,89 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                         label: '字距',
                         valueText: style.letterSpacing.toStringAsFixed(2),
                         foreground: fg,
-                        onDecrease: () => _controller.updateStyle(
-                          style.copyWith(
-                            letterSpacing:
-                                (style.letterSpacing - 0.1).clamp(0.0, 3.0),
+                        onDecrease: () => unawaited(
+                          _applyTypographyStyle(
+                            style.copyWith(
+                              letterSpacing:
+                                  (style.letterSpacing - 0.1).clamp(0.0, 3.0),
+                            ),
                           ),
                         ),
-                        onIncrease: () => _controller.updateStyle(
-                          style.copyWith(
-                            letterSpacing:
-                                (style.letterSpacing + 0.1).clamp(0.0, 3.0),
+                        onIncrease: () => unawaited(
+                          _applyTypographyStyle(
+                            style.copyWith(
+                              letterSpacing:
+                                  (style.letterSpacing + 0.1).clamp(0.0, 3.0),
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(height: 10),
+                      Text('阅读字体', style: sectionTextStyle),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: List<Widget>.generate(
+                          FontCatalog.readerFonts.length,
+                          (index) {
+                            final option = FontCatalog.readerFonts[index];
+                            final selected = style.fontFamily == option.family;
+                            return _buildReaderFontChoiceChip(
+                              label: FontCatalog.labelFor(
+                                context.l10n,
+                                option,
+                              ),
+                              fontFamily: option.family,
+                              selected: selected,
+                              foreground: fg,
+                              background: bg,
+                              onTap: () => unawaited(
+                                _setReaderFontFamily(option.family),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       Text('对齐方式', style: sectionTextStyle),
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          ChoiceChip(
-                            label: const Text('左对齐'),
+                          _buildAlignChoiceChip(
+                            label: '左对齐',
                             selected: style.textAlign == TextAlign.start,
-                            backgroundColor: fg.withValues(alpha: 0.10),
-                            selectedColor: fg.withValues(alpha: 0.20),
-                            side: BorderSide(color: fg.withValues(alpha: 0.20)),
-                            labelStyle: TextStyle(
-                              color: fg.withValues(alpha: 0.86),
-                              fontWeight: FontWeight.w600,
+                            foreground: fg,
+                            background: bg,
+                            onTap: () => unawaited(
+                              _applyTypographyStyle(
+                                style.copyWith(textAlign: TextAlign.start),
+                              ),
                             ),
-                            onSelected: (_) => _controller.updateStyle(
-                                style.copyWith(textAlign: TextAlign.start)),
                           ),
-                          ChoiceChip(
-                            label: const Text('两端'),
+                          _buildAlignChoiceChip(
+                            label: '两端',
                             selected: style.textAlign == TextAlign.justify,
-                            backgroundColor: fg.withValues(alpha: 0.10),
-                            selectedColor: fg.withValues(alpha: 0.20),
-                            side: BorderSide(color: fg.withValues(alpha: 0.20)),
-                            labelStyle: TextStyle(
-                              color: fg.withValues(alpha: 0.86),
-                              fontWeight: FontWeight.w600,
+                            foreground: fg,
+                            background: bg,
+                            onTap: () => unawaited(
+                              _applyTypographyStyle(
+                                style.copyWith(textAlign: TextAlign.justify),
+                              ),
                             ),
-                            onSelected: (_) => _controller.updateStyle(
-                                style.copyWith(textAlign: TextAlign.justify)),
                           ),
-                          ChoiceChip(
-                            label: const Text('居中'),
+                          _buildAlignChoiceChip(
+                            label: '居中',
                             selected: style.textAlign == TextAlign.center,
-                            backgroundColor: fg.withValues(alpha: 0.10),
-                            selectedColor: fg.withValues(alpha: 0.20),
-                            side: BorderSide(color: fg.withValues(alpha: 0.20)),
-                            labelStyle: TextStyle(
-                              color: fg.withValues(alpha: 0.86),
-                              fontWeight: FontWeight.w600,
+                            foreground: fg,
+                            background: bg,
+                            onTap: () => unawaited(
+                              _applyTypographyStyle(
+                                style.copyWith(textAlign: TextAlign.center),
+                              ),
                             ),
-                            onSelected: (_) => _controller.updateStyle(
-                                style.copyWith(textAlign: TextAlign.center)),
                           ),
                         ],
                       ),
@@ -1745,7 +2427,8 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: List<Widget>.generate(_themes.length, (index) {
+                        children:
+                            List<Widget>.generate(_themes.length, (index) {
                           final theme = _themes[index];
                           final selected = _themeIndex == index;
                           return _buildThemeSelectorChip(
@@ -1819,19 +2502,86 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     );
   }
 
+  Widget _buildAlignChoiceChip({
+    required String label,
+    required bool selected,
+    required Color foreground,
+    required Color background,
+    required VoidCallback onTap,
+  }) {
+    final bgColor = Color.lerp(background, Colors.white, 0.10)!
+        .withValues(alpha: selected ? 0.62 : 0.46);
+    final selectedColor = Color.lerp(background, foreground, 0.10)!
+        .withValues(alpha: selected ? 0.58 : 0.40);
+    final borderColor = foreground.withValues(alpha: selected ? 0.34 : 0.18);
+    final textColor = foreground.withValues(alpha: selected ? 0.96 : 0.86);
+
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      backgroundColor: bgColor,
+      selectedColor: selectedColor,
+      side: BorderSide(
+        color: borderColor,
+        width: selected ? 1.2 : 1.0,
+      ),
+      labelStyle: TextStyle(
+        color: textColor,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+      ),
+      onSelected: (_) => onTap(),
+    );
+  }
+
+  Widget _buildReaderFontChoiceChip({
+    required String label,
+    required String? fontFamily,
+    required bool selected,
+    required Color foreground,
+    required Color background,
+    required VoidCallback onTap,
+  }) {
+    final bgColor = Color.lerp(background, Colors.white, 0.10)!
+        .withValues(alpha: selected ? 0.66 : 0.48);
+    final selectedColor = Color.lerp(background, foreground, 0.10)!
+        .withValues(alpha: selected ? 0.58 : 0.40);
+    final borderColor = foreground.withValues(alpha: selected ? 0.34 : 0.18);
+    final textColor = foreground.withValues(alpha: selected ? 0.96 : 0.86);
+
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      backgroundColor: bgColor,
+      selectedColor: selectedColor,
+      side: BorderSide(
+        color: borderColor,
+        width: selected ? 1.2 : 1.0,
+      ),
+      labelStyle: TextStyle(
+        color: textColor,
+        fontFamily: fontFamily,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+      ),
+      onSelected: (_) => onTap(),
+    );
+  }
+
   Widget _buildThemeSelectorChip({
     required _ReaderThemePreset theme,
     required bool selected,
     required VoidCallback onTap,
   }) {
     final chipRadius = BorderRadius.circular(16);
-    final borderColor = theme.foreground
-        .withValues(alpha: selected ? 0.78 : 0.34);
+    final borderColor =
+        theme.foreground.withValues(alpha: selected ? 0.78 : 0.34);
     final startColor = Color.lerp(theme.background, Colors.white, 0.10)!
         .withValues(alpha: selected ? 0.70 : 0.52);
     final endColor = Color.lerp(theme.background, Colors.black, 0.08)!
         .withValues(alpha: selected ? 0.62 : 0.44);
-    final textColor = theme.foreground.withValues(alpha: selected ? 0.96 : 0.84);
+    final textColor =
+        theme.foreground.withValues(alpha: selected ? 0.96 : 0.84);
 
     return Material(
       color: Colors.transparent,
@@ -1899,33 +2649,1222 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     );
   }
 
-  void _showAiSheet(BuildContext context, String text) {
-    unawaited(_showReaderBottomSheet<void>(
+  Future<void> _showAiChatSheet({String? initialQuestion}) async {
+    final plan = _controller.pagePlan;
+    if (plan == null || plan.pages.isEmpty) {
+      return;
+    }
+    final page =
+        plan.pages[_controller.pageIndex.clamp(0, plan.pages.length - 1)];
+    final chapter = _controller.currentParsedChapter;
+    final chapterTitle = chapter?.chapter.title ?? '当前章节';
+    final pageText = _controller.pageText(page).trim();
+
+    await _showReaderBottomSheet<void>(
       context: context,
-      title: 'AI 分析',
-      maxHeightFactor: 0.72,
+      title: 'AI 阅读助手',
+      maxHeightFactor: 0.90,
       builder: (_) {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
-          child: Text(
-            text,
-            style: TextStyle(
-              color: _activeTheme.foreground.withValues(alpha: 0.93),
-              height: 1.52,
-            ),
-          ),
+        return _ReaderAiChatPanel(
+          controller: _controller,
+          theme: _activeTheme,
+          chapterTitle: chapterTitle,
+          pageLabel: '第 ${_controller.pageIndex + 1}/${plan.pages.length} 页',
+          pageText: pageText,
+          initialQuestion: initialQuestion,
         );
       },
-    ));
+    );
     if (_chromeVisible) {
       _scheduleAutoImmersive();
     }
   }
+}
 
-  void _showAiSheetFromState(String text) {
-    if (!mounted) return;
-    _showAiSheet(context, text);
+class _ReaderTocSheetPanel extends StatefulWidget {
+  const _ReaderTocSheetPanel({
+    required this.toc,
+    required this.currentChapterId,
+    required this.foreground,
+    required this.background,
+    required this.onTapItem,
+  });
+
+  final List<core.TocItem> toc;
+  final String? currentChapterId;
+  final Color foreground;
+  final Color background;
+  final ValueChanged<core.TocItem> onTapItem;
+
+  @override
+  State<_ReaderTocSheetPanel> createState() => _ReaderTocSheetPanelState();
+}
+
+class _ReaderTocSheetPanelState extends State<_ReaderTocSheetPanel> {
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  bool _didAutoLocateCurrentChapter = false;
+  String _query = '';
+
+  static const double _estimatedTileExtent = 57.0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoLocateCurrentChapter();
+    });
   }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _autoLocateCurrentChapter() {
+    if (_didAutoLocateCurrentChapter ||
+        !_scrollController.hasClients ||
+        widget.currentChapterId == null) {
+      return;
+    }
+    final currentIndex =
+        widget.toc.indexWhere((t) => t.chapterId == widget.currentChapterId);
+    if (currentIndex < 0) {
+      _didAutoLocateCurrentChapter = true;
+      return;
+    }
+    final previewOffset = math.max(0, currentIndex - 2);
+    final rawOffset = previewOffset * _estimatedTileExtent;
+    final maxOffset = _scrollController.position.maxScrollExtent;
+    final targetOffset = rawOffset.clamp(0.0, maxOffset);
+    _scrollController.jumpTo(targetOffset);
+    _didAutoLocateCurrentChapter = true;
+  }
+
+  List<_TocSearchResult> _filteredItems() {
+    final query = _query.trim().toLowerCase();
+    final results = <_TocSearchResult>[];
+    for (var i = 0; i < widget.toc.length; i++) {
+      final item = widget.toc[i];
+      if (query.isNotEmpty && !item.title.toLowerCase().contains(query)) {
+        continue;
+      }
+      results.add(_TocSearchResult(index: i, item: item));
+    }
+    return results;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = widget.foreground;
+    final filtered = _filteredItems();
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+          child: TextField(
+            controller: _searchController,
+            onChanged: (value) {
+              setState(() {
+                _query = value;
+              });
+            },
+            style: TextStyle(
+              color: fg.withValues(alpha: 0.92),
+              fontWeight: FontWeight.w500,
+            ),
+            decoration: InputDecoration(
+              hintText: '搜索章节名',
+              hintStyle: TextStyle(color: fg.withValues(alpha: 0.56)),
+              prefixIcon: Icon(
+                Icons.search_rounded,
+                color: fg.withValues(alpha: 0.72),
+              ),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: Icon(
+                        Icons.close_rounded,
+                        color: fg.withValues(alpha: 0.72),
+                      ),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {
+                          _query = '';
+                        });
+                      },
+                    ),
+              isDense: true,
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.08),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: fg.withValues(alpha: 0.16),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: fg.withValues(alpha: 0.14),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: fg.withValues(alpha: 0.30),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Expanded(
+          child: filtered.isEmpty
+              ? Center(
+                  child: Text(
+                    '没有找到相关章节',
+                    style: TextStyle(
+                      color: fg.withValues(alpha: 0.70),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                )
+              : RawScrollbar(
+                  controller: _scrollController,
+                  thumbVisibility: true,
+                  interactive: true,
+                  thickness: 5.5,
+                  radius: const Radius.circular(999),
+                  thumbColor: fg.withValues(alpha: 0.40),
+                  trackVisibility: false,
+                  crossAxisMargin: 3,
+                  minThumbLength: 36,
+                  child: ListView.separated(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(8, 2, 10, 10),
+                    itemCount: filtered.length,
+                    separatorBuilder: (context, index) => Divider(
+                      height: 1,
+                      color: fg.withValues(alpha: 0.08),
+                    ),
+                    itemBuilder: (context, index) {
+                      final result = filtered[index];
+                      final item = result.item;
+                      final isCurrent =
+                          item.chapterId == widget.currentChapterId;
+                      return ListTile(
+                        contentPadding: EdgeInsets.only(
+                          left: 12 + (item.level * 12),
+                          right: 10,
+                        ),
+                        leading: Container(
+                          width: 32,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '${result.index + 1}',
+                            style: TextStyle(
+                              color:
+                                  fg.withValues(alpha: isCurrent ? 0.92 : 0.54),
+                              fontWeight:
+                                  isCurrent ? FontWeight.w700 : FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          item.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color:
+                                fg.withValues(alpha: isCurrent ? 0.96 : 0.90),
+                            fontWeight:
+                                isCurrent ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                        ),
+                        trailing: isCurrent
+                            ? Icon(
+                                Icons.my_location_rounded,
+                                size: 16,
+                                color: fg.withValues(alpha: 0.86),
+                              )
+                            : null,
+                        onTap: () => widget.onTapItem(item),
+                      );
+                    },
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TocSearchResult {
+  const _TocSearchResult({
+    required this.index,
+    required this.item,
+  });
+
+  final int index;
+  final core.TocItem item;
+}
+
+class _ReaderAiChatPanel extends StatefulWidget {
+  const _ReaderAiChatPanel({
+    required this.controller,
+    required this.theme,
+    required this.chapterTitle,
+    required this.pageLabel,
+    required this.pageText,
+    this.initialQuestion,
+  });
+
+  final ReaderKernelController controller;
+  final _ReaderThemePreset theme;
+  final String chapterTitle;
+  final String pageLabel;
+  final String pageText;
+  final String? initialQuestion;
+
+  @override
+  State<_ReaderAiChatPanel> createState() => _ReaderAiChatPanelState();
+}
+
+class _ReaderAiChatPanelState extends State<_ReaderAiChatPanel> {
+  final TextEditingController _inputController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _inputFocusNode = FocusNode();
+  final List<_AiUiMessage> _messages = <_AiUiMessage>[];
+
+  AIProviderSettings? _settings;
+  bool _loadingSettings = true;
+  bool _sending = false;
+  bool _entered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _inputFocusNode.addListener(_handleInputFocusChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _entered = true;
+      });
+    });
+    _bootstrap();
+  }
+
+  @override
+  void dispose() {
+    _inputFocusNode
+      ..removeListener(_handleInputFocusChanged)
+      ..dispose();
+    _inputController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _handleInputFocusChanged() {
+    if (_inputFocusNode.hasFocus) {
+      _scrollToBottom();
+    }
+  }
+
+  Future<void> _bootstrap() async {
+    try {
+      final settings = await widget.controller.loadAiSettings();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _settings = settings;
+        _loadingSettings = false;
+        _messages.add(
+          _AiUiMessage.assistant(
+            '我已经读取了本页内容（${widget.pageText.length} 字），可以直接问我：总结、解释、提炼要点、出题都可以。',
+            includeInHistory: false,
+          ),
+        );
+      });
+      _scrollToBottom();
+      final initial = widget.initialQuestion?.trim();
+      if (initial != null && initial.isNotEmpty) {
+        await _send(message: initial);
+      }
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _loadingSettings = false;
+        _messages.add(_AiUiMessage.system('初始化 AI 失败：$e'));
+      });
+    }
+  }
+
+  Future<void> _switchProvider(AIProviderType provider) async {
+    try {
+      final loaded = await widget.controller.loadAiSettings(provider);
+      await widget.controller.saveAiSettings(loaded);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _settings = loaded;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _messages.add(_AiUiMessage.system('切换服务商失败：$e'));
+      });
+      _scrollToBottom();
+    }
+  }
+
+  Future<void> _openProviderConfigDialog() async {
+    try {
+      final current = _settings ?? await widget.controller.loadAiSettings();
+      if (!mounted) {
+        return;
+      }
+      final providerSettings = <AIProviderType, AIProviderSettings>{};
+      for (final provider in AIProviderType.values) {
+        try {
+          providerSettings[provider] =
+              await widget.controller.loadAiSettings(provider);
+        } catch (_) {
+          providerSettings[provider] = AIProviderSettings.defaults(provider);
+        }
+      }
+      if (!mounted) {
+        return;
+      }
+
+      final result = await showDialog<AIProviderSettings>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.30),
+        builder: (dialogContext) {
+          return _AiProviderConfigDialog(
+            theme: widget.theme,
+            initialSettings: current,
+            providerSettings: providerSettings,
+          );
+        },
+      );
+
+      if (result == null) {
+        return;
+      }
+      await widget.controller.saveAiSettings(result);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _settings = result;
+        _messages.add(
+          _AiUiMessage.system(
+            '已切换到 ${result.provider.displayName} · 模型 ${result.model}',
+          ),
+        );
+      });
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _messages.add(_AiUiMessage.system('配置保存失败：$e'));
+      });
+      _scrollToBottom();
+    }
+  }
+
+  Future<void> _send({String? message}) async {
+    final text = (message ?? _inputController.text).trim();
+    if (text.isEmpty || _sending) {
+      return;
+    }
+
+    final settings = _settings;
+    if (settings == null) {
+      return;
+    }
+
+    if (!settings.isConfigured) {
+      await _openProviderConfigDialog();
+      if (!mounted || !(_settings?.isConfigured ?? false)) {
+        return;
+      }
+    }
+
+    FocusScope.of(context).unfocus();
+    _inputController.clear();
+
+    setState(() {
+      _sending = true;
+      _messages.add(_AiUiMessage.user(text));
+    });
+    _scrollToBottom();
+
+    final history = _messages
+        .where((m) => m.includeInHistory)
+        .map(
+          (m) => AIChatMessage(
+            role: m.role,
+            content: m.text,
+          ),
+        )
+        .toList();
+
+    try {
+      final answer = await widget.controller.askAiChat(
+        history: history,
+        pageText: widget.pageText,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _messages.add(_AiUiMessage.assistant(answer));
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _messages.add(_AiUiMessage.system('$e'));
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _sending = false;
+        });
+      }
+      _scrollToBottom();
+    }
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) {
+        return;
+      }
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent + 120,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = widget.theme.foreground;
+    final settings = _settings;
+
+    return AnimatedSlide(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      offset: _entered ? Offset.zero : const Offset(0, 0.04),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 220),
+        opacity: _entered ? 1 : 0,
+        child: Column(
+          children: [
+            _buildGlassSection(
+              fg: fg,
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.chapterTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: fg.withValues(alpha: 0.92),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.pageLabel,
+                        style: TextStyle(
+                          color: fg.withValues(alpha: 0.78),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<AIProviderType>(
+                            value: settings?.provider ?? AIProviderType.minimax,
+                            iconEnabledColor: fg.withValues(alpha: 0.90),
+                            dropdownColor:
+                                widget.theme.background.withValues(alpha: 0.98),
+                            style: TextStyle(
+                              color: fg.withValues(alpha: 0.92),
+                              fontWeight: FontWeight.w600,
+                            ),
+                            items: AIProviderType.values
+                                .map(
+                                  (provider) => DropdownMenuItem(
+                                    value: provider,
+                                    child: Text(provider.displayName),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (provider) {
+                              if (provider == null) {
+                                return;
+                              }
+                              unawaited(_switchProvider(provider));
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        settings == null || !settings.isConfigured
+                            ? '未配置 Key'
+                            : settings.model,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: fg.withValues(alpha: 0.76),
+                          fontSize: 12,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '配置 API',
+                        icon: Icon(
+                          Icons.settings_suggest_rounded,
+                          color: fg.withValues(alpha: 0.90),
+                        ),
+                        onPressed: _openProviderConfigDialog,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _buildGlassSection(
+                fg: fg,
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                child: _loadingSettings
+                    ? Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.6,
+                          color: fg.withValues(alpha: 0.86),
+                        ),
+                      )
+                    : ListView.separated(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+                        itemCount: _messages.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final msg = _messages[index];
+                          return _AiMessageBubble(
+                            key: ValueKey(msg.id),
+                            message: msg,
+                            foreground: fg,
+                            background: widget.theme.background,
+                          );
+                        },
+                      ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildGlassSection(
+              fg: fg,
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      focusNode: _inputFocusNode,
+                      controller: _inputController,
+                      minLines: 1,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                      onTap: _scrollToBottom,
+                      style: TextStyle(color: fg.withValues(alpha: 0.93)),
+                      decoration: InputDecoration(
+                        hintText: '问点什么？例如：总结本页重点',
+                        hintStyle: TextStyle(
+                          color: fg.withValues(alpha: 0.58),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide:
+                              BorderSide(color: fg.withValues(alpha: 0.18)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide:
+                              BorderSide(color: fg.withValues(alpha: 0.16)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide:
+                              BorderSide(color: fg.withValues(alpha: 0.34)),
+                        ),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.white.withValues(
+                        alpha: _sending ? 0.18 : 0.28,
+                      ),
+                    ),
+                    child: IconButton(
+                      tooltip: '发送',
+                      iconSize: 20,
+                      icon: _sending
+                          ? SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                color: fg.withValues(alpha: 0.92),
+                              ),
+                            )
+                          : Icon(
+                              Icons.send_rounded,
+                              color: fg.withValues(alpha: 0.92),
+                            ),
+                      onPressed: _sending ? null : () => _send(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGlassSection({
+    required Color fg,
+    required EdgeInsets padding,
+    required Widget child,
+  }) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: fg.withValues(alpha: 0.18)),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white.withValues(alpha: 0.18),
+                Colors.white.withValues(alpha: 0.08),
+              ],
+            ),
+            color: widget.theme.background.withValues(alpha: 0.36),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _AiMessageBubble extends StatefulWidget {
+  const _AiMessageBubble({
+    super.key,
+    required this.message,
+    required this.foreground,
+    required this.background,
+  });
+
+  final _AiUiMessage message;
+  final Color foreground;
+  final Color background;
+
+  @override
+  State<_AiMessageBubble> createState() => _AiMessageBubbleState();
+}
+
+class _AiMessageBubbleState extends State<_AiMessageBubble> {
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _visible = true;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final msg = widget.message;
+    final isUser = msg.role == 'user';
+    final isSystem = msg.role == 'system';
+    final bubbleColor = isSystem
+        ? widget.background.withValues(alpha: 0.38)
+        : isUser
+            ? widget.foreground.withValues(alpha: 0.22)
+            : widget.background.withValues(alpha: 0.46);
+    final borderColor = isUser
+        ? widget.foreground.withValues(alpha: 0.36)
+        : widget.foreground.withValues(alpha: 0.18);
+    final textColor =
+        widget.foreground.withValues(alpha: isSystem ? 0.78 : 0.93);
+
+    return AnimatedSlide(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      offset: _visible ? Offset.zero : const Offset(0, 0.08),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 180),
+        opacity: _visible ? 1 : 0,
+        child: Align(
+          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 340),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              decoration: BoxDecoration(
+                color: bubbleColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderColor),
+              ),
+              child: Text(
+                msg.text,
+                style: TextStyle(
+                  color: textColor,
+                  height: 1.45,
+                  fontSize: isSystem ? 12.5 : 13.5,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AiProviderConfigDialog extends StatefulWidget {
+  const _AiProviderConfigDialog({
+    required this.theme,
+    required this.initialSettings,
+    required this.providerSettings,
+  });
+
+  final _ReaderThemePreset theme;
+  final AIProviderSettings initialSettings;
+  final Map<AIProviderType, AIProviderSettings> providerSettings;
+
+  @override
+  State<_AiProviderConfigDialog> createState() =>
+      _AiProviderConfigDialogState();
+}
+
+class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _keyController;
+  late final TextEditingController _modelController;
+  late final TextEditingController _baseUrlController;
+  late final TextEditingController _tempController;
+
+  late final Map<AIProviderType, AIProviderSettings> _draftByProvider;
+  late AIProviderType _selectedProvider;
+  bool _obscureApiKey = true;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _draftByProvider = {
+      for (final provider in AIProviderType.values)
+        provider: (widget.providerSettings[provider] ??
+                AIProviderSettings.defaults(provider))
+            .normalized(),
+    };
+    _selectedProvider = widget.initialSettings.provider;
+    _draftByProvider[_selectedProvider] = widget.initialSettings.normalized();
+
+    _keyController = TextEditingController();
+    _modelController = TextEditingController();
+    _baseUrlController = TextEditingController();
+    _tempController = TextEditingController();
+    _applyProviderDraft(_selectedProvider);
+  }
+
+  @override
+  void dispose() {
+    _keyController.dispose();
+    _modelController.dispose();
+    _baseUrlController.dispose();
+    _tempController.dispose();
+    super.dispose();
+  }
+
+  void _applyProviderDraft(AIProviderType provider) {
+    final draft =
+        _draftByProvider[provider] ?? AIProviderSettings.defaults(provider);
+    _keyController.text = draft.apiKey;
+    _modelController.text = draft.model;
+    _baseUrlController.text = draft.baseUrl;
+    _tempController.text = draft.temperature.toStringAsFixed(2);
+  }
+
+  AIProviderSettings _buildDraftFromInputs(
+    AIProviderType provider, {
+    bool allowFallbackTemp = true,
+  }) {
+    final previous =
+        _draftByProvider[provider] ?? AIProviderSettings.defaults(provider);
+    final parsedTemp = double.tryParse(_tempController.text.trim());
+    final nextTemp =
+        parsedTemp ?? (allowFallbackTemp ? previous.temperature : double.nan);
+    return previous
+        .copyWith(
+          provider: provider,
+          apiKey: _keyController.text,
+          model: _modelController.text,
+          baseUrl: _baseUrlController.text,
+          temperature: nextTemp,
+        )
+        .normalized();
+  }
+
+  bool _validateTemperature(double value) {
+    if (!value.isFinite) {
+      return false;
+    }
+    if (value < 0 || value > 2) {
+      return false;
+    }
+    if (_selectedProvider == AIProviderType.minimax &&
+        (value <= 0 || value > 1)) {
+      return false;
+    }
+    if ((_selectedProvider == AIProviderType.claude ||
+            _selectedProvider == AIProviderType.gemini) &&
+        value > 1) {
+      return false;
+    }
+    return true;
+  }
+
+  String _temperatureHint(AIProviderType provider) {
+    switch (provider) {
+      case AIProviderType.minimax:
+        return 'Temperature: MiniMax 建议 0.01 ~ 1.00';
+      case AIProviderType.claude:
+      case AIProviderType.gemini:
+        return 'Temperature: 0.00 ~ 1.00';
+      case AIProviderType.glm:
+      case AIProviderType.openai:
+        return 'Temperature: 0.00 ~ 2.00';
+    }
+  }
+
+  void _onProviderChanged(AIProviderType provider) {
+    _draftByProvider[_selectedProvider] =
+        _buildDraftFromInputs(_selectedProvider);
+    setState(() {
+      _selectedProvider = provider;
+      _errorText = null;
+      _applyProviderDraft(provider);
+    });
+  }
+
+  void _onSave() {
+    final valid = _formKey.currentState?.validate() ?? false;
+    if (!valid) {
+      return;
+    }
+    final parsedTemp = double.tryParse(_tempController.text.trim());
+    if (parsedTemp == null || !_validateTemperature(parsedTemp)) {
+      setState(() {
+        _errorText = _selectedProvider == AIProviderType.minimax
+            ? 'MiniMax 的 Temperature 必须在 0.01 ~ 1.00 之间'
+            : 'Temperature 超出范围，请按提示填写';
+      });
+      return;
+    }
+
+    final result = _buildDraftFromInputs(
+      _selectedProvider,
+      allowFallbackTemp: false,
+    );
+    Navigator.of(context).pop(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = widget.theme.foreground;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 14),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              color: widget.theme.background.withValues(alpha: 0.68),
+              border: Border.all(color: fg.withValues(alpha: 0.26)),
+            ),
+            child: Form(
+              key: _formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AI 接口配置',
+                      style: TextStyle(
+                        color: fg.withValues(alpha: 0.95),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<AIProviderType>(
+                      initialValue: _selectedProvider,
+                      decoration: const InputDecoration(
+                        labelText: '服务商',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: AIProviderType.values
+                          .map(
+                            (provider) => DropdownMenuItem(
+                              value: provider,
+                              child: Text(provider.displayName),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (provider) {
+                        if (provider == null || provider == _selectedProvider) {
+                          return;
+                        }
+                        _onProviderChanged(provider);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _keyController,
+                      obscureText: _obscureApiKey,
+                      decoration: InputDecoration(
+                        labelText: 'API Key',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        suffixIcon: IconButton(
+                          tooltip: _obscureApiKey ? '显示' : '隐藏',
+                          icon: Icon(_obscureApiKey
+                              ? Icons.visibility_off_rounded
+                              : Icons.visibility_rounded),
+                          onPressed: () {
+                            setState(() {
+                              _obscureApiKey = !_obscureApiKey;
+                            });
+                          },
+                        ),
+                      ),
+                      validator: (value) {
+                        if ((value ?? '').trim().isEmpty) {
+                          return 'API Key 不能为空';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _modelController,
+                      decoration: const InputDecoration(
+                        labelText: 'Model',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      validator: (value) {
+                        if ((value ?? '').trim().isEmpty) {
+                          return 'Model 不能为空';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _baseUrlController,
+                      decoration: const InputDecoration(
+                        labelText: 'Base URL',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      validator: (value) {
+                        final text = (value ?? '').trim();
+                        if (text.isEmpty) {
+                          return 'Base URL 不能为空';
+                        }
+                        final uri = Uri.tryParse(text);
+                        if (uri == null ||
+                            !(uri.isScheme('http') || uri.isScheme('https'))) {
+                          return '请输入合法的 http/https 地址';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _tempController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Temperature',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      validator: (value) {
+                        final parsed = double.tryParse((value ?? '').trim());
+                        if (parsed == null) {
+                          return 'Temperature 必须是数字';
+                        }
+                        if (!_validateTemperature(parsed)) {
+                          return _selectedProvider == AIProviderType.minimax
+                              ? 'MiniMax 需 0.01 ~ 1.00'
+                              : '超出允许范围';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _temperatureHint(_selectedProvider),
+                      style: TextStyle(
+                        color: fg.withValues(alpha: 0.72),
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'MiniMax: https://api.minimax.io/v1\nGLM: https://open.bigmodel.cn/api/paas/v4\nOpenAI: https://api.openai.com/v1\nClaude: https://api.anthropic.com\nGemini: https://generativelanguage.googleapis.com/v1beta',
+                      style: TextStyle(
+                        color: fg.withValues(alpha: 0.66),
+                        fontSize: 11.5,
+                        height: 1.35,
+                      ),
+                    ),
+                    if (_errorText != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        _errorText!,
+                        style: TextStyle(
+                          color: Colors.redAccent.shade200,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('取消'),
+                        ),
+                        const Spacer(),
+                        FilledButton(
+                          onPressed: _onSave,
+                          child: const Text('保存'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AiUiMessage {
+  _AiUiMessage({
+    required this.role,
+    required this.text,
+    required this.includeInHistory,
+  }) : id = '${DateTime.now().microsecondsSinceEpoch}-${text.hashCode}';
+
+  factory _AiUiMessage.user(String text) => _AiUiMessage(
+        role: 'user',
+        text: text,
+        includeInHistory: true,
+      );
+  factory _AiUiMessage.assistant(String text, {bool includeInHistory = true}) =>
+      _AiUiMessage(
+        role: 'assistant',
+        text: text,
+        includeInHistory: includeInHistory,
+      );
+  factory _AiUiMessage.system(String text) => _AiUiMessage(
+        role: 'system',
+        text: text,
+        includeInHistory: false,
+      );
+
+  final String id;
+  final String role;
+  final String text;
+  final bool includeInHistory;
 }
 
 class _ReaderTopStatusOverlay extends StatefulWidget {

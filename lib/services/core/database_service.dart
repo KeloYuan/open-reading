@@ -12,7 +12,7 @@ class DatabaseService {
 
   static Database? _database;
   static const String _dbName = 'xxread_v2.db';
-  static const int _dbVersion = 11;
+  static const int _dbVersion = 12;
   static bool _isInitializing = false;
   static final Completer<Database> _initCompleter = Completer<Database>();
 
@@ -282,6 +282,15 @@ class DatabaseService {
       ''');
       await _createReadingSessionsIndexes(db);
     }
+    if (oldVersion < 12) {
+      final bookmarkInfo = await db.rawQuery('PRAGMA table_info(bookmarks)');
+      final bookmarkColumns =
+          bookmarkInfo.map((c) => c['name'] as String).toSet();
+      if (!bookmarkColumns.contains('cfi')) {
+        await db.execute('ALTER TABLE bookmarks ADD COLUMN cfi TEXT');
+      }
+      await _createBookmarksIndexes(db);
+    }
   }
 
   Future<void> _createTables(Database db) async {
@@ -312,6 +321,7 @@ class DatabaseService {
         pageNumber INTEGER NOT NULL,
         note TEXT,
         createDate INTEGER NOT NULL,
+        cfi TEXT,
         FOREIGN KEY (bookId) REFERENCES books (id) ON DELETE CASCADE
       )
     ''');
@@ -360,6 +370,7 @@ class DatabaseService {
 
     // Create indexes for performance
     await _createBooksTableIndexes(db);
+    await _createBookmarksIndexes(db);
     await _createReadingStatsIndexes(db);
     await _createReadingSessionsIndexes(db);
     await _createBookNotesIndexes(db);
@@ -435,6 +446,16 @@ class DatabaseService {
     // 为date创建索引，用于快速查询日期范围
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_reading_stats_date ON reading_stats (date DESC)',
+    );
+  }
+
+  /// 创建bookmarks表索引
+  Future<void> _createBookmarksIndexes(Database db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_bookmarks_book_page ON bookmarks (bookId, pageNumber)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_bookmarks_book_create ON bookmarks (bookId, createDate DESC)',
     );
   }
 

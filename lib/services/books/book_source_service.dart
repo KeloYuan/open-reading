@@ -242,25 +242,62 @@ class BookSourceService {
       final jsonData = jsonDecode(jsonString);
       final List<BookSource> sources = [];
       final List<String> errors = [];
+      final Set<String> importedIds = <String>{};
+
+      void parseAndCollect(dynamic rawEntry, String prefix) {
+        if (rawEntry is! Map) {
+          errors.add('$prefix 不是有效对象');
+          return;
+        }
+
+        final normalizedEntry = rawEntry.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+
+        try {
+          final parsed = BookSource.fromJson(normalizedEntry);
+          final normalizedUrl = parsed.bookSourceUrl.trim();
+          if (normalizedUrl.isEmpty) {
+            errors.add('$prefix 缺少 bookSourceUrl');
+            return;
+          }
+
+          final uri = Uri.tryParse(normalizedUrl);
+          if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+            errors.add('$prefix bookSourceUrl 无效: $normalizedUrl');
+            return;
+          }
+
+          final normalizedId =
+              parsed.id.trim().isEmpty ? normalizedUrl : parsed.id.trim();
+          if (importedIds.contains(normalizedId)) {
+            errors.add('$prefix 与前面条目重复，已跳过: $normalizedId');
+            return;
+          }
+
+          importedIds.add(normalizedId);
+          sources.add(
+            parsed.copyWith(
+              id: normalizedId,
+              bookSourceUrl: normalizedUrl,
+              bookSourceName: parsed.bookSourceName.trim().isEmpty
+                  ? uri.host
+                  : parsed.bookSourceName.trim(),
+            ),
+          );
+        } catch (e) {
+          errors.add('$prefix 解析失败: $e');
+        }
+      }
 
       if (jsonData is List) {
         // 批量导入
         for (int i = 0; i < jsonData.length; i++) {
-          try {
-            final source = BookSource.fromJson(jsonData[i]);
-            sources.add(source);
-          } catch (e) {
-            errors.add('第${i + 1}个书源解析失败: $e');
-          }
+          parseAndCollect(jsonData[i], '第${i + 1}个书源');
         }
-      } else if (jsonData is Map<String, dynamic>) {
+      } else if (jsonData is Map) {
         // 单个导入
-        try {
-          final source = BookSource.fromJson(jsonData);
-          sources.add(source);
-        } catch (e) {
-          errors.add('书源解析失败: $e');
-        }
+        parseAndCollect(jsonData, '书源');
       } else {
         throw Exception('不支持的JSON格式');
       }

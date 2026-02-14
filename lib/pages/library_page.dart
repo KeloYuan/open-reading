@@ -18,6 +18,7 @@ import '../widgets/scrolling_text.dart';
 import '../utils/localization_extension.dart';
 import '../utils/page_style_helper.dart';
 import '../utils/system_ui_helper.dart';
+import '../widgets/app_brand_icon.dart';
 
 class LibraryPage extends StatefulWidget {
   const LibraryPage({super.key});
@@ -118,54 +119,56 @@ class _LibraryPageState extends State<LibraryPage> {
       ),
       body: _buildContent(context, useRailNavigation: useRailNavigation),
       // 手机端改为顶部“+”按钮入口，宽屏继续保留FAB
-      floatingActionButton: LayoutHelper.getNavigationType(context) == NavigationType.rail
-          ? _buildFloatingActionButton()
-          : null,
+      floatingActionButton:
+          LayoutHelper.getNavigationType(context) == NavigationType.rail
+              ? _buildFloatingActionButton()
+              : null,
     );
   }
 
   // 提取页面内容部分，在两种模式下共用
-  Widget _buildContent(BuildContext context, {required bool useRailNavigation}) {
+  Widget _buildContent(BuildContext context,
+      {required bool useRailNavigation}) {
     final books = _visibleBooks;
     final palette = PageStyleHelper.palette(context);
     return Container(
-        decoration: BoxDecoration(
-          gradient: PageStyleHelper.backgroundGradient(context),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              if (useRailNavigation) ...[
-                _buildTopBar(),
-                const SizedBox(height: 10),
-              ] else ...[
-                const SizedBox(height: kHomeMobileTopBarHeight + 8),
-              ],
-              _buildSearchBar(),
+      decoration: BoxDecoration(
+        gradient: PageStyleHelper.backgroundGradient(context),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            if (useRailNavigation) ...[
+              _buildTopBar(),
               const SizedBox(height: 10),
-              _buildShelfSummaryCard(),
-              const SizedBox(height: 8),
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _books.isEmpty
-                        ? _buildEmptyLibrary(compactTop: true)
-                        : books.isEmpty
-                            ? _buildNoSearchResult()
-                            : RefreshIndicator(
-                                onRefresh: _loadBooks,
-                                strokeWidth: 2.5,
-                                displacement: 48,
-                                color: Theme.of(context).colorScheme.primary,
-                                backgroundColor: palette.cardStrong,
-                                child: _buildBooksGrid(books),
-                              ),
-              ),
+            ] else ...[
+              const SizedBox(height: kHomeMobileTopBarHeight + 8),
             ],
-          ),
+            _buildSearchBar(),
+            const SizedBox(height: 10),
+            _buildShelfSummaryCard(),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _books.isEmpty
+                      ? _buildEmptyLibrary(compactTop: true)
+                      : books.isEmpty
+                          ? _buildNoSearchResult()
+                          : RefreshIndicator(
+                              onRefresh: _loadBooks,
+                              strokeWidth: 2.5,
+                              displacement: 48,
+                              color: Theme.of(context).colorScheme.primary,
+                              backgroundColor: palette.cardStrong,
+                              child: _buildBooksGrid(books),
+                            ),
+            ),
+          ],
         ),
-      );
+      ),
+    );
   }
 
   List<Book> get _visibleBooks {
@@ -277,9 +280,13 @@ class _LibraryPageState extends State<LibraryPage> {
     final palette = PageStyleHelper.palette(context);
     final total = _books.length;
     final inReading = _books
-        .where((book) => book.currentPage > 0 && book.currentPage < book.totalPages)
+        .where((book) =>
+            book.currentPage > 0 && book.currentPage < book.totalPages)
         .length;
-    final finished = _books.where((book) => book.totalPages > 0 && book.currentPage >= book.totalPages).length;
+    final finished = _books
+        .where((book) =>
+            book.totalPages > 0 && book.currentPage >= book.totalPages)
+        .length;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -384,7 +391,8 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Widget _buildEmptyLibrary({bool compactTop = false}) {
-    final topInset = compactTop ? 20.0 : MediaQuery.of(context).padding.top + 100;
+    final topInset =
+        compactTop ? 20.0 : MediaQuery.of(context).padding.top + 100;
     return Center(
       child: Padding(
         padding: EdgeInsets.fromLTRB(40, topInset, 40, 40),
@@ -420,10 +428,15 @@ class _LibraryPageState extends State<LibraryPage> {
                       ).colorScheme.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: Icon(
-                      Icons.auto_stories,
+                    child: AppBrandIcon(
                       size: 60,
-                      color: Theme.of(context).colorScheme.primary,
+                      borderRadius: 16,
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.24),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -489,7 +502,8 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Widget _buildBooksGrid(List<Book> books) {
-    final useRail = LayoutHelper.getNavigationType(context) == NavigationType.rail;
+    final useRail =
+        LayoutHelper.getNavigationType(context) == NavigationType.rail;
     if (!useRail) {
       return _buildBooksList(books);
     }
@@ -527,8 +541,7 @@ class _LibraryPageState extends State<LibraryPage> {
         );
         final itemWidth = availableWidth / crossAxisCount;
         final itemHeight = (itemWidth * 4 / 3) + textHeight + gap;
-        final childAspectRatio =
-            itemWidth > 0 ? itemWidth / itemHeight : 0.75;
+        final childAspectRatio = itemWidth > 0 ? itemWidth / itemHeight : 0.75;
 
         return Container(
           decoration: BoxDecoration(
@@ -608,7 +621,8 @@ class _LibraryPageState extends State<LibraryPage> {
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
           child: Material(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.86),
+            color:
+                Theme.of(context).colorScheme.surface.withValues(alpha: 0.86),
             borderRadius: BorderRadius.circular(16),
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
@@ -641,14 +655,18 @@ class _LibraryPageState extends State<LibraryPage> {
                             book.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w700),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             progressText,
                             style: TextStyle(
                               fontSize: 13,
-                              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.58),
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withValues(alpha: 0.58),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -657,10 +675,12 @@ class _LibraryPageState extends State<LibraryPage> {
                             child: LinearProgressIndicator(
                               value: progress,
                               minHeight: 5,
-                              backgroundColor:
-                                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-                              valueColor:
-                                  AlwaysStoppedAnimation(Theme.of(context).colorScheme.primary),
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withValues(alpha: 0.12),
+                              valueColor: AlwaysStoppedAnimation(
+                                  Theme.of(context).colorScheme.primary),
                             ),
                           ),
                         ],
@@ -669,7 +689,10 @@ class _LibraryPageState extends State<LibraryPage> {
                     const SizedBox(width: 8),
                     Icon(
                       Icons.chevron_right_rounded,
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurface
+                          .withValues(alpha: 0.35),
                     ),
                   ],
                 ),
@@ -682,11 +705,13 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Widget _buildListCover(BuildContext context, Book book) {
-    if (book.coverImagePath != null && File(book.coverImagePath!).existsSync()) {
+    if (book.coverImagePath != null &&
+        File(book.coverImagePath!).existsSync()) {
       return Image.file(
         File(book.coverImagePath!),
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => _buildListDefaultCover(context, book),
+        errorBuilder: (context, error, stackTrace) =>
+            _buildListDefaultCover(context, book),
       );
     }
     return _buildListDefaultCover(context, book);
@@ -705,7 +730,12 @@ class _LibraryPageState extends State<LibraryPage> {
           ],
         ),
       ),
-      child: const Icon(Icons.menu_book_rounded, color: Colors.white),
+      child: const Center(
+        child: AppBrandIcon(
+          size: 32,
+          borderRadius: 8,
+        ),
+      ),
     );
   }
 
@@ -796,10 +826,11 @@ class _LibraryPageState extends State<LibraryPage> {
                                     fit: BoxFit.cover,
                                   ),
                                 )
-                              : const Icon(
-                                  Icons.menu_book,
-                                  color: Colors.white,
-                                  size: 24,
+                              : const Center(
+                                  child: AppBrandIcon(
+                                    size: 24,
+                                    borderRadius: 6,
+                                  ),
                                 ),
                         ),
                         const SizedBox(width: 16),
@@ -838,13 +869,15 @@ class _LibraryPageState extends State<LibraryPage> {
                               // 阅读进度
                               Row(
                                 children: [
-                                  Icon(
-                                    Icons.auto_stories,
+                                  AppBrandIcon(
                                     size: 14,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .primary
-                                        .withValues(alpha: 0.7),
+                                    borderRadius: 4,
+                                    border: Border.all(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.22),
+                                    ),
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
@@ -1318,8 +1351,7 @@ class _BookCoverItem extends StatelessWidget {
           final targetCoverHeight = maxWidth * 4 / 3;
           final availableCoverHeight =
               math.max(0.0, maxHeight - textHeight - gap);
-          final coverHeight =
-              math.min(availableCoverHeight, targetCoverHeight);
+          final coverHeight = math.min(availableCoverHeight, targetCoverHeight);
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1498,7 +1530,10 @@ class _BookCoverItem extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.menu_book, size: 48, color: Colors.white),
+          const AppBrandIcon(
+            size: 48,
+            borderRadius: 12,
+          ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),

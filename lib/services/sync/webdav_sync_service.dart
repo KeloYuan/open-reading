@@ -54,6 +54,7 @@ class WebDavSyncService {
   String _username = '';
   String _password = '';
   bool _isConfigured = false;
+  String _lastErrorMessage = '';
 
   // 同步设置
   bool _autoSync = true;
@@ -70,10 +71,12 @@ class WebDavSyncService {
 
   // 按需上传的书籍文件集合
   final Set<int> _selectedBooksForSync = {};
+  final List<String> _lastSyncWarnings = <String>[];
 
   // 网络监听
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   bool _hasNetwork = true;
+  static const int _maxRetryAttempts = 3;
 
   // Getters
   ValueNotifier<SyncStatus> get statusNotifier => _statusNotifier;
@@ -84,6 +87,7 @@ class WebDavSyncService {
   DateTime? get lastSyncTime => _lastSyncTime;
   String get serverUrl => _serverUrl;
   String get username => _username;
+  String get lastErrorMessage => _lastErrorMessage;
 
   /// 初始化同步服务
   Future<void> initialize() async {
@@ -100,11 +104,15 @@ class WebDavSyncService {
   Future<void> _loadConfiguration() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _serverUrl = prefs.getString('webdav_server_url') ?? '';
+      _serverUrl = _normalizeServerUrl(
+        prefs.getString('webdav_server_url') ?? '',
+      );
       _username = prefs.getString('webdav_username') ?? '';
       _password = prefs.getString('webdav_password') ?? '';
       _autoSync = prefs.getBool('webdav_auto_sync') ?? true;
-      _syncInterval = prefs.getInt('webdav_sync_interval') ?? 30;
+      _syncInterval = _sanitizeSyncInterval(
+        prefs.getInt('webdav_sync_interval') ?? 30,
+      );
 
       final lastSyncStr = prefs.getString('webdav_last_sync');
       if (lastSyncStr != null) {
@@ -117,11 +125,13 @@ class WebDavSyncService {
       if (_isConfigured) {
         _setupDioClient();
         _statusNotifier.value = SyncStatus.idle;
+        _lastErrorMessage = '';
       } else {
         _statusNotifier.value = SyncStatus.notConfigured;
       }
     } catch (e) {
       debugPrint('加载WebDAV配置失败: $e');
+      _lastErrorMessage = '加载WebDAV配置失败: $e';
       _statusNotifier.value = SyncStatus.notConfigured;
     }
   }
@@ -133,8 +143,11 @@ class WebDavSyncService {
       final selectedBooksStr = prefs.getStringList('webdav_selected_books');
       if (selectedBooksStr != null) {
         _selectedBooksForSync.clear();
-        _selectedBooksForSync
-            .addAll(selectedBooksStr.map((s) => int.tryParse(s) ?? 0));
+        _selectedBooksForSync.addAll(
+          selectedBooksStr
+              .map((s) => int.tryParse(s) ?? -1)
+              .where((bookId) => bookId > 0),
+        );
       }
     } catch (e) {
       debugPrint('加载同步设置失败: $e');
@@ -156,6 +169,7 @@ class WebDavSyncService {
 
   /// 设置网络监听
   Future<void> _setupNetworkListener() async {
+    await _connectivitySubscription?.cancel();
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
       (List<ConnectivityResult> results) {
         final hasNetwork =
@@ -177,16 +191,12 @@ class WebDavSyncService {
 
   /// 设置Dio客户端
   void _setupDioClient() {
-    _dio.options = BaseOptions(
-      baseUrl: _serverUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 30),
-      headers: {
-        'Authorization': _generateAuthHeader(),
-        'Content-Type': 'application/octet-stream',
-        'Accept': '*/*',
-      },
+    _dio.options = _buildBaseOptions(
+      serverUrl: _serverUrl,
+      username: _username,
+      password: _password,
     );
+    _dio.interceptors.clear();
 
     // 添加拦截器
     _dio.interceptors.add(
@@ -207,10 +217,52 @@ class WebDavSyncService {
     );
   }
 
+  BaseOptions _buildBaseOptions({
+    required String serverUrl,
+    required String username,
+    required String password,
+  }) {
+    return BaseOptions(
+      baseUrl: _normalizeServerUrl(serverUrl),
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: {
+        'Authorization': _generateAuthHeader(username, password),
+        'Content-Type': 'application/octet-stream',
+        'Accept': '*/*',
+      },
+    );
+  }
+
   /// 生成认证头
-  String _generateAuthHeader() {
-    final credentials = base64Encode(utf8.encode('$_username:$_password'));
+  String _generateAuthHeader(String username, String password) {
+    final credentials = base64Encode(utf8.encode('$username:$password'));
     return 'Basic $credentials';
+  }
+
+  String _normalizeServerUrl(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    return trimmed.endsWith('/') ? trimmed : '$trimmed/';
+  }
+
+  bool _isValidServerUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    return uri.scheme == 'http' || uri.scheme == 'https';
+  }
+
+  int _sanitizeSyncInterval(int value) {
+    if (value < 5) return 5;
+    if (value > 24 * 60) return 24 * 60;
+    return value;
+  }
+
+  void _setLastError(String message) {
+    _lastErrorMessage = message;
+    debugPrint('WebDAV错误: $message');
   }
 
   /// 配置WebDAV
@@ -221,34 +273,85 @@ class WebDavSyncService {
     bool autoSync = true,
     int syncInterval = 30,
   }) async {
+    final normalizedServerUrl = _normalizeServerUrl(serverUrl);
+    final normalizedUsername = username.trim();
+    final normalizedPassword = password.trim();
+    final effectivePassword =
+        normalizedPassword.isNotEmpty ? normalizedPassword : _password;
+
+    if (!_isValidServerUrl(normalizedServerUrl)) {
+      _setLastError('服务器地址无效，请使用 http 或 https URL');
+      return false;
+    }
+    if (normalizedUsername.isEmpty) {
+      _setLastError('用户名不能为空');
+      return false;
+    }
+    if (effectivePassword.isEmpty) {
+      _setLastError('密码不能为空');
+      return false;
+    }
+
+    final previousServerUrl = _serverUrl;
+    final previousUsername = _username;
+    final previousPassword = _password;
+    final previousAutoSync = _autoSync;
+    final previousSyncInterval = _syncInterval;
+    final previousConfigured = _isConfigured;
+
     try {
-      _serverUrl = serverUrl.endsWith('/') ? serverUrl : '$serverUrl/';
-      _username = username;
-      _password = password;
+      _serverUrl = normalizedServerUrl;
+      _username = normalizedUsername;
+      _password = effectivePassword;
       _autoSync = autoSync;
-      _syncInterval = syncInterval;
+      _syncInterval = _sanitizeSyncInterval(syncInterval);
 
       _setupDioClient();
 
       // 测试连接
       final isValid = await testConnection();
       if (!isValid) {
+        _serverUrl = previousServerUrl;
+        _username = previousUsername;
+        _password = previousPassword;
+        _autoSync = previousAutoSync;
+        _syncInterval = previousSyncInterval;
+        _isConfigured = previousConfigured;
+        if (_isConfigured) {
+          _setupDioClient();
+        }
         return false;
       }
+
+      await _ensureSyncDirectories();
 
       // 保存配置
       await _saveConfiguration();
       _isConfigured = true;
       _statusNotifier.value = SyncStatus.idle;
+      _lastErrorMessage = '';
 
       // 启动自动同步
       if (_autoSync) {
         _startAutoSync();
+      } else {
+        _stopAutoSync();
       }
 
       return true;
     } catch (e) {
-      debugPrint('配置WebDAV失败: $e');
+      _setLastError('配置失败: $e');
+
+      _serverUrl = previousServerUrl;
+      _username = previousUsername;
+      _password = previousPassword;
+      _autoSync = previousAutoSync;
+      _syncInterval = previousSyncInterval;
+      _isConfigured = previousConfigured;
+      if (_isConfigured) {
+        _setupDioClient();
+      }
+
       return false;
     }
   }
@@ -265,23 +368,102 @@ class WebDavSyncService {
 
   /// 测试连接
   Future<bool> testConnection() async {
+    if (_serverUrl.isEmpty || _username.isEmpty || _password.isEmpty) {
+      _setLastError('请先填写完整的 WebDAV 配置');
+      return false;
+    }
+
     try {
       if (!_hasNetwork) {
+        _setLastError('当前无网络连接');
         _statusNotifier.value = SyncStatus.noNetwork;
         return false;
       }
 
-      // 检查根目录
-      final response = await _dio.request(
-        '/',
-        options: Options(method: 'PROPFIND'),
-      );
-
-      return response.statusCode == 207 || response.statusCode == 200;
+      return _testConnectionByDio(_dio);
     } catch (e) {
-      debugPrint('WebDAV连接测试失败: $e');
+      _setLastError('WebDAV 连接测试失败: $e');
       return false;
     }
+  }
+
+  /// 测试连接（不保存配置）
+  Future<bool> testConnectionWith({
+    required String serverUrl,
+    required String username,
+    required String password,
+  }) async {
+    if (!_hasNetwork) {
+      _setLastError('当前无网络连接');
+      return false;
+    }
+
+    final normalizedServerUrl = _normalizeServerUrl(serverUrl);
+    final normalizedUsername = username.trim();
+    final normalizedPassword = password.trim();
+    final effectivePassword =
+        normalizedPassword.isNotEmpty ? normalizedPassword : _password;
+
+    if (!_isValidServerUrl(normalizedServerUrl)) {
+      _setLastError('服务器地址无效，请使用 http 或 https URL');
+      return false;
+    }
+    if (normalizedUsername.isEmpty) {
+      _setLastError('用户名不能为空');
+      return false;
+    }
+    if (effectivePassword.isEmpty) {
+      _setLastError('密码不能为空');
+      return false;
+    }
+
+    final testDio = Dio(
+      _buildBaseOptions(
+        serverUrl: normalizedServerUrl,
+        username: normalizedUsername,
+        password: effectivePassword,
+      ),
+    );
+    try {
+      return await _testConnectionByDio(testDio);
+    } catch (e) {
+      _setLastError('WebDAV 连接测试失败: $e');
+      return false;
+    } finally {
+      testDio.close(force: true);
+    }
+  }
+
+  Future<bool> _testConnectionByDio(Dio dio) async {
+    final probePaths = <String>['', WebDavSyncPathHelper.rootDir];
+
+    for (final path in probePaths) {
+      try {
+        final response = await dio.request(
+          path,
+          options: Options(
+            method: 'PROPFIND',
+            headers: {'Depth': '0'},
+            validateStatus: (status) => status != null && status > 0,
+          ),
+        );
+        final statusCode = response.statusCode ?? 0;
+
+        if (statusCode == 401 || statusCode == 403) {
+          _setLastError('认证失败，请检查用户名或密码');
+          return false;
+        }
+        if (<int>{200, 201, 204, 207, 301, 302, 405}.contains(statusCode)) {
+          _lastErrorMessage = '';
+          return true;
+        }
+      } catch (e) {
+        debugPrint('WebDAV探测失败($path): $e');
+      }
+    }
+
+    _setLastError('无法访问 WebDAV 目录，请检查服务器地址与权限');
+    return false;
   }
 
   /// 开始自动同步
@@ -305,6 +487,13 @@ class WebDavSyncService {
   /// 手动同步
   Future<bool> manualSync() async {
     if (_statusNotifier.value == SyncStatus.syncing) {
+      _setLastError('同步正在进行中，请稍后再试');
+      return false;
+    }
+
+    if (!_isConfigured) {
+      _statusNotifier.value = SyncStatus.notConfigured;
+      _setLastError('请先配置 WebDAV');
       return false;
     }
 
@@ -363,11 +552,20 @@ class WebDavSyncService {
 
   /// 执行同步
   Future<bool> _performSync() async {
-    if (!_isConfigured || !_hasNetwork) {
+    if (!_isConfigured) {
+      _statusNotifier.value = SyncStatus.notConfigured;
+      _setLastError('请先配置 WebDAV');
+      return false;
+    }
+    if (!_hasNetwork) {
+      _statusNotifier.value = SyncStatus.noNetwork;
+      _setLastError('当前无网络连接');
       return false;
     }
 
     _statusNotifier.value = SyncStatus.syncing;
+    _lastErrorMessage = '';
+    _lastSyncWarnings.clear();
 
     try {
       // 确保同步目录存在
@@ -388,6 +586,11 @@ class WebDavSyncService {
       );
 
       _statusNotifier.value = SyncStatus.completed;
+      if (_lastSyncWarnings.isNotEmpty) {
+        _lastErrorMessage = '同步完成（部分项目失败）：${_lastSyncWarnings.join('；')}';
+      } else {
+        _lastErrorMessage = '';
+      }
 
       // 3秒后恢复空闲状态
       Timer(const Duration(seconds: 3), () {
@@ -398,7 +601,7 @@ class WebDavSyncService {
 
       return true;
     } catch (e) {
-      debugPrint('同步失败: $e');
+      _setLastError('同步失败: ${_toFriendlySyncError(e)}');
       _statusNotifier.value = SyncStatus.failed;
 
       // 5秒后恢复空闲状态
@@ -417,13 +620,20 @@ class WebDavSyncService {
     const directories = WebDavSyncPathHelper.allDirectories;
 
     for (final dir in directories) {
-      try {
-        await _dio.request(dir, options: Options(method: 'MKCOL'));
-      } catch (e) {
-        // 目录已存在会返回405错误，这是正常的
-        if (e is DioException && e.response?.statusCode != 405) {
-          debugPrint('创建目录失败: $dir, $e');
-        }
+      final response = await _retryRequest(
+        label: '创建目录 $dir',
+        action: () => _dio.request(
+          dir,
+          options: Options(
+            method: 'MKCOL',
+            validateStatus: (status) => status != null && status > 0,
+          ),
+        ),
+      );
+      final statusCode = response.statusCode ?? 0;
+      // 201: 创建成功, 405: 已存在, 301/302: 服务端重定向
+      if (!<int>{200, 201, 204, 301, 302, 405}.contains(statusCode)) {
+        throw Exception('创建目录失败: $dir (HTTP $statusCode)');
       }
     }
 
@@ -458,8 +668,11 @@ class WebDavSyncService {
     try {
       final response = await _dio.get(WebDavSyncPathHelper.deviceMetaFile);
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.data);
-        return DateTime.parse(data['first_sync_time']);
+        final data = _asJsonMap(response.data);
+        final firstSync = data['first_sync_time']?.toString();
+        if (firstSync != null && firstSync.isNotEmpty) {
+          return DateTime.parse(firstSync);
+        }
       }
     } catch (e) {
       // 忽略错误
@@ -469,18 +682,16 @@ class WebDavSyncService {
 
   /// 上传本地数据
   Future<void> _uploadLocalData() async {
-    await Future.wait([
-      _uploadBooks(),
-      _uploadBookmarks(),
-      _uploadNotes(),
-      _uploadHighlightsAndAnnotations(),
-      _uploadProgress(),
-      _uploadStats(),
-      _uploadSources(),
-    ]);
+    await _runSyncStage('上传书籍列表', _uploadBooks);
+    await _runSyncStage('上传书签', _uploadBookmarks);
+    await _runSyncStage('上传笔记', _uploadNotes);
+    await _runSyncStage('上传高亮与批注', _uploadHighlightsAndAnnotations);
+    await _runSyncStage('上传阅读进度', _uploadProgress, optional: true);
+    await _runSyncStage('上传阅读统计', _uploadStats);
+    await _runSyncStage('上传书源', _uploadSources, optional: true);
 
-    await _uploadSyncManifest();
-    await _uploadBookFiles();
+    await _runSyncStage('上传同步清单', _uploadSyncManifest, optional: true);
+    await _runSyncStage('上传书籍文件', _uploadBookFiles, optional: true);
   }
 
   /// 上传书籍列表（使用差异化同步）
@@ -509,11 +720,14 @@ class WebDavSyncService {
       };
 
       final jsonData = jsonEncode(booksData);
-      await _dio.put(WebDavSyncPathHelper.booksFile, data: jsonData);
+      await _retryRequest(
+        label: '上传书籍列表',
+        action: () => _dio.put(WebDavSyncPathHelper.booksFile, data: jsonData),
+      );
 
       debugPrint('📚 已上传 ${books.length} 本书籍的元数据');
     } catch (e) {
-      debugPrint('上传书籍列表失败: $e');
+      throw Exception('上传书籍列表失败: $e');
     }
   }
 
@@ -530,11 +744,15 @@ class WebDavSyncService {
       };
 
       final jsonData = jsonEncode(bookmarksData);
-      await _dio.put(WebDavSyncPathHelper.bookmarksFile, data: jsonData);
+      await _retryRequest(
+        label: '上传书签',
+        action: () =>
+            _dio.put(WebDavSyncPathHelper.bookmarksFile, data: jsonData),
+      );
 
       debugPrint('🔖 已上传 ${bookmarks.length} 个书签');
     } catch (e) {
-      debugPrint('上传书签失败: $e');
+      throw Exception('上传书签失败: $e');
     }
   }
 
@@ -551,11 +769,14 @@ class WebDavSyncService {
       };
 
       final jsonData = jsonEncode(notesData);
-      await _dio.put(WebDavSyncPathHelper.notesFile, data: jsonData);
+      await _retryRequest(
+        label: '上传笔记',
+        action: () => _dio.put(WebDavSyncPathHelper.notesFile, data: jsonData),
+      );
 
       debugPrint('📝 已上传 ${notes.length} 条笔记');
     } catch (e) {
-      debugPrint('上传笔记失败: $e');
+      throw Exception('上传笔记失败: $e');
     }
   }
 
@@ -588,21 +809,25 @@ class WebDavSyncService {
         'annotations': annotations,
       };
 
-      await Future.wait([
-        _dio.put(
+      await _retryRequest(
+        label: '上传高亮',
+        action: () => _dio.put(
           WebDavSyncPathHelper.highlightsFile,
           data: jsonEncode(highlightsData),
         ),
-        _dio.put(
+      );
+      await _retryRequest(
+        label: '上传批注',
+        action: () => _dio.put(
           WebDavSyncPathHelper.annotationsFile,
           data: jsonEncode(annotationsData),
         ),
-      ]);
+      );
 
       debugPrint('✨ 已上传 ${highlights.length} 条高亮');
       debugPrint('🗒️ 已上传 ${annotations.length} 条批注');
     } catch (e) {
-      debugPrint('上传高亮/批注失败: $e');
+      throw Exception('上传高亮/批注失败: $e');
     }
   }
 
@@ -611,27 +836,34 @@ class WebDavSyncService {
     try {
       final books = await _bookDao.getAllBooks();
 
+      final progressItems = books.map((book) {
+        final hasHash = (book.contentHash ?? '').trim().isNotEmpty;
+        return {
+          'bookId': book.id,
+          if (hasHash) 'contentHash': book.contentHash,
+          if (!hasHash) 'filePath': book.filePath,
+          'currentPage': book.currentPage,
+          'totalPages': book.totalPages,
+        };
+      }).toList();
+
       final progressData = {
         'version': 2,
         'device_id': await SyncUtils.getDeviceId(),
         'timestamp': DateTime.now().toIso8601String(),
-        'progress': books.map((book) {
-          return {
-            'bookId': book.id,
-            'filePath': book.filePath,
-            'currentPage': book.currentPage,
-            'totalPages': book.totalPages,
-            'update_time': DateTime.now().toIso8601String(),
-          };
-        }).toList(),
+        'progress': progressItems,
       };
 
       final jsonData = jsonEncode(progressData);
-      await _dio.put(WebDavSyncPathHelper.progressFile, data: jsonData);
+      await _retryRequest(
+        label: '上传阅读进度',
+        action: () =>
+            _dio.put(WebDavSyncPathHelper.progressFile, data: jsonData),
+      );
 
-      debugPrint('📄 已上传 ${books.length} 本书籍的阅读进度');
+      debugPrint('📄 已上传 ${progressItems.length} 本书籍的阅读进度');
     } catch (e) {
-      debugPrint('上传阅读进度失败: $e');
+      throw Exception('上传阅读进度失败: $e');
     }
   }
 
@@ -648,11 +880,14 @@ class WebDavSyncService {
       };
 
       final jsonData = jsonEncode(statsData);
-      await _dio.put(WebDavSyncPathHelper.statsFile, data: jsonData);
+      await _retryRequest(
+        label: '上传阅读统计',
+        action: () => _dio.put(WebDavSyncPathHelper.statsFile, data: jsonData),
+      );
 
       debugPrint('📊 已上传 ${stats.length} 条阅读统计');
     } catch (e) {
-      debugPrint('上传阅读统计失败: $e');
+      throw Exception('上传阅读统计失败: $e');
     }
   }
 
@@ -669,11 +904,15 @@ class WebDavSyncService {
       };
 
       final jsonData = jsonEncode(sourcesData);
-      await _dio.put(WebDavSyncPathHelper.sourcesFile, data: jsonData);
+      await _retryRequest(
+        label: '上传书源',
+        action: () =>
+            _dio.put(WebDavSyncPathHelper.sourcesFile, data: jsonData),
+      );
 
       debugPrint('📡 已上传 ${sources.length} 个书源');
     } catch (e) {
-      debugPrint('上传书源失败: $e');
+      throw Exception('上传书源失败: $e');
     }
   }
 
@@ -709,12 +948,15 @@ class WebDavSyncService {
         selectedBookFilesCount: _selectedBooksForSync.length,
       );
 
-      await _dio.put(
-        WebDavSyncPathHelper.syncManifestFile,
-        data: jsonEncode(manifest.toJson()),
+      await _retryRequest(
+        label: '上传同步清单',
+        action: () => _dio.put(
+          WebDavSyncPathHelper.syncManifestFile,
+          data: jsonEncode(manifest.toJson()),
+        ),
       );
     } catch (e) {
-      debugPrint('上传同步清单失败: $e');
+      throw Exception('上传同步清单失败: $e');
     }
   }
 
@@ -769,11 +1011,14 @@ class WebDavSyncService {
         }
 
         final fileBytes = await bookFile.readAsBytes();
-        await _dio.put(
-          remotePath,
-          data: fileBytes,
-          options: Options(
-            headers: {'Content-Type': 'application/octet-stream'},
+        await _retryRequest(
+          label: '上传书籍文件 ${book.title}',
+          action: () => _dio.put(
+            remotePath,
+            data: fileBytes,
+            options: Options(
+              headers: {'Content-Type': 'application/octet-stream'},
+            ),
           ),
         );
 
@@ -786,7 +1031,7 @@ class WebDavSyncService {
         '📚 书籍文件上传完成: 上传 $uploadedCount 个, 跳过 $skippedCount 个',
       );
     } catch (e) {
-      debugPrint('上传书籍文件失败: $e');
+      throw Exception('上传书籍文件失败: $e');
     }
   }
 
@@ -807,14 +1052,17 @@ class WebDavSyncService {
     try {
       final response = await _dio.get(WebDavSyncPathHelper.booksFile);
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.data);
-        final remoteBooks =
-            (data['books'] as List).cast<Map<String, dynamic>>();
+        final data = _asJsonMap(response.data);
+        final remoteBooks = _asJsonList(data['books']);
 
         await _mergeBooks(remoteBooks);
       }
     } catch (e) {
-      debugPrint('下载书籍列表失败: $e');
+      if (_isRemoteFileMissing(e)) {
+        debugPrint('远程书籍数据不存在，跳过下载');
+        return;
+      }
+      throw Exception('下载书籍列表失败: $e');
     }
   }
 
@@ -823,14 +1071,17 @@ class WebDavSyncService {
     try {
       final response = await _dio.get(WebDavSyncPathHelper.bookmarksFile);
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.data);
-        final remoteBookmarks =
-            (data['bookmarks'] as List).cast<Map<String, dynamic>>();
+        final data = _asJsonMap(response.data);
+        final remoteBookmarks = _asJsonList(data['bookmarks']);
 
         await _mergeBookmarks(remoteBookmarks);
       }
     } catch (e) {
-      debugPrint('下载书签失败: $e');
+      if (_isRemoteFileMissing(e)) {
+        debugPrint('远程书签数据不存在，跳过下载');
+        return;
+      }
+      throw Exception('下载书签失败: $e');
     }
   }
 
@@ -839,14 +1090,17 @@ class WebDavSyncService {
     try {
       final response = await _dio.get(WebDavSyncPathHelper.notesFile);
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.data);
-        final remoteNotes =
-            (data['notes'] as List).cast<Map<String, dynamic>>();
+        final data = _asJsonMap(response.data);
+        final remoteNotes = _asJsonList(data['notes']);
 
         await _mergeNotes(remoteNotes);
       }
     } catch (e) {
-      debugPrint('下载笔记失败: $e');
+      if (_isRemoteFileMissing(e)) {
+        debugPrint('远程笔记数据不存在，跳过下载');
+        return;
+      }
+      throw Exception('下载笔记失败: $e');
     }
   }
 
@@ -855,14 +1109,17 @@ class WebDavSyncService {
     try {
       final response = await _dio.get(WebDavSyncPathHelper.progressFile);
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.data);
-        final remoteProgress =
-            (data['progress'] as List).cast<Map<String, dynamic>>();
+        final data = _asJsonMap(response.data);
+        final remoteProgress = _asJsonList(data['progress']);
 
         await _mergeProgress(remoteProgress);
       }
     } catch (e) {
-      debugPrint('下载阅读进度失败: $e');
+      if (_isRemoteFileMissing(e)) {
+        debugPrint('远程进度数据不存在，跳过下载');
+        return;
+      }
+      throw Exception('下载阅读进度失败: $e');
     }
   }
 
@@ -871,14 +1128,17 @@ class WebDavSyncService {
     try {
       final response = await _dio.get(WebDavSyncPathHelper.statsFile);
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.data);
-        final remoteStats =
-            (data['stats'] as List).cast<Map<String, dynamic>>();
+        final data = _asJsonMap(response.data);
+        final remoteStats = _asJsonList(data['stats']);
 
         await _mergeStats(remoteStats);
       }
     } catch (e) {
-      debugPrint('下载阅读统计失败: $e');
+      if (_isRemoteFileMissing(e)) {
+        debugPrint('远程统计数据不存在，跳过下载');
+        return;
+      }
+      throw Exception('下载阅读统计失败: $e');
     }
   }
 
@@ -887,14 +1147,17 @@ class WebDavSyncService {
     try {
       final response = await _dio.get(WebDavSyncPathHelper.sourcesFile);
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.data);
-        final remoteSources =
-            (data['sources'] as List).cast<Map<String, dynamic>>();
+        final data = _asJsonMap(response.data);
+        final remoteSources = _asJsonList(data['sources']);
 
         await _mergeSources(remoteSources);
       }
     } catch (e) {
-      debugPrint('下载书源失败: $e');
+      if (_isRemoteFileMissing(e)) {
+        debugPrint('远程书源数据不存在，跳过下载');
+        return;
+      }
+      throw Exception('下载书源失败: $e');
     }
   }
 
@@ -908,18 +1171,14 @@ class WebDavSyncService {
     final localMap = <String, Bookmark>{};
 
     for (final bookmark in localBookmarks) {
-      final key =
-          SyncUtils.generateBookmarkKey(bookmark.bookId, bookmark.pageNumber);
+      final key = _bookmarkSyncKey(bookmark);
       localMap[key] = bookmark;
     }
 
     for (final remoteMap in remoteBookmarks) {
       try {
         final remoteBookmark = Bookmark.fromMap(remoteMap);
-        final key = SyncUtils.generateBookmarkKey(
-          remoteBookmark.bookId,
-          remoteBookmark.pageNumber,
-        );
+        final key = _bookmarkSyncKey(remoteBookmark);
 
         if (localMap.containsKey(key)) {
           // 已存在，跳过（保留创建时间较早的）
@@ -936,6 +1195,14 @@ class WebDavSyncService {
     }
 
     debugPrint('🔖 书签合并完成: 新增 $addedCount, 已存在 $mergedCount');
+  }
+
+  String _bookmarkSyncKey(Bookmark bookmark) {
+    final cfi = bookmark.cfi?.trim() ?? '';
+    if (cfi.isNotEmpty) {
+      return 'bookmark-cfi:${bookmark.bookId}:$cfi';
+    }
+    return SyncUtils.generateBookmarkKey(bookmark.bookId, bookmark.pageNumber);
   }
 
   /// 合并笔记（按位置去重，时间戳优先）
@@ -994,29 +1261,68 @@ class WebDavSyncService {
   /// 合并阅读进度（时间戳优先）
   Future<void> _mergeProgress(List<Map<String, dynamic>> remoteProgress) async {
     int updatedCount = 0;
+    final localBooks = await _bookDao.getAllBooks();
+    final localById = <int, Book>{};
+    final localByHash = <String, Book>{};
+    final localByPath = <String, Book>{};
+
+    for (final book in localBooks) {
+      if (book.id != null) {
+        localById[book.id!] = book;
+      }
+      final hash = (book.contentHash ?? '').trim();
+      if (hash.isNotEmpty) {
+        localByHash[hash] = book;
+      }
+      final pathKey = _normalizePathKey(book.filePath);
+      if (pathKey.isNotEmpty) {
+        localByPath[pathKey] = book;
+      }
+    }
 
     for (final progress in remoteProgress) {
       try {
-        final bookId = progress['bookId'] as int;
-        final remoteCurrentPage = progress['currentPage'] as int;
-        final remoteUpdateTime = progress['update_time'] as String?;
+        final remoteCurrentPage = (progress['currentPage'] as num?)?.toInt();
+        if (remoteCurrentPage == null || remoteCurrentPage < 0) {
+          continue;
+        }
 
-        final localBook = await _bookDao.getBookById(bookId);
-        if (localBook != null) {
-          // 比较更新时间，决定是否使用远程进度
-          final localUpdateTime = DateTime.now().toIso8601String(); // 本地更新时间
+        final remoteBookId = progress['bookId'];
+        final remoteContentHash = (progress['contentHash'] ?? '').toString();
+        final remoteFilePath = (progress['filePath'] ?? '').toString();
+        final remoteTotalPages = (progress['totalPages'] as num?)?.toInt();
 
-          if (remoteUpdateTime != null &&
-              SyncUtils.isRemoteNewer(localUpdateTime, remoteUpdateTime)) {
-            final updatedBook = localBook.copyWith(
-              currentPage: remoteCurrentPage,
-            );
-            await _bookDao.updateBook(updatedBook);
-            updatedCount++;
-            debugPrint(
-              '📄 更新书籍 $bookId 的阅读进度: ${localBook.currentPage} -> $remoteCurrentPage',
-            );
-          }
+        Book? localBook;
+        if (remoteBookId is int) {
+          localBook = localById[remoteBookId];
+        }
+        if (localBook == null && remoteContentHash.trim().isNotEmpty) {
+          localBook = localByHash[remoteContentHash.trim()];
+        }
+        if (localBook == null && remoteFilePath.trim().isNotEmpty) {
+          localBook = localByPath[_normalizePathKey(remoteFilePath)];
+        }
+
+        if (localBook == null || localBook.id == null) {
+          continue;
+        }
+
+        if (remoteCurrentPage > localBook.currentPage) {
+          final mergedTotalPages = remoteTotalPages != null &&
+                  remoteTotalPages > localBook.totalPages
+              ? remoteTotalPages
+              : localBook.totalPages;
+
+          final updatedBook = localBook.copyWith(
+            currentPage: remoteCurrentPage,
+            totalPages: mergedTotalPages,
+          );
+          await _bookDao.updateBook(updatedBook);
+          localById[updatedBook.id!] = updatedBook;
+          updatedCount++;
+          debugPrint(
+            '📄 更新书籍进度 ${updatedBook.id}: ${localBook.currentPage} -> $remoteCurrentPage',
+          );
         }
       } catch (e) {
         debugPrint('合并进度失败: $e');
@@ -1083,7 +1389,12 @@ class WebDavSyncService {
 
     for (final remoteMap in remoteSources) {
       try {
-        final url = remoteMap['book_source_url'] as String;
+        final url = (remoteMap['bookSourceUrl'] ?? remoteMap['book_source_url'])
+            ?.toString()
+            .trim();
+        if (url == null || url.isEmpty) {
+          continue;
+        }
 
         if (localUrlSet.contains(url)) {
           // URL 已存在，跳过（保留本地）
@@ -1105,9 +1416,45 @@ class WebDavSyncService {
 
   /// 合并书籍数据
   Future<void> _mergeBooks(List<Map<String, dynamic>> remoteBooks) async {
+    final localBooks = await _bookDao.getAllBooks();
+    final localById = <int, Book>{};
+    final localByHash = <String, Book>{};
+    final localByPath = <String, Book>{};
+
+    for (final localBook in localBooks) {
+      if (localBook.id != null) {
+        localById[localBook.id!] = localBook;
+      }
+      final hash = (localBook.contentHash ?? '').trim();
+      if (hash.isNotEmpty) {
+        localByHash[hash] = localBook;
+      }
+      final pathKey = _normalizePathKey(localBook.filePath);
+      if (pathKey.isNotEmpty) {
+        localByPath[pathKey] = localBook;
+      }
+    }
+
     for (final remoteBook in remoteBooks) {
-      final book = Book.fromMap(remoteBook);
-      final localBook = await _bookDao.getBookById(book.id ?? 0);
+      Book book;
+      try {
+        book = Book.fromMap(remoteBook);
+      } catch (e) {
+        debugPrint('解析远程书籍失败: $e');
+        continue;
+      }
+
+      Book? localBook;
+      final remoteHash = (book.contentHash ?? '').trim();
+      if (remoteHash.isNotEmpty) {
+        localBook = localByHash[remoteHash];
+      }
+      if (localBook == null && book.filePath.isNotEmpty) {
+        localBook = localByPath[_normalizePathKey(book.filePath)];
+      }
+      if (localBook == null && book.id != null) {
+        localBook = localById[book.id!];
+      }
 
       if (localBook == null) {
         // 远程书籍在本地不存在，检查文件是否存在
@@ -1117,20 +1464,39 @@ class WebDavSyncService {
       } else {
         // 合并数据
         final mergedBook = _mergeBookData(localBook, book);
-        await _bookDao.updateBook(mergedBook);
+        if (mergedBook.currentPage != localBook.currentPage ||
+            mergedBook.totalPages != localBook.totalPages ||
+            mergedBook.contentHash != localBook.contentHash) {
+          await _bookDao.updateBook(mergedBook);
+          if (mergedBook.id != null) {
+            localById[mergedBook.id!] = mergedBook;
+          }
+          if ((mergedBook.contentHash ?? '').trim().isNotEmpty) {
+            localByHash[mergedBook.contentHash!.trim()] = mergedBook;
+          }
+          localByPath[_normalizePathKey(mergedBook.filePath)] = mergedBook;
+        }
       }
     }
   }
 
   /// 合并书籍数据（以阅读进度更大的为准）
   Book _mergeBookData(Book local, Book remote) {
-    // 使用进度更大的一方
-    if (remote.currentPage > local.currentPage) {
-      return local.copyWith(
-        currentPage: remote.currentPage,
-      );
-    }
-    return local;
+    final mergedCurrentPage = remote.currentPage > local.currentPage
+        ? remote.currentPage
+        : local.currentPage;
+    final mergedTotalPages = remote.totalPages > local.totalPages
+        ? remote.totalPages
+        : local.totalPages;
+    final mergedContentHash = (local.contentHash?.isNotEmpty ?? false)
+        ? local.contentHash
+        : remote.contentHash;
+
+    return local.copyWith(
+      currentPage: mergedCurrentPage,
+      totalPages: mergedTotalPages,
+      contentHash: mergedContentHash,
+    );
   }
 
   /// 获取同步状态描述
@@ -1163,9 +1529,18 @@ class WebDavSyncService {
     await prefs.remove('webdav_selected_books');
 
     _stopAutoSync();
+    _serverUrl = '';
+    _username = '';
+    _password = '';
+    _autoSync = true;
+    _syncInterval = 30;
+    _lastSyncTime = null;
+    _lastErrorMessage = '';
     _isConfigured = false;
     _selectedBooksForSync.clear();
     _statusNotifier.value = SyncStatus.notConfigured;
+    _dio.interceptors.clear();
+    _dio.options.baseUrl = '';
   }
 
   /// 释放资源
@@ -1173,5 +1548,146 @@ class WebDavSyncService {
     _stopAutoSync();
     _connectivitySubscription?.cancel();
     _dio.close();
+  }
+
+  Map<String, dynamic> _asJsonMap(dynamic data) {
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+    if (data is String && data.isNotEmpty) {
+      final decoded = jsonDecode(data);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+    }
+    throw const FormatException('响应不是有效的 JSON 对象');
+  }
+
+  List<Map<String, dynamic>> _asJsonList(dynamic data) {
+    if (data is! List) {
+      return const [];
+    }
+    return data
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  String _normalizePathKey(String path) {
+    return path.trim().replaceAll('\\', '/').toLowerCase();
+  }
+
+  bool _isRemoteFileMissing(Object error) {
+    return error is DioException && error.response?.statusCode == 404;
+  }
+
+  Future<void> _runSyncStage(
+    String stageName,
+    Future<void> Function() action, {
+    bool optional = false,
+  }) async {
+    try {
+      await action();
+    } catch (e) {
+      final friendly = '$stageName失败：${_toFriendlySyncError(e)}';
+      if (optional) {
+        _lastSyncWarnings.add(friendly);
+        debugPrint('⚠️ $friendly');
+        return;
+      }
+      throw Exception(friendly);
+    }
+  }
+
+  Future<T> _retryRequest<T>({
+    required String label,
+    required Future<T> Function() action,
+  }) async {
+    Object? lastError;
+    for (int attempt = 1; attempt <= _maxRetryAttempts; attempt++) {
+      try {
+        return await action();
+      } catch (e) {
+        lastError = e;
+        if (!_isRetryableError(e) || attempt >= _maxRetryAttempts) {
+          break;
+        }
+        final backoffMs = 500 * (1 << (attempt - 1));
+        debugPrint(
+          'WebDAV重试[$attempt/$_maxRetryAttempts] $label，等待 ${backoffMs}ms，原因: $e',
+        );
+        await Future.delayed(Duration(milliseconds: backoffMs));
+      }
+    }
+    throw lastError ?? Exception('$label 请求失败');
+  }
+
+  bool _isRetryableError(Object error) {
+    if (error is! DioException) {
+      return false;
+    }
+    final code = error.response?.statusCode ?? 0;
+    if (code == 429 ||
+        code == 500 ||
+        code == 502 ||
+        code == 503 ||
+        code == 504) {
+      return true;
+    }
+    if (error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout) {
+      return true;
+    }
+    return false;
+  }
+
+  String _toFriendlySyncError(Object error) {
+    if (error is DioException) {
+      final code = error.response?.statusCode;
+      if (code == 503) {
+        return '服务器暂时不可用（503），请稍后重试';
+      }
+      if (code == 429) {
+        return '请求过于频繁（429），请稍后再试';
+      }
+      if (code == 401 || code == 403) {
+        return '认证失败，请检查 WebDAV 账号或密码';
+      }
+      if (code != null && code > 0) {
+        return '服务器返回异常状态码（$code）';
+      }
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout) {
+        return '网络超时，请检查网络后重试';
+      }
+      if (error.type == DioExceptionType.connectionError) {
+        return '网络连接失败，请检查网络或服务器地址';
+      }
+      final message = error.message?.trim();
+      if (message != null && message.isNotEmpty) {
+        return message;
+      }
+    }
+
+    final text = error.toString();
+    if (text.contains('503')) {
+      return '服务器暂时不可用（503），请稍后重试';
+    }
+    if (text.contains('401') || text.contains('403')) {
+      return '认证失败，请检查 WebDAV 账号或密码';
+    }
+    if (text.length > 120) {
+      return text.substring(0, 120);
+    }
+    return text;
   }
 }
