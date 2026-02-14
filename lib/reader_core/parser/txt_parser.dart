@@ -33,6 +33,9 @@ Map<String, dynamic> _decodeAndDetectTxtInBackground(
 class TxtParser implements BookParser {
   static const _fallbackChapterChars = 12000;
   static const _fallbackParagraphCount = 25;
+  static const _decodeSampleBytes = 512 * 1024;
+  static const _largeTxtBytes = 2 * 1024 * 1024;
+  static const _fastFlowDocCharsThreshold = 3 * 1024 * 1024;
 
   static final List<RegExp> _chapterPatterns = [
     RegExp(r'^第[一二三四五六七八九十百千\d]+章\s*.*$'),
@@ -50,6 +53,12 @@ class TxtParser implements BookParser {
     required String filePath,
     String? encodingOverride,
   }) async {
+    final startAt = DateTime.now();
+    if (kDebugMode) {
+      debugPrint(
+        '[TxtParser] parse start book=$bookId file=$filePath encoding=${encodingOverride ?? 'auto'}',
+      );
+    }
     final bytes = await File(filePath).readAsBytes();
     final payload = await compute<Map<String, dynamic>, Map<String, dynamic>>(
       _decodeAndDetectTxtInBackground,
@@ -69,8 +78,21 @@ class TxtParser implements BookParser {
           ),
         )
         .toList();
+    if (kDebugMode) {
+      final elapsedMs = DateTime.now().difference(startAt).inMilliseconds;
+      debugPrint(
+        '[TxtParser] decode+toc done book=$bookId bytes=${bytes.length} chars=${content.length} '
+        'markers=${markers.length} elapsed=${elapsedMs}ms',
+      );
+    }
     final chapters =
         _buildChapters(bookId: bookId, content: content, markers: markers);
+    if (kDebugMode) {
+      final elapsedMs = DateTime.now().difference(startAt).inMilliseconds;
+      debugPrint(
+        '[TxtParser] build chapters done book=$bookId chapters=${chapters.length} elapsed=${elapsedMs}ms',
+      );
+    }
 
     final book = Book(
       id: bookId,
@@ -102,38 +124,88 @@ class TxtParser implements BookParser {
     Uint8List bytes, {
     String? encodingOverride,
   }) {
+    if (bytes.isEmpty) {
+      return '';
+    }
+
     final txtService = EnhancedTxtImportService();
     final normalized = EnhancedTxtImportService.normalizeEncoding(
       encodingOverride,
     );
 
     if (normalized != 'auto') {
-      try {
-        return txtService.decodeWithOverride(
-          _trimBytesForEncoding(bytes, normalized),
-          encodingOverride: normalized,
+      final forced = txtService.decodeWithOverride(
+        _trimBytesForEncoding(bytes, normalized),
+        encodingOverride: normalized,
+      );
+      if (kDebugMode) {
+        debugPrint(
+          '[TxtParser] decode forced encoding=$normalized bytes=${bytes.length} chars=${forced.length}',
         );
-      } catch (_) {
-        // fall through
       }
+      return forced;
     }
 
-    final preferred = normalized == 'auto'
-        ? txtService.detectEncoding(
-            bytes,
-            encodingOverride: encodingOverride,
-          )
-        : normalized;
-
-    final tried = <String>{};
+    final preferred = txtService.detectEncoding(
+      bytes,
+      encodingOverride: null,
+    );
+    final normalizedPreferred =
+        EnhancedTxtImportService.normalizeEncoding(preferred);
     final candidates = <String>[
-      preferred,
+      normalizedPreferred,
       'gbk',
       'utf8',
       'utf16le',
       'utf16be',
     ];
 
+    // 大文件优先走快速路径，避免整本多轮全量解码导致卡住。
+    if (bytes.length >= _largeTxtBytes) {
+      final primary = _decodeCandidate(
+        txtService,
+        bytes,
+        normalizedPreferred,
+      );
+      if (primary != null && !_looksGarbled(primary)) {
+        if (kDebugMode) {
+          debugPrint(
+            '[TxtParser] decode fast-path encoding=$normalizedPreferred bytes=${bytes.length}',
+          );
+        }
+        return primary;
+      }
+
+      final fallbackEncoding = normalizedPreferred == 'gbk' ? 'utf8' : 'gbk';
+      final fallback = _decodeCandidate(txtService, bytes, fallbackEncoding);
+      if (primary == null || primary.isEmpty) {
+        if (fallback != null && fallback.isNotEmpty) {
+          return fallback;
+        }
+      } else if (fallback != null &&
+          fallback.isNotEmpty &&
+          _contentQualityScore(fallback) > _contentQualityScore(primary)) {
+        if (kDebugMode) {
+          debugPrint(
+            '[TxtParser] decode fast-fallback encoding=$fallbackEncoding bytes=${bytes.length}',
+          );
+        }
+        return fallback;
+      } else {
+        if (kDebugMode) {
+          debugPrint(
+            '[TxtParser] decode fast-primary encoding=$normalizedPreferred bytes=${bytes.length}',
+          );
+        }
+        return primary;
+      }
+    }
+
+    final sampleBytes = bytes.length > _decodeSampleBytes
+        ? bytes.sublist(0, _decodeSampleBytes)
+        : bytes;
+    final tried = <String>{};
+    String? bestCandidate;
     String? best;
     double bestScore = -1e9;
 
@@ -143,34 +215,60 @@ class TxtParser implements BookParser {
       }
       tried.add(candidate);
 
-      try {
-        final normalizedCandidate =
-            EnhancedTxtImportService.normalizeEncoding(candidate);
-        final decoded = txtService.decodeWithOverride(
-          _trimBytesForEncoding(bytes, normalizedCandidate),
-          encodingOverride: normalizedCandidate,
-        );
-        final score = _contentQualityScore(decoded);
-        if (score > bestScore) {
-          bestScore = score;
-          best = decoded;
-        }
-        if (!_looksGarbled(decoded)) {
-          return decoded;
-        }
-      } catch (_) {
-        // Try next candidate.
+      final sampleDecoded =
+          _decodeCandidate(txtService, sampleBytes, candidate);
+      if (sampleDecoded == null || sampleDecoded.isEmpty) {
+        continue;
       }
+      final score = _contentQualityScore(sampleDecoded);
+      if (score > bestScore) {
+        bestScore = score;
+        bestCandidate = candidate;
+      }
+    }
+
+    final finalCandidate = bestCandidate ?? normalizedPreferred;
+    best = _decodeCandidate(txtService, bytes, finalCandidate);
+    if (kDebugMode) {
+      debugPrint(
+        '[TxtParser] decode sampled encoding=$finalCandidate '
+        'preferred=$normalizedPreferred bytes=${bytes.length}',
+      );
     }
 
     final bestText = best;
     if (bestText != null && bestText.isNotEmpty) {
       return bestText;
     }
-    return txtService.decodeWithOverride(
-      bytes,
-      encodingOverride: preferred,
-    );
+
+    for (final candidate in candidates) {
+      final fallback = _decodeCandidate(txtService, bytes, candidate);
+      if (fallback != null && fallback.isNotEmpty) {
+        return fallback;
+      }
+    }
+
+    return txtService.decodeWithOverride(bytes, encodingOverride: 'utf8');
+  }
+
+  static String? _decodeCandidate(
+    EnhancedTxtImportService txtService,
+    Uint8List bytes,
+    String candidate,
+  ) {
+    final normalizedCandidate =
+        EnhancedTxtImportService.normalizeEncoding(candidate);
+    if (normalizedCandidate == 'auto') {
+      return null;
+    }
+    try {
+      return txtService.decodeWithOverride(
+        _trimBytesForEncoding(bytes, normalizedCandidate),
+        encodingOverride: normalizedCandidate,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   static Uint8List _trimBytesForEncoding(
@@ -357,6 +455,7 @@ class TxtParser implements BookParser {
     required List<_ChapterMarker> markers,
   }) {
     final results = <_ParsedChapterWithOffset>[];
+    final fastFlowDocMode = content.length >= _fastFlowDocCharsThreshold;
 
     for (int i = 0; i < markers.length; i++) {
       final marker = markers[i];
@@ -383,7 +482,11 @@ class TxtParser implements BookParser {
           anchorOffset: start,
           chapter: ParsedChapter(
             chapter: chapter,
-            flowDoc: _toFlowDoc(chapter.title, chapterContent),
+            flowDoc: _toFlowDoc(
+              chapter.title,
+              chapterContent,
+              fastMode: fastFlowDocMode,
+            ),
           ),
         ),
       );
@@ -402,7 +505,11 @@ class TxtParser implements BookParser {
           anchorOffset: 0,
           chapter: ParsedChapter(
             chapter: chapter,
-            flowDoc: _toFlowDoc(chapter.title, chapter.content),
+            flowDoc: _toFlowDoc(
+              chapter.title,
+              chapter.content,
+              fastMode: fastFlowDocMode,
+            ),
           ),
         ),
       );
@@ -411,7 +518,11 @@ class TxtParser implements BookParser {
     return results;
   }
 
-  FlowDoc _toFlowDoc(String title, String content) {
+  FlowDoc _toFlowDoc(
+    String title,
+    String content, {
+    bool fastMode = false,
+  }) {
     final blocks = <Block>[];
     int blockIndex = 0;
 
@@ -440,6 +551,16 @@ class TxtParser implements BookParser {
 
     final bodyText = cleanedLines.join('\n').trim();
     if (bodyText.isEmpty) {
+      return FlowDoc(blocks: blocks);
+    }
+
+    if (fastMode) {
+      blocks.add(
+        ParagraphBlock(
+          id: 'p-${blockIndex++}',
+          inlines: [TextInline(bodyText)],
+        ),
+      );
       return FlowDoc(blocks: blocks);
     }
 

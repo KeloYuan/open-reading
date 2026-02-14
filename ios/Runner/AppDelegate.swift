@@ -1,8 +1,54 @@
 import Flutter
 import UIKit
 
+@objc(ReaderFlutterViewController) class ReaderFlutterViewController: FlutterViewController {
+  private var readerImmersiveEnabled = false {
+    didSet {
+      if oldValue != readerImmersiveEnabled {
+        refreshImmersiveUI()
+      }
+    }
+  }
+
+  override var prefersHomeIndicatorAutoHidden: Bool {
+    readerImmersiveEnabled
+  }
+
+  override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge {
+    readerImmersiveEnabled ? .all : []
+  }
+
+  @objc func setReaderImmersiveEnabled(_ enabled: Bool) {
+    readerImmersiveEnabled = enabled
+    if enabled {
+      refreshImmersiveUI()
+    }
+  }
+
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    if readerImmersiveEnabled {
+      refreshImmersiveUI()
+    }
+  }
+
+  override func viewDidLayoutSubviews() {
+    super.viewDidLayoutSubviews()
+    if readerImmersiveEnabled {
+      refreshImmersiveUI()
+    }
+  }
+
+  private func refreshImmersiveUI() {
+    setNeedsUpdateOfHomeIndicatorAutoHidden()
+    setNeedsUpdateOfScreenEdgesDeferringSystemGestures()
+  }
+}
+
 @main
 @objc class AppDelegate: FlutterAppDelegate {
+  private var readerImmersiveEnabled = false
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -16,16 +62,43 @@ import UIKit
 
     GeneratedPluginRegistrant.register(with: self)
 
-    if let controller = window?.rootViewController as? FlutterViewController {
+    if let registrar = self.registrar(forPlugin: "ReaderUIBridge") {
       let iCloudChannel = FlutterMethodChannel(
         name: "com.niki.xxread/icloud",
-        binaryMessenger: controller.binaryMessenger
+        binaryMessenger: registrar.messenger()
       )
 
-      iCloudChannel.setMethodCallHandler { [weak self] call, result in
+      iCloudChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
         switch call.method {
         case "getICloudDocumentsPath":
           self?.getICloudDocumentsPath(result: result)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+
+      let readerUIChannel = FlutterMethodChannel(
+        name: "com.niki.xxread/reader_ui",
+        binaryMessenger: registrar.messenger()
+      )
+
+      readerUIChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
+        switch call.method {
+        case "setReaderImmersive":
+          guard let args = call.arguments as? [String: Any],
+                let enabled = args["enabled"] as? Bool else {
+            result(
+              FlutterError(
+                code: "invalid_args",
+                message: "expected {enabled: bool}",
+                details: nil
+              )
+            )
+            return
+          }
+          self?.readerImmersiveEnabled = enabled
+          self?.applyReaderImmersiveIfPossible()
+          result(nil)
         default:
           result(FlutterMethodNotImplemented)
         }
@@ -53,5 +126,59 @@ import UIKit
     } catch {
       result(nil)
     }
+  }
+
+  override func applicationDidBecomeActive(_ application: UIApplication) {
+    super.applicationDidBecomeActive(application)
+    applyReaderImmersiveIfPossible()
+  }
+
+  private func applyReaderImmersiveIfPossible() {
+    guard let controller = currentReaderController() else { return }
+    controller.setReaderImmersiveEnabled(readerImmersiveEnabled)
+  }
+
+  private func currentReaderController() -> ReaderFlutterViewController? {
+    if #available(iOS 13.0, *) {
+      for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+        let keyWindow = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first
+        if let found = findReaderController(in: keyWindow?.rootViewController) {
+          return found
+        }
+      }
+      return nil
+    }
+    return findReaderController(in: window?.rootViewController)
+  }
+
+  private func findReaderController(in viewController: UIViewController?) -> ReaderFlutterViewController? {
+    guard let viewController else { return nil }
+    if let reader = viewController as? ReaderFlutterViewController {
+      return reader
+    }
+    if let presented = viewController.presentedViewController,
+       let found = findReaderController(in: presented) {
+      return found
+    }
+    if let nav = viewController as? UINavigationController {
+      for vc in nav.viewControllers {
+        if let found = findReaderController(in: vc) {
+          return found
+        }
+      }
+    }
+    if let tab = viewController as? UITabBarController {
+      for vc in tab.viewControllers ?? [] {
+        if let found = findReaderController(in: vc) {
+          return found
+        }
+      }
+    }
+    for child in viewController.children {
+      if let found = findReaderController(in: child) {
+        return found
+      }
+    }
+    return nil
   }
 }

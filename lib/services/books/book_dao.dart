@@ -33,6 +33,7 @@ class BookDao {
           'file_modified_time',
           'content_hash',
           'cover_image_path',
+          'text_encoding',
         ],
         orderBy: 'importDate DESC',
       );

@@ -195,7 +195,8 @@ class FlowPaginator {
       currentDebugStats.clear();
       consumedHeight = 0;
 
-      if (pages.length == eagerPageCount ||
+      if (pages.length == 1 ||
+          pages.length == eagerPageCount ||
           (pages.length > eagerPageCount && pages.length % batchSize == 0)) {
         onProgress?.call(List<Page>.from(pages), false);
         await Future<void>.delayed(Duration.zero);

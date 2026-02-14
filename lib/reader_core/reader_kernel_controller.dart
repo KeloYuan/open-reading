@@ -105,8 +105,19 @@ class ReaderKernelController extends ChangeNotifier {
       _pagePlan = null;
 
       await _storage.saveBook(parsed.book);
-      await _storage
-          .saveChapters(parsed.chapters.map((e) => e.chapter).toList());
+      if (_shouldPersistChapters(parsed)) {
+        await _storage
+            .saveChapters(parsed.chapters.map((e) => e.chapter).toList());
+      } else if (kDebugMode) {
+        final totalChars = parsed.chapters.fold<int>(
+          0,
+          (sum, item) => sum + item.chapter.content.length,
+        );
+        debugPrint(
+          '[ReaderController] skip persisting chapters for fast-open '
+          'format=${parsed.book.format} chapters=${parsed.chapters.length} chars=$totalChars',
+        );
+      }
 
       final position = await _storage.getReadingPosition(bookId);
       if (position != null) {
@@ -125,6 +136,27 @@ class ReaderKernelController extends ChangeNotifier {
       _loading = false;
       notifyListeners();
     }
+  }
+
+  bool _shouldPersistChapters(ParsedBook parsed) {
+    final format = parsed.book.format.toLowerCase();
+    if (format != 'txt') {
+      return true;
+    }
+    final chapterCount = parsed.chapters.length;
+    final totalChars = parsed.chapters.fold<int>(
+      0,
+      (sum, item) => sum + item.chapter.content.length,
+    );
+
+    // 大TXT首开优先速度：避免一次性大量写库导致长时间转圈。
+    if (totalChars > 1200000) {
+      return false;
+    }
+    if (chapterCount > 320) {
+      return false;
+    }
+    return true;
   }
 
   Future<void> reloadWithEncoding(String? textEncoding) async {

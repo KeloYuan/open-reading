@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
-import 'dart:math' as math;
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import 'package:gbk_codec/gbk_codec.dart';
+import 'package:xxread/utils/fast_gbk_decoder.dart';
 
 /// Isolate工作参数
 class HashCalculationParams {
@@ -294,117 +293,96 @@ Future<SimpleMetadata> extractMobiMetadataInIsolate(
 /// 参数 [bytes] 要解码的字节数组
 /// 返回解码后的文本内容
 String _detectAndDecodeText(Uint8List bytes, {String? encodingOverride}) {
-  debugPrint('🔍 [Isolate] 开始编码检测，文件大小: ${bytes.length} 字节');
+  if (bytes.isEmpty) {
+    return '';
+  }
 
   final normalizedOverride = _normalizeEncoding(encodingOverride);
   if (normalizedOverride != 'auto') {
-    final forced = _decodeWithEncodingOverride(bytes, normalizedOverride);
-    if (forced != null && forced.isNotEmpty) {
-      debugPrint('✅ [Isolate] 使用指定编码: $normalizedOverride');
-      return forced;
-    }
+    return _decodeWithEncodingOverride(bytes, normalizedOverride) ??
+        utf8.decode(bytes, allowMalformed: true);
   }
 
-  // 1. 检测 BOM
   if (bytes.length >= 3 &&
       bytes[0] == 0xEF &&
       bytes[1] == 0xBB &&
       bytes[2] == 0xBF) {
-    debugPrint('✅ [Isolate] UTF-8 BOM');
-    return utf8.decode(bytes.sublist(3));
+    return utf8.decode(bytes.sublist(3), allowMalformed: true);
   }
-
   if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) {
-    debugPrint('✅ [Isolate] UTF-16 LE BOM');
     return _decodeUtf16LE(bytes.sublist(2));
   }
-
   if (bytes.length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) {
-    debugPrint('✅ [Isolate] UTF-16 BE BOM');
     return _decodeUtf16BE(bytes.sublist(2));
   }
 
-  // 2. 尝试 UTF-8 严格模式
-  debugPrint('📊 [Isolate] 步骤1: UTF-8 严格模式...');
-  try {
-    final content = utf8.decode(bytes, allowMalformed: false);
-    if (_isValidUtf8Content(content)) {
-      final utf8Quality = _contentQualityScore(content);
-      try {
-        final gbkContent = gbk_bytes.decode(bytes);
-        final gbkQuality = _contentQualityScore(gbkContent);
-        if (gbkQuality > utf8Quality + 0.15 && _isValidGbkContent(gbkContent)) {
-          debugPrint('✅ [Isolate] 识别为GBK/GB2312（质量更高）');
-          return gbkContent;
-        }
-      } catch (_) {}
+  const sampleSize = 256 * 1024;
+  final sample =
+      bytes.length > sampleSize ? bytes.sublist(0, sampleSize) : bytes;
+  const candidates = <String>['utf8', 'gbk', 'utf16le', 'utf16be'];
 
-      debugPrint('✅ [Isolate] UTF-8 解码成功 (${content.length} 字符)');
-      return content;
+  String bestEncoding = 'utf8';
+  double bestScore = -1e9;
+
+  for (final encoding in candidates) {
+    final decoded = _decodeWithEncodingOverride(sample, encoding);
+    if (decoded == null || decoded.isEmpty) {
+      continue;
     }
-    debugPrint('⚠️ [Isolate] UTF-8 内容验证失败');
-  } catch (e) {
-    debugPrint('⚠️ [Isolate] UTF-8 严格模式失败');
-  }
-
-  // 3. 检测 GBK 特征
-  debugPrint('📊 [Isolate] 步骤2: GBK 特征检测...');
-  final gbkScore = _calculateGbkScore(bytes);
-  debugPrint('   GBK 评分: ${gbkScore.toStringAsFixed(2)}');
-
-  if (gbkScore > 0.3) {
-    try {
-      var content = gbk_bytes.decode(bytes);
-      // 如果评分很高(>0.8)，直接接受
-      if (gbkScore > 0.8) {
-        final chineseRatio = _chineseRatio(content);
-        if (chineseRatio < 0.05) {
-          debugPrint('⚠️ [Isolate] GBK 中文比例过低，尝试宽松解码');
-          content = _decodeGbkLenient(bytes);
-        }
-        debugPrint(
-            '✅ [Isolate] GBK 解码成功 (高评分: ${gbkScore.toStringAsFixed(2)}, ${content.length} 字符)');
-        return content;
-      }
-      // 评分中等时才验证
-      if (content.isNotEmpty && _isValidGbkContent(content)) {
-        debugPrint('✅ [Isolate] GBK 解码成功 (${content.length} 字符)');
-        return content;
-      }
-      debugPrint('⚠️ [Isolate] GBK 内容验证失败');
-    } catch (e) {
-      debugPrint('❌ [Isolate] GBK 解码失败: $e');
+    final score = _quickContentScore(decoded, encoding);
+    if (score > bestScore) {
+      bestScore = score;
+      bestEncoding = encoding;
     }
   }
 
-  // 4. UTF-8 宽松模式
-  debugPrint('📊 [Isolate] 步骤3: UTF-8 宽松模式...');
-  try {
-    final content = utf8.decode(bytes, allowMalformed: true);
-    if (content.isNotEmpty && !_hasExcessiveReplacementChars(content)) {
-      debugPrint('✅ [Isolate] UTF-8 宽松模式成功 (${content.length} 字符)');
-      return content;
+  return _decodeWithEncodingOverride(bytes, bestEncoding) ??
+      utf8.decode(bytes, allowMalformed: true);
+}
+
+double _quickContentScore(String text, String encoding) {
+  if (text.isEmpty) return -1e9;
+  final sample = text.length > 6000 ? text.substring(0, 6000) : text;
+
+  int total = 0;
+  int replacement = 0;
+  int control = 0;
+  int cjk = 0;
+  int ascii = 0;
+  int zero = 0;
+
+  for (final rune in sample.runes) {
+    total++;
+    if (rune == 0xfffd) replacement++;
+    if (rune == 0) zero++;
+    if (rune < 32 && rune != 9 && rune != 10 && rune != 13) control++;
+    if ((rune >= 0x4e00 && rune <= 0x9fff) ||
+        (rune >= 0x3400 && rune <= 0x4dbf)) {
+      cjk++;
     }
-    debugPrint('⚠️ [Isolate] UTF-8 宽松模式替换字符过多');
-  } catch (e) {
-    debugPrint('❌ [Isolate] UTF-8 宽松模式失败: $e');
+    if (rune >= 0x20 && rune <= 0x7e) {
+      ascii++;
+    }
   }
 
-  // 5. 强制 GBK
-  debugPrint('📊 [Isolate] 步骤4: 强制 GBK...');
-  try {
-    final content = gbk_bytes.decode(bytes);
-    if (content.isNotEmpty) {
-      debugPrint('⚠️ [Isolate] 强制 GBK (${content.length} 字符)');
-      return content;
-    }
-  } catch (e) {
-    debugPrint('❌ [Isolate] 强制 GBK 失败: $e');
-  }
+  if (total == 0) return -1e9;
+  final replacementRatio = replacement / total;
+  final controlRatio = control / total;
+  final cjkRatio = cjk / total;
+  final asciiRatio = ascii / total;
+  final zeroRatio = zero / total;
 
-  // 6. 最终降级
-  debugPrint('⚠️ [Isolate] 最终降级：UTF-8 宽松');
-  return utf8.decode(bytes, allowMalformed: true);
+  var score = cjkRatio * 1.4 +
+      asciiRatio * 0.45 -
+      replacementRatio * 6.0 -
+      controlRatio * 2.2 -
+      zeroRatio * 3.0;
+  if (encoding == 'gbk') {
+    score += 0.15;
+  } else if (encoding.startsWith('utf16') && zeroRatio > 0.06) {
+    score -= 0.6;
+  }
+  return score;
 }
 
 /// UTF-16 LE 解码
@@ -444,158 +422,23 @@ String _normalizeEncoding(String? encoding) {
 }
 
 String? _decodeWithEncodingOverride(Uint8List bytes, String encoding) {
-  try {
-    switch (encoding) {
-      case 'gbk':
-        return gbk_bytes.decode(bytes);
-      case 'utf8':
-        return utf8.decode(bytes, allowMalformed: true);
-      case 'utf16le':
-        return _decodeUtf16LE(bytes);
-      case 'utf16be':
-        return _decodeUtf16BE(bytes);
-      default:
-        return null;
-    }
-  } catch (_) {
-    return null;
+  switch (encoding) {
+    case 'gbk':
+      return _decodeGbkBestEffort(bytes);
+    case 'utf8':
+      return utf8.decode(bytes, allowMalformed: true);
+    case 'utf16le':
+      return _decodeUtf16LE(bytes);
+    case 'utf16be':
+      return _decodeUtf16BE(bytes);
+    default:
+      return null;
   }
 }
 
-/// 计算 GBK 特征评分
-double _calculateGbkScore(Uint8List bytes) {
-  if (bytes.length < 100) return 0.0;
-
-  int gbkPairCount = 0;
-  int totalPairs = 0;
-  int validPairs = 0;
-
-  final checkLength = math.min(bytes.length, 2000);
-
-  for (int i = 0; i < checkLength - 1; i++) {
-    final byte1 = bytes[i];
-
-    if (byte1 >= 0x81 && byte1 <= 0xFE) {
-      totalPairs++;
-      final byte2 = bytes[i + 1];
-
-      if (byte2 >= 0x40 && byte2 <= 0xFE && byte2 != 0x7F) {
-        gbkPairCount++;
-
-        // GB2312 常用汉字区域
-        if (byte1 >= 0xB0 && byte1 <= 0xF7 && byte2 >= 0xA1 && byte2 <= 0xFE) {
-          validPairs++;
-        }
-
-        i++;
-      }
-    }
-  }
-
-  if (totalPairs == 0) return 0.0;
-
-  final matchRatio = gbkPairCount / totalPairs;
-  final validRatio = validPairs > 0 ? validPairs / gbkPairCount : 0.0;
-
-  return matchRatio * 0.7 + validRatio * 0.3;
-}
-
-/// 验证 UTF-8 内容
-bool _isValidUtf8Content(String content) {
-  if (content.isEmpty) return false;
-
-  final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
-  if (replacementCount > content.length * 0.01) return false;
-
-  final controlCount = content.codeUnits.where((c) {
-    return c < 32 && c != 9 && c != 10 && c != 13;
-  }).length;
-
-  return controlCount < content.length * 0.05;
-}
-
-/// 验证 GBK 内容
-bool _isValidGbkContent(String content) {
-  if (content.isEmpty) {
-    debugPrint('   [Isolate] GBK 内容为空');
-    return false;
-  }
-
-  final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
-  final replacementRatio = replacementCount / content.length;
-  debugPrint(
-      '   [Isolate] GBK 替换字符: $replacementCount/${content.length} (${(replacementRatio * 100).toStringAsFixed(2)}%)');
-
-  if (replacementRatio > 0.05) {
-    debugPrint('   [Isolate] ❌ GBK 替换字符过多');
-    return false;
-  }
-
-  final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length;
-  debugPrint('   [Isolate] GBK 中文字符: $chineseCount/${content.length}');
-
-  if (chineseCount > 0) {
-    debugPrint('   [Isolate] ✅ 包含中文字符');
-    return true;
-  }
-
-  final printableCount = content.codeUnits.where((c) {
-    return (c >= 32 && c <= 126) || c == 9 || c == 10 || c == 13;
-  }).length;
-  final printableRatio = printableCount / content.length;
-  debugPrint(
-      '   [Isolate] GBK 可打印字符: ${(printableRatio * 100).toStringAsFixed(2)}%');
-
-  return printableRatio > 0.8;
-}
-
-/// 检查是否有过多替换字符
-bool _hasExcessiveReplacementChars(String content) {
-  final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
-  return replacementCount > content.length * 0.1;
-}
-
-double _contentQualityScore(String content) {
-  if (content.isEmpty) return 0.0;
-  final replacementCount = content.codeUnits.where((c) => c == 0xFFFD).length;
-  final replacementRatio = replacementCount / content.length;
-  final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length;
-  final chineseRatio = chineseCount / content.length;
-  final printableCount = content.codeUnits.where((c) {
-    return (c >= 32 && c <= 126) || c == 9 || c == 10 || c == 13;
-  }).length;
-  final printableRatio = printableCount / content.length;
-  final penalty = (1.0 - (replacementRatio * 5)).clamp(0.0, 1.0);
-  return (chineseRatio * 0.7 + printableRatio * 0.3) * penalty;
-}
-
-double _chineseRatio(String content) {
-  if (content.isEmpty) return 0.0;
-  final chineseCount = RegExp(r'[\u4e00-\u9fff]').allMatches(content).length;
-  return chineseCount / content.length;
-}
-
-String _decodeGbkLenient(Uint8List bytes) {
-  final buffer = StringBuffer();
-  int i = 0;
-  while (i < bytes.length) {
-    final b1 = bytes[i];
-    if (b1 <= 0x7F) {
-      buffer.writeCharCode(b1);
-      i++;
-      continue;
-    }
-    if (i + 1 < bytes.length) {
-      final b2 = bytes[i + 1];
-      if (b2 >= 0x40 && b2 <= 0xFE && b2 != 0x7F) {
-        try {
-          buffer.write(gbk_bytes.decode([b1, b2]));
-        } catch (_) {}
-        i += 2;
-        continue;
-      }
-    }
-    i++;
-  }
-  return buffer.toString();
+String _decodeGbkBestEffort(Uint8List bytes) {
+  return decodeGbkFast(
+    bytes,
+    lenient: !isLikelyValidGbkByteStream(bytes),
+  );
 }

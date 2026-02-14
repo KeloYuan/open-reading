@@ -184,6 +184,9 @@ class BookImportService {
 
       if (result != null && result.files.isNotEmpty) {
         final pickedFile = result.files.first;
+        final pickedExtension = (pickedFile.extension ?? '').toLowerCase();
+        final normalizedEncodingOverride =
+            EnhancedTxtImportService.normalizeEncoding(encodingOverride);
 
         // 获取原始文件路径
         final sourcePath = pickedFile.path;
@@ -248,6 +251,25 @@ class BookImportService {
               // 继续执行复制流程，然后更新路径
               // （不在这里return，让后续流程处理）
             } else {
+              // 对TXT重复导入允许刷新编码设置，避免“重新选择GB2312无效”。
+              if (pickedExtension == 'txt' &&
+                  normalizedEncodingOverride != 'auto' &&
+                  existingBook.id != null &&
+                  existingBook.textEncoding != normalizedEncodingOverride) {
+                await _bookDao.updateBookTextEncoding(
+                  existingBook.id!,
+                  normalizedEncodingOverride,
+                );
+                progressCallback?.call(1.0, '书籍已存在，已更新编码设置');
+                debugPrint(
+                  '♻️ 重复TXT导入，已更新编码: '
+                  '${existingBook.textEncoding} -> $normalizedEncodingOverride',
+                );
+                return existingBook.copyWith(
+                  textEncoding: normalizedEncodingOverride,
+                );
+              }
+
               // 旧文件存在，这是真正的重复
               debugPrint('Duplicate book detected: ${existingBook.title}');
               throw Exception(
@@ -792,20 +814,24 @@ class BookImportService {
   }) async {
     try {
       debugPrint('📖 开始TXT元数据提取: $fileName');
+      final normalizedOverride =
+          EnhancedTxtImportService.normalizeEncoding(encodingOverride);
+      var resolvedEncoding = normalizedOverride;
 
-      // 先进行编码分析（快速检测）
-      debugPrint('🔍 分析文件编码特征...');
-      final analysis = EncodingDetectorHelper.analyzeEncoding(bytes);
+      if (normalizedOverride == 'auto') {
+        // 仅自动模式执行编码检测。
+        debugPrint('🔍 分析文件编码特征...');
+        final analysis = EncodingDetectorHelper.analyzeEncoding(bytes);
+        final report = EncodingDetectorHelper.generateReport(analysis);
+        EncodingDetectorHelper.debugPrintReport(report);
 
-      // 打印详细的编码分析报告
-      final report = EncodingDetectorHelper.generateReport(analysis);
-      EncodingDetectorHelper.debugPrintReport(report);
-
-      final detectedEncoding = _enhancedTxtService.detectEncoding(
-        bytes,
-        encodingOverride: encodingOverride,
-      );
-      var resolvedEncoding = detectedEncoding;
+        resolvedEncoding = _enhancedTxtService.detectEncoding(
+          bytes,
+          encodingOverride: null,
+        );
+      } else {
+        debugPrint('🧷 使用用户指定编码: $normalizedOverride（跳过自动检测）');
+      }
 
       // 对于大文件，使用isolate处理
       SimpleMetadata simpleMetadata;
@@ -818,27 +844,41 @@ class BookImportService {
             bytes: bytes,
             fileName: fileName,
             extension: 'txt',
-            encodingOverride: detectedEncoding,
+            encodingOverride: resolvedEncoding,
           ),
         );
       } else {
         // 小文件在主线程处理
         String content;
         try {
-          debugPrint('🔄 开始智能编码检测...');
+          if (resolvedEncoding == 'auto') {
+            debugPrint('🔄 开始智能编码检测...');
+          } else {
+            debugPrint('🔄 使用指定编码解码: $resolvedEncoding');
+          }
           final decodeResult = _enhancedTxtService.decodeWithResult(
             bytes,
-            encodingOverride: encodingOverride,
+            encodingOverride: resolvedEncoding,
           );
           content = decodeResult.content;
           resolvedEncoding = decodeResult.encoding;
-          debugPrint('✅ 文本编码检测成功，内容长度: ${content.length}');
+          debugPrint('✅ 文本解码成功，编码=$resolvedEncoding，内容长度: ${content.length}');
         } catch (e, stackTrace) {
           debugPrint('❌ 编码检测失败: $e');
           debugPrint('Stack trace: $stackTrace');
-          content = utf8.decode(bytes, allowMalformed: true);
-          resolvedEncoding = 'utf8';
-          debugPrint('使用UTF-8 fallback解码');
+          if (resolvedEncoding != 'auto') {
+            final retry = _enhancedTxtService.decodeWithResult(
+              bytes,
+              encodingOverride: resolvedEncoding,
+            );
+            content = retry.content;
+            resolvedEncoding = retry.encoding;
+            debugPrint('使用指定编码重试解码: $resolvedEncoding');
+          } else {
+            content = utf8.decode(bytes, allowMalformed: true);
+            resolvedEncoding = 'utf8';
+            debugPrint('使用UTF-8 fallback解码');
+          }
         }
 
         // ✅ 文本预处理：压缩空行、添加缩进、段落间距

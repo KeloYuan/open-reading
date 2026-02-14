@@ -12,7 +12,7 @@ class DatabaseService {
 
   static Database? _database;
   static const String _dbName = 'xxread_v2.db';
-  static const int _dbVersion = 10;
+  static const int _dbVersion = 11;
   static bool _isInitializing = false;
   static final Completer<Database> _initCompleter = Completer<Database>();
 
@@ -268,6 +268,20 @@ class DatabaseService {
         await db.execute('ALTER TABLE books ADD COLUMN text_encoding TEXT');
       }
     }
+    if (oldVersion < 11) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS reading_sessions(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          date TEXT NOT NULL,
+          bookId INTEGER,
+          startTimeMs INTEGER NOT NULL,
+          endTimeMs INTEGER NOT NULL,
+          durationInSeconds INTEGER NOT NULL,
+          pagesRead INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+      await _createReadingSessionsIndexes(db);
+    }
   }
 
   Future<void> _createTables(Database db) async {
@@ -311,6 +325,18 @@ class DatabaseService {
     ''');
 
     await db.execute('''
+      CREATE TABLE reading_sessions(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        bookId INTEGER,
+        startTimeMs INTEGER NOT NULL,
+        endTimeMs INTEGER NOT NULL,
+        durationInSeconds INTEGER NOT NULL,
+        pagesRead INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+
+    await db.execute('''
       CREATE TABLE book_notes(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         book_id INTEGER NOT NULL,
@@ -335,6 +361,7 @@ class DatabaseService {
     // Create indexes for performance
     await _createBooksTableIndexes(db);
     await _createReadingStatsIndexes(db);
+    await _createReadingSessionsIndexes(db);
     await _createBookNotesIndexes(db);
   }
 
@@ -408,6 +435,19 @@ class DatabaseService {
     // 为date创建索引，用于快速查询日期范围
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_reading_stats_date ON reading_stats (date DESC)',
+    );
+  }
+
+  /// 创建reading_sessions表索引
+  Future<void> _createReadingSessionsIndexes(Database db) async {
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_reading_sessions_date ON reading_sessions (date DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_reading_sessions_book_id ON reading_sessions (bookId)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_reading_sessions_start_time ON reading_sessions (startTimeMs DESC)',
     );
   }
 

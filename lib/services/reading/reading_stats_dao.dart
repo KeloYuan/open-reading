@@ -1,35 +1,84 @@
+import 'dart:math' as math;
+
 import 'package:xxread/services/core/database_service.dart';
 
 class ReadingStatsDao {
   final dbService = DatabaseService();
 
   Future<void> insertReadingTime(DateTime date, int durationInSeconds) async {
+    if (durationInSeconds <= 0) return;
     final db = await dbService.database;
-    final dateString = date.toIso8601String().split('T').first;
+    final dateString = _dateKey(date);
+    await _upsertReadingDuration(
+      db: db,
+      dateString: dateString,
+      deltaSeconds: durationInSeconds,
+    );
+  }
 
-    // Check if a record for this date already exists
-    final existing = await db.query(
-      'reading_stats',
-      where: 'date = ?',
-      whereArgs: [dateString],
+  /// 记录一次真实阅读会话（会自动按跨天拆分并汇总到 daily stats）。
+  Future<void> recordReadingSession({
+    required DateTime startTime,
+    required DateTime endTime,
+    int? bookId,
+    int pagesRead = 0,
+  }) async {
+    if (!endTime.isAfter(startTime)) {
+      return;
+    }
+    final durationSeconds = endTime.difference(startTime).inSeconds;
+    if (durationSeconds <= 0) {
+      return;
+    }
+
+    final db = await dbService.database;
+    final chunks = _splitSessionByDate(startTime: startTime, endTime: endTime);
+    if (chunks.isEmpty) {
+      return;
+    }
+
+    final totalChunkSeconds = chunks.fold<int>(
+      0,
+      (sum, chunk) => sum + chunk.durationSeconds,
     );
 
-    if (existing.isNotEmpty) {
-      // Update existing record
-      final newDuration =
-          (existing.first['durationInSeconds'] as int) + durationInSeconds;
-      await db.update(
-        'reading_stats',
-        {'durationInSeconds': newDuration},
-        where: 'date = ?',
-        whereArgs: [dateString],
-      );
-    } else {
-      // Insert new record
-      await db.insert('reading_stats', {
-        'date': dateString,
-        'durationInSeconds': durationInSeconds,
+    var remainingPages = math.max(0, pagesRead);
+    var remainingSeconds = totalChunkSeconds;
+
+    for (var i = 0; i < chunks.length; i++) {
+      final chunk = chunks[i];
+      final chunkSeconds = chunk.durationSeconds;
+      if (chunkSeconds <= 0) {
+        continue;
+      }
+
+      var chunkPages = 0;
+      if (remainingPages > 0) {
+        if (i == chunks.length - 1 || remainingSeconds <= 0) {
+          chunkPages = remainingPages;
+        } else {
+          final ratio = chunkSeconds / totalChunkSeconds;
+          chunkPages = (pagesRead * ratio).round().clamp(0, remainingPages);
+        }
+      }
+
+      await db.insert('reading_sessions', {
+        'date': chunk.dateString,
+        'bookId': bookId,
+        'startTimeMs': chunk.startTime.millisecondsSinceEpoch,
+        'endTimeMs': chunk.endTime.millisecondsSinceEpoch,
+        'durationInSeconds': chunkSeconds,
+        'pagesRead': chunkPages,
       });
+
+      await _upsertReadingDuration(
+        db: db,
+        dateString: chunk.dateString,
+        deltaSeconds: chunkSeconds,
+      );
+
+      remainingPages = math.max(0, remainingPages - chunkPages);
+      remainingSeconds = math.max(0, remainingSeconds - chunkSeconds);
     }
   }
 
@@ -38,26 +87,24 @@ class ReadingStatsDao {
     final today = DateTime.now();
     final weekStart = today.subtract(Duration(days: today.weekday - 1));
 
-    // Total
     final totalResult = await db
         .rawQuery('SELECT SUM(durationInSeconds) as total FROM reading_stats');
     final totalDuration = (totalResult.first['total'] as int?) ?? 0;
 
-    // Today
     final todayResult = await db.query(
       'reading_stats',
       columns: ['durationInSeconds'],
       where: 'date = ?',
-      whereArgs: [today.toIso8601String().split('T').first],
+      whereArgs: [_dateKey(today)],
     );
     final todayDuration = todayResult.isNotEmpty
         ? (todayResult.first['durationInSeconds'] as int)
         : 0;
 
-    // This week
     final weekResult = await db.rawQuery(
-        'SELECT SUM(durationInSeconds) as total FROM reading_stats WHERE date >= ?',
-        [weekStart.toIso8601String().split('T').first]);
+      'SELECT SUM(durationInSeconds) as total FROM reading_stats WHERE date >= ?',
+      [_dateKey(weekStart)],
+    );
     final weekDuration = (weekResult.first['total'] as int?) ?? 0;
 
     return {
@@ -69,10 +116,10 @@ class ReadingStatsDao {
 
   Future<List<Map<String, dynamic>>> getWeeklyChartData() async {
     final db = await dbService.database;
-    final List<Map<String, dynamic>> chartData = [];
+    final chartData = <Map<String, dynamic>>[];
     for (int i = 6; i >= 0; i--) {
       final date = DateTime.now().subtract(Duration(days: i));
-      final dateString = date.toIso8601String().split('T').first;
+      final dateString = _dateKey(date);
       final result = await db.query(
         'reading_stats',
         columns: ['durationInSeconds'],
@@ -93,15 +140,13 @@ class ReadingStatsDao {
     final db = await dbService.database;
     final today = DateTime.now();
 
-    // 获取连续阅读天数
     int consecutiveDays = 0;
-    for (int i = 0; i < 30; i++) {
+    for (int i = 0; i < 365; i++) {
       final date = today.subtract(Duration(days: i));
-      final dateString = date.toIso8601String().split('T').first;
       final result = await db.query(
         'reading_stats',
         where: 'date = ? AND durationInSeconds > 0',
-        whereArgs: [dateString],
+        whereArgs: [_dateKey(date)],
       );
       if (result.isNotEmpty) {
         consecutiveDays++;
@@ -110,9 +155,9 @@ class ReadingStatsDao {
       }
     }
 
-    // 获取单次最长阅读时间（分钟）
     final maxSessionResult = await db.rawQuery(
-        'SELECT MAX(durationInSeconds) as maxDuration FROM reading_stats');
+      'SELECT MAX(durationInSeconds) as maxDuration FROM reading_sessions',
+    );
     final maxDuration = (maxSessionResult.first['maxDuration'] as int?) ?? 0;
 
     return {
@@ -121,118 +166,161 @@ class ReadingStatsDao {
     };
   }
 
-  // 获取指定日期范围内的每日统计数据
+  /// 每日统计（真实）：时长来自 reading_stats；页数/当日阅读书籍数来自 reading_sessions。
   Future<List<Map<String, dynamic>>> getDailyStatsRange(
-      DateTime startDate, DateTime endDate) async {
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
     final db = await dbService.database;
+    final startDateStr = _dateKey(startDate);
+    final endDateStr = _dateKey(endDate);
 
-    final startDateStr = startDate.toIso8601String().split('T').first;
-    final endDateStr = endDate.toIso8601String().split('T').first;
-
-    final result = await db.query(
+    final durationRows = await db.query(
       'reading_stats',
       where: 'date >= ? AND date <= ?',
       whereArgs: [startDateStr, endDateStr],
       orderBy: 'date ASC',
     );
+    final durationByDate = <String, int>{
+      for (final row in durationRows)
+        row['date'] as String: (row['durationInSeconds'] as int?) ?? 0,
+    };
 
-    // 转换为统一格式，添加缺失的字段
-    return result
-        .map((row) => {
-              'date': row['date'],
-              'duration': row['durationInSeconds'], // 保持秒为单位，在上层转换
-              'pages': 0, // 由于当前数据库结构中没有页数记录，暂时设为0
-              'books_read': 0, // 由于当前数据库结构中没有完成书籍记录，暂时设为0
-            })
-        .toList();
+    final pagesRows = await db.rawQuery(
+      '''
+      SELECT date, SUM(pagesRead) as totalPages
+      FROM reading_sessions
+      WHERE date >= ? AND date <= ?
+      GROUP BY date
+      ''',
+      [startDateStr, endDateStr],
+    );
+    final pagesByDate = <String, int>{
+      for (final row in pagesRows)
+        row['date'] as String: (row['totalPages'] as int?) ?? 0,
+    };
+
+    final booksRows = await db.rawQuery(
+      '''
+      SELECT date, COUNT(DISTINCT bookId) as booksRead
+      FROM reading_sessions
+      WHERE date >= ? AND date <= ? AND bookId IS NOT NULL AND bookId > 0
+      GROUP BY date
+      ''',
+      [startDateStr, endDateStr],
+    );
+    final booksByDate = <String, int>{
+      for (final row in booksRows)
+        row['date'] as String: (row['booksRead'] as int?) ?? 0,
+    };
+
+    final rows = <Map<String, dynamic>>[];
+    final totalDays = endDate
+            .difference(DateTime(startDate.year, startDate.month, startDate.day))
+            .inDays +
+        1;
+    for (var i = 0; i < totalDays; i++) {
+      final date = DateTime(startDate.year, startDate.month, startDate.day + i);
+      final key = _dateKey(date);
+      rows.add({
+        'date': key,
+        'duration': durationByDate[key] ?? 0,
+        'pages': pagesByDate[key] ?? 0,
+        'books_read': booksByDate[key] ?? 0,
+      });
+    }
+    return rows;
   }
 
-  /// 获取每小时的阅读时长分布（基于现有数据估算）
-  /// 根据一天中的总阅读时长，按照常见阅读时段分配
-  Future<Map<int, int>> getHourlyReadingDistribution() async {
+  /// 读取小时分布（真实）：根据会话时间窗口切分到每个小时。
+  Future<Map<int, int>> getHourlyReadingDistribution({int days = 30}) async {
     final db = await dbService.database;
+    final now = DateTime.now();
+    final startWindow = now.subtract(Duration(days: days));
+    final startMs = startWindow.millisecondsSinceEpoch;
+    final endMs = now.millisecondsSinceEpoch;
 
-    // 获取最近30天的数据作为样本
-    final endDate = DateTime.now();
-    final startDate = endDate.subtract(const Duration(days: 30));
-    final startDateStr = startDate.toIso8601String().split('T').first;
-    final endDateStr = endDate.toIso8601String().split('T').first;
-
-    final result = await db.query(
-      'reading_stats',
-      where: 'date >= ? AND date <= ?',
-      whereArgs: [startDateStr, endDateStr],
+    final rows = await db.rawQuery(
+      '''
+      SELECT startTimeMs, endTimeMs
+      FROM reading_sessions
+      WHERE endTimeMs > ? AND startTimeMs < ?
+      ''',
+      [startMs, endMs],
     );
 
-    // 初始化24小时的数据
-    final hourlyData = <int, int>{};
-    for (int i = 0; i < 24; i++) {
-      hourlyData[i] = 0;
-    }
+    final hourlyMinutes = <int, double>{
+      for (var h = 0; h < 24; h++) h: 0,
+    };
 
-    // 如果有真实数据，按常见阅读时段分配
-    // 早晨8-10点，中午12-14点，晚上19-23点是主要阅读时段
-    for (final row in result) {
-      final duration = row['durationInSeconds'] as int;
-      if (duration > 0) {
-        // 按阅读时长权重分配到不同时段
-        final totalMinutes = duration ~/ 60;
+    for (final row in rows) {
+      final rawStart = row['startTimeMs'] as int? ?? 0;
+      final rawEnd = row['endTimeMs'] as int? ?? 0;
+      if (rawEnd <= rawStart) continue;
 
-        // 早晨时段占20%
-        final morningMinutes = (totalMinutes * 0.2).round();
-        hourlyData[8] = (hourlyData[8]! + morningMinutes ~/ 2);
-        hourlyData[9] = (hourlyData[9]! + morningMinutes ~/ 2);
+      var current = DateTime.fromMillisecondsSinceEpoch(rawStart);
+      final end = DateTime.fromMillisecondsSinceEpoch(rawEnd);
 
-        // 中午时段占20%
-        final noonMinutes = (totalMinutes * 0.2).round();
-        hourlyData[12] = (hourlyData[12]! + noonMinutes ~/ 2);
-        hourlyData[13] = (hourlyData[13]! + noonMinutes ~/ 2);
+      if (current.isBefore(startWindow)) {
+        current = startWindow;
+      }
+      var actualEnd = end;
+      if (actualEnd.isAfter(now)) {
+        actualEnd = now;
+      }
+      if (!actualEnd.isAfter(current)) {
+        continue;
+      }
 
-        // 晚上时段占60%
-        final eveningMinutes = (totalMinutes * 0.6).round();
-        hourlyData[19] = (hourlyData[19]! + eveningMinutes ~/ 4);
-        hourlyData[20] = (hourlyData[20]! + eveningMinutes ~/ 4);
-        hourlyData[21] = (hourlyData[21]! + eveningMinutes ~/ 4);
-        hourlyData[22] = (hourlyData[22]! + eveningMinutes ~/ 4);
+      while (current.isBefore(actualEnd)) {
+        final hourBoundary = DateTime(
+          current.year,
+          current.month,
+          current.day,
+          current.hour + 1,
+        );
+        final segmentEnd =
+            hourBoundary.isBefore(actualEnd) ? hourBoundary : actualEnd;
+        final segmentMinutes =
+            segmentEnd.difference(current).inSeconds.toDouble() / 60.0;
+        hourlyMinutes[current.hour] =
+            (hourlyMinutes[current.hour] ?? 0) + segmentMinutes;
+        current = segmentEnd;
       }
     }
 
-    return hourlyData;
+    return {
+      for (var h = 0; h < 24; h++) h: (hourlyMinutes[h] ?? 0).round(),
+    };
   }
 
-  /// 获取阅读强度热力图数据（最近91天）
+  /// 阅读强度热力图（最近91天）- 基于真实 daily duration。
   Future<Map<String, double>> getReadingIntensityHeatmap() async {
     final db = await dbService.database;
-
     final endDate = DateTime.now();
     final startDate = endDate.subtract(const Duration(days: 91));
-    final startDateStr = startDate.toIso8601String().split('T').first;
-    final endDateStr = endDate.toIso8601String().split('T').first;
 
     final result = await db.query(
       'reading_stats',
       where: 'date >= ? AND date <= ?',
-      whereArgs: [startDateStr, endDateStr],
+      whereArgs: [_dateKey(startDate), _dateKey(endDate)],
     );
 
-    // 创建日期到时长的映射
     final dateToMinutes = <String, int>{};
     for (final row in result) {
       final date = row['date'] as String;
-      final minutes = (row['durationInSeconds'] as int) ~/ 60;
+      final minutes = ((row['durationInSeconds'] as int?) ?? 0) ~/ 60;
       dateToMinutes[date] = minutes;
     }
 
-    // 找出最大阅读时长用于归一化
     final maxMinutes = dateToMinutes.values.isEmpty
         ? 1
         : dateToMinutes.values.reduce((a, b) => a > b ? a : b);
 
-    // 归一化为0-1的强度值
     final intensityMap = <String, double>{};
     for (int i = 90; i >= 0; i--) {
       final date = endDate.subtract(Duration(days: i));
-      final dateStr = date.toIso8601String().split('T').first;
+      final dateStr = _dateKey(date);
       final minutes = dateToMinutes[dateStr] ?? 0;
       intensityMap[dateStr] = maxMinutes > 0 ? minutes / maxMinutes : 0.0;
     }
@@ -240,13 +328,146 @@ class ReadingStatsDao {
     return intensityMap;
   }
 
-  /// 获取所有阅读统计（用于同步）
+  /// 每本书的真实阅读统计（来自 reading_sessions）。
+  Future<Map<int, Map<String, dynamic>>> getBookReadingStats() async {
+    final db = await dbService.database;
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        bookId,
+        SUM(durationInSeconds) as totalDurationSeconds,
+        SUM(pagesRead) as totalPagesRead,
+        COUNT(*) as sessionCount,
+        MAX(endTimeMs) as lastReadMs
+      FROM reading_sessions
+      WHERE bookId IS NOT NULL AND bookId > 0
+      GROUP BY bookId
+      ''',
+    );
+
+    final result = <int, Map<String, dynamic>>{};
+    for (final row in rows) {
+      final bookId = row['bookId'] as int?;
+      if (bookId == null || bookId <= 0) continue;
+      final durationSeconds = (row['totalDurationSeconds'] as int?) ?? 0;
+      result[bookId] = {
+        'durationSeconds': durationSeconds,
+        'durationMinutes': (durationSeconds / 60).round(),
+        'pagesRead': (row['totalPagesRead'] as int?) ?? 0,
+        'sessionCount': (row['sessionCount'] as int?) ?? 0,
+        'lastReadMs': (row['lastReadMs'] as int?) ?? 0,
+      };
+    }
+    return result;
+  }
+
+  /// 阅读会话概览（真实）。
+  Future<Map<String, int>> getSessionSummary({int recentDays = 90}) async {
+    final db = await dbService.database;
+    final startDate = _dateKey(DateTime.now().subtract(Duration(days: recentDays)));
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        COUNT(*) as totalSessions,
+        SUM(durationInSeconds) as totalDurationSeconds,
+        MAX(durationInSeconds) as maxDurationSeconds
+      FROM reading_sessions
+      WHERE date >= ?
+      ''',
+      [startDate],
+    );
+    final first = rows.isNotEmpty ? rows.first : const <String, Object?>{};
+    final totalSessions = (first['totalSessions'] as int?) ?? 0;
+    final totalDurationSeconds = (first['totalDurationSeconds'] as int?) ?? 0;
+    final maxDurationSeconds = (first['maxDurationSeconds'] as int?) ?? 0;
+    final avgMinutes = totalSessions > 0
+        ? ((totalDurationSeconds / totalSessions) / 60).round()
+        : 0;
+    return {
+      'totalSessions': totalSessions,
+      'totalMinutes': (totalDurationSeconds / 60).round(),
+      'avgSessionMinutes': avgMinutes,
+      'maxSessionMinutes': (maxDurationSeconds / 60).round(),
+    };
+  }
+
+  /// 获取所有阅读统计（用于同步）- 保持兼容旧同步结构。
   Future<List<Map<String, dynamic>>> getAllStats() async {
     final db = await dbService.database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'reading_stats',
-      orderBy: 'date DESC',
-    );
-    return maps;
+    return db.query('reading_stats', orderBy: 'date DESC');
   }
+
+  Future<void> _upsertReadingDuration({
+    required dynamic db,
+    required String dateString,
+    required int deltaSeconds,
+  }) async {
+    if (deltaSeconds <= 0) return;
+    final existing = await db.query(
+      'reading_stats',
+      where: 'date = ?',
+      whereArgs: [dateString],
+      limit: 1,
+    );
+
+    if (existing.isNotEmpty) {
+      final newDuration =
+          ((existing.first['durationInSeconds'] as int?) ?? 0) + deltaSeconds;
+      await db.update(
+        'reading_stats',
+        {'durationInSeconds': newDuration},
+        where: 'date = ?',
+        whereArgs: [dateString],
+      );
+    } else {
+      await db.insert('reading_stats', {
+        'date': dateString,
+        'durationInSeconds': deltaSeconds,
+      });
+    }
+  }
+
+  List<_SessionChunk> _splitSessionByDate({
+    required DateTime startTime,
+    required DateTime endTime,
+  }) {
+    final chunks = <_SessionChunk>[];
+    var cursor = startTime;
+    while (cursor.isBefore(endTime)) {
+      final nextDay = DateTime(cursor.year, cursor.month, cursor.day + 1);
+      final chunkEnd = nextDay.isBefore(endTime) ? nextDay : endTime;
+      final seconds = chunkEnd.difference(cursor).inSeconds;
+      if (seconds > 0) {
+        chunks.add(
+          _SessionChunk(
+            dateString: _dateKey(cursor),
+            startTime: cursor,
+            endTime: chunkEnd,
+            durationSeconds: seconds,
+          ),
+        );
+      }
+      cursor = chunkEnd;
+    }
+    return chunks;
+  }
+
+  String _dateKey(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    return normalized.toIso8601String().split('T').first;
+  }
+}
+
+class _SessionChunk {
+  final String dateString;
+  final DateTime startTime;
+  final DateTime endTime;
+  final int durationSeconds;
+
+  const _SessionChunk({
+    required this.dateString,
+    required this.startTime,
+    required this.endTime,
+    required this.durationSeconds,
+  });
 }

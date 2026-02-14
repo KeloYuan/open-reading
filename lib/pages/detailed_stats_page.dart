@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -29,9 +30,11 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   // List<Map<String, dynamic>> _weeklyStats = [];
   // List<Map<String, dynamic>> _monthlyStats = [];
   List<Map<String, dynamic>> _bookStats = [];
+  Map<int, Map<String, dynamic>> _bookReadingStats = {};
   List<Book> _recentBooks = [];
   Map<int, int> _hourlyDistribution = {}; // 每小时阅读分布
   Map<String, double> _heatmapData = {}; // 热力图数据
+  Map<String, int> _sessionSummary = {};
 
   // UI状态
   bool _isLoading = true;
@@ -81,16 +84,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
   // 平均单次阅读时长（以有阅读的天为“次”近似）
   String get _avgSessionDurationLabel {
-    final data = _windowedDailyStats;
-    if (data.isEmpty) return '0 分钟';
-    final daysWithReading =
-        data.where((e) => ((e['readingTime'] as int?) ?? 0) > 0).length;
-    if (daysWithReading == 0) return '0 分钟';
-    final totalMinutes = data.fold<int>(
-      0,
-      (sum, e) => sum + ((e['readingTime'] as int?) ?? 0),
-    );
-    final avg = (totalMinutes / daysWithReading).round();
+    final avg = _sessionSummary['avgSessionMinutes'] ?? 0;
     return '$avg 分钟';
   }
 
@@ -124,8 +118,33 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   }
 
   String _inferBestReadingPeriod() {
-    // TODO: 当有小时粒度数据时，统计分布后给出时间段；当前返回占位
-    return '--';
+    if (_hourlyDistribution.isEmpty ||
+        _hourlyDistribution.values.every((v) => v <= 0)) {
+      return '暂无数据';
+    }
+
+    int sumRange(int start, int endInclusive) {
+      var total = 0;
+      for (var h = start; h <= endInclusive; h++) {
+        total += _hourlyDistribution[h] ?? 0;
+      }
+      return total;
+    }
+
+    final ranges = <MapEntry<String, int>>[
+      MapEntry('清晨 05:00-08:59', sumRange(5, 8)),
+      MapEntry('上午 09:00-11:59', sumRange(9, 11)),
+      MapEntry('下午 12:00-17:59', sumRange(12, 17)),
+      MapEntry('晚上 18:00-21:59', sumRange(18, 21)),
+      MapEntry('深夜 22:00-04:59',
+          sumRange(22, 23) + sumRange(0, 4)),
+    ];
+
+    ranges.sort((a, b) => b.value.compareTo(a.value));
+    if (ranges.first.value <= 0) {
+      return '暂无数据';
+    }
+    return ranges.first.key;
   }
 
   @override
@@ -189,25 +208,34 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     // 使用真实的数据库查询
     final summaryStats = await _statsDao.getSummaryStats();
     final achievementStats = await _statsDao.getAchievementStats();
+    final sessionSummary = await _statsDao.getSessionSummary(recentDays: 3650);
+    final perBookStats = await _statsDao.getBookReadingStats();
     final bookCount = await _bookDao.getBooksCount();
 
     final totalMinutes = (summaryStats['total'] ?? 0) ~/ 60;
 
-    // 计算总页数 - 基于所有书籍的currentPage总和
+    // 总页数优先使用真实会话累计页数；没有会话时回退到当前已读进度。
+    final sessionPages = perBookStats.values.fold<int>(
+      0,
+      (sum, item) => sum + ((item['pagesRead'] as int?) ?? 0),
+    );
     final books = await _bookDao.getAllBooks();
-    final totalPages = books.fold<int>(
+    final fallbackPages = books.fold<int>(
       0,
       (sum, book) => sum + book.currentPage,
     );
+    final totalPages = sessionPages > 0 ? sessionPages : fallbackPages;
 
     setState(
       () => _overallStats = {
         'totalReadingTime': totalMinutes,
-        'totalPages': totalPages, // 真实数据：所有书籍已读页数总和
+        'totalPages': totalPages,
         'totalBooks': bookCount, // 真实数据：书架中的书籍总数
-        'streak': achievementStats['consecutiveDays'] ?? 0, // 真实数据：连续阅读天数
+        'streak': achievementStats['consecutiveDays'] ?? 0,
+        'maxSessionMinutes': achievementStats['maxSessionMinutes'] ?? 0,
       },
     );
+    setState(() => _sessionSummary = sessionSummary);
   }
 
   Future<void> _loadDailyStats() async {
@@ -271,38 +299,57 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   */
 
   Future<void> _loadBookStats() async {
+    final bookReadingStats = await _statsDao.getBookReadingStats();
     final books = await _bookDao.getAllBooks();
     final bookStats = <Map<String, dynamic>>[];
 
     for (final book in books) {
-      // 基于真实阅读进度计算统计数据
       final progress =
           book.totalPages > 0 ? book.currentPage / book.totalPages : 0.0;
-
-      // 根据书籍阅读进度和估算阅读速度计算阅读时间
-      // 假设平均阅读速度为每页2分钟，根据已读页数计算
-      final estimatedReadingTime = book.currentPage * 2; // 每页2分钟
+      final realStats = book.id != null ? bookReadingStats[book.id!] : null;
+      final readingTime = (realStats?['durationMinutes'] as int?) ?? 0;
+      final pagesFromSessions = (realStats?['pagesRead'] as int?) ?? 0;
+      final pagesRead = pagesFromSessions > 0 ? pagesFromSessions : book.currentPage;
 
       bookStats.add({
         'book': book,
-        'readingTime': estimatedReadingTime, // 基于已读页数的估算时间
+        'readingTime': readingTime,
         'progress': progress,
-        'pagesRead': book.currentPage, // 真实已读页数
-        'totalPages': book.totalPages, // 真实总页数
+        'pagesRead': pagesRead,
+        'totalPages': book.totalPages,
+        'sessionCount': (realStats?['sessionCount'] as int?) ?? 0,
+        'lastReadMs': (realStats?['lastReadMs'] as int?) ?? 0,
       });
     }
 
-    // 按阅读时间排序
-    bookStats.sort(
-      (a, b) => (b['readingTime'] as int).compareTo(a['readingTime'] as int),
-    );
-    setState(() => _bookStats = bookStats);
+    // 优先按真实时长排序，其次按已读页数排序。
+    bookStats.sort((a, b) {
+      final timeCmp =
+          (b['readingTime'] as int).compareTo(a['readingTime'] as int);
+      if (timeCmp != 0) return timeCmp;
+      return (b['pagesRead'] as int).compareTo(a['pagesRead'] as int);
+    });
+    setState(() {
+      _bookReadingStats = bookReadingStats;
+      _bookStats = bookStats;
+    });
   }
 
   Future<void> _loadRecentBooks() async {
     final books = await _bookDao.getAllBooks();
-    // 取前5本书作为最近阅读
-    setState(() => _recentBooks = books.take(5).toList());
+    final perBook = _bookReadingStats.isNotEmpty
+        ? _bookReadingStats
+        : await _statsDao.getBookReadingStats();
+    final sorted = [...books];
+    sorted.sort((a, b) {
+      final aMs = a.id != null ? (perBook[a.id!]?['lastReadMs'] as int?) ?? 0 : 0;
+      final bMs = b.id != null ? (perBook[b.id!]?['lastReadMs'] as int?) ?? 0 : 0;
+      if (aMs == bMs) {
+        return b.currentPage.compareTo(a.currentPage);
+      }
+      return bMs.compareTo(aMs);
+    });
+    setState(() => _recentBooks = sorted.take(5).toList());
   }
 
   @override
@@ -321,12 +368,18 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: const [0.0, 0.22, 0.48, 0.74, 1.0],
                 colors: [
-                  Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.14),
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+                  Theme.of(context).colorScheme.secondary.withValues(alpha: 0.10),
+                  Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.07),
+                  Theme.of(context)
+                      .colorScheme
+                      .primaryContainer
+                      .withValues(alpha: 0.12),
                   Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
-                  Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.08),
                 ],
               ),
             ),
@@ -359,7 +412,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 child: Container(
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.surface.withValues(
-                          alpha: 0.78,
+                          alpha: 0.82,
                         ),
                     border: Border(
                       bottom: BorderSide(
@@ -397,11 +450,11 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                               child: Text(
                                 '详细统计',
                                 style: TextStyle(
-                                  fontSize: 30,
+                                  fontSize: 24,
                                   fontWeight: FontWeight.w700,
                                   color:
                                       Theme.of(context).colorScheme.onSurface,
-                                  height: 1.1,
+                                  height: 1.0,
                                 ),
                               ),
                             ),
@@ -433,9 +486,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                                   child: PopupMenuButton<String>(
                                     initialValue: _selectedTimeRange,
                                     onSelected: (value) {
-                                      setState(
-                                          () => _selectedTimeRange = value);
-                                      _loadAllStats();
+                                      setState(() => _selectedTimeRange = value);
                                     },
                                     icon: Icon(
                                       Icons.date_range,
@@ -1188,13 +1239,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
       double value = 0;
       switch (_selectedStatType) {
         case 0:
-          value = (data['duration'] ?? 0).toDouble() / 60; // 转换为分钟
+          value = (data['readingTime'] ?? 0).toDouble();
           break;
         case 1:
-          value = (data['pages'] ?? 0).toDouble();
+          value = (data['pagesRead'] ?? 0).toDouble();
           break;
         case 2:
-          value = (data['books_read'] ?? 0).toDouble();
+          value = (data['booksRead'] ?? 0).toDouble();
           break;
       }
       return FlSpot(index, value);
@@ -1855,6 +1906,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
   // 书籍排行榜
   Widget _buildBooksRanking() {
+    final hasRealDuration = _bookStats.any((e) => (e['readingTime'] as int) > 0);
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
@@ -1880,7 +1932,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '阅读时长排行',
+                hasRealDuration ? '阅读时长排行' : '阅读进度排行',
                 style: Theme.of(
                   context,
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
@@ -1889,12 +1941,16 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               ..._bookStats.take(10).map((bookStat) {
                 final book = bookStat['book'] as Book;
                 final readingTime = bookStat['readingTime'] as int;
+                final pagesRead = bookStat['pagesRead'] as int;
+                final sessionCount = bookStat['sessionCount'] as int;
                 final progress = bookStat['progress'] as double;
                 final index = _bookStats.indexOf(bookStat) + 1;
 
                 return _buildBookRankingItem(
                   book,
                   readingTime,
+                  pagesRead,
+                  sessionCount,
                   progress,
                   index,
                 );
@@ -1909,6 +1965,8 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   Widget _buildBookRankingItem(
     Book book,
     int readingTime,
+    int pagesRead,
+    int sessionCount,
     double progress,
     int rank,
   ) {
@@ -1997,14 +2055,16 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '$readingTime分钟',
+                readingTime > 0 ? '$readingTime分钟' : '$pagesRead页',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                       color: Theme.of(context).colorScheme.primary,
                     ),
               ),
               Text(
-                '${(progress * 100).toInt()}%',
+                readingTime > 0
+                    ? '$sessionCount 次会话'
+                    : '${(progress * 100).toInt()}%',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(
                         context,
@@ -2381,6 +2441,21 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
   // 阅读目标进度图表
   Widget _buildReadingGoalChart() {
+    final recent30 = _windowedDailyStats.length >= 30
+        ? _windowedDailyStats.sublist(_windowedDailyStats.length - 30)
+        : _windowedDailyStats;
+    final monthMinutes = recent30.fold<int>(
+      0,
+      (sum, item) => sum + ((item['readingTime'] as int?) ?? 0),
+    );
+    final weekMinutes = _windowedDailyStats
+        .skip(math.max(0, _windowedDailyStats.length - 7))
+        .fold<int>(0, (sum, item) => sum + ((item['readingTime'] as int?) ?? 0));
+    final weekPages = _windowedDailyStats
+        .skip(math.max(0, _windowedDailyStats.length - 7))
+        .fold<int>(0, (sum, item) => sum + ((item['pagesRead'] as int?) ?? 0));
+    final avgDailyPages = weekPages / 7.0;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
@@ -2414,16 +2489,34 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               ),
               const SizedBox(height: 20),
 
-              // 月度目标
-              _buildGoalProgress('本月阅读目标', '12本书', 8, 12, Colors.blue),
+              _buildGoalProgress(
+                '本月阅读时长',
+                '20小时',
+                monthMinutes / 60.0,
+                20,
+                Colors.blue,
+                valueUnit: '小时',
+              ),
               const SizedBox(height: 16),
 
-              // 时间目标
-              _buildGoalProgress('每周阅读时长', '10小时', 7.5, 10, Colors.orange),
+              _buildGoalProgress(
+                '本周阅读时长',
+                '10小时',
+                weekMinutes / 60.0,
+                10,
+                Colors.orange,
+                valueUnit: '小时',
+              ),
               const SizedBox(height: 16),
 
-              // 页数目标
-              _buildGoalProgress('每日阅读页数', '50页', 38, 50, Colors.green),
+              _buildGoalProgress(
+                '近7天日均页数',
+                '30页',
+                avgDailyPages,
+                30,
+                Colors.green,
+                valueUnit: '页',
+              ),
             ],
           ),
         ),
@@ -2436,9 +2529,13 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     String target,
     double current,
     double max,
-    Color color,
+    Color color, {
+    String valueUnit = '',
+  }
   ) {
     final progress = (current / max).clamp(0.0, 1.0);
+    final displayValue = current >= 10 ? current.toStringAsFixed(0) : current.toStringAsFixed(1);
+    final valueText = valueUnit.isEmpty ? displayValue : '$displayValue$valueUnit';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2452,7 +2549,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
             ),
             Text(
-              '${current.toInt()} / $target',
+              '$valueText / $target',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: color,
                     fontWeight: FontWeight.w600,
@@ -2558,19 +2655,31 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   }
 
   LineChartData _buildReadingSpeedChartData() {
-    // 模拟阅读速度数据（页/分钟）
-    final speedData = List.generate(14, (index) {
-      return FlSpot(
-        index.toDouble(),
-        1.8 + (index % 7) * 0.2 + (index / 14) * 0.5,
-      );
-    });
+    final source = _windowedDailyStats.length > 14
+        ? _windowedDailyStats.sublist(_windowedDailyStats.length - 14)
+        : _windowedDailyStats;
+    final speedData = <FlSpot>[];
+    for (var i = 0; i < source.length; i++) {
+      final row = source[i];
+      final pages = (row['pagesRead'] as int?) ?? 0;
+      final minutes = (row['readingTime'] as int?) ?? 0;
+      final speed = minutes > 0 ? pages / minutes : 0.0;
+      speedData.add(FlSpot(i.toDouble(), speed));
+    }
+    if (speedData.isEmpty) {
+      speedData.add(const FlSpot(0, 0));
+    }
+    final maxY = math.max(
+      1.5,
+      (speedData.map((e) => e.y).reduce(math.max) * 1.25),
+    );
+    final yInterval = maxY <= 1.5 ? 0.25 : maxY <= 3 ? 0.5 : 1.0;
 
     return LineChartData(
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
-        horizontalInterval: 0.5,
+        horizontalInterval: yInterval,
         getDrawingHorizontalLine: (value) {
           return FlLine(
             color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.1),
@@ -2590,9 +2699,18 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
             reservedSize: 30,
             interval: 2,
             getTitlesWidget: (double value, TitleMeta meta) {
+              final index = value.toInt();
+              if (index < 0 || index >= source.length) {
+                return const SizedBox.shrink();
+              }
+              final dateStr = source[index]['date'] as String? ?? '';
+              final parts = dateStr.split('-');
+              final mmdd = parts.length >= 3 ? '${parts[1]}/${parts[2]}' : '';
               return Text(
-                '第${(value.toInt() + 1)}天',
-                style: Theme.of(context).textTheme.bodySmall,
+                mmdd,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontSize: 10,
+                    ),
               );
             },
           ),
@@ -2600,7 +2718,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
         leftTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            interval: 0.5,
+            interval: yInterval,
             getTitlesWidget: (double value, TitleMeta meta) {
               return Text(
                 '${value.toStringAsFixed(1)}页/分',
@@ -2613,9 +2731,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
       ),
       borderData: FlBorderData(show: false),
       minX: 0,
-      maxX: 13,
-      minY: 1.0,
-      maxY: 3.5,
+      maxX: (speedData.length - 1).toDouble(),
+      minY: 0,
+      maxY: maxY,
       lineBarsData: [
         LineChartBarData(
           spots: speedData,
@@ -2702,7 +2820,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '当前连读: 12天',
+                      '当前连读: ${_overallStats['streak'] ?? 0}天',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context).colorScheme.tertiary,
                             fontWeight: FontWeight.w600,
@@ -2822,7 +2940,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
                 // 热力图方格
                 ...List.generate(weeksToShow, (weekIndex) {
-                  // 模拟阅读强度数据 (0-1)
+                  // 真实阅读强度数据 (0-1)
                   final intensity = _generateReadingIntensity(
                     weekIndex,
                     dayOfWeek,
@@ -2862,11 +2980,18 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   double _generateReadingIntensity(int weekIndex, int dayOfWeek) {
     // 使用真实的热力图数据
     final now = DateTime.now();
-    // 计算具体日期（从最近的周日开始算起）
-    final currentWeekday = now.weekday % 7; // 转换为0=周日的格式
-    final daysFromStart = 90 - (weekIndex * 7 + (6 - dayOfWeek));
+    final today = DateTime(now.year, now.month, now.day);
+    final currentWeekSunday = today.subtract(Duration(days: today.weekday % 7));
+    final firstWeekSunday =
+        currentWeekSunday.subtract(const Duration(days: 12 * 7));
     final targetDate =
-        now.subtract(Duration(days: daysFromStart + currentWeekday));
+        firstWeekSunday.add(Duration(days: (weekIndex * 7) + dayOfWeek));
+    if (targetDate.isAfter(today)) {
+      return 0.0;
+    }
+    if (today.difference(targetDate).inDays > 90) {
+      return 0.0;
+    }
     final dateStr = targetDate.toIso8601String().split('T').first;
 
     return _heatmapData[dateStr] ?? 0.0;
