@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:battery_plus/battery_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -135,6 +136,18 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
         systemNavigationBarColor: Colors.transparent,
       ),
     );
+    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
+    if (isAndroid) {
+      if (immersive) {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      } else {
+        SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.manual,
+          overlays: const [SystemUiOverlay.top],
+        );
+      }
+      return;
+    }
     SystemChrome.setEnabledSystemUIMode(
       immersive ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
     );
@@ -297,8 +310,9 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
               final media = MediaQuery.of(context);
               final isLandscape = constraints.maxWidth > constraints.maxHeight;
               final enableSpread = constraints.maxWidth >= 900 && isLandscape;
-              final topInset = media.padding.top;
-              final bottomInset = media.padding.bottom;
+              // Use viewPadding to keep pagination area stable when chrome toggles.
+              final topInset = media.viewPadding.top;
+              final bottomInset = media.viewPadding.bottom;
               const topUiReserve = 8.0;
               const bottomUiReserve = 16.0;
               final padding = EdgeInsets.fromLTRB(
@@ -634,12 +648,16 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
         (_controller.pageIndex + 1).clamp(1, math.max(1, plan.pages.length));
     final pageTotal = math.max(1, plan.pages.length);
     final media = MediaQuery.of(context);
+    final platform = Theme.of(context).platform;
+    final isMobilePlatform =
+        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
     final bottomInset = media.padding.bottom > 0 ? 1.0 : 0.0;
+    final mobileLift = isMobilePlatform ? 6.0 : 0.0;
 
     return Align(
       alignment: Alignment.bottomCenter,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(12, 0, 12, bottomInset),
+        padding: EdgeInsets.fromLTRB(12, 0, 12, bottomInset + mobileLift),
         child: Text(
           '第 $chapterNo/$chapterTotal 章 · 第 $pageNo/$pageTotal 页',
           style: TextStyle(
@@ -1133,17 +1151,28 @@ class _ReaderTopStatusOverlayState extends State<_ReaderTopStatusOverlay> {
     final fg = widget.foreground;
     final media = MediaQuery.of(context);
     final statusBarHeight = math.max(media.viewPadding.top, 24.0);
+    final platform = Theme.of(context).platform;
+    final isAndroid = platform == TargetPlatform.android;
+    final isIOS = platform == TargetPlatform.iOS;
+    final horizontalInset = isAndroid ? 42.0 : 36.0;
+    final topPadding = isAndroid
+        ? 9.0
+        : isIOS
+            ? 22.0
+            : 24.0;
     return SizedBox(
       height: statusBarHeight + 30,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(36, 28, 36, 0),
+        padding: EdgeInsets.fromLTRB(
+            horizontalInset, topPadding, horizontalInset, 0),
         child: Align(
           alignment: Alignment.topCenter,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                 decoration: BoxDecoration(
                   color: fg.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -1158,7 +1187,8 @@ class _ReaderTopStatusOverlayState extends State<_ReaderTopStatusOverlay> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
                 decoration: BoxDecoration(
                   color: fg.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),

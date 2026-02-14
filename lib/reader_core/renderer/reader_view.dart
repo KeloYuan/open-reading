@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Page;
 import 'package:flutter/rendering.dart' show SelectedContentRange;
 
@@ -406,8 +406,15 @@ class _PagePane extends StatefulWidget {
 }
 
 class _PagePaneState extends State<_PagePane> {
+  static const TextHeightBehavior _textHeightBehavior = TextHeightBehavior(
+    applyHeightToFirstAscent: false,
+    applyHeightToLastDescent: false,
+  );
+  static const bool _debugRenderLogs = true;
   final SelectionListenerNotifier _selectionNotifier =
       SelectionListenerNotifier();
+  final ScrollController _pageScrollController = ScrollController();
+  String? _lastRenderLogKey;
 
   String _selectedText = '';
   SelectedContentRange? _selectedRange;
@@ -422,6 +429,7 @@ class _PagePaneState extends State<_PagePane> {
   void dispose() {
     _selectionNotifier.removeListener(_handleSelectionDetails);
     _selectionNotifier.dispose();
+    _pageScrollController.dispose();
     super.dispose();
   }
 
@@ -433,8 +441,6 @@ class _PagePaneState extends State<_PagePane> {
     final textColor = widget.textColor ?? Theme.of(context).colorScheme.onSurface;
     final baseStyle = widget.style.toTextStyle(color: textColor);
     final renderItems = _buildRenderItems(blockMap);
-    _trimLeadingLineBreaksAtPageStart(renderItems);
-    _tightenWhitespaceAroundImages(renderItems);
     final chapterTitleText = widget.chapterTitle?.trim();
     final promotedCandidate = shouldPromoteTitle
         ? (_extractLeadingTitleFromItems(renderItems, widget.chapterTitle!) ??
@@ -509,6 +515,8 @@ class _PagePaneState extends State<_PagePane> {
                             promotedTitle,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
+                            textScaler: TextScaler.noScaling,
+                            textHeightBehavior: _textHeightBehavior,
                             style: baseStyle.copyWith(
                               fontSize: (widget.style.fontSize *
                                       (hasImageItem ? 1.24 : 1.34))
@@ -527,23 +535,37 @@ class _PagePaneState extends State<_PagePane> {
                           if (text == null || text.isEmpty) {
                             continue;
                           }
+                          final blockTextStyle = _resolveTextStyle(
+                            baseStyle,
+                            item.blockStyle,
+                          );
+                          final blockTextAlign =
+                              item.blockStyle?.textAlign ?? widget.style.textAlign;
+                          final blockLineHeight = _normalizedLineHeight(
+                            item.blockStyle?.lineHeight,
+                          );
                           final spans = _buildHighlightedSpans(
                             text: text,
                             pageStartOffset: item.globalStart ?? widget.page.startOffset,
                             annotations: widget.annotations,
-                            baseStyle: baseStyle,
+                            baseStyle: blockTextStyle,
                           );
                           children.add(
                             Text.rich(
                               TextSpan(children: spans),
-                              textAlign: widget.style.textAlign,
+                              textAlign: blockTextAlign,
+                              textScaler: TextScaler.noScaling,
                               strutStyle: StrutStyle(
-                                fontFamily: widget.style.fontFamily,
-                                fontSize: widget.style.fontSize,
-                                height: widget.style.lineHeight,
+                                fontFamily: blockTextStyle.fontFamily,
+                                fontSize:
+                                    blockTextStyle.fontSize ?? widget.style.fontSize,
+                                fontWeight: blockTextStyle.fontWeight,
+                                fontStyle: blockTextStyle.fontStyle,
+                                height: blockLineHeight,
                                 leading: 0,
                                 forceStrutHeight: true,
                               ),
+                              textHeightBehavior: _textHeightBehavior,
                             ),
                           );
                           break;
@@ -572,14 +594,18 @@ class _PagePaneState extends State<_PagePane> {
                       children.add(
                         Text(
                           '本页暂无可显示内容',
+                          textScaler: TextScaler.noScaling,
+                          textHeightBehavior: _textHeightBehavior,
                           style: baseStyle,
                         ),
                       );
                     }
 
+                    _scheduleRenderOverflowDebug(constraints.maxHeight);
                     return SizedBox(
                       height: constraints.maxHeight,
                       child: ListView(
+                        controller: _pageScrollController,
                         physics: const NeverScrollableScrollPhysics(),
                         padding: EdgeInsets.zero,
                         children: children,
@@ -595,6 +621,45 @@ class _PagePaneState extends State<_PagePane> {
     );
   }
 
+  @override
+  void didUpdateWidget(covariant _PagePane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.page.index != widget.page.index ||
+        oldWidget.page.startOffset != widget.page.startOffset ||
+        oldWidget.page.endOffset != widget.page.endOffset ||
+        oldWidget.style.cacheSignature() != widget.style.cacheSignature()) {
+      _lastRenderLogKey = null;
+    }
+    _scheduleRenderOverflowDebug(null);
+  }
+
+  void _scheduleRenderOverflowDebug(double? expectedViewportHeight) {
+    if (!_debugRenderLogs || !kDebugMode) {
+      return;
+    }
+    final key =
+        '${widget.page.index}-${widget.page.startOffset}-${widget.page.endOffset}-${widget.style.cacheSignature()}';
+    if (_lastRenderLogKey == key) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageScrollController.hasClients) {
+        return;
+      }
+      final position = _pageScrollController.position;
+      final overflow = position.maxScrollExtent;
+      final viewport = position.viewportDimension;
+      _lastRenderLogKey = key;
+      debugPrint(
+        '[ReaderRender] page=${widget.page.index} '
+        'range=${widget.page.startOffset}-${widget.page.endOffset} '
+        'viewportH=${viewport.toStringAsFixed(2)} '
+        'expectedH=${(expectedViewportHeight ?? viewport).toStringAsFixed(2)} '
+        'overflow=${overflow.toStringAsFixed(2)}',
+      );
+    });
+  }
+
   List<_RenderItem> _buildRenderItems(Map<String, Block> blockMap) {
     final items = <_RenderItem>[];
     for (final fragment in widget.page.fragments) {
@@ -603,6 +668,11 @@ class _PagePaneState extends State<_PagePane> {
         final blockText = switch (block) {
           ParagraphBlock p => p.plainText,
           HeadingBlock h => h.plainText,
+          _ => null,
+        };
+        final blockStyle = switch (block) {
+          ParagraphBlock p => p.style,
+          HeadingBlock h => h.style,
           _ => null,
         };
         if (blockText == null || blockText.isEmpty) {
@@ -618,6 +688,7 @@ class _PagePaneState extends State<_PagePane> {
             text: blockText.substring(start, end),
             globalStart: fragment.globalStart,
             isHeading: block is HeadingBlock,
+            blockStyle: blockStyle,
           ),
         );
         continue;
@@ -700,6 +771,8 @@ class _PagePaneState extends State<_PagePane> {
         items[i] = _RenderItem.text(
           text: trimmed,
           globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
+          isHeading: item.isHeading ?? false,
+          blockStyle: item.blockStyle,
         );
       }
       return promoted.isNotEmpty ? promoted : title;
@@ -741,6 +814,7 @@ class _PagePaneState extends State<_PagePane> {
           text: trimmed,
           globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
           isHeading: item.isHeading ?? false,
+          blockStyle: item.blockStyle,
         );
       }
       return firstLine;
@@ -787,6 +861,7 @@ class _PagePaneState extends State<_PagePane> {
           text: trimmed,
           globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
           isHeading: item.isHeading ?? false,
+          blockStyle: item.blockStyle,
         );
       }
       return firstLine;
@@ -848,6 +923,8 @@ class _PagePaneState extends State<_PagePane> {
         items[i] = _RenderItem.text(
           text: trimmed,
           globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
+          isHeading: item.isHeading ?? false,
+          blockStyle: item.blockStyle,
         );
       }
       return;
@@ -906,103 +983,11 @@ class _PagePaneState extends State<_PagePane> {
           text: trimmed,
           globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
           isHeading: item.isHeading ?? false,
+          blockStyle: item.blockStyle,
         );
       }
       return;
     }
-  }
-
-  void _trimLeadingLineBreaksAtPageStart(List<_RenderItem> items) {
-    for (var i = 0; i < items.length; i++) {
-      final item = items[i];
-      if (item.type == _RenderItemType.space) {
-        if ((item.spaceHeight ?? 0) <= 6) {
-          items.removeAt(i);
-          i -= 1;
-          continue;
-        }
-        return;
-      }
-      if (item.type != _RenderItemType.text) {
-        return;
-      }
-      final raw = item.text ?? '';
-      if (raw.isEmpty) {
-        items.removeAt(i);
-        i -= 1;
-        continue;
-      }
-      final trimmed = raw.replaceFirst(RegExp(r'^[\r\n]+'), '');
-      if (trimmed.length == raw.length) {
-        return;
-      }
-      if (trimmed.isEmpty) {
-        items.removeAt(i);
-        i -= 1;
-        continue;
-      }
-      final shift = raw.length - trimmed.length;
-      items[i] = _RenderItem.text(
-        text: trimmed,
-        globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
-        isHeading: item.isHeading ?? false,
-      );
-      return;
-    }
-  }
-
-  void _tightenWhitespaceAroundImages(List<_RenderItem> items) {
-    for (var i = 0; i < items.length; i++) {
-      final item = items[i];
-      if (item.type != _RenderItemType.text) {
-        continue;
-      }
-      final prev = _nearestNonSpaceItem(items, i, backward: true);
-      final next = _nearestNonSpaceItem(items, i, backward: false);
-      final nearImage = prev?.type == _RenderItemType.image ||
-          next?.type == _RenderItemType.image;
-      if (!nearImage) {
-        continue;
-      }
-
-      final raw = item.text ?? '';
-      if (raw.isEmpty) {
-        continue;
-      }
-      final leadingTrimmed = raw.replaceFirst(RegExp(r'^[ \t\r\n]+'), '');
-      final trailingTrimmed =
-          leadingTrimmed.replaceFirst(RegExp(r'[ \t\r\n]+$'), '');
-      if (trailingTrimmed == raw) {
-        continue;
-      }
-      if (trailingTrimmed.isEmpty) {
-        items.removeAt(i);
-        i -= 1;
-        continue;
-      }
-      final shift = raw.length - leadingTrimmed.length;
-      items[i] = _RenderItem.text(
-        text: trailingTrimmed,
-        globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
-        isHeading: item.isHeading ?? false,
-      );
-    }
-  }
-
-  _RenderItem? _nearestNonSpaceItem(
-    List<_RenderItem> items,
-    int index, {
-    required bool backward,
-  }) {
-    var i = backward ? index - 1 : index + 1;
-    while (i >= 0 && i < items.length) {
-      final item = items[i];
-      if (item.type != _RenderItemType.space) {
-        return item;
-      }
-      i += backward ? -1 : 1;
-    }
-    return null;
   }
 
   String _normalizeTitleToken(String value) {
@@ -1023,7 +1008,8 @@ class _PagePaneState extends State<_PagePane> {
     final isRemote = uri != null &&
         (uri.scheme.toLowerCase() == 'http' ||
             uri.scheme.toLowerCase() == 'https');
-    final maxImageHeight = math.max(84.0, widget.pageUsableHeight * 0.36);
+    final effectivePageHeight = _effectivePageHeight();
+    final maxImageHeight = math.max(84.0, effectivePageHeight * 0.36);
 
     var targetWidth = maxWidth;
     var targetHeight = imageBlock.height;
@@ -1041,7 +1027,7 @@ class _PagePaneState extends State<_PagePane> {
       targetHeight = targetHeight.clamp(38.0, maxImageHeight).toDouble();
     } else {
       targetHeight =
-          (widget.pageUsableHeight * 0.22).clamp(38.0, maxImageHeight).toDouble();
+          (effectivePageHeight * 0.22).clamp(38.0, maxImageHeight).toDouble();
     }
 
     Widget imageChild;
@@ -1136,6 +1122,8 @@ class _PagePaneState extends State<_PagePane> {
               text,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
+              textScaler: TextScaler.noScaling,
+              textHeightBehavior: _textHeightBehavior,
               style: widget.style.toTextStyle(
                 color: textColor.withValues(alpha: 0.85),
               ),
@@ -1270,6 +1258,33 @@ class _PagePaneState extends State<_PagePane> {
       parts.add(part);
     }
     return parts.join('/');
+  }
+
+  TextStyle _resolveTextStyle(TextStyle baseStyle, BlockStyle? blockStyle) {
+    final lineHeight = _normalizedLineHeight(blockStyle?.lineHeight);
+    return baseStyle.copyWith(
+      fontWeight: blockStyle?.fontWeight ?? baseStyle.fontWeight,
+      fontStyle: blockStyle?.fontStyle ?? baseStyle.fontStyle,
+      height: lineHeight,
+    );
+  }
+
+  double _effectivePageHeight() {
+    final lineGuard =
+        math.max(2.0, widget.style.fontSize * widget.style.lineHeight * 0.10);
+    return math.max(80.0, widget.pageUsableHeight - 8.0 - lineGuard);
+  }
+
+  double _normalizedLineHeight(double? rawLineHeight) {
+    final fallback = widget.style.lineHeight.clamp(1.0, 3.2).toDouble();
+    final raw = rawLineHeight;
+    if (raw == null || !raw.isFinite || raw <= 0) {
+      return fallback;
+    }
+    if (raw < 0.7 || raw > 4.0) {
+      return fallback;
+    }
+    return raw.clamp(1.0, 3.2).toDouble();
   }
 
   void _handleSelectionDetails() {
@@ -1422,6 +1437,7 @@ class _RenderItem {
   final String? text;
   final int? globalStart;
   final bool? isHeading;
+  final BlockStyle? blockStyle;
   final ImageBlock? imageBlock;
   final double? spaceHeight;
 
@@ -1430,6 +1446,7 @@ class _RenderItem {
     this.text,
     this.globalStart,
     this.isHeading,
+    this.blockStyle,
     this.imageBlock,
     this.spaceHeight,
   });
@@ -1438,12 +1455,14 @@ class _RenderItem {
     required String text,
     required int globalStart,
     bool isHeading = false,
+    BlockStyle? blockStyle,
   }) {
     return _RenderItem._(
       type: _RenderItemType.text,
       text: text,
       globalStart: globalStart,
       isHeading: isHeading,
+      blockStyle: blockStyle,
     );
   }
 

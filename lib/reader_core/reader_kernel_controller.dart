@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Page;
 
 import 'ai/ai_service.dart';
@@ -37,6 +38,7 @@ class ReaderKernelController extends ChangeNotifier {
   int _chapterIndex = 0;
   int _pageIndex = 0;
   PagePlan? _pagePlan;
+  int _paginationRequestId = 0;
 
   ReaderStyle _style = const ReaderStyle();
   PageLayout _layout = const PageLayout(
@@ -196,6 +198,15 @@ class ReaderKernelController extends ChangeNotifier {
 
     final changed = nextLayout.cacheSignature() != _layout.cacheSignature();
     _layout = nextLayout;
+    if (kDebugMode && changed) {
+      debugPrint(
+        '[ReaderController] viewport=${viewport.width.toStringAsFixed(1)}x${viewport.height.toStringAsFixed(1)} '
+        'padding=(${padding.left.toStringAsFixed(1)},${padding.top.toStringAsFixed(1)},'
+        '${padding.right.toStringAsFixed(1)},${padding.bottom.toStringAsFixed(1)}) '
+        'usable=${usableWidth.toStringAsFixed(1)}x${usableHeight.toStringAsFixed(1)} '
+        'columns=$nextColumns',
+      );
+    }
 
     if (changed) {
       final anchor = currentAnchorOffset;
@@ -240,6 +251,7 @@ class ReaderKernelController extends ChangeNotifier {
     final parsed = currentParsedChapter;
     final parsedBook = _parsedBook;
     if (parsed == null || parsedBook == null) return;
+    final requestId = ++_paginationRequestId;
 
     final chapterId = parsed.chapter.id;
     final chapterCacheId =
@@ -252,6 +264,15 @@ class ReaderKernelController extends ChangeNotifier {
 
     final cachedMemory = FlowPaginator.getMemoryCache(cacheKey);
     if (cachedMemory != null) {
+      if (requestId != _paginationRequestId) {
+        if (kDebugMode) {
+          debugPrint(
+            '[ReaderController] ignore stale memory cache request=$requestId '
+            'current=$_paginationRequestId',
+          );
+        }
+        return;
+      }
       final repaired =
           _repairPagePlanIfNeeded(cachedMemory, parsed.chapter.content);
       _applyPagePlan(repaired, anchorOffset: anchorOffset);
@@ -260,6 +281,15 @@ class ReaderKernelController extends ChangeNotifier {
 
     final cachedDisk = await _storage.getPaginationCache(cacheKey);
     if (cachedDisk != null) {
+      if (requestId != _paginationRequestId) {
+        if (kDebugMode) {
+          debugPrint(
+            '[ReaderController] ignore stale disk cache request=$requestId '
+            'current=$_paginationRequestId',
+          );
+        }
+        return;
+      }
       final repaired =
           _repairPagePlanIfNeeded(cachedDisk, parsed.chapter.content);
       FlowPaginator.putMemoryCache(repaired);
@@ -272,14 +302,30 @@ class ReaderKernelController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      if (kDebugMode) {
+        debugPrint(
+          '[ReaderController] paginate request=$requestId chapter=${parsed.chapter.id} '
+          'layout=${_layout.cacheSignature()} style=${_style.cacheSignature()}',
+        );
+      }
       final result = await _paginator.paginate(
         chapterId: chapterId,
         flowDoc: parsed.flowDoc,
         style: _style,
         layout: _layout,
+        chapterTitle: parsed.chapter.title,
         eagerPageCount: 4,
         batchSize: 8,
         onProgress: (pages, done) {
+          if (requestId != _paginationRequestId) {
+            if (kDebugMode) {
+              debugPrint(
+                '[ReaderController] drop stale onProgress request=$requestId '
+                'current=$_paginationRequestId pages=${pages.length} done=$done',
+              );
+            }
+            return;
+          }
           _pagePlan = _repairPagePlanIfNeeded(
             PagePlan(chapterId: chapterId, pages: pages, cacheKey: cacheKey),
             parsed.chapter.content,
@@ -291,6 +337,15 @@ class ReaderKernelController extends ChangeNotifier {
           notifyListeners();
         },
       );
+      if (requestId != _paginationRequestId) {
+        if (kDebugMode) {
+          debugPrint(
+            '[ReaderController] drop stale result request=$requestId '
+            'current=$_paginationRequestId pages=${result.pages.length}',
+          );
+        }
+        return;
+      }
 
       final repairedResult =
           _repairPagePlanIfNeeded(result, parsed.chapter.content);
@@ -302,10 +357,21 @@ class ReaderKernelController extends ChangeNotifier {
         plan: repairedResult,
       );
     } catch (e) {
+      if (requestId != _paginationRequestId) {
+        if (kDebugMode) {
+          debugPrint(
+            '[ReaderController] ignore stale error request=$requestId '
+            'current=$_paginationRequestId error=$e',
+          );
+        }
+        return;
+      }
       _error = e.toString();
     } finally {
-      _loading = false;
-      notifyListeners();
+      if (requestId == _paginationRequestId) {
+        _loading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -316,6 +382,12 @@ class ReaderKernelController extends ChangeNotifier {
       _pageIndex = FlowPaginator.findPageIndexByAnchor(plan, anchorOffset);
     } else if (_pageIndex >= plan.pages.length) {
       _pageIndex = math.max(0, plan.pages.length - 1);
+    }
+    if (kDebugMode) {
+      debugPrint(
+        '[ReaderController] applyPagePlan chapter=$_chapterIndex pages=${plan.pages.length} '
+        'anchor=${anchorOffset ?? -1} pageIndex=$_pageIndex',
+      );
     }
 
     notifyListeners();
@@ -332,6 +404,13 @@ class ReaderKernelController extends ChangeNotifier {
     }
 
     _pageIndex = pageIndex.clamp(0, _pagePlan!.pages.length - 1);
+    if (kDebugMode) {
+      final page = _pagePlan!.pages[_pageIndex];
+      debugPrint(
+        '[ReaderController] setPageIndex=$_pageIndex '
+        'range=${page.startOffset}-${page.endOffset}',
+      );
+    }
     notifyListeners();
 
     final page = _pagePlan!.pages[_pageIndex];

@@ -204,7 +204,7 @@ class HtmlToFlowDocConverter {
       fontStyle = FontStyle.italic;
     }
 
-    final lineHeight = _parseCssSize(map['line-height']);
+    final lineHeight = _parseLineHeight(map['line-height']);
     final textIndent = _parseCssSize(map['text-indent']);
     final marginValue = _parseCssSize(map['margin']);
 
@@ -229,6 +229,45 @@ class HtmlToFlowDocConverter {
     }
     final normalized = value.replaceAll('px', '').trim();
     return double.tryParse(normalized);
+  }
+
+  double? _parseLineHeight(String? value) {
+    if (value == null) {
+      return null;
+    }
+    final raw = value.trim().toLowerCase();
+    if (raw.isEmpty || raw == 'normal') {
+      return null;
+    }
+    if (raw.endsWith('%')) {
+      final percent = double.tryParse(raw.substring(0, raw.length - 1).trim());
+      if (percent == null || !percent.isFinite || percent <= 0) {
+        return null;
+      }
+      return (percent / 100.0).clamp(0.9, 3.0).toDouble();
+    }
+    if (raw.endsWith('px')) {
+      final px = double.tryParse(raw.substring(0, raw.length - 2).trim());
+      if (px == null || !px.isFinite || px <= 0) {
+        return null;
+      }
+      return (px / 16.0).clamp(0.9, 3.0).toDouble();
+    }
+    if (raw.endsWith('em') || raw.endsWith('rem')) {
+      final factor = double.tryParse(raw.substring(0, raw.length - 2).trim());
+      if (factor == null || !factor.isFinite || factor <= 0) {
+        return null;
+      }
+      return factor.clamp(0.9, 3.0).toDouble();
+    }
+    final numeric = double.tryParse(raw);
+    if (numeric == null || !numeric.isFinite || numeric <= 0) {
+      return null;
+    }
+    if (numeric > 4.0) {
+      return (numeric / 16.0).clamp(0.9, 3.0).toDouble();
+    }
+    return numeric.clamp(0.9, 3.0).toDouble();
   }
 
   double? _parseDouble(String? value) {
