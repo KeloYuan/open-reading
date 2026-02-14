@@ -300,7 +300,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
               final topInset = media.padding.top;
               final bottomInset = media.padding.bottom;
               const topUiReserve = 8.0;
-              const bottomUiReserve = 24.0;
+              const bottomUiReserve = 16.0;
               final padding = EdgeInsets.fromLTRB(
                 16,
                 topInset + topUiReserve,
@@ -1134,9 +1134,9 @@ class _ReaderTopStatusOverlayState extends State<_ReaderTopStatusOverlay> {
     final media = MediaQuery.of(context);
     final statusBarHeight = math.max(media.viewPadding.top, 24.0);
     return SizedBox(
-      height: statusBarHeight + 24,
+      height: statusBarHeight + 30,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(36, 22, 36, 0),
+        padding: const EdgeInsets.fromLTRB(36, 28, 36, 0),
         child: Align(
           alignment: Alignment.topCenter,
           child: Row(

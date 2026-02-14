@@ -448,7 +448,7 @@ class TxtParser implements BookParser {
       blocks.add(
         ParagraphBlock(
           id: 'p-${blockIndex++}',
-          inlines: [TextInline('$bodyText\n')],
+          inlines: [TextInline(bodyText)],
         ),
       );
       return FlowDoc(blocks: blocks);
@@ -463,7 +463,7 @@ class TxtParser implements BookParser {
       blocks.add(
         ParagraphBlock(
           id: 'p-${blockIndex++}',
-          inlines: [TextInline('$p\n')],
+          inlines: [TextInline(p)],
         ),
       );
     }

@@ -12,9 +12,11 @@ typedef PaginationProgress = void Function(List<Page> pages, bool done);
 class FlowPaginator {
   static final Map<String, PagePlan> _memoryCache = <String, PagePlan>{};
   static const double _eps = 0.5;
-  static const double _renderSafetyBottom = 24.0;
-  static const double _estimatedImageVerticalPadding = 4.0;
-  static const String _cacheAlgoVersion = 'v4';
+  static const double _renderSafetyBottom = 8.0;
+  static const double _estimatedImageVerticalPadding = 0.0;
+  static const double _imageFragmentSafety = 1.2;
+  static const double _textFragmentSafety = 0.2;
+  static const String _cacheAlgoVersion = 'v11';
 
   static String buildCacheKey({
     required String chapterId,
@@ -74,7 +76,7 @@ class FlowPaginator {
     final paragraphCache = <String, _ParagraphLayout>{};
 
     final pageWidth = layout.usableWidth;
-    final lineGuard = math.max(6.0, style.fontSize * style.lineHeight * 0.45);
+    final lineGuard = math.max(2.0, style.fontSize * style.lineHeight * 0.10);
     final pageHeight = math.max(
       80.0,
       layout.usableHeight - _renderSafetyBottom - lineGuard,
@@ -164,6 +166,21 @@ class FlowPaginator {
             end = (cursor + 1).clamp(0, plainText.length);
           }
 
+          end = _shrinkTextEndToFit(
+            layoutData,
+            start: cursor,
+            end: end,
+            consumedHeight: consumedHeight,
+            pageHeight: pageHeight,
+          );
+          if (end <= cursor) {
+            if (currentFragments.isNotEmpty) {
+              await flushPage();
+              continue;
+            }
+            end = (cursor + 1).clamp(0, plainText.length);
+          }
+
           final blockBase = blockOffsets[block.id] ?? 0;
           final globalStart = blockBase + cursor;
           final globalEnd = blockBase + end;
@@ -179,8 +196,8 @@ class FlowPaginator {
           );
 
           final usedHeight =
-              _estimateHeight(layoutData, start: cursor, end: end);
-          consumedHeight += usedHeight;
+              _measureSliceHeight(layoutData, start: cursor, end: end);
+          consumedHeight += usedHeight + _textFragmentSafety;
           cursor = end;
 
           if (cursor < plainText.length) {
@@ -188,7 +205,7 @@ class FlowPaginator {
           }
         }
 
-        final spacing = _blockSpacing(block.style);
+        final spacing = _paragraphSpacing(block.style);
         if (spacing > 0) {
           if (consumedHeight + spacing > pageHeight &&
               currentFragments.isNotEmpty) {
@@ -199,18 +216,24 @@ class FlowPaginator {
           consumedHeight += spacing;
         }
       } else if (block is ImageBlock) {
-        final maxImageHeight = math.max(88.0, pageHeight * 0.44);
-        final imageHeight =
-            (block.height ?? (pageHeight * 0.28)).clamp(44.0, maxImageHeight);
-        final spacing = _blockSpacing(block.style);
+        final imageHeight = _estimateImageHeight(
+          block: block,
+          pageWidth: pageWidth,
+          pageHeight: pageHeight,
+        );
+        final spacing = _imageSpacing(block.style);
         final requiredHeight =
-            imageHeight + _estimatedImageVerticalPadding + spacing;
+            imageHeight +
+                _estimatedImageVerticalPadding +
+                _imageFragmentSafety +
+                spacing;
         if (consumedHeight + requiredHeight > pageHeight &&
             currentFragments.isNotEmpty) {
           await flushPage();
         }
         currentFragments.add(ImageFragment(blockId: block.id));
-        consumedHeight += imageHeight + _estimatedImageVerticalPadding;
+        consumedHeight +=
+            imageHeight + _estimatedImageVerticalPadding + _imageFragmentSafety;
         if (spacing > 0) {
           if (consumedHeight + spacing > pageHeight &&
               currentFragments.isNotEmpty) {
@@ -273,12 +296,20 @@ class FlowPaginator {
               (readerStyle.italic ? FontStyle.italic : FontStyle.normal),
           height: blockStyle.lineHeight ?? readerStyle.lineHeight,
         );
+    final strutStyle = StrutStyle(
+      fontFamily: textStyle.fontFamily,
+      fontSize: textStyle.fontSize ?? readerStyle.fontSize,
+      height: textStyle.height ?? readerStyle.lineHeight,
+      leading: 0,
+      forceStrutHeight: true,
+    );
 
     final painter = TextPainter(
       text: TextSpan(text: text, style: textStyle),
       textDirection: TextDirection.ltr,
       textAlign: blockStyle.textAlign ?? readerStyle.textAlign,
       locale: readerStyle.locale,
+      strutStyle: strutStyle,
     )..layout(maxWidth: maxWidth);
 
     final lineHeight = (textStyle.fontSize ?? readerStyle.fontSize) *
@@ -317,6 +348,11 @@ class FlowPaginator {
     return _ParagraphLayout(
       text: text,
       painter: painter,
+      textStyle: textStyle,
+      strutStyle: strutStyle,
+      textAlign: blockStyle.textAlign ?? readerStyle.textAlign,
+      locale: readerStyle.locale,
+      maxWidth: maxWidth,
       minLineHeight: lineHeight,
       lineEnds: lineEnds,
       cumulativeHeights: cumulativeHeights,
@@ -363,7 +399,74 @@ class FlowPaginator {
     return end.clamp(start + 1, textLength).toInt();
   }
 
-  double _estimateHeight(
+  int _shrinkTextEndToFit(
+    _ParagraphLayout layout, {
+    required int start,
+    required int end,
+    required double consumedHeight,
+    required double pageHeight,
+  }) {
+    var candidate = end.clamp(start + 1, layout.text.length).toInt();
+    if (_canFitTextSlice(
+      layout,
+      start: start,
+      end: candidate,
+      consumedHeight: consumedHeight,
+      pageHeight: pageHeight,
+    )) {
+      return candidate;
+    }
+
+    final startLine = _lineIndexForStart(layout, start);
+    var endLine = _lineIndexForEnd(layout, candidate);
+    while (endLine > startLine) {
+      final previousLineEnd = layout.lineEnds[endLine - 1]
+          .clamp(start + 1, candidate)
+          .toInt();
+      if (previousLineEnd <= start) {
+        break;
+      }
+      candidate = previousLineEnd;
+      if (_canFitTextSlice(
+        layout,
+        start: start,
+        end: candidate,
+        consumedHeight: consumedHeight,
+        pageHeight: pageHeight,
+      )) {
+        return candidate;
+      }
+      endLine -= 1;
+    }
+
+    while (candidate > start + 1) {
+      candidate -= 1;
+      if (_canFitTextSlice(
+        layout,
+        start: start,
+        end: candidate,
+        consumedHeight: consumedHeight,
+        pageHeight: pageHeight,
+      )) {
+        return candidate;
+      }
+    }
+
+    return (start + 1).clamp(0, layout.text.length).toInt();
+  }
+
+  bool _canFitTextSlice(
+    _ParagraphLayout layout, {
+    required int start,
+    required int end,
+    required double consumedHeight,
+    required double pageHeight,
+  }) {
+    final used = _measureSliceHeight(layout, start: start, end: end);
+    return consumedHeight + used + _textFragmentSafety <= pageHeight + _eps;
+  }
+
+  double _measureSliceHeight(
     _ParagraphLayout layout, {
     required int start,
     required int end,
@@ -371,18 +474,23 @@ class FlowPaginator {
     if (end <= start) {
       return layout.minLineHeight;
     }
-    final startLine = _lineIndexForStart(layout, start);
-    final endLine = _lineIndexForEnd(layout, end);
-    if (endLine < startLine) {
+    final safeStart = start.clamp(0, layout.text.length).toInt();
+    final safeEnd = end.clamp(safeStart, layout.text.length).toInt();
+    if (safeEnd <= safeStart) {
       return layout.minLineHeight;
     }
-    final startValue = layout.cumulativeHeights[startLine];
-    final endValue = layout.cumulativeHeights[endLine + 1];
-    final delta = endValue - startValue;
-    if (delta <= 0) {
-      return layout.minLineHeight;
-    }
-    return delta;
+
+    final slice = layout.text.substring(safeStart, safeEnd);
+    final painter = TextPainter(
+      text: TextSpan(text: slice, style: layout.textStyle),
+      textDirection: TextDirection.ltr,
+      textAlign: layout.textAlign,
+      locale: layout.locale,
+      strutStyle: layout.strutStyle,
+    )..layout(maxWidth: layout.maxWidth);
+    final h = painter.height;
+    painter.dispose();
+    return h <= 0 ? layout.minLineHeight : h;
   }
 
   int _lineIndexForStart(_ParagraphLayout layout, int offset) {
@@ -453,15 +561,51 @@ class FlowPaginator {
     return (bestExclusive - 1).clamp(startLine, lineCount - 1);
   }
 
-  double _blockSpacing(BlockStyle style) {
-    final raw = style.margin?.bottom ?? 8.0;
-    return raw.clamp(2.0, 18.0);
+  double _paragraphSpacing(BlockStyle style) {
+    final raw = style.margin?.bottom ?? 2.0;
+    return raw.clamp(0.0, 8.0);
+  }
+
+  double _imageSpacing(BlockStyle style) {
+    final raw = style.margin?.bottom ?? 0.0;
+    return raw.clamp(0.0, 4.0);
+  }
+
+  double _estimateImageHeight({
+    required ImageBlock block,
+    required double pageWidth,
+    required double pageHeight,
+  }) {
+    final maxImageHeight = math.max(84.0, pageHeight * 0.36);
+
+    var targetWidth = pageWidth;
+    var targetHeight = block.height;
+
+    if (block.width != null && block.width! > 0) {
+      targetWidth = math.min(pageWidth, block.width!);
+    }
+    if (block.width != null &&
+        block.height != null &&
+        block.width! > 0 &&
+        block.height! > 0) {
+      targetHeight = targetWidth * (block.height! / block.width!);
+    }
+
+    if (targetHeight != null) {
+      return targetHeight.clamp(38.0, maxImageHeight).toDouble();
+    }
+    return (pageHeight * 0.22).clamp(38.0, maxImageHeight).toDouble();
   }
 }
 
 class _ParagraphLayout {
   final String text;
   final TextPainter painter;
+  final TextStyle textStyle;
+  final StrutStyle strutStyle;
+  final TextAlign textAlign;
+  final Locale? locale;
+  final double maxWidth;
   final double minLineHeight;
   final List<int> lineEnds;
   final List<double> cumulativeHeights;
@@ -469,6 +613,11 @@ class _ParagraphLayout {
   const _ParagraphLayout({
     required this.text,
     required this.painter,
+    required this.textStyle,
+    required this.strutStyle,
+    required this.textAlign,
+    required this.locale,
+    required this.maxWidth,
     required this.minLineHeight,
     required this.lineEnds,
     required this.cumulativeHeights,

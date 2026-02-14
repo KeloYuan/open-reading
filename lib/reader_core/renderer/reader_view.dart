@@ -433,16 +433,23 @@ class _PagePaneState extends State<_PagePane> {
     final textColor = widget.textColor ?? Theme.of(context).colorScheme.onSurface;
     final baseStyle = widget.style.toTextStyle(color: textColor);
     final renderItems = _buildRenderItems(blockMap);
-    final promotedTitle = shouldPromoteTitle
+    _trimLeadingLineBreaksAtPageStart(renderItems);
+    _tightenWhitespaceAroundImages(renderItems);
+    final chapterTitleText = widget.chapterTitle?.trim();
+    final promotedCandidate = shouldPromoteTitle
         ? (_extractLeadingTitleFromItems(renderItems, widget.chapterTitle!) ??
             _extractLeadingHeadingFromItems(renderItems) ??
             _extractFallbackLeadingTextFromItems(renderItems))
         : null;
+    final promotedTitle = shouldPromoteTitle
+        ? (promotedCandidate ?? chapterTitleText)?.trim()
+        : null;
     final hasImageItem = renderItems.any((e) => e.type == _RenderItemType.image);
-    if (promotedTitle != null) {
+    if (promotedTitle != null && promotedTitle.isNotEmpty) {
       _removeImmediateDuplicateTitle(renderItems, promotedTitle);
+      _removeLeadingHeadingAfterPromotion(renderItems, promotedTitle);
     }
-    final hasContent = promotedTitle != null ||
+    final hasContent = (promotedTitle != null && promotedTitle.isNotEmpty) ||
         renderItems.any((e) => e.type != _RenderItemType.space);
 
     return Container(
@@ -495,7 +502,7 @@ class _PagePaneState extends State<_PagePane> {
                     final maxWidth =
                         constraints.maxWidth.isFinite ? constraints.maxWidth : 360.0;
                     final children = <Widget>[
-                      if (promotedTitle != null)
+                      if (promotedTitle != null && promotedTitle.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: Text(
@@ -812,9 +819,15 @@ class _PagePaneState extends State<_PagePane> {
       }
 
       final normalized = _normalizeTitleToken(stripped);
+      if (normalized.isEmpty) {
+        continue;
+      }
+      final diff = (normalized.length - target.length).abs();
       final duplicate = normalized == target ||
-          (normalized.startsWith(target) &&
-              normalized.length <= target.length + 2);
+          (normalized.startsWith(target) && diff <= 12) ||
+          (target.startsWith(normalized) && diff <= 12) ||
+          (normalized.contains(target) && diff <= 12) ||
+          (target.contains(normalized) && diff <= 12);
       if (!duplicate) {
         break;
       }
@@ -841,6 +854,157 @@ class _PagePaneState extends State<_PagePane> {
     }
   }
 
+  void _removeLeadingHeadingAfterPromotion(
+    List<_RenderItem> items,
+    String promotedTitle,
+  ) {
+    final normalizedTarget = _normalizeTitleToken(promotedTitle);
+    if (normalizedTarget.isEmpty) {
+      return;
+    }
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      if (item.type == _RenderItemType.space) {
+        continue;
+      }
+      if (item.type != _RenderItemType.text) {
+        return;
+      }
+      final raw = item.text ?? '';
+      final stripped = raw.trimLeft();
+      if (stripped.isEmpty) {
+        continue;
+      }
+      final firstLine = stripped.split('\n').first.trim();
+      if (firstLine.isEmpty) {
+        return;
+      }
+      final normalizedFirst = _normalizeTitleToken(firstLine);
+      final looksHeading = (item.isHeading ?? false) ||
+          (firstLine.length <= 34 &&
+              !RegExp(r'[。！？!?；;，,]').hasMatch(firstLine));
+      final maybeDuplicate = normalizedFirst.isNotEmpty &&
+          (normalizedFirst == normalizedTarget ||
+              normalizedFirst.startsWith(normalizedTarget) ||
+              normalizedTarget.startsWith(normalizedFirst));
+      if (!looksHeading || !maybeDuplicate) {
+        return;
+      }
+
+      final leading = raw.length - stripped.length;
+      final remove = leading + firstLine.length;
+      if (remove <= 0 || remove > raw.length) {
+        return;
+      }
+      var trimmed = raw.substring(remove);
+      trimmed = trimmed.replaceFirst(RegExp(r'^[\s:：\-—·•]+'), '');
+      if (trimmed.trim().isEmpty) {
+        items.removeAt(i);
+      } else {
+        final shift = raw.length - trimmed.length;
+        items[i] = _RenderItem.text(
+          text: trimmed,
+          globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
+          isHeading: item.isHeading ?? false,
+        );
+      }
+      return;
+    }
+  }
+
+  void _trimLeadingLineBreaksAtPageStart(List<_RenderItem> items) {
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      if (item.type == _RenderItemType.space) {
+        if ((item.spaceHeight ?? 0) <= 6) {
+          items.removeAt(i);
+          i -= 1;
+          continue;
+        }
+        return;
+      }
+      if (item.type != _RenderItemType.text) {
+        return;
+      }
+      final raw = item.text ?? '';
+      if (raw.isEmpty) {
+        items.removeAt(i);
+        i -= 1;
+        continue;
+      }
+      final trimmed = raw.replaceFirst(RegExp(r'^[\r\n]+'), '');
+      if (trimmed.length == raw.length) {
+        return;
+      }
+      if (trimmed.isEmpty) {
+        items.removeAt(i);
+        i -= 1;
+        continue;
+      }
+      final shift = raw.length - trimmed.length;
+      items[i] = _RenderItem.text(
+        text: trimmed,
+        globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
+        isHeading: item.isHeading ?? false,
+      );
+      return;
+    }
+  }
+
+  void _tightenWhitespaceAroundImages(List<_RenderItem> items) {
+    for (var i = 0; i < items.length; i++) {
+      final item = items[i];
+      if (item.type != _RenderItemType.text) {
+        continue;
+      }
+      final prev = _nearestNonSpaceItem(items, i, backward: true);
+      final next = _nearestNonSpaceItem(items, i, backward: false);
+      final nearImage = prev?.type == _RenderItemType.image ||
+          next?.type == _RenderItemType.image;
+      if (!nearImage) {
+        continue;
+      }
+
+      final raw = item.text ?? '';
+      if (raw.isEmpty) {
+        continue;
+      }
+      final leadingTrimmed = raw.replaceFirst(RegExp(r'^[ \t\r\n]+'), '');
+      final trailingTrimmed =
+          leadingTrimmed.replaceFirst(RegExp(r'[ \t\r\n]+$'), '');
+      if (trailingTrimmed == raw) {
+        continue;
+      }
+      if (trailingTrimmed.isEmpty) {
+        items.removeAt(i);
+        i -= 1;
+        continue;
+      }
+      final shift = raw.length - leadingTrimmed.length;
+      items[i] = _RenderItem.text(
+        text: trailingTrimmed,
+        globalStart: (item.globalStart ?? widget.page.startOffset) + shift,
+        isHeading: item.isHeading ?? false,
+      );
+    }
+  }
+
+  _RenderItem? _nearestNonSpaceItem(
+    List<_RenderItem> items,
+    int index, {
+    required bool backward,
+  }) {
+    var i = backward ? index - 1 : index + 1;
+    while (i >= 0 && i < items.length) {
+      final item = items[i];
+      if (item.type != _RenderItemType.space) {
+        return item;
+      }
+      i += backward ? -1 : 1;
+    }
+    return null;
+  }
+
   String _normalizeTitleToken(String value) {
     return value
         .trim()
@@ -859,7 +1023,7 @@ class _PagePaneState extends State<_PagePane> {
     final isRemote = uri != null &&
         (uri.scheme.toLowerCase() == 'http' ||
             uri.scheme.toLowerCase() == 'https');
-    final maxImageHeight = math.max(88.0, widget.pageUsableHeight * 0.44);
+    final maxImageHeight = math.max(84.0, widget.pageUsableHeight * 0.36);
 
     var targetWidth = maxWidth;
     var targetHeight = imageBlock.height;
@@ -874,10 +1038,10 @@ class _PagePaneState extends State<_PagePane> {
       targetHeight = targetWidth * (imageBlock.height! / imageBlock.width!);
     }
     if (targetHeight != null) {
-      targetHeight = targetHeight.clamp(44.0, maxImageHeight).toDouble();
+      targetHeight = targetHeight.clamp(38.0, maxImageHeight).toDouble();
     } else {
       targetHeight =
-          (widget.pageUsableHeight * 0.28).clamp(44.0, maxImageHeight).toDouble();
+          (widget.pageUsableHeight * 0.22).clamp(38.0, maxImageHeight).toDouble();
     }
 
     Widget imageChild;
@@ -895,6 +1059,7 @@ class _PagePaneState extends State<_PagePane> {
           textColor: textColor,
           maxWidth: maxWidth,
           maxHeight: maxImageHeight,
+          targetHeight: targetHeight,
         ),
       );
     } else if (isRemote) {
@@ -911,6 +1076,7 @@ class _PagePaneState extends State<_PagePane> {
           textColor: textColor,
           maxWidth: maxWidth,
           maxHeight: maxImageHeight,
+          targetHeight: targetHeight,
         ),
       );
     } else {
@@ -921,20 +1087,19 @@ class _PagePaneState extends State<_PagePane> {
         textColor: textColor,
         maxWidth: maxWidth,
         maxHeight: maxImageHeight,
+        targetHeight: targetHeight,
       );
     }
 
+    final resolvedHeight = targetHeight.clamp(38.0, maxImageHeight).toDouble();
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: maxWidth,
-          maxHeight: maxImageHeight,
-        ),
+      padding: const EdgeInsets.symmetric(vertical: 0),
+      child: SizedBox(
+        width: maxWidth,
+        height: resolvedHeight,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(6),
-          child: Align(
-            alignment: Alignment.center,
+          child: Center(
             child: imageChild,
           ),
         ),
@@ -947,12 +1112,14 @@ class _PagePaneState extends State<_PagePane> {
     required Color textColor,
     required double maxWidth,
     required double maxHeight,
+    required double? targetHeight,
   }) {
     return Container(
       width: maxWidth,
+      height: targetHeight,
       constraints: BoxConstraints(
-        minHeight: 72,
-        maxHeight: maxHeight,
+        minHeight: targetHeight ?? 38,
+        maxHeight: targetHeight ?? maxHeight,
       ),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
