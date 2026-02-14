@@ -16,12 +16,17 @@ class FlowPaginator {
   static const double _renderSafetyBottom = 8.0;
   static const double _estimatedImageVerticalPadding = 0.0;
   static const double _imageFragmentSafety = 1.2;
-  static const double _textFragmentSafety = 0.25;
-  static const String _cacheAlgoVersion = 'v17';
+  static const double _textFragmentSafety = 0.35;
+  static const double _strictFitTolerance = 0.02;
+  static const double _layoutWidthSafety = 1.0;
+  static const String _cacheAlgoVersion = 'v25';
   static const TextScaler _textScaler = TextScaler.noScaling;
   static const TextHeightBehavior _textHeightBehavior = TextHeightBehavior(
     applyHeightToFirstAscent: false,
     applyHeightToLastDescent: false,
+  );
+  static final RegExp _tailNoiseRegExp = RegExp(
+    r'''[，。！？；：,.!?;、“”"'‘’（）()\[\]{}<>《》〈〉【】「」『』—…·•~`@#$%^&*_+=|\\/]+''',
   );
   static const bool _debugPaginationLogs = true;
   static const bool _debugPaginationVerbose = true;
@@ -93,6 +98,10 @@ class FlowPaginator {
     final currentFragments = <Fragment>[];
     final currentDebugStats = <_DebugFragmentStat>[];
     final paragraphCache = <String, _ParagraphLayout>{};
+    final blocks = flowDoc.blocks;
+    final blockById = <String, Block>{for (final b in blocks) b.id: b};
+    final hasFollowingContentByBlockId =
+        _computeHasFollowingContentByBlockId(blocks);
 
     final pageWidth = layout.usableWidth;
     final pageHeight = _effectivePageHeight(
@@ -120,6 +129,17 @@ class FlowPaginator {
       if (currentFragments.isEmpty) {
         return;
       }
+
+      consumedHeight = _fitPageFragmentsToHeight(
+        fragments: currentFragments,
+        blockById: blockById,
+        blockOffsets: blockOffsets,
+        hasFollowingContentByBlockId: hasFollowingContentByBlockId,
+        paragraphCache: paragraphCache,
+        readerStyle: style,
+        pageWidth: pageWidth,
+        pageHeight: pageHeight,
+      );
 
       int startOffset = lastCommittedOffset;
       int endOffset = lastCommittedOffset;
@@ -182,7 +202,6 @@ class FlowPaginator {
       }
     }
 
-    final blocks = flowDoc.blocks;
     for (var blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
       final block = blocks[blockIndex];
       final hasLaterBlocks = blockIndex < blocks.length - 1;
@@ -229,7 +248,7 @@ class FlowPaginator {
             layoutData,
             start: cursor,
             remainingHeight: math.max(remaining, layoutData.minLineHeight),
-            maxWidth: pageWidth,
+            maxWidth: layoutData.maxWidth,
           );
           final probeEnd = end;
 
@@ -264,6 +283,7 @@ class FlowPaginator {
             start: cursor,
             end: end,
             hasFollowingContent: end < plainText.length || hasLaterBlocks,
+            hasFollowingContentInBlock: end < plainText.length,
             consumedHeight: consumedHeight,
             pageHeight: pageHeight,
           );
@@ -452,12 +472,39 @@ class FlowPaginator {
     return result;
   }
 
+  Map<String, bool> _computeHasFollowingContentByBlockId(List<Block> blocks) {
+    final result = <String, bool>{};
+    var hasContentAfter = false;
+    for (var i = blocks.length - 1; i >= 0; i--) {
+      final block = blocks[i];
+      result[block.id] = hasContentAfter;
+      if (_hasRenderableContent(block)) {
+        hasContentAfter = true;
+      }
+    }
+    return result;
+  }
+
+  bool _hasRenderableContent(Block block) {
+    if (block is ParagraphBlock) {
+      return block.plainText.trim().isNotEmpty;
+    }
+    if (block is HeadingBlock) {
+      return block.plainText.trim().isNotEmpty;
+    }
+    if (block is ImageBlock) {
+      return true;
+    }
+    return false;
+  }
+
   _ParagraphLayout _layoutParagraph({
     required String text,
     required BlockStyle blockStyle,
     required ReaderStyle readerStyle,
     required double maxWidth,
   }) {
+    final layoutWidth = math.max(40.0, maxWidth - _layoutWidthSafety);
     final resolvedLineHeight = _normalizeBlockLineHeight(
       blockStyle.lineHeight,
       readerStyle.lineHeight,
@@ -471,6 +518,8 @@ class FlowPaginator {
     final strutStyle = StrutStyle(
       fontFamily: textStyle.fontFamily,
       fontSize: textStyle.fontSize ?? readerStyle.fontSize,
+      fontWeight: textStyle.fontWeight,
+      fontStyle: textStyle.fontStyle,
       height: resolvedLineHeight,
       leading: 0,
       forceStrutHeight: true,
@@ -485,7 +534,7 @@ class FlowPaginator {
       strutStyle: strutStyle,
       textHeightBehavior: _textHeightBehavior,
       textWidthBasis: TextWidthBasis.parent,
-    )..layout(maxWidth: maxWidth);
+    )..layout(maxWidth: layoutWidth);
 
     final lineHeight =
         (textStyle.fontSize ?? readerStyle.fontSize) * resolvedLineHeight;
@@ -504,7 +553,7 @@ class FlowPaginator {
                 .clamp(0, math.max(0, painter.height - _eps))
                 .toDouble();
         final probe =
-            painter.getPositionForOffset(Offset(maxWidth - _eps, probeDy));
+            painter.getPositionForOffset(Offset(layoutWidth - _eps, probeDy));
         final boundary = painter.getLineBoundary(probe);
         var endIndex = boundary.end.clamp(0, text.length).toInt();
         if (lineEnds.isNotEmpty && endIndex <= lineEnds.last) {
@@ -527,7 +576,7 @@ class FlowPaginator {
       strutStyle: strutStyle,
       textAlign: blockStyle.textAlign ?? readerStyle.textAlign,
       locale: readerStyle.locale,
-      maxWidth: maxWidth,
+      maxWidth: layoutWidth,
       minLineHeight: lineHeight,
       lineEnds: lineEnds,
       cumulativeHeights: cumulativeHeights,
@@ -681,6 +730,7 @@ class FlowPaginator {
     required int start,
     required int end,
     required bool hasFollowingContent,
+    required bool hasFollowingContentInBlock,
     required double consumedHeight,
     required double pageHeight,
   }) {
@@ -691,8 +741,9 @@ class FlowPaginator {
     final used = _measureSliceHeight(layout, start: start, end: end);
     final remainingAfter =
         pageHeight - (consumedHeight + used + _textFragmentSafety);
-    // 仅在接近页底时做“尾行单字回退”，避免在页面很空时制造大片留白。
-    if (remainingAfter > layout.minLineHeight * 0.75) {
+    final nearBottom = remainingAfter <= layout.minLineHeight * 1.8;
+    final forceTinyTailFix = hasFollowingContentInBlock;
+    if (!forceTinyTailFix && !nearBottom) {
       return end;
     }
 
@@ -713,13 +764,26 @@ class FlowPaginator {
     if (compact.isEmpty) {
       return previousLineEnd;
     }
-    if (compact.length <= 1) {
+    final semanticTail = compact.replaceAll(_tailNoiseRegExp, '');
+
+    // 硬规则：末行语义只剩 1 字（哪怕带标点）且后面还有内容，直接回推一行。
+    if (semanticTail.length <= 1) {
       return previousLineEnd;
     }
-    if (compact.length == 2) {
-      final noPunc = compact.replaceAll(RegExp(r'[，。！？；：,.!?;]'), '');
-      if (noPunc.length <= 1) {
+
+    if (compact.length <= 1) {
+      if (forceTinyTailFix || remainingAfter <= layout.minLineHeight * 1.8) {
         return previousLineEnd;
+      }
+      return end;
+    }
+    if (compact.length == 2) {
+      final noPunc = semanticTail;
+      if (noPunc.length <= 1) {
+        if (forceTinyTailFix || remainingAfter <= layout.minLineHeight * 1.2) {
+          return previousLineEnd;
+        }
+        return end;
       }
     }
 
@@ -822,6 +886,20 @@ class FlowPaginator {
       return layout.minLineHeight;
     }
 
+    if (layout.lineEnds.isNotEmpty &&
+        layout.cumulativeHeights.length == layout.lineEnds.length + 1) {
+      final startLine = _lineIndexForStart(layout, safeStart);
+      final endLine = _lineIndexForEnd(layout, safeEnd);
+      final safeStartLine = startLine.clamp(0, layout.lineEnds.length - 1);
+      final safeEndLine = endLine.clamp(safeStartLine, layout.lineEnds.length - 1);
+      final h = layout.cumulativeHeights[safeEndLine + 1] -
+          layout.cumulativeHeights[safeStartLine];
+      if (h > 0) {
+        return h;
+      }
+    }
+
+    // Fallback for unexpected metrics mismatch.
     final slice = layout.text.substring(safeStart, safeEnd);
     final painter = TextPainter(
       text: TextSpan(text: slice, style: layout.textStyle),
@@ -833,9 +911,9 @@ class FlowPaginator {
       textHeightBehavior: _textHeightBehavior,
       textWidthBasis: TextWidthBasis.parent,
     )..layout(maxWidth: layout.maxWidth);
-    final h = painter.height;
+    final measured = painter.height;
     painter.dispose();
-    return h <= 0 ? layout.minLineHeight : h;
+    return measured <= 0 ? layout.minLineHeight : measured;
   }
 
   int _lineIndexForStart(_ParagraphLayout layout, int offset) {
@@ -948,6 +1026,439 @@ class FlowPaginator {
   }) {
     final lineGuard = math.max(2.0, style.fontSize * style.lineHeight * 0.10);
     return math.max(80.0, usableHeight - _renderSafetyBottom - lineGuard);
+  }
+
+  double _fitPageFragmentsToHeight({
+    required List<Fragment> fragments,
+    required Map<String, Block> blockById,
+    required Map<String, int> blockOffsets,
+    required Map<String, bool> hasFollowingContentByBlockId,
+    required Map<String, _ParagraphLayout> paragraphCache,
+    required ReaderStyle readerStyle,
+    required double pageWidth,
+    required double pageHeight,
+  }) {
+    var strictHeight = _measurePageStrictHeight(
+      fragments: fragments,
+      blockById: blockById,
+      paragraphCache: paragraphCache,
+      readerStyle: readerStyle,
+      pageWidth: pageWidth,
+      pageHeight: pageHeight,
+    );
+    var overflowTrimLoop = 0;
+    while (
+        strictHeight > pageHeight + _strictFitTolerance &&
+            fragments.isNotEmpty &&
+            overflowTrimLoop < 180) {
+      overflowTrimLoop += 1;
+      final lastTextIndex =
+          fragments.lastIndexWhere((fragment) => fragment is TextFragment);
+      if (lastTextIndex < 0) {
+        fragments.removeLast();
+        strictHeight = _measurePageStrictHeight(
+          fragments: fragments,
+          blockById: blockById,
+          paragraphCache: paragraphCache,
+          readerStyle: readerStyle,
+          pageWidth: pageWidth,
+          pageHeight: pageHeight,
+        );
+        continue;
+      }
+
+      final current = fragments[lastTextIndex] as TextFragment;
+      final block = blockById[current.blockId];
+      if (block == null || (block is! ParagraphBlock && block is! HeadingBlock)) {
+        fragments.removeAt(lastTextIndex);
+        strictHeight = _measurePageStrictHeight(
+          fragments: fragments,
+          blockById: blockById,
+          paragraphCache: paragraphCache,
+          readerStyle: readerStyle,
+          pageWidth: pageWidth,
+          pageHeight: pageHeight,
+        );
+        continue;
+      }
+
+      final plainText =
+          block is ParagraphBlock ? block.plainText : (block as HeadingBlock).plainText;
+      final key = '${block.id}|$pageWidth|${readerStyle.cacheSignature()}';
+      final layoutData = paragraphCache.putIfAbsent(
+        key,
+        () => _layoutParagraph(
+          text: plainText,
+          blockStyle: block.style,
+          readerStyle: readerStyle,
+          maxWidth: pageWidth,
+        ),
+      );
+      final reducedEnd = _reduceTextFragmentByOneLine(
+        layoutData: layoutData,
+        start: current.start,
+        end: current.end,
+      );
+
+      if (reducedEnd <= current.start) {
+        fragments.removeAt(lastTextIndex);
+      } else {
+        final blockBase = blockOffsets[current.blockId] ?? 0;
+        fragments[lastTextIndex] = TextFragment(
+          blockId: current.blockId,
+          start: current.start,
+          end: reducedEnd,
+          globalStart: current.globalStart,
+          globalEnd: blockBase + reducedEnd,
+        );
+      }
+
+      strictHeight = _measurePageStrictHeight(
+        fragments: fragments,
+        blockById: blockById,
+        paragraphCache: paragraphCache,
+        readerStyle: readerStyle,
+        pageWidth: pageWidth,
+        pageHeight: pageHeight,
+      );
+    }
+
+    var widowFixLoop = 0;
+    while (fragments.isNotEmpty && widowFixLoop < 60) {
+      widowFixLoop += 1;
+      final lastTextIndex =
+          fragments.lastIndexWhere((fragment) => fragment is TextFragment);
+      if (lastTextIndex < 0) {
+        break;
+      }
+
+      final current = fragments[lastTextIndex] as TextFragment;
+      final block = blockById[current.blockId];
+      if (block == null || (block is! ParagraphBlock && block is! HeadingBlock)) {
+        break;
+      }
+      final plainText =
+          block is ParagraphBlock ? block.plainText : (block as HeadingBlock).plainText;
+      final hasFollowingContent =
+          current.end < plainText.length ||
+          (hasFollowingContentByBlockId[current.blockId] ?? false);
+      if (!hasFollowingContent) {
+        break;
+      }
+
+      final key = '${block.id}|$pageWidth|${readerStyle.cacheSignature()}';
+      final layoutData = paragraphCache.putIfAbsent(
+        key,
+        () => _layoutParagraph(
+          text: plainText,
+          blockStyle: block.style,
+          readerStyle: readerStyle,
+          maxWidth: pageWidth,
+        ),
+      );
+
+      final widowAdjustedEnd = _widowAdjustedEndBySlicePainter(
+        layoutData: layoutData,
+        start: current.start,
+        end: current.end,
+        allowDropWholeFragment: fragments.length > 1,
+      );
+      if (widowAdjustedEnd == null || widowAdjustedEnd >= current.end) {
+        if (_debugPaginationVerbose && kDebugMode) {
+          final tailDebug = _tailDebugSummaryBySlicePainter(
+            layoutData: layoutData,
+            start: current.start,
+            end: current.end,
+          );
+          _logDebug(
+            'widow-skip block=${current.blockId} range=${current.start}-${current.end} '
+            'reason=no_adjust ${tailDebug ?? ''}',
+          );
+        }
+        break;
+      }
+
+      if (widowAdjustedEnd <= current.start) {
+        fragments.removeAt(lastTextIndex);
+        final fixedHeight = _measurePageStrictHeight(
+          fragments: fragments,
+          blockById: blockById,
+          paragraphCache: paragraphCache,
+          readerStyle: readerStyle,
+          pageWidth: pageWidth,
+          pageHeight: pageHeight,
+        );
+        _logDebug(
+          'widow-drop-fragment block=${current.blockId} '
+          'range=${current.start}-${current.end} '
+          'height=${strictHeight.toStringAsFixed(2)}->${fixedHeight.toStringAsFixed(2)}',
+        );
+        strictHeight = fixedHeight;
+        continue;
+      }
+
+      final blockBase = blockOffsets[current.blockId] ?? 0;
+      fragments[lastTextIndex] = TextFragment(
+        blockId: current.blockId,
+        start: current.start,
+        end: widowAdjustedEnd,
+        globalStart: current.globalStart,
+        globalEnd: blockBase + widowAdjustedEnd,
+      );
+
+      final fixedHeight = _measurePageStrictHeight(
+        fragments: fragments,
+        blockById: blockById,
+        paragraphCache: paragraphCache,
+        readerStyle: readerStyle,
+        pageWidth: pageWidth,
+        pageHeight: pageHeight,
+      );
+      _logDebug(
+        'widow-fix block=${current.blockId} start=${current.start} '
+        'end=${current.end}->$widowAdjustedEnd '
+        'height=${strictHeight.toStringAsFixed(2)}->${fixedHeight.toStringAsFixed(2)}',
+      );
+      strictHeight = fixedHeight;
+    }
+
+    if (overflowTrimLoop > 0 || widowFixLoop > 1) {
+      _logDebug(
+        'strict-fit trims=$overflowTrimLoop widowFix=${math.max(0, widowFixLoop - 1)} '
+        'finalHeight=${strictHeight.toStringAsFixed(2)}/${pageHeight.toStringAsFixed(2)}',
+      );
+    }
+    return strictHeight;
+  }
+
+  bool _isTinySemanticTail(
+    String text, {
+    required int start,
+    required int end,
+  }) {
+    final safeStart = start.clamp(0, text.length).toInt();
+    final safeEnd = end.clamp(safeStart, text.length).toInt();
+    if (safeEnd <= safeStart) {
+      return false;
+    }
+    final tail = text.substring(safeStart, safeEnd);
+    final compact = tail.replaceAll(RegExp(r'\s+'), '');
+    if (compact.isEmpty) {
+      return true;
+    }
+    final semanticTail = compact.replaceAll(_tailNoiseRegExp, '');
+    return semanticTail.length <= 1;
+  }
+
+  int? _widowAdjustedEndBySlicePainter({
+    required _ParagraphLayout layoutData,
+    required int start,
+    required int end,
+    required bool allowDropWholeFragment,
+  }) {
+    final safeStart = start.clamp(0, layoutData.text.length).toInt();
+    final safeEnd = end.clamp(safeStart, layoutData.text.length).toInt();
+    if (safeEnd <= safeStart) {
+      return null;
+    }
+
+    final slice = layoutData.text.substring(safeStart, safeEnd);
+    if (slice.isEmpty) {
+      return null;
+    }
+
+    final slicePainter = TextPainter(
+      text: TextSpan(text: slice, style: layoutData.textStyle),
+      textDirection: TextDirection.ltr,
+      textAlign: layoutData.textAlign,
+      locale: layoutData.locale,
+      textScaler: _textScaler,
+      strutStyle: layoutData.strutStyle,
+      textHeightBehavior: _textHeightBehavior,
+      textWidthBasis: TextWidthBasis.parent,
+    )..layout(maxWidth: layoutData.maxWidth);
+
+    try {
+      final metrics = slicePainter.computeLineMetrics();
+      if (metrics.isEmpty) {
+        return null;
+      }
+      final lastOffset = math.max(0, slice.length - 1);
+      final boundary =
+          slicePainter.getLineBoundary(TextPosition(offset: lastOffset));
+      final tailStart = boundary.start.clamp(0, slice.length).toInt();
+      final tailEnd = boundary.end.clamp(tailStart, slice.length).toInt();
+      if (tailEnd <= tailStart) {
+        return null;
+      }
+
+      final tinyTail = _isTinySemanticTail(
+        slice,
+        start: tailStart,
+        end: tailEnd,
+      );
+      if (!tinyTail) {
+        return null;
+      }
+
+      if (tailStart <= 0) {
+        return allowDropWholeFragment ? safeStart : null;
+      }
+      return (safeStart + tailStart).clamp(safeStart, safeEnd - 1).toInt();
+    } finally {
+      slicePainter.dispose();
+    }
+  }
+
+  String? _tailDebugSummaryBySlicePainter({
+    required _ParagraphLayout layoutData,
+    required int start,
+    required int end,
+  }) {
+    final safeStart = start.clamp(0, layoutData.text.length).toInt();
+    final safeEnd = end.clamp(safeStart, layoutData.text.length).toInt();
+    if (safeEnd <= safeStart) {
+      return null;
+    }
+    final slice = layoutData.text.substring(safeStart, safeEnd);
+    if (slice.isEmpty) {
+      return null;
+    }
+
+    final painter = TextPainter(
+      text: TextSpan(text: slice, style: layoutData.textStyle),
+      textDirection: TextDirection.ltr,
+      textAlign: layoutData.textAlign,
+      locale: layoutData.locale,
+      textScaler: _textScaler,
+      strutStyle: layoutData.strutStyle,
+      textHeightBehavior: _textHeightBehavior,
+      textWidthBasis: TextWidthBasis.parent,
+    )..layout(maxWidth: layoutData.maxWidth);
+
+    try {
+      final metrics = painter.computeLineMetrics();
+      if (metrics.isEmpty) {
+        return 'lines=0';
+      }
+      final lastOffset = math.max(0, slice.length - 1);
+      final boundary = painter.getLineBoundary(TextPosition(offset: lastOffset));
+      final tailStart = boundary.start.clamp(0, slice.length).toInt();
+      final tailEnd = boundary.end.clamp(tailStart, slice.length).toInt();
+      final tail = tailEnd > tailStart ? slice.substring(tailStart, tailEnd) : '';
+      final compact = tail.replaceAll(RegExp(r'\s+'), '');
+      final semantic = compact.replaceAll(_tailNoiseRegExp, '');
+      final previewRaw = tail.replaceAll('\n', r'\n').replaceAll('\r', r'\r');
+      final preview =
+          previewRaw.length > 16 ? '${previewRaw.substring(0, 16)}…' : previewRaw;
+      return 'lines=${metrics.length} tail="$preview" compact=${compact.length} semantic=${semantic.length}';
+    } finally {
+      painter.dispose();
+    }
+  }
+
+  int _reduceTextFragmentByOneLine({
+    required _ParagraphLayout layoutData,
+    required int start,
+    required int end,
+  }) {
+    final safeStart = start.clamp(0, layoutData.text.length).toInt();
+    final safeEnd = end.clamp(safeStart, layoutData.text.length).toInt();
+    if (safeEnd <= safeStart) {
+      return safeStart;
+    }
+    final startLine = _lineIndexForStart(layoutData, safeStart);
+    final endLine = _lineIndexForEnd(layoutData, safeEnd);
+    if (endLine <= startLine) {
+      return (safeEnd - 1).clamp(safeStart, safeEnd);
+    }
+    return layoutData.lineEnds[endLine - 1]
+        .clamp(safeStart, safeEnd - 1)
+        .toInt();
+  }
+
+  double _measurePageStrictHeight({
+    required List<Fragment> fragments,
+    required Map<String, Block> blockById,
+    required Map<String, _ParagraphLayout> paragraphCache,
+    required ReaderStyle readerStyle,
+    required double pageWidth,
+    required double pageHeight,
+  }) {
+    var total = 0.0;
+    for (final fragment in fragments) {
+      if (fragment is TextFragment) {
+        final block = blockById[fragment.blockId];
+        if (block == null || (block is! ParagraphBlock && block is! HeadingBlock)) {
+          continue;
+        }
+        final plainText =
+            block is ParagraphBlock ? block.plainText : (block as HeadingBlock).plainText;
+        final key = '${block.id}|$pageWidth|${readerStyle.cacheSignature()}';
+        final layoutData = paragraphCache.putIfAbsent(
+          key,
+          () => _layoutParagraph(
+            text: plainText,
+            blockStyle: block.style,
+            readerStyle: readerStyle,
+            maxWidth: pageWidth,
+          ),
+        );
+        final used = _measureSliceHeightStrict(
+          layoutData,
+          start: fragment.start,
+          end: fragment.end,
+        );
+        total += used + _textFragmentSafety;
+        continue;
+      }
+      if (fragment is ImageFragment) {
+        final block = blockById[fragment.blockId];
+        if (block is ImageBlock) {
+          final imageHeight = _estimateImageHeight(
+            block: block,
+            pageWidth: pageWidth,
+            pageHeight: pageHeight,
+          );
+          total +=
+              imageHeight + _estimatedImageVerticalPadding + _imageFragmentSafety;
+        }
+        continue;
+      }
+      if (fragment is SpaceFragment) {
+        total += fragment.height;
+      }
+    }
+    return total;
+  }
+
+  double _measureSliceHeightStrict(
+    _ParagraphLayout layout, {
+    required int start,
+    required int end,
+  }) {
+    if (end <= start) {
+      return layout.minLineHeight;
+    }
+    final safeStart = start.clamp(0, layout.text.length).toInt();
+    final safeEnd = end.clamp(safeStart, layout.text.length).toInt();
+    if (safeEnd <= safeStart) {
+      return layout.minLineHeight;
+    }
+    final slice = layout.text.substring(safeStart, safeEnd);
+    final painter = TextPainter(
+      text: TextSpan(text: slice, style: layout.textStyle),
+      textDirection: TextDirection.ltr,
+      textAlign: layout.textAlign,
+      locale: layout.locale,
+      textScaler: _textScaler,
+      strutStyle: layout.strutStyle,
+      textHeightBehavior: _textHeightBehavior,
+      textWidthBasis: TextWidthBasis.parent,
+    )..layout(maxWidth: layout.maxWidth);
+    final measured = painter.height;
+    painter.dispose();
+    return measured <= 0 ? layout.minLineHeight : measured;
   }
 
   void _logDebug(String message) {

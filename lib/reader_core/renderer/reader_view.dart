@@ -650,13 +650,20 @@ class _PagePaneState extends State<_PagePane> {
       final overflow = position.maxScrollExtent;
       final viewport = position.viewportDimension;
       _lastRenderLogKey = key;
-      debugPrint(
-        '[ReaderRender] page=${widget.page.index} '
-        'range=${widget.page.startOffset}-${widget.page.endOffset} '
-        'viewportH=${viewport.toStringAsFixed(2)} '
-        'expectedH=${(expectedViewportHeight ?? viewport).toStringAsFixed(2)} '
-        'overflow=${overflow.toStringAsFixed(2)}',
-      );
+      final baseLog =
+          '[ReaderRender] page=${widget.page.index} '
+          'range=${widget.page.startOffset}-${widget.page.endOffset} '
+          'viewportH=${viewport.toStringAsFixed(2)} '
+          'expectedH=${(expectedViewportHeight ?? viewport).toStringAsFixed(2)} '
+          'overflow=${overflow.toStringAsFixed(2)}';
+      debugPrint(baseLog);
+      if (overflow > 0.01) {
+        debugPrint(
+          '[ReaderRender][OVERFLOW] page=${widget.page.index} '
+          'range=${widget.page.startOffset}-${widget.page.endOffset} '
+          'overflow=${overflow.toStringAsFixed(2)}',
+        );
+      }
     });
   }
 

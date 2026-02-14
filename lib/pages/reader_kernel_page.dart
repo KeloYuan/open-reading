@@ -136,8 +136,9 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
         systemNavigationBarColor: Colors.transparent,
       ),
     );
-    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
-    if (isAndroid) {
+    final isMobilePlatform = defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    if (isMobilePlatform) {
       if (immersive) {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       } else {
@@ -288,6 +289,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _activeTheme.background,
+      extendBody: true,
       body: AnimatedBuilder(
         animation: _controller,
         builder: (context, _) {
@@ -310,11 +312,14 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
               final media = MediaQuery.of(context);
               final isLandscape = constraints.maxWidth > constraints.maxHeight;
               final enableSpread = constraints.maxWidth >= 900 && isLandscape;
+              final platform = Theme.of(context).platform;
+              final isAndroid = platform == TargetPlatform.android;
               // Use viewPadding to keep pagination area stable when chrome toggles.
               final topInset = media.viewPadding.top;
               final bottomInset = media.viewPadding.bottom;
               const topUiReserve = 8.0;
-              const bottomUiReserve = 16.0;
+              // Keep a dedicated footer-safe lane for bottom page label to avoid text overlap.
+              final bottomUiReserve = isAndroid ? 32.0 : 28.0;
               final padding = EdgeInsets.fromLTRB(
                 16,
                 topInset + topUiReserve,
@@ -651,7 +656,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage> {
     final platform = Theme.of(context).platform;
     final isMobilePlatform =
         platform == TargetPlatform.android || platform == TargetPlatform.iOS;
-    final bottomInset = media.padding.bottom > 0 ? 1.0 : 0.0;
+    final bottomInset = media.viewPadding.bottom > 0 ? 1.0 : 0.0;
     final mobileLift = isMobilePlatform ? 6.0 : 0.0;
 
     return Align(
