@@ -101,11 +101,13 @@ class ThemeNotifier extends ChangeNotifier {
   void _loadTheme() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     final isDarkMode = prefs.getBool('isDarkMode');
+    final disableGlassEffects = prefs.getBool('disable_glass_effects') ?? false;
     final appThemeName = prefs.getString('appTheme') ?? 'blue';
     final customColorValue = prefs.getInt('customAccentColor');
     final globalAccentColorValue = prefs.getInt('globalAccentColor');
 
-    // 根据动画设置降低毛玻璃成本（提升流畅度）
+    // 根据设置恢复毛玻璃全局状态
+    GlassEffectConfig.setDisableAllGlassEffects(disableGlassEffects);
     GlassEffectConfig.applyPerformanceMode(reduceEffects: false);
     if (prefs.getBool('enableAnimations') != true) {
       await prefs.setBool('enableAnimations', true);

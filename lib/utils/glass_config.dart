@@ -1,4 +1,4 @@
-﻿// 毛玻璃效果配置管理器
+// 毛玻璃效果配置管理器
 // 集中管理所有界面的毛玻璃效果和透明度设置
 
 import 'package:flutter/material.dart';
@@ -17,9 +17,27 @@ class GlassEffectConfig {
 
   // 全局模糊缩放（性能优化：降低 GPU 压力）
   static double _blurScale = 0.85;
+  static bool _reduceEffects = false;
+  static bool _disableAllGlassEffects = false;
+
+  static bool get disableAllGlassEffects => _disableAllGlassEffects;
 
   static void applyPerformanceMode({required bool reduceEffects}) {
-    _blurScale = reduceEffects ? 0.65 : 0.85;
+    _reduceEffects = reduceEffects;
+    _syncBlurScale();
+  }
+
+  static void setDisableAllGlassEffects(bool disabled) {
+    _disableAllGlassEffects = disabled;
+    _syncBlurScale();
+  }
+
+  static void _syncBlurScale() {
+    if (_disableAllGlassEffects) {
+      _blurScale = 0.0;
+      return;
+    }
+    _blurScale = _reduceEffects ? 0.65 : 0.85;
   }
 
   static double _scaled(double value) => value * _blurScale;
@@ -94,7 +112,7 @@ class GlassEffectConfig {
         context: context,
         child: child,
         preset: preset,
-        enableBlur: enableBlur,
+        enableBlur: enableBlur && !_disableAllGlassEffects,
         opacityScale: opacityScale,
       ),
     );
@@ -112,7 +130,7 @@ class GlassEffectConfig {
       child: child,
       borderRadius: borderRadius,
       preset: preset,
-      enableBlur: enableBlur,
+      enableBlur: enableBlur && !_disableAllGlassEffects,
     );
   }
 }
@@ -196,7 +214,8 @@ class GlassEffectHelper {
           ).colorScheme.surface.withValues(alpha: scaledOpacity),
           border: Border(
             bottom: BorderSide(
-              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.16),
+              color:
+                  Theme.of(context).colorScheme.outline.withValues(alpha: 0.16),
               width: 0.5,
             ),
           ),
@@ -237,12 +256,14 @@ class GlassEffectHelper {
           color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
           borderRadius: borderRadius,
           border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.16),
+            color:
+                Theme.of(context).colorScheme.outline.withValues(alpha: 0.16),
             width: 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.12),
+              color:
+                  Theme.of(context).colorScheme.shadow.withValues(alpha: 0.12),
               blurRadius: 18,
               offset: const Offset(0, 8),
             ),
@@ -257,7 +278,10 @@ class GlassEffectHelper {
         decoration: BoxDecoration(
           color: Theme.of(
             context,
-          ).colorScheme.surface.withValues(alpha: GlassEffectConfig.cardOpacity),
+          )
+              .colorScheme
+              .surface
+              .withValues(alpha: GlassEffectConfig.cardOpacity),
           borderRadius: borderRadius,
           border: Border.all(
             color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),

@@ -35,6 +35,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _enableAutoSave = true;
   bool _keepScreenOn = false;
   int _autoSaveInterval = 30;
+  bool _disableGlassEffects = false;
 
   // TTS设置
   bool _enableTTS = true;
@@ -124,16 +125,16 @@ class _SettingsPageState extends State<SettingsPage> {
           prefs.getBool('enablePerformanceMonitor') ?? false;
       _enableMemoryStats = prefs.getBool('enableMemoryStats') ?? false;
       _showFPS = prefs.getBool('showFPS') ?? false;
+      _disableGlassEffects = prefs.getBool('disable_glass_effects') ?? false;
     });
 
     if (prefs.getBool('enableAnimations') != true) {
       await prefs.setBool('enableAnimations', true);
     }
 
-    // 依据动画设置动态调整毛玻璃强度
-    GlassEffectConfig.applyPerformanceMode(
-      reduceEffects: false,
-    );
+    // 应用毛玻璃全局设置
+    GlassEffectConfig.setDisableAllGlassEffects(_disableGlassEffects);
+    GlassEffectConfig.applyPerformanceMode(reduceEffects: false);
 
     // 初始化WebDAV服务
     await _webdavService.initialize();
@@ -184,6 +185,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setBool('enablePerformanceMonitor', _enablePerformanceMonitor);
     await prefs.setBool('enableMemoryStats', _enableMemoryStats);
     await prefs.setBool('showFPS', _showFPS);
+    await prefs.setBool('disable_glass_effects', _disableGlassEffects);
   }
 
   @override
@@ -251,6 +253,24 @@ class _SettingsPageState extends State<SettingsPage> {
             title: l10n.appearanceSettings,
             icon: Icons.palette_outlined,
             children: [
+              _buildSwitchSetting(
+                title: '低性能模式（关闭毛玻璃）',
+                subtitle: _disableGlassEffects ? '已关闭所有毛玻璃效果' : '保留毛玻璃效果',
+                value: _disableGlassEffects,
+                onChanged: (value) {
+                  setState(() => _disableGlassEffects = value);
+                  GlassEffectConfig.setDisableAllGlassEffects(value);
+                  GlassEffectConfig.applyPerformanceMode(reduceEffects: false);
+                  showSideToast(
+                    context,
+                    value ? '已关闭毛玻璃效果' : '已恢复毛玻璃效果',
+                    icon: value
+                        ? Icons.auto_awesome_motion_rounded
+                        : Icons.blur_on_rounded,
+                  );
+                },
+                icon: Icons.tune_rounded,
+              ),
               _buildThemeToggle(themeNotifier),
               _buildAppThemeSelector(themeNotifier),
               _buildCustomAccentColorSelector(themeNotifier),
@@ -642,6 +662,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
+        enabled: !_disableGlassEffects,
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
           decoration: BoxDecoration(
@@ -1321,6 +1342,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
+        enabled: !_disableGlassEffects,
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: const EdgeInsets.all(20),

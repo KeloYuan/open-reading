@@ -62,6 +62,11 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   Timer? _immersiveTimer;
   final List<_ReaderThemePreset> _themes = const [
     _ReaderThemePreset(
+      name: '纯白',
+      background: Color(0xFFFFFFFF),
+      foreground: Color(0xFF111111),
+    ),
+    _ReaderThemePreset(
       name: '纸张',
       background: Color(0xFFF7F2E7),
       foreground: Color(0xFF2A241C),
@@ -72,9 +77,19 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
       foreground: Color(0xFF2F271C),
     ),
     _ReaderThemePreset(
+      name: '象牙',
+      background: Color(0xFFFFFBF2),
+      foreground: Color(0xFF2C251A),
+    ),
+    _ReaderThemePreset(
       name: '云灰',
       background: Color(0xFFF2F4F8),
       foreground: Color(0xFF1F2630),
+    ),
+    _ReaderThemePreset(
+      name: '晨雾',
+      background: Color(0xFFF8FAFC),
+      foreground: Color(0xFF1E2933),
     ),
     _ReaderThemePreset(
       name: '薄荷',
@@ -87,9 +102,19 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
       foreground: Color(0xFF1D2C39),
     ),
     _ReaderThemePreset(
+      name: '暖杏',
+      background: Color(0xFFFFF4E9),
+      foreground: Color(0xFF33261C),
+    ),
+    _ReaderThemePreset(
       name: '夜间',
       background: Color(0xFF171A1F),
       foreground: Color(0xFFE5E7EC),
+    ),
+    _ReaderThemePreset(
+      name: '深蓝夜',
+      background: Color(0xFF101A2A),
+      foreground: Color(0xFFDCE8FF),
     ),
     _ReaderThemePreset(
       name: '墨黑',
