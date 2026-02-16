@@ -21,6 +21,7 @@ class GlassEffectConfig {
   static bool _disableAllGlassEffects = false;
 
   static bool get disableAllGlassEffects => _disableAllGlassEffects;
+  static bool get lowPerformanceMode => _disableAllGlassEffects;
 
   static void applyPerformanceMode({required bool reduceEffects}) {
     _reduceEffects = reduceEffects;
@@ -61,20 +62,44 @@ class GlassEffectConfig {
   // ============ 透明度配置 (alpha值: 0.0-1.0) ============
 
   // 顶部应用栏透明度
-  static const double appBarOpacity = 0.3; // 可调范围: 0.3-0.9 (修改为不透明)
+  static const double _appBarOpacityBase = 0.3;
+  static double get appBarOpacity => effectiveOpacity(_appBarOpacityBase);
 
   // 导航栏透明度
-  static const double navigationBarOpacity = 0.3; // 可调范围: 0.7-0.95
+  static const double _navigationBarOpacityBase = 0.3;
+  static double get navigationBarOpacity =>
+      effectiveOpacity(_navigationBarOpacityBase);
 
   // 阅读页面控制栏透明度
-  static const double readingTopBarOpacity = 0.9; // 可调范围: 0.6-0.9
-  static const double readingBottomBarOpacity = 0.9; // 可调范围: 0.8-0.95
+  static const double _readingTopBarOpacityBase = 0.9;
+  static const double _readingBottomBarOpacityBase = 0.9;
+  static double get readingTopBarOpacity =>
+      effectiveOpacity(_readingTopBarOpacityBase);
+  static double get readingBottomBarOpacity =>
+      effectiveOpacity(_readingBottomBarOpacityBase);
 
   // 卡片透明度
-  static const double cardOpacity = 0.8; // 一般卡片
-  static const double lightCardOpacity = 0.15; // 轻量级容器
-  static const double dialogOpacity = 0.95; // 对话框
-  static const double modalOpacity = 0.9; // 底部弹出菜单
+  static const double _cardOpacityBase = 0.8;
+  static const double _lightCardOpacityBase = 0.15;
+  static const double _dialogOpacityBase = 0.95;
+  static const double _modalOpacityBase = 0.9;
+  static double get cardOpacity => effectiveOpacity(_cardOpacityBase);
+  static double get lightCardOpacity => effectiveOpacity(_lightCardOpacityBase);
+  static double get dialogOpacity => effectiveOpacity(_dialogOpacityBase);
+  static double get modalOpacity => effectiveOpacity(_modalOpacityBase);
+
+  static bool get shouldDisableBlur => _disableAllGlassEffects;
+
+  static double effectiveOpacity(double opacity) {
+    if (_disableAllGlassEffects) return 1.0;
+    return opacity.clamp(0.0, 1.0);
+  }
+
+  static Color surfaceColor(BuildContext context, {double opacity = 1.0}) {
+    return Theme.of(context).colorScheme.surface.withValues(
+          alpha: effectiveOpacity(opacity),
+        );
+  }
 
   // ============ 快速配置预设 ============
 
@@ -112,7 +137,7 @@ class GlassEffectConfig {
         context: context,
         child: child,
         preset: preset,
-        enableBlur: enableBlur && !_disableAllGlassEffects,
+        enableBlur: enableBlur && !shouldDisableBlur,
         opacityScale: opacityScale,
       ),
     );
@@ -130,7 +155,7 @@ class GlassEffectConfig {
       child: child,
       borderRadius: borderRadius,
       preset: preset,
-      enableBlur: enableBlur && !_disableAllGlassEffects,
+      enableBlur: enableBlur && !shouldDisableBlur,
     );
   }
 }
@@ -209,9 +234,8 @@ class GlassEffectHelper {
     if (!enableBlur) {
       return Container(
         decoration: BoxDecoration(
-          color: Theme.of(
-            context,
-          ).colorScheme.surface.withValues(alpha: scaledOpacity),
+          color:
+              GlassEffectConfig.surfaceColor(context, opacity: scaledOpacity),
           border: Border(
             bottom: BorderSide(
               color:
@@ -228,9 +252,8 @@ class GlassEffectHelper {
     return ProgressiveBlurPresets.topToBottomBlur(
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(
-            context,
-          ).colorScheme.surface.withValues(alpha: scaledOpacity),
+          color:
+              GlassEffectConfig.surfaceColor(context, opacity: scaledOpacity),
         ),
         child: child,
       ),
@@ -253,7 +276,7 @@ class GlassEffectHelper {
       // 使用更清晰的实体卡片样式
       return Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
+          color: GlassEffectConfig.surfaceColor(context, opacity: 0.98),
           borderRadius: borderRadius,
           border: Border.all(
             color:
@@ -276,12 +299,10 @@ class GlassEffectHelper {
     return ProgressiveBlurPresets.radialBlur(
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(
+          color: GlassEffectConfig.surfaceColor(
             context,
-          )
-              .colorScheme
-              .surface
-              .withValues(alpha: GlassEffectConfig.cardOpacity),
+            opacity: GlassEffectConfig.cardOpacity,
+          ),
           borderRadius: borderRadius,
           border: Border.all(
             color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
@@ -330,13 +351,17 @@ class GlassEffectHelper {
             begin: Alignment.bottomCenter,
             end: Alignment.topCenter,
             colors: [
-              Theme.of(
+              GlassEffectConfig.surfaceColor(
                 context,
-              ).colorScheme.surface.withValues(alpha: config['opacity']! + 0.1),
-              Theme.of(
+                opacity: (config['opacity']! + 0.1).clamp(0.0, 1.0),
+              ),
+              GlassEffectConfig.surfaceColor(
                 context,
-              ).colorScheme.surface.withValues(alpha: config['opacity']!),
-              Colors.transparent,
+                opacity: config['opacity']!,
+              ),
+              GlassEffectConfig.disableAllGlassEffects
+                  ? GlassEffectConfig.surfaceColor(context, opacity: 1.0)
+                  : Colors.transparent,
             ],
             stops: const [0.0, 0.7, 1.0],
           ),
@@ -344,7 +369,7 @@ class GlassEffectHelper {
         child: child,
       ),
       context: context,
-      maxBlur: config['blur']!,
+      maxBlur: GlassEffectConfig.shouldDisableBlur ? 0 : config['blur']!,
       borderRadius: borderRadius,
     );
   }

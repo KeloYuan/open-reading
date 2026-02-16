@@ -75,6 +75,7 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
           children: [
             ClipRRect(
               child: BackdropFilter(
+                enabled: !GlassEffectConfig.shouldDisableBlur,
                 filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                 child: Container(
                   width: LayoutHelper.getValue(
@@ -84,9 +85,10 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
                     desktop: 250, // 桌面使用最大宽度
                   ),
                   decoration: BoxDecoration(
-                    color: Theme.of(
+                    color: GlassEffectConfig.surfaceColor(
                       context,
-                    ).colorScheme.surface.withValues(alpha: 0.8),
+                      opacity: 0.8,
+                    ),
                     border: Border(
                       right: BorderSide(
                         color: Theme.of(
@@ -182,12 +184,15 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: BackdropFilter(
+                  enabled: !GlassEffectConfig.shouldDisableBlur,
                   filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                   child: FloatingActionButton.extended(
                     onPressed: () => _navigateToImport(),
                     backgroundColor: Theme.of(
                       context,
-                    ).colorScheme.primary.withValues(alpha: 0.9),
+                    ).colorScheme.primary.withValues(
+                          alpha: GlassEffectConfig.effectiveOpacity(0.9),
+                        ),
                     icon: const Icon(Icons.add),
                     label: Text(context.l10n.importBooks),
                   ),
@@ -266,6 +271,7 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(60),
                     child: BackdropFilter(
+                      enabled: !GlassEffectConfig.shouldDisableBlur,
                       filter: ImageFilter.blur(
                         sigmaX: GlassEffectConfig.navigationBarBlur,
                         sigmaY: GlassEffectConfig.navigationBarBlur,
@@ -278,12 +284,10 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surface
-                              .withValues(
-                                alpha: GlassEffectConfig.navigationBarOpacity,
-                              ),
+                          color: GlassEffectConfig.surfaceColor(
+                            context,
+                            opacity: GlassEffectConfig.navigationBarOpacity,
+                          ),
                           borderRadius: BorderRadius.circular(60),
                           border: Border.all(
                             color: Theme.of(context)

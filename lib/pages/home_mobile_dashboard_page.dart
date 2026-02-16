@@ -456,6 +456,7 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
               backgroundColor: palette.refreshBackgroundColor,
               edgeOffset: metrics.refreshEdgeOffset,
               child: ListView(
+                cacheExtent: 900,
                 physics: const AlwaysScrollableScrollPhysics(
                   parent: BouncingScrollPhysics(),
                 ),
@@ -474,27 +475,42 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           if (useRailNavigation) ...[
-                            _buildTopRow(),
+                            RepaintBoundary(child: _buildTopRow()),
                             SizedBox(height: metrics.sectionSpacing),
                           ],
-                          _buildHeroCard(),
+                          RepaintBoundary(child: _buildHeroCard()),
                           SizedBox(height: metrics.sectionSpacing),
-                          _buildSectionLabel('今日速览'),
+                          RepaintBoundary(child: _buildSectionLabel('今日速览')),
                           SizedBox(height: metrics.sectionSpacing),
-                          _buildSummaryRow(),
+                          RepaintBoundary(child: _buildSummaryRow()),
                           SizedBox(height: metrics.sectionSpacing),
-                          _buildHeaderRow('今日阅读计划', '$planDone / $planTotal'),
+                          RepaintBoundary(
+                            child: _buildHeaderRow(
+                              '今日阅读计划',
+                              '$planDone / $planTotal',
+                            ),
+                          ),
                           SizedBox(height: metrics.sectionSpacing),
-                          _buildPlanCard(),
+                          RepaintBoundary(child: _buildPlanCard()),
                           SizedBox(height: metrics.sectionSpacing),
-                          _buildSectionLabel('阅读进度'),
+                          RepaintBoundary(child: _buildSectionLabel('阅读进度')),
                           SizedBox(height: metrics.sectionSpacing),
-                          _buildWeekCard(dots, weekPercent),
+                          RepaintBoundary(
+                            child: _buildWeekCard(dots, weekPercent),
+                          ),
                           SizedBox(height: metrics.sectionSpacing),
-                          _buildHeaderRow('最近阅读', '查看全部', action: _openStats),
+                          RepaintBoundary(
+                            child: _buildHeaderRow(
+                              '最近阅读',
+                              '查看全部',
+                              action: _openStats,
+                            ),
+                          ),
                           SizedBox(height: metrics.sectionSpacing),
-                          _buildRecentCard(
-                            _recentBooks.take(3).toList(growable: false),
+                          RepaintBoundary(
+                            child: _buildRecentCard(
+                              _recentBooks.take(3).toList(growable: false),
+                            ),
                           ),
                         ],
                       ),

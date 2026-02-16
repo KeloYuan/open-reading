@@ -1,12 +1,32 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide BackdropFilter;
+import 'package:flutter/widgets.dart' as fw show BackdropFilter;
 import 'package:fl_chart/fl_chart.dart';
 import '../services/books/book_services.dart';
 import '../services/reading/reading_services.dart';
 import '../utils/glass_config.dart';
 import '../models/book.dart';
+
+class _GlassAwareBackdropFilter extends StatelessWidget {
+  final ImageFilter filter;
+  final Widget child;
+
+  const _GlassAwareBackdropFilter({
+    required this.filter,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return fw.BackdropFilter(
+      enabled: !GlassEffectConfig.shouldDisableBlur,
+      filter: filter,
+      child: child,
+    );
+  }
+}
 
 // 超级详细的阅读统计页面
 class DetailedStatsPage extends StatefulWidget {
@@ -384,17 +404,26 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
               Expanded(
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
-                    : PageView(
+                    : PageView.builder(
                         controller: _pageController,
+                        itemCount: 4,
                         onPageChanged: (index) {
                           _tabController.animateTo(index);
                         },
-                        children: [
-                          _buildOverviewTab(),
-                          _buildChartsTab(),
-                          _buildBooksTab(),
-                          _buildAchievementsTab(),
-                        ],
+                        itemBuilder: (context, index) {
+                          switch (index) {
+                            case 0:
+                              return _buildOverviewTab();
+                            case 1:
+                              return _buildChartsTab();
+                            case 2:
+                              return _buildBooksTab();
+                            case 3:
+                              return _buildAchievementsTab();
+                            default:
+                              return const SizedBox.shrink();
+                          }
+                        },
                       ),
               ),
             ],
@@ -414,7 +443,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           constraints: const BoxConstraints(maxWidth: 1040),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
+            child: _GlassAwareBackdropFilter(
               filter: ImageFilter.blur(
                 sigmaX: GlassEffectConfig.appBarBlur,
                 sigmaY: GlassEffectConfig.appBarBlur,
@@ -461,7 +490,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     final scheme = Theme.of(context).colorScheme;
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
           decoration: BoxDecoration(
@@ -501,7 +530,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           constraints: const BoxConstraints(maxWidth: 1040),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: BackdropFilter(
+            child: _GlassAwareBackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Container(
                 decoration: BoxDecoration(
@@ -600,7 +629,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
           padding: const EdgeInsets.all(20),
@@ -780,7 +809,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
           padding: const EdgeInsets.all(14),
@@ -848,7 +877,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: GlassEffectConfig.cardBlur,
           sigmaY: GlassEffectConfig.cardBlur,
@@ -1005,7 +1034,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   Widget _buildRecentBooks() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: GlassEffectConfig.cardBlur,
           sigmaY: GlassEffectConfig.cardBlur,
@@ -1128,7 +1157,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   Widget _buildReadingHabits() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: GlassEffectConfig.cardBlur,
           sigmaY: GlassEffectConfig.cardBlur,
@@ -1273,7 +1302,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   Widget _buildStatTypeSelector() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
           decoration: BoxDecoration(
@@ -1324,7 +1353,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   Widget _buildTrendChart() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: GlassEffectConfig.cardBlur,
           sigmaY: GlassEffectConfig.cardBlur,
@@ -1586,7 +1615,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   Widget _buildTimeDistributionChart() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: GlassEffectConfig.cardBlur,
           sigmaY: GlassEffectConfig.cardBlur,
@@ -1802,7 +1831,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   Widget _buildGenreDistributionChart() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: GlassEffectConfig.cardBlur,
           sigmaY: GlassEffectConfig.cardBlur,
@@ -1941,7 +1970,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: GlassEffectConfig.cardBlur,
           sigmaY: GlassEffectConfig.cardBlur,
@@ -2044,7 +2073,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
         _bookStats.any((e) => (e['readingTime'] as int) > 0);
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: GlassEffectConfig.cardBlur,
           sigmaY: GlassEffectConfig.cardBlur,
@@ -2240,7 +2269,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: GlassEffectConfig.cardBlur,
           sigmaY: GlassEffectConfig.cardBlur,
@@ -2419,7 +2448,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
           margin: const EdgeInsets.only(bottom: 16),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
+            child: _GlassAwareBackdropFilter(
               filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
               child: Container(
                 padding: const EdgeInsets.all(20),
@@ -2588,7 +2617,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: GlassEffectConfig.cardBlur,
           sigmaY: GlassEffectConfig.cardBlur,
@@ -2720,7 +2749,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   Widget _buildReadingSpeedChart() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: GlassEffectConfig.cardBlur,
           sigmaY: GlassEffectConfig.cardBlur,
@@ -2919,7 +2948,7 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   Widget _buildReadingStreakHeatmap() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
+      child: _GlassAwareBackdropFilter(
         filter: ImageFilter.blur(
           sigmaX: GlassEffectConfig.cardBlur,
           sigmaY: GlassEffectConfig.cardBlur,

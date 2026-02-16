@@ -24,6 +24,7 @@ import 'package:xxread/services/books/bookmark_dao.dart';
 import 'package:xxread/services/reading/reading_stats_dao.dart';
 import 'package:xxread/services/tts_service.dart';
 import 'package:xxread/utils/font_catalog_helper.dart';
+import 'package:xxread/utils/glass_config.dart';
 import 'package:xxread/utils/localization_extension.dart';
 import 'package:xxread/utils/system_ui_helper.dart';
 import 'package:xxread/widgets/side_toast.dart';
@@ -1549,14 +1550,37 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     required EdgeInsets margin,
     required EdgeInsets padding,
     double radius = 14,
+    bool forceDisableBlur = false,
+    double blurSigma = 14,
   }) {
     final fg = _activeTheme.foreground;
+    final isLowPerformance =
+        GlassEffectConfig.shouldDisableBlur || forceDisableBlur;
+    final panelBaseColor = isLowPerformance
+        ? Color.alphaBlend(
+            fg.withValues(alpha: 0.06),
+            _activeTheme.background,
+          )
+        : _activeTheme.background.withValues(
+            alpha: GlassEffectConfig.effectiveOpacity(0.50),
+          );
+    final panelGradientColors = isLowPerformance
+        ? <Color>[panelBaseColor, panelBaseColor]
+        : <Color>[
+            Colors.white.withValues(
+              alpha: GlassEffectConfig.effectiveOpacity(0.20),
+            ),
+            Colors.white.withValues(
+              alpha: GlassEffectConfig.effectiveOpacity(0.08),
+            ),
+          ];
     return Container(
       margin: margin,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          enabled: !isLowPerformance,
+          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
           child: Container(
             padding: padding,
             decoration: BoxDecoration(
@@ -1565,12 +1589,9 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  Colors.white.withValues(alpha: 0.20),
-                  Colors.white.withValues(alpha: 0.08),
-                ],
+                colors: panelGradientColors,
               ),
-              color: _activeTheme.background.withValues(alpha: 0.50),
+              color: panelBaseColor,
             ),
             child: child,
           ),
@@ -2157,6 +2178,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     required String title,
     required WidgetBuilder builder,
     double maxHeightFactor = 0.84,
+    bool forceDisableOuterBlur = false,
   }) {
     final fg = _activeTheme.foreground;
     final bg = _activeTheme.background;
@@ -2168,19 +2190,19 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
       builder: (sheetContext) {
         final media = MediaQuery.of(sheetContext);
         final maxHeight = media.size.height * maxHeightFactor;
-        final keyboardInset = media.viewInsets.bottom;
-        return AnimatedPadding(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          padding: EdgeInsets.only(bottom: keyboardInset),
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+        final keyboardVisible = media.viewInsets.bottom > 0;
+        final disableOuterBlur = forceDisableOuterBlur || keyboardVisible;
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+            child: RepaintBoundary(
               child: _buildGlassPanel(
                 margin: EdgeInsets.zero,
                 padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
                 radius: _floatingPanelRadius,
+                forceDisableBlur: disableOuterBlur,
+                blurSigma: disableOuterBlur ? 0 : 14,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxHeight: maxHeight),
                   child: Theme(
@@ -2743,12 +2765,23 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     required VoidCallback onTap,
   }) {
     final chipRadius = BorderRadius.circular(16);
+    final isLowPerformance = GlassEffectConfig.shouldDisableBlur;
     final borderColor =
         theme.foreground.withValues(alpha: selected ? 0.78 : 0.34);
-    final startColor = Color.lerp(theme.background, Colors.white, 0.10)!
-        .withValues(alpha: selected ? 0.70 : 0.52);
-    final endColor = Color.lerp(theme.background, Colors.black, 0.08)!
-        .withValues(alpha: selected ? 0.62 : 0.44);
+    final startColor = isLowPerformance
+        ? Color.alphaBlend(
+            theme.foreground.withValues(alpha: selected ? 0.08 : 0.04),
+            theme.background,
+          )
+        : Color.lerp(theme.background, Colors.white, 0.10)!
+            .withValues(alpha: selected ? 0.70 : 0.52);
+    final endColor = isLowPerformance
+        ? Color.alphaBlend(
+            theme.foreground.withValues(alpha: selected ? 0.04 : 0.02),
+            theme.background,
+          )
+        : Color.lerp(theme.background, Colors.black, 0.08)!
+            .withValues(alpha: selected ? 0.62 : 0.44);
     final textColor =
         theme.foreground.withValues(alpha: selected ? 0.96 : 0.84);
 
@@ -2760,6 +2793,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
         child: ClipRRect(
           borderRadius: chipRadius,
           child: BackdropFilter(
+            enabled: !GlassEffectConfig.shouldDisableBlur,
             filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
@@ -2833,6 +2867,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
       context: context,
       title: 'AI 阅读助手',
       maxHeightFactor: 0.90,
+      forceDisableOuterBlur: true,
       builder: (_) {
         return _ReaderAiChatPanel(
           controller: _controller,
@@ -2968,7 +3003,12 @@ class _ReaderTocSheetPanelState extends State<_ReaderTocSheetPanel> {
                     ),
               isDense: true,
               filled: true,
-              fillColor: Colors.white.withValues(alpha: 0.08),
+              fillColor: GlassEffectConfig.shouldDisableBlur
+                  ? Color.alphaBlend(
+                      fg.withValues(alpha: 0.05),
+                      widget.background,
+                    )
+                  : Colors.white.withValues(alpha: 0.08),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide(
@@ -3113,6 +3153,7 @@ class _ReaderAiChatPanelState extends State<_ReaderAiChatPanel> {
   bool _loadingSettings = true;
   bool _sending = false;
   bool _entered = false;
+  bool _scrollTaskScheduled = false;
 
   @override
   void initState() {
@@ -3322,12 +3363,23 @@ class _ReaderAiChatPanelState extends State<_ReaderAiChatPanel> {
   }
 
   void _scrollToBottom() {
+    if (_scrollTaskScheduled) {
+      return;
+    }
+    _scrollTaskScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollTaskScheduled = false;
       if (!_scrollController.hasClients) {
         return;
       }
+      final targetOffset = _scrollController.position.maxScrollExtent;
+      final keyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+      if (keyboardVisible) {
+        _scrollController.jumpTo(targetOffset);
+        return;
+      }
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent + 120,
+        targetOffset,
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
       );
@@ -3338,6 +3390,12 @@ class _ReaderAiChatPanelState extends State<_ReaderAiChatPanel> {
   Widget build(BuildContext context) {
     final fg = widget.theme.foreground;
     final settings = _settings;
+    final media = MediaQuery.of(context);
+    final keyboardInset = media.viewInsets.bottom;
+    final keyboardVisible = keyboardInset > 0;
+    final inputLift = keyboardVisible
+        ? math.max(0.0, keyboardInset - media.padding.bottom)
+        : 0.0;
 
     return AnimatedSlide(
       duration: const Duration(milliseconds: 220),
@@ -3458,88 +3516,109 @@ class _ReaderAiChatPanelState extends State<_ReaderAiChatPanel> {
                             message: msg,
                             foreground: fg,
                             background: widget.theme.background,
+                            enableAnimation: !keyboardVisible,
                           );
                         },
                       ),
               ),
             ),
             const SizedBox(height: 8),
-            _buildGlassSection(
-              fg: fg,
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      focusNode: _inputFocusNode,
-                      controller: _inputController,
-                      minLines: 1,
-                      maxLines: 4,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _send(),
-                      onTap: _scrollToBottom,
-                      style: TextStyle(color: fg.withValues(alpha: 0.93)),
-                      decoration: InputDecoration(
-                        hintText: '问点什么？例如：总结本页重点',
-                        hintStyle: TextStyle(
-                          color: fg.withValues(alpha: 0.58),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.12),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide:
-                              BorderSide(color: fg.withValues(alpha: 0.18)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide:
-                              BorderSide(color: fg.withValues(alpha: 0.16)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide:
-                              BorderSide(color: fg.withValues(alpha: 0.34)),
-                        ),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: Colors.white.withValues(
-                        alpha: _sending ? 0.18 : 0.28,
-                      ),
-                    ),
-                    child: IconButton(
-                      tooltip: '发送',
-                      iconSize: 20,
-                      icon: _sending
-                          ? SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.2,
-                                color: fg.withValues(alpha: 0.92),
-                              ),
-                            )
-                          : Icon(
-                              Icons.send_rounded,
-                              color: fg.withValues(alpha: 0.92),
+            RepaintBoundary(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: inputLift),
+                child: _buildGlassSection(
+                  fg: fg,
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          focusNode: _inputFocusNode,
+                          controller: _inputController,
+                          minLines: 1,
+                          maxLines: 4,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => _send(),
+                          onTap: _scrollToBottom,
+                          style: TextStyle(color: fg.withValues(alpha: 0.93)),
+                          decoration: InputDecoration(
+                            hintText: '问点什么？例如：总结本页重点',
+                            hintStyle: TextStyle(
+                              color: fg.withValues(alpha: 0.58),
                             ),
-                      onPressed: _sending ? null : () => _send(),
-                    ),
+                            filled: true,
+                            fillColor: GlassEffectConfig.shouldDisableBlur
+                                ? Color.alphaBlend(
+                                    fg.withValues(alpha: 0.06),
+                                    widget.theme.background,
+                                  )
+                                : Colors.white.withValues(alpha: 0.12),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: fg.withValues(alpha: 0.18),
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: fg.withValues(alpha: 0.16),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: fg.withValues(alpha: 0.34),
+                              ),
+                            ),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: GlassEffectConfig.shouldDisableBlur
+                              ? Color.alphaBlend(
+                                  fg.withValues(
+                                    alpha: _sending ? 0.10 : 0.16,
+                                  ),
+                                  widget.theme.background,
+                                )
+                              : Colors.white.withValues(
+                                  alpha: _sending ? 0.18 : 0.28,
+                                ),
+                        ),
+                        child: IconButton(
+                          tooltip: '发送',
+                          iconSize: 20,
+                          icon: _sending
+                              ? SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.2,
+                                    color: fg.withValues(alpha: 0.92),
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.send_rounded,
+                                  color: fg.withValues(alpha: 0.92),
+                                ),
+                          onPressed: _sending ? null : () => _send(),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ],
@@ -3553,9 +3632,29 @@ class _ReaderAiChatPanelState extends State<_ReaderAiChatPanel> {
     required EdgeInsets padding,
     required Widget child,
   }) {
+    final isLowPerformance = GlassEffectConfig.shouldDisableBlur;
+    final sectionBaseColor = isLowPerformance
+        ? Color.alphaBlend(
+            fg.withValues(alpha: 0.05),
+            widget.theme.background,
+          )
+        : widget.theme.background.withValues(
+            alpha: GlassEffectConfig.effectiveOpacity(0.36),
+          );
+    final sectionGradientColors = isLowPerformance
+        ? <Color>[sectionBaseColor, sectionBaseColor]
+        : <Color>[
+            Colors.white.withValues(
+              alpha: GlassEffectConfig.effectiveOpacity(0.18),
+            ),
+            Colors.white.withValues(
+              alpha: GlassEffectConfig.effectiveOpacity(0.08),
+            ),
+          ];
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
+        enabled: !GlassEffectConfig.shouldDisableBlur,
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
           padding: padding,
@@ -3565,12 +3664,9 @@ class _ReaderAiChatPanelState extends State<_ReaderAiChatPanel> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withValues(alpha: 0.18),
-                Colors.white.withValues(alpha: 0.08),
-              ],
+              colors: sectionGradientColors,
             ),
-            color: widget.theme.background.withValues(alpha: 0.36),
+            color: sectionBaseColor,
           ),
           child: child,
         ),
@@ -3585,11 +3681,13 @@ class _AiMessageBubble extends StatefulWidget {
     required this.message,
     required this.foreground,
     required this.background,
+    required this.enableAnimation,
   });
 
   final _AiUiMessage message;
   final Color foreground;
   final Color background;
+  final bool enableAnimation;
 
   @override
   State<_AiMessageBubble> createState() => _AiMessageBubbleState();
@@ -3626,6 +3724,31 @@ class _AiMessageBubbleState extends State<_AiMessageBubble> {
         : widget.foreground.withValues(alpha: 0.18);
     final textColor =
         widget.foreground.withValues(alpha: isSystem ? 0.78 : 0.93);
+
+    if (!widget.enableAnimation) {
+      return Align(
+        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            decoration: BoxDecoration(
+              color: bubbleColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor),
+            ),
+            child: Text(
+              msg.text,
+              style: TextStyle(
+                color: textColor,
+                height: 1.45,
+                fontSize: isSystem ? 12.5 : 13.5,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return AnimatedSlide(
       duration: const Duration(milliseconds: 180),
@@ -3819,12 +3942,15 @@ class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
         child: BackdropFilter(
+          enabled: !GlassEffectConfig.shouldDisableBlur,
           filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
           child: Container(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
-              color: widget.theme.background.withValues(alpha: 0.68),
+              color: widget.theme.background.withValues(
+                alpha: GlassEffectConfig.effectiveOpacity(0.68),
+              ),
               border: Border.all(color: fg.withValues(alpha: 0.26)),
             ),
             child: Form(

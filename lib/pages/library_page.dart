@@ -15,6 +15,7 @@ import 'home_layout_constants.dart';
 import 'home_shell_page.dart';
 import '../utils/layout_helper.dart';
 import '../widgets/scrolling_text.dart';
+import '../utils/glass_config.dart';
 import '../utils/localization_extension.dart';
 import '../utils/page_style_helper.dart';
 import '../utils/system_ui_helper.dart';
@@ -39,6 +40,7 @@ class _LibraryPageState extends State<LibraryPage> {
   final _bookDao = BookDao();
   StreamSubscription<void>? _librarySubscription;
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounce;
   String _searchQuery = '';
   _LibraryFilter _selectedFilter = _LibraryFilter.all;
 
@@ -62,8 +64,18 @@ class _LibraryPageState extends State<LibraryPage> {
   @override
   void dispose() {
     _librarySubscription?.cancel();
+    _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 120), () {
+      if (!mounted) return;
+      if (_searchQuery == value) return;
+      setState(() => _searchQuery = value);
+    });
   }
 
   bool _shouldApplySystemUI() {
@@ -281,7 +293,7 @@ class _LibraryPageState extends State<LibraryPage> {
             Expanded(
               child: TextField(
                 controller: _searchController,
-                onChanged: (value) => setState(() => _searchQuery = value),
+                onChanged: _onSearchChanged,
                 decoration: const InputDecoration(
                   hintText: '搜索书名、作者',
                   border: InputBorder.none,
@@ -415,6 +427,7 @@ class _LibraryPageState extends State<LibraryPage> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
+          enabled: !GlassEffectConfig.shouldDisableBlur,
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: FloatingActionButton(
             onPressed: () async {
@@ -431,7 +444,9 @@ class _LibraryPageState extends State<LibraryPage> {
             },
             backgroundColor: Theme.of(
               context,
-            ).colorScheme.primary.withValues(alpha: 0.9),
+            ).colorScheme.primary.withValues(
+                  alpha: GlassEffectConfig.effectiveOpacity(0.9),
+                ),
             foregroundColor: Colors.white,
             elevation: 0,
             heroTag: "add_book_fab", // 添加唯一标识避免冲突
@@ -454,13 +469,12 @@ class _LibraryPageState extends State<LibraryPage> {
           // ClipRRect + BackdropFilter 组合：圆角 + 模糊背景
           // 适合用于卡片、弹窗等需要突出显示的元素
           child: BackdropFilter(
+            enabled: !GlassEffectConfig.shouldDisableBlur,
             filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20), // 中等模糊强度
             child: Container(
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surface.withValues(alpha: 0.8),
+                color: GlassEffectConfig.surfaceColor(context, opacity: 0.8),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
                   color: Theme.of(
@@ -635,6 +649,7 @@ class _LibraryPageState extends State<LibraryPage> {
             ),
           ),
           child: GridView.builder(
+            cacheExtent: 720,
             padding: EdgeInsets.fromLTRB(
               16,
               12,
@@ -677,6 +692,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
   Widget _buildBooksList(List<Book> books) {
     return ListView.builder(
+      cacheExtent: 720,
       padding: EdgeInsets.fromLTRB(
         16,
         8,
@@ -778,8 +794,7 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Widget _buildListCover(BuildContext context, Book book) {
-    if (book.coverImagePath != null &&
-        File(book.coverImagePath!).existsSync()) {
+    if (book.coverImagePath != null && book.coverImagePath!.isNotEmpty) {
       return Image.file(
         File(book.coverImagePath!),
         fit: BoxFit.cover,
@@ -820,11 +835,11 @@ class _LibraryPageState extends State<LibraryPage> {
       builder: (context) => ClipRRect(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         child: BackdropFilter(
+          enabled: !GlassEffectConfig.shouldDisableBlur,
           filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
           child: Container(
             decoration: BoxDecoration(
-              color:
-                  Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+              color: GlassEffectConfig.surfaceColor(context, opacity: 0.95),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(28)),
               border: Border(
@@ -891,7 +906,7 @@ class _LibraryPageState extends State<LibraryPage> {
                             ],
                           ),
                           child: book.coverImagePath != null &&
-                                  File(book.coverImagePath!).existsSync()
+                                  book.coverImagePath!.isNotEmpty
                               ? ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
                                   child: Image.file(
@@ -1234,11 +1249,13 @@ class _LibraryPageState extends State<LibraryPage> {
           // 毛玻璃效果 - 确认对话框
           // 为删除确认对话框添加精美的毛玻璃背景
           child: BackdropFilter(
+            enabled: !GlassEffectConfig.shouldDisableBlur,
             filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30), // 高强度模糊突出对话框
             child: AlertDialog(
-              backgroundColor: Theme.of(
+              backgroundColor: GlassEffectConfig.surfaceColor(
                 context,
-              ).colorScheme.surface.withValues(alpha: 0.95),
+                opacity: 0.95,
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
@@ -1590,8 +1607,7 @@ class _BookCoverItem extends StatelessWidget {
   }
 
   Widget _buildCoverImage(BuildContext context, Book book) {
-    if (book.coverImagePath != null &&
-        File(book.coverImagePath!).existsSync()) {
+    if (book.coverImagePath != null && book.coverImagePath!.isNotEmpty) {
       // 有封面图片时，直接显示真实的书籍封面
       return SizedBox(
         width: double.infinity,

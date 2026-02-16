@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../services/sync/webdav_sync_service.dart';
+import '../utils/glass_config.dart';
 import 'side_toast.dart';
 
 /// WebDAV配置对话框
@@ -65,6 +66,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
                 : screenWidth - 20;
 
     return BackdropFilter(
+      enabled: !GlassEffectConfig.shouldDisableBlur,
       filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
       child: Dialog(
         backgroundColor: Colors.transparent,
@@ -73,6 +75,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(28),
           child: BackdropFilter(
+            enabled: !GlassEffectConfig.shouldDisableBlur,
             filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
             child: Container(
               width: targetWidth,
@@ -84,7 +87,9 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
                   end: Alignment.bottomRight,
                   colors: [
                     _getDialogSurfaceColor(),
-                    _getDialogSurfaceColor().withValues(alpha: 0.7),
+                    _getDialogSurfaceColor().withValues(
+                      alpha: GlassEffectConfig.effectiveOpacity(0.7),
+                    ),
                   ],
                 ),
                 border: Border.all(
@@ -546,9 +551,10 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
   }
 
   Color _getDialogSurfaceColor() {
-    return Theme.of(context).brightness == Brightness.dark
+    final base = Theme.of(context).brightness == Brightness.dark
         ? const Color(0xCC1A1E2A)
         : const Color(0xCCF6FAFF);
+    return base.withValues(alpha: GlassEffectConfig.effectiveOpacity(0.8));
   }
 
   Color _getTextColor() {

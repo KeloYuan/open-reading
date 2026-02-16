@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/glass_config.dart';
 import '../widgets/app_brand_icon.dart';
 
 /// 用户协议页面
@@ -331,13 +332,18 @@ class _UserAgreementPageState extends State<UserAgreementPage>
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
         child: BackdropFilter(
+          enabled: !GlassEffectConfig.shouldDisableBlur,
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
             width: double.infinity,
             decoration: BoxDecoration(
               color: isDark
-                  ? Colors.black.withValues(alpha: 0.4)
-                  : Colors.white.withValues(alpha: 0.85),
+                  ? Colors.black.withValues(
+                      alpha: GlassEffectConfig.effectiveOpacity(0.4),
+                    )
+                  : Colors.white.withValues(
+                      alpha: GlassEffectConfig.effectiveOpacity(0.85),
+                    ),
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
                 color: isDark
@@ -704,6 +710,7 @@ class _UserAgreementPageState extends State<UserAgreementPage>
       child: ClipRRect(
         borderRadius: BorderRadius.circular(28),
         child: BackdropFilter(
+          enabled: !GlassEffectConfig.shouldDisableBlur,
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Material(
             color: isPrimary ? Colors.transparent : Colors.transparent,

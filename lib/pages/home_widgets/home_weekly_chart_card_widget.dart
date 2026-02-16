@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../utils/glass_config.dart';
 import '../../utils/localization_extension.dart';
 
 /// 首页本周趋势图卡片。
@@ -30,11 +31,12 @@ class HomeWeeklyChartCardWidget extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
+        enabled: !GlassEffectConfig.shouldDisableBlur,
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+            color: GlassEffectConfig.surfaceColor(context, opacity: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color:

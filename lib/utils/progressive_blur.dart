@@ -3,6 +3,7 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'glass_config.dart';
 
 class ProgressiveBlur extends StatelessWidget {
   final Widget child;
@@ -47,6 +48,7 @@ class ProgressiveBlur extends StatelessWidget {
 
   Widget _buildProgressiveBlurOverlay(BuildContext context) {
     Widget overlay = BackdropFilter(
+      enabled: !GlassEffectConfig.shouldDisableBlur,
       filter: ImageFilter.blur(
         sigmaX: (startBlur + endBlur) / 2,
         sigmaY: (startBlur + endBlur) / 2,
@@ -61,8 +63,12 @@ class ProgressiveBlur extends StatelessWidget {
                 : [
                     Colors.transparent,
                     // 降低默认覆盖层不透明度，减少内容发灰
-                    Theme.of(context).colorScheme.surface.withValues(alpha: 0.06),
-                    Theme.of(context).colorScheme.surface.withValues(alpha: 0.12),
+                    Theme.of(context).colorScheme.surface.withValues(
+                          alpha: GlassEffectConfig.effectiveOpacity(0.06),
+                        ),
+                    Theme.of(context).colorScheme.surface.withValues(
+                          alpha: GlassEffectConfig.effectiveOpacity(0.12),
+                        ),
                   ],
             stops: stops ?? [0.0, 0.55, 1.0],
           ),
@@ -123,6 +129,7 @@ class ProgressiveBlurPresets {
             child: IgnorePointer(
               // 覆盖层忽略指针，防止遮挡按钮点击
               child: BackdropFilter(
+                enabled: !GlassEffectConfig.shouldDisableBlur,
                 // 降低模糊强度，避免内容变糊
                 filter: ImageFilter.blur(
                   sigmaX: maxBlur * 0.4,
@@ -136,8 +143,14 @@ class ProgressiveBlurPresets {
                       colors: [
                         Colors.transparent,
                         // 明显降低覆盖层不透明度
-                        Theme.of(context).colorScheme.surface.withValues(alpha: 0.04),
-                        Theme.of(context).colorScheme.surface.withValues(alpha: 0.08),
+                        Theme.of(context)
+                            .colorScheme
+                            .surface
+                            .withValues(alpha: 0.04),
+                        Theme.of(context)
+                            .colorScheme
+                            .surface
+                            .withValues(alpha: 0.08),
                       ],
                       stops: const [0.0, 0.75, 1.0],
                     ),
@@ -163,6 +176,7 @@ class ProgressiveBlurPresets {
         ClipRRect(
           borderRadius: borderRadius ?? BorderRadius.zero,
           child: BackdropFilter(
+            enabled: !GlassEffectConfig.shouldDisableBlur,
             filter: ImageFilter.blur(sigmaX: maxBlur, sigmaY: maxBlur),
             child: child,
           ),
@@ -177,10 +191,22 @@ class ProgressiveBlurPresets {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
-                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.65),
-                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
-                      Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+                      Theme.of(context)
+                          .colorScheme
+                          .surface
+                          .withValues(alpha: 0.85),
+                      Theme.of(context)
+                          .colorScheme
+                          .surface
+                          .withValues(alpha: 0.65),
+                      Theme.of(context)
+                          .colorScheme
+                          .surface
+                          .withValues(alpha: 0.7),
+                      Theme.of(context)
+                          .colorScheme
+                          .surface
+                          .withValues(alpha: 0.9),
                     ],
                     stops: const [0.0, 0.3, 0.7, 1.0],
                   ),
@@ -250,11 +276,11 @@ class AdvancedProgressiveBlur extends StatelessWidget {
 
   Widget _buildLayer(BuildContext context, BlurLayer layer) {
     Widget layerWidget = BackdropFilter(
+      enabled: !GlassEffectConfig.shouldDisableBlur,
       filter: ImageFilter.blur(sigmaX: layer.blur, sigmaY: layer.blur),
       child: Container(
         decoration: BoxDecoration(
-          gradient:
-              layer.gradient ??
+          gradient: layer.gradient ??
               LinearGradient(colors: [Colors.transparent, layer.color]),
         ),
       ),

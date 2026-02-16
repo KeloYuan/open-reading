@@ -108,7 +108,7 @@ class ThemeNotifier extends ChangeNotifier {
 
     // 根据设置恢复毛玻璃全局状态
     GlassEffectConfig.setDisableAllGlassEffects(disableGlassEffects);
-    GlassEffectConfig.applyPerformanceMode(reduceEffects: false);
+    GlassEffectConfig.applyPerformanceMode(reduceEffects: disableGlassEffects);
     if (prefs.getBool('enableAnimations') != true) {
       await prefs.setBool('enableAnimations', true);
     }

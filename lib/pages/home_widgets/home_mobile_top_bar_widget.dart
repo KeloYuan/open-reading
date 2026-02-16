@@ -28,6 +28,7 @@ class HomeMobileTopBarWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       child: BackdropFilter(
+        enabled: !GlassEffectConfig.shouldDisableBlur,
         filter: ImageFilter.blur(
           sigmaX: GlassEffectConfig.appBarBlur,
           sigmaY: GlassEffectConfig.appBarBlur,
@@ -35,9 +36,10 @@ class HomeMobileTopBarWidget extends StatelessWidget {
         child: Container(
           height: MediaQuery.of(context).padding.top + kHomeMobileTopBarHeight,
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(
-                  alpha: GlassEffectConfig.appBarOpacity,
-                ),
+            color: GlassEffectConfig.surfaceColor(
+              context,
+              opacity: GlassEffectConfig.appBarOpacity,
+            ),
             border: Border(
               bottom: BorderSide(
                 color: Theme.of(context)

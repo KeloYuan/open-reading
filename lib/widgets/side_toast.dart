@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../utils/glass_config.dart';
 
 OverlayEntry? _activeSideToastEntry;
 
@@ -119,8 +120,8 @@ class _SideToastState extends State<_SideToast>
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final topInset = MediaQuery.of(context).padding.top;
-    final background =
-        widget.backgroundColor ?? scheme.surface.withValues(alpha: 0.82);
+    final background = widget.backgroundColor ??
+        GlassEffectConfig.surfaceColor(context, opacity: 0.82);
     final foreground = widget.textColor ?? scheme.onSurface;
     final icon = widget.icon ?? Icons.notifications_rounded;
 
@@ -145,6 +146,7 @@ class _SideToastState extends State<_SideToast>
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(18),
                     child: BackdropFilter(
+                      enabled: !GlassEffectConfig.shouldDisableBlur,
                       filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
                       child: Container(
                         decoration: BoxDecoration(

@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../../utils/glass_config.dart';
 import '../../utils/localization_extension.dart';
 import '../../widgets/app_brand_icon.dart';
 
@@ -31,6 +32,7 @@ class HomeMobileHeroCardWidget extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
       child: BackdropFilter(
+        enabled: !GlassEffectConfig.shouldDisableBlur,
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: const EdgeInsets.all(16),

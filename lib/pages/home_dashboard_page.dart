@@ -300,6 +300,7 @@ class _StatCard extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
+          enabled: !GlassEffectConfig.shouldDisableBlur,
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
             padding: EdgeInsets.all(
@@ -311,9 +312,7 @@ class _StatCard extends StatelessWidget {
               ),
             ),
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.surface.withValues(alpha: 0.8),
+              color: GlassEffectConfig.surfaceColor(context, opacity: 0.8),
               borderRadius: BorderRadius.circular(
                 LayoutHelper.getValue(
                   context,

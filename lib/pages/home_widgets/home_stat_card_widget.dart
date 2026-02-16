@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../../utils/glass_config.dart';
 
 /// 首页统计小卡片。
 ///
@@ -26,11 +27,12 @@ class HomeStatCardWidget extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
+        enabled: !GlassEffectConfig.shouldDisableBlur,
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: const EdgeInsets.all(10.0),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+            color: GlassEffectConfig.surfaceColor(context, opacity: 0.8),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: Theme.of(

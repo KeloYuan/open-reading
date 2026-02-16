@@ -15,11 +15,12 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
+        enabled: !GlassEffectConfig.shouldDisableBlur,
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+            color: GlassEffectConfig.surfaceColor(context, opacity: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(
@@ -151,6 +152,7 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
+        enabled: !GlassEffectConfig.shouldDisableBlur,
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: const EdgeInsets.all(24),
@@ -394,11 +396,12 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
       child: BackdropFilter(
+        enabled: !GlassEffectConfig.shouldDisableBlur,
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+            color: GlassEffectConfig.surfaceColor(context, opacity: 0.8),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
               color:
@@ -451,6 +454,7 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
       child: BackdropFilter(
+        enabled: !GlassEffectConfig.shouldDisableBlur,
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: const EdgeInsets.all(20),
@@ -860,11 +864,12 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
+        enabled: !GlassEffectConfig.shouldDisableBlur,
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+            color: GlassEffectConfig.surfaceColor(context, opacity: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(
@@ -1008,11 +1013,12 @@ extension _HomeDashboardSections on _HomeDashboardPageState {
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
+        enabled: !GlassEffectConfig.shouldDisableBlur,
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.8),
+            color: GlassEffectConfig.surfaceColor(context, opacity: 0.8),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: Theme.of(

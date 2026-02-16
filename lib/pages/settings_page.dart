@@ -123,7 +123,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
     // 应用毛玻璃全局设置
     GlassEffectConfig.setDisableAllGlassEffects(_disableGlassEffects);
-    GlassEffectConfig.applyPerformanceMode(reduceEffects: false);
+    GlassEffectConfig.applyPerformanceMode(
+      reduceEffects: _disableGlassEffects,
+    );
 
     // 初始化WebDAV服务
     await _webdavService.initialize();
@@ -235,7 +237,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 onChanged: (value) {
                   setState(() => _disableGlassEffects = value);
                   GlassEffectConfig.setDisableAllGlassEffects(value);
-                  GlassEffectConfig.applyPerformanceMode(reduceEffects: false);
+                  GlassEffectConfig.applyPerformanceMode(reduceEffects: value);
                   showSideToast(
                     context,
                     value ? '已关闭毛玻璃效果' : '已恢复毛玻璃效果',
