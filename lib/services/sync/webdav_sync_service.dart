@@ -373,7 +373,8 @@ class WebDavSyncService {
   }
 
   String _importPath(String relativePath, {String? prefix}) {
-    final effectivePrefix = prefix ?? _importRootPrefix ?? WebDavSyncPathHelper.rootDir;
+    final effectivePrefix =
+        prefix ?? _importRootPrefix ?? WebDavSyncPathHelper.rootDir;
     final trimmedPrefix = effectivePrefix.trim();
     if (trimmedPrefix.isEmpty) {
       return relativePath;
@@ -730,7 +731,8 @@ class WebDavSyncService {
       final hrefNodes = document.getElementsByTagName('href');
       final books = <Book>[];
       final seen = <String>{};
-      final expectedSegment = '/${_importPath('files/').replaceAll(RegExp(r'^/+'), '')}';
+      final expectedSegment =
+          '/${_importPath('files/').replaceAll(RegExp(r'^/+'), '')}';
 
       for (final node in hrefNodes) {
         final rawHref = node.text.trim();
@@ -739,7 +741,9 @@ class WebDavSyncService {
         }
         final decodedHref = Uri.decodeFull(rawHref).replaceAll('&amp;', '&');
         final normalizedPath = decodedHref.split('?').first;
-        if (!normalizedPath.toLowerCase().contains(expectedSegment.toLowerCase())) {
+        if (!normalizedPath
+            .toLowerCase()
+            .contains(expectedSegment.toLowerCase())) {
           continue;
         }
         if (normalizedPath.endsWith('/')) {
