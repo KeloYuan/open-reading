@@ -635,6 +635,9 @@ class RuleToc {
   /// 章节URL规则
   final String chapterUrl;
 
+  /// 下一页目录URL规则
+  final String nextTocUrl;
+
   /// 是否是VIP章节规则
   final String isVip;
 
@@ -645,6 +648,7 @@ class RuleToc {
     required this.chapterList,
     required this.chapterName,
     required this.chapterUrl,
+    this.nextTocUrl = '',
     this.isVip = '',
     this.updateTime = '',
   });
@@ -654,6 +658,7 @@ class RuleToc {
       chapterList: json['chapterList'] ?? '',
       chapterName: json['chapterName'] ?? '',
       chapterUrl: json['chapterUrl'] ?? '',
+      nextTocUrl: (json['nextTocUrl'] ?? json['nextUrl'] ?? '').toString(),
       isVip: json['isVip'] ?? '',
       updateTime: json['updateTime'] ?? '',
     );
@@ -664,6 +669,7 @@ class RuleToc {
       'chapterList': chapterList,
       'chapterName': chapterName,
       'chapterUrl': chapterUrl,
+      'nextTocUrl': nextTocUrl,
       'isVip': isVip,
       'updateTime': updateTime,
     };

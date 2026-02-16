@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:html/parser.dart' as html_parser;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -75,6 +76,7 @@ class WebDavSyncService {
   // 按需上传的书籍文件集合
   final Set<int> _selectedBooksForSync = {};
   final List<String> _lastSyncWarnings = <String>[];
+  String? _importRootPrefix;
 
   // 网络监听
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
@@ -310,6 +312,7 @@ class WebDavSyncService {
       _syncInterval = _sanitizeSyncInterval(syncInterval);
 
       _setupDioClient();
+      _importRootPrefix = null;
 
       // 测试连接
       final isValid = await testConnection();
@@ -367,6 +370,80 @@ class WebDavSyncService {
     await prefs.setString('webdav_password', _password);
     await prefs.setBool('webdav_auto_sync', _autoSync);
     await prefs.setInt('webdav_sync_interval', _syncInterval);
+  }
+
+  String _importPath(String relativePath, {String? prefix}) {
+    final effectivePrefix = prefix ?? _importRootPrefix ?? WebDavSyncPathHelper.rootDir;
+    final trimmedPrefix = effectivePrefix.trim();
+    if (trimmedPrefix.isEmpty) {
+      return relativePath;
+    }
+    return '$trimmedPrefix$relativePath';
+  }
+
+  Future<String> _resolveImportRootPrefix() async {
+    if (_importRootPrefix != null) {
+      return _importRootPrefix!;
+    }
+
+    final uri = Uri.tryParse(_serverUrl);
+    final basePath = (uri?.path ?? '').toLowerCase();
+    final candidates = <String>[];
+    if (basePath.endsWith('/xxread/') || basePath.endsWith('/xxread')) {
+      candidates.add('');
+      candidates.add(WebDavSyncPathHelper.rootDir);
+    } else {
+      candidates.add(WebDavSyncPathHelper.rootDir);
+      candidates.add('');
+    }
+
+    Future<bool> probeBooks(String prefix) async {
+      final path = _importPath('books/books.json', prefix: prefix);
+      final response = await _dio.get<dynamic>(
+        path,
+        options: Options(
+          validateStatus: (code) => code != null && code > 0,
+          responseType: ResponseType.plain,
+        ),
+      );
+      final code = response.statusCode ?? 0;
+      return code == 200 || code == 207;
+    }
+
+    Future<bool> probeFiles(String prefix) async {
+      final path = _importPath('files/', prefix: prefix);
+      final response = await _dio.request<dynamic>(
+        path,
+        options: Options(
+          method: 'PROPFIND',
+          headers: {
+            'Depth': '0',
+            'Content-Type': 'application/xml; charset=utf-8',
+            'Accept': 'application/xml,text/xml,*/*',
+          },
+          validateStatus: (code) => code != null && code > 0,
+          responseType: ResponseType.plain,
+        ),
+        data:
+            '<?xml version="1.0" encoding="utf-8"?><propfind xmlns="DAV:"><prop><displayname/></prop></propfind>',
+      );
+      final code = response.statusCode ?? 0;
+      return <int>{200, 207, 301, 302, 405}.contains(code);
+    }
+
+    for (final candidate in candidates) {
+      try {
+        if (await probeBooks(candidate) || await probeFiles(candidate)) {
+          _importRootPrefix = candidate;
+          return candidate;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+
+    _importRootPrefix = WebDavSyncPathHelper.rootDir;
+    return _importRootPrefix!;
   }
 
   /// 测试连接
@@ -561,12 +638,14 @@ class WebDavSyncService {
     if (!_isConfigured) {
       throw Exception('WebDAV 未配置');
     }
+    await _resolveImportRootPrefix();
     final books = <Book>[];
 
     try {
+      final booksPath = _importPath('books/books.json');
       final response = await _retryRequest<Response<dynamic>>(
         label: '读取远端书籍列表',
-        action: () => _dio.get<dynamic>(WebDavSyncPathHelper.booksFile),
+        action: () => _dio.get<dynamic>(booksPath),
       );
 
       final payload = response.data;
@@ -575,8 +654,15 @@ class WebDavSyncService {
         decoded = jsonDecode(payload);
       }
 
+      List<dynamic>? rawList;
       if (decoded is List) {
-        for (final item in decoded) {
+        rawList = decoded;
+      } else if (decoded is Map && decoded['books'] is List) {
+        rawList = decoded['books'] as List<dynamic>;
+      }
+
+      if (rawList != null) {
+        for (final item in rawList) {
           if (item is! Map) {
             continue;
           }
@@ -593,12 +679,20 @@ class WebDavSyncService {
     }
 
     final fileFallbackBooks = await _listRemoteBooksFromFilesDir();
+    String keyOf(Book book) {
+      final base = p.basename(book.filePath.trim());
+      if (base.isNotEmpty) {
+        return base.toLowerCase();
+      }
+      return book.title.trim().toLowerCase();
+    }
+
     final mergedByPath = <String, Book>{};
     for (final book in books) {
-      mergedByPath[book.filePath] = book;
+      mergedByPath[keyOf(book)] = book;
     }
     for (final book in fileFallbackBooks) {
-      mergedByPath.putIfAbsent(book.filePath, () => book);
+      mergedByPath.putIfAbsent(keyOf(book), () => book);
     }
 
     final merged = mergedByPath.values.toList()
@@ -608,17 +702,22 @@ class WebDavSyncService {
 
   Future<List<Book>> _listRemoteBooksFromFilesDir() async {
     try {
+      final filesPath = _importPath('files/');
       final response = await _retryRequest<Response<dynamic>>(
         label: '列出远端文件目录',
         action: () => _dio.request<dynamic>(
-          WebDavSyncPathHelper.filesDir,
+          filesPath,
           options: Options(
             method: 'PROPFIND',
-            headers: {'Depth': '1'},
+            headers: {
+              'Depth': '1',
+              'Content-Type': 'application/xml; charset=utf-8',
+              'Accept': 'application/xml,text/xml,*/*',
+            },
             responseType: ResponseType.plain,
           ),
           data:
-              '<?xml version="1.0"?><propfind xmlns="DAV:"><prop><displayname/></prop></propfind>',
+              '<?xml version="1.0" encoding="utf-8"?><propfind xmlns="DAV:"><prop><displayname/></prop></propfind>',
         ),
       );
 
@@ -627,18 +726,22 @@ class WebDavSyncService {
         return const <Book>[];
       }
 
-      final matches =
-          RegExp(r'<[^>]*href[^>]*>([^<]+)</[^>]*href>').allMatches(body);
+      final document = html_parser.parse(body);
+      final hrefNodes = document.getElementsByTagName('href');
       final books = <Book>[];
       final seen = <String>{};
+      final expectedSegment = '/${_importPath('files/').replaceAll(RegExp(r'^/+'), '')}';
 
-      for (final match in matches) {
-        final rawHref = match.group(1)?.trim() ?? '';
+      for (final node in hrefNodes) {
+        final rawHref = node.text.trim();
         if (rawHref.isEmpty) {
           continue;
         }
-        final decodedHref = Uri.decodeFull(rawHref);
+        final decodedHref = Uri.decodeFull(rawHref).replaceAll('&amp;', '&');
         final normalizedPath = decodedHref.split('?').first;
+        if (!normalizedPath.toLowerCase().contains(expectedSegment.toLowerCase())) {
+          continue;
+        }
         if (normalizedPath.endsWith('/')) {
           continue;
         }
@@ -1781,6 +1884,7 @@ class WebDavSyncService {
   }
 
   Future<List<int>?> _downloadRemoteBookBytes(Book remoteBook) async {
+    await _resolveImportRootPrefix();
     final candidates = <String>{
       if ((remoteBook.contentHash ?? '').trim().isNotEmpty)
         (remoteBook.contentHash ?? '').trim(),
@@ -1796,7 +1900,7 @@ class WebDavSyncService {
       if (fileName.trim().isEmpty) {
         continue;
       }
-      final remotePath = WebDavSyncPathHelper.buildBookFilePath(fileName);
+      final remotePath = _importPath('files/$fileName');
       try {
         final response = await _retryRequest<Response<dynamic>>(
           label: '下载书籍文件 ${remoteBook.title}',

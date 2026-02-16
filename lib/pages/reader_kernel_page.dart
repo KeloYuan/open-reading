@@ -175,7 +175,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     _controller = ReaderKernelController();
     _lastPersistedCurrentPage = widget.book.currentPage;
     _lastPersistedTotalPages = widget.book.totalPages;
-    _applyReaderSystemUI(immersive: true);
+    _applyReaderSystemUI(immersive: false);
     _startStatsTracking();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
@@ -201,15 +201,16 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   }
 
   Future<void> _bootstrap() async {
+    await _restoreReaderSystemStatusBarPreference();
     await _restoreTheme();
     await _restoreTtsPreference();
     await _restoreVolumeKeyTurnPreference();
-    await _restoreReaderSystemStatusBarPreference();
     await _restoreReaderFontPreference();
     await _restoreReaderTypographyPreference();
     if (!mounted) {
       return;
     }
+    _applyReaderSystemUI(immersive: !_chromeVisible);
     await _open();
   }
 

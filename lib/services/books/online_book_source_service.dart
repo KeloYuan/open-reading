@@ -183,48 +183,82 @@ class OnlineBookSourceService {
         }
       }
 
-      final request = _buildRequest(
-        rawRule: tocTargetUrl,
-        source: source,
-      );
-      final response = await _sendRequest(source: source, request: request);
-      final body = _decodeBody(
-        response.bodyBytes,
-        preferredCharset: preferredCharset,
-        responseHeaders: response.headers,
-      );
-      final baseUrl = response.request?.url.toString() ?? request.url;
-
-      final jsonData = _tryParseJson(body);
-      final htmlDoc = jsonData == null ? html_parser.parse(body) : null;
-      final listItems = _extractListItems(
-        listRule: rule.chapterList,
-        jsonData: jsonData,
-        htmlDoc: htmlDoc,
-      );
-
       final chapters = <OnlineChapterItem>[];
-      for (final item in listItems) {
-        final title = _extractField(
-          item: item,
-          rule: rule.chapterName,
-          baseUrl: baseUrl,
-          isUrl: false,
-          rootJson: jsonData,
-          rootDocument: htmlDoc,
+      final visitedPages = <String>{};
+      final seenChapterKeys = <String>{};
+      var currentTocUrl = tocTargetUrl;
+      var tocPageCount = 0;
+      const maxTocPages = 30;
+      final nextTocRule = rule.nextTocUrl.trim();
+
+      while (currentTocUrl.trim().isNotEmpty &&
+          !visitedPages.contains(currentTocUrl) &&
+          tocPageCount < maxTocPages) {
+        visitedPages.add(currentTocUrl);
+        tocPageCount++;
+
+        final request = _buildRequest(
+          rawRule: currentTocUrl,
+          source: source,
         );
-        final url = _extractField(
-          item: item,
-          rule: rule.chapterUrl,
+        final response = await _sendRequest(source: source, request: request);
+        final body = _decodeBody(
+          response.bodyBytes,
+          preferredCharset: preferredCharset,
+          responseHeaders: response.headers,
+        );
+        final baseUrl = response.request?.url.toString() ?? request.url;
+
+        final jsonData = _tryParseJson(body);
+        final htmlDoc = jsonData == null ? html_parser.parse(body) : null;
+        final listItems = _extractListItems(
+          listRule: rule.chapterList,
+          jsonData: jsonData,
+          htmlDoc: htmlDoc,
+        );
+
+        for (final item in listItems) {
+          final title = _extractField(
+            item: item,
+            rule: rule.chapterName,
+            baseUrl: baseUrl,
+            isUrl: false,
+            rootJson: jsonData,
+            rootDocument: htmlDoc,
+          );
+          final url = _extractField(
+            item: item,
+            rule: rule.chapterUrl,
+            baseUrl: baseUrl,
+            isUrl: true,
+            rootJson: jsonData,
+            rootDocument: htmlDoc,
+          );
+
+          if (title.isEmpty || url.isEmpty) continue;
+          final key = '${title.trim()}|${url.trim()}';
+          if (!seenChapterKeys.add(key)) {
+            continue;
+          }
+          chapters.add(OnlineChapterItem(title: title, url: url));
+        }
+
+        if (nextTocRule.isEmpty) {
+          break;
+        }
+        final nextUrl = _extractField(
+          item: jsonData ?? htmlDoc?.documentElement,
+          rule: nextTocRule,
           baseUrl: baseUrl,
           isUrl: true,
           rootJson: jsonData,
           rootDocument: htmlDoc,
         );
 
-        if (title.isEmpty || url.isEmpty) continue;
-
-        chapters.add(OnlineChapterItem(title: title, url: url));
+        if (nextUrl.trim().isEmpty || visitedPages.contains(nextUrl)) {
+          break;
+        }
+        currentTocUrl = nextUrl.trim();
       }
 
       return chapters;
