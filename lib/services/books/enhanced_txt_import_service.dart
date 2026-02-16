@@ -169,7 +169,8 @@ class EnhancedTxtImportService {
 
     try {
       final gbkText = _decodeGbkBestEffort(sample);
-      candidateScores['gbk'] = _quickContentScore(gbkText, 'gbk') + gbkConfidence;
+      candidateScores['gbk'] =
+          _quickContentScore(gbkText, 'gbk') + gbkConfidence;
     } catch (_) {
       // ignore
     }
@@ -352,8 +353,7 @@ class EnhancedTxtImportService {
       if (rune >= 0x20 && rune <= 0x7e) {
         ascii++;
       }
-      if ('，。！？：；、“”‘’（）《》【】—…,.!?;:()[]'.runes
-          .contains(rune)) {
+      if ('，。！？：；、“”‘’（）《》【】—…,.!?;:()[]'.runes.contains(rune)) {
         punctuation++;
       }
       // 常见乱码特征字符（UTF-8 被按西文错误解码）
