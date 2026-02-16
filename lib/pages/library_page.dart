@@ -211,23 +211,6 @@ class _LibraryPageState extends State<LibraryPage> {
     return book.currentPage > 0 && !_isFinishedBook(book);
   }
 
-  Rect? _resolveRectFromKey(GlobalKey key) {
-    final keyContext = key.currentContext;
-    if (keyContext == null) {
-      return null;
-    }
-    final renderObject = keyContext.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.attached) {
-      return null;
-    }
-    final size = renderObject.size;
-    if (size.isEmpty) {
-      return null;
-    }
-    final origin = renderObject.localToGlobal(Offset.zero);
-    return origin & size;
-  }
-
   Widget _buildTopBar() {
     final palette = PageStyleHelper.palette(context);
     return Padding(
@@ -588,6 +571,8 @@ class _LibraryPageState extends State<LibraryPage> {
 
     final isDesktop = LayoutHelper.isDesktop(context);
     final isTablet = LayoutHelper.isTablet(context);
+    final media = MediaQuery.of(context);
+    final isTabletLandscape = isTablet && media.size.width > media.size.height;
 
     // 毛玻璃效果增强 - 网格容器背景
     // 为整个书籍网格添加细微的毛玻璃背景层
@@ -605,8 +590,17 @@ class _LibraryPageState extends State<LibraryPage> {
       spacing = 12;
     }
 
-    final gap = isTablet ? 4.0 : 6.0;
-    final textHeight = isTablet ? 26.0 : 36.0;
+    final gap = isTabletLandscape
+        ? 6.0
+        : isTablet
+            ? 5.0
+            : 6.0;
+    final textHeight = isTabletLandscape
+        ? 50.0
+        : isTablet
+            ? 40.0
+            : 36.0;
+    final coverWidthScale = isTabletLandscape ? 0.75 : 1.0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -618,7 +612,8 @@ class _LibraryPageState extends State<LibraryPage> {
           constraints.maxWidth - horizontalPadding - totalSpacing,
         );
         final itemWidth = availableWidth / crossAxisCount;
-        final itemHeight = (itemWidth * 4 / 3) + textHeight + gap;
+        final itemHeight =
+            ((itemWidth * coverWidthScale) * 4 / 3) + textHeight + gap;
         final childAspectRatio = itemWidth > 0 ? itemWidth / itemHeight : 0.75;
 
         return Container(
@@ -662,15 +657,11 @@ class _LibraryPageState extends State<LibraryPage> {
               return RepaintBoundary(
                 child: _BookCoverItem(
                   book: book,
-                  onTap: (sourceRect) async {
+                  onTap: () async {
                     final fullBook = await _bookDao.getBookById(book.id!);
                     if (fullBook != null && mounted && context.mounted) {
                       // 直接打开沉浸式阅读器
-                      await ReadingRouterService.openBook(
-                        context,
-                        fullBook,
-                        sourceRect: sourceRect,
-                      );
+                      await ReadingRouterService.openBook(context, fullBook);
                       _loadBooks();
                     }
                   },
@@ -695,7 +686,6 @@ class _LibraryPageState extends State<LibraryPage> {
       itemCount: books.length,
       itemBuilder: (context, index) {
         final book = books[index];
-        final coverKey = GlobalKey();
         final progress = book.totalPages > 0
             ? (book.currentPage / book.totalPages).clamp(0.0, 1.0)
             : 0.0;
@@ -710,14 +700,9 @@ class _LibraryPageState extends State<LibraryPage> {
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
               onTap: () async {
-                final sourceRect = _resolveRectFromKey(coverKey);
                 final fullBook = await _bookDao.getBookById(book.id!);
                 if (fullBook != null && mounted && context.mounted) {
-                  await ReadingRouterService.openBook(
-                    context,
-                    fullBook,
-                    sourceRect: sourceRect,
-                  );
+                  await ReadingRouterService.openBook(context, fullBook);
                   _loadBooks();
                 }
               },
@@ -727,7 +712,6 @@ class _LibraryPageState extends State<LibraryPage> {
                 child: Row(
                   children: [
                     SizedBox(
-                      key: coverKey,
                       width: 44,
                       height: 64,
                       child: ClipRRect(
@@ -1412,7 +1396,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
 class _BookCoverItem extends StatelessWidget {
   final Book book;
-  final Future<void> Function(Rect? sourceRect) onTap;
+  final Future<void> Function() onTap;
   final VoidCallback onLongPress;
 
   const _BookCoverItem({
@@ -1425,20 +1409,32 @@ class _BookCoverItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final progress =
         book.currentPage / (book.totalPages > 0 ? book.totalPages : 1);
-    final coverKey = GlobalKey();
 
     return InkWell(
-      onTap: () => unawaited(onTap(_resolveCoverRect(coverKey))),
+      onTap: () => unawaited(onTap()),
       onLongPress: onLongPress,
       borderRadius: BorderRadius.circular(12),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isTablet = LayoutHelper.isTablet(context);
-          final gap = isTablet ? 4.0 : 6.0;
-          final textHeight = isTablet ? 26.0 : 36.0;
+          final media = MediaQuery.of(context);
+          final isTabletLandscape =
+              isTablet && media.size.width > media.size.height;
+          final gap = isTabletLandscape
+              ? 6.0
+              : isTablet
+                  ? 5.0
+                  : 6.0;
+          final textHeight = isTabletLandscape
+              ? 50.0
+              : isTablet
+                  ? 40.0
+                  : 36.0;
+          final coverWidthScale = isTabletLandscape ? 0.75 : 1.0;
           final maxWidth = constraints.maxWidth;
           final maxHeight = constraints.maxHeight;
-          final targetCoverHeight = maxWidth * 4 / 3;
+          final coverWidth = maxWidth * coverWidthScale;
+          final targetCoverHeight = coverWidth * 4 / 3;
           final availableCoverHeight =
               math.max(0.0, maxHeight - textHeight - gap);
           final coverHeight = math.min(availableCoverHeight, targetCoverHeight);
@@ -1447,130 +1443,142 @@ class _BookCoverItem extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // 书籍封面区域 - 3:4比例，但不超过可用高度
-              SizedBox(
-                key: coverKey,
-                width: double.infinity,
-                height: coverHeight,
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.15),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                        spreadRadius: 0,
-                      ),
-                    ],
-                  ),
-                  child: Stack(
-                    children: [
-                      // 封面图片或默认图标
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: _buildCoverImage(context, book),
-                      ),
-                      // 阅读进度指示器（仅在有进度时显示）
-                      if (progress > 0)
-                        Positioned(
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          child: Container(
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.3),
-                              borderRadius: const BorderRadius.only(
-                                bottomLeft: Radius.circular(12),
-                                bottomRight: Radius.circular(12),
+              Align(
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  width: coverWidth,
+                  height: coverHeight,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                          spreadRadius: 0,
+                        ),
+                      ],
+                    ),
+                    child: Stack(
+                      children: [
+                        // 封面图片或默认图标
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: _buildCoverImage(context, book),
+                        ),
+                        // 阅读进度指示器（仅在有进度时显示）
+                        if (progress > 0)
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                borderRadius: const BorderRadius.only(
+                                  bottomLeft: Radius.circular(12),
+                                  bottomRight: Radius.circular(12),
+                                ),
                               ),
-                            ),
-                            child: FractionallySizedBox(
-                              alignment: Alignment.centerLeft,
-                              widthFactor: progress.clamp(0.0, 1.0),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  borderRadius: const BorderRadius.only(
-                                    bottomLeft: Radius.circular(12),
-                                    bottomRight: Radius.circular(12),
+                              child: FractionallySizedBox(
+                                alignment: Alignment.centerLeft,
+                                widthFactor: progress.clamp(0.0, 1.0),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                    borderRadius: const BorderRadius.only(
+                                      bottomLeft: Radius.circular(12),
+                                      bottomRight: Radius.circular(12),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      // "在读"标签
-                      if (book.currentPage > 0)
-                        Positioned(
-                          top: 6,
-                          right: 6,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.primary,
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.2),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
+                        // "在读"标签
+                        if (book.currentPage > 0)
+                          Positioned(
+                            top: 6,
+                            right: 6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.2),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                '在读',
+                                style: TextStyle(
+                                  color:
+                                      Theme.of(context).colorScheme.onPrimary,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w500,
                                 ),
-                              ],
-                            ),
-                            child: Text(
-                              '在读',
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.onPrimary,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
               SizedBox(height: gap),
               // 书籍信息区域 - 固定高度
-              SizedBox(
-                height: textHeight,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 书名 - 使用滚动文本
-                      Expanded(
-                        child: ScrollingText(
-                          text: book.title,
+              Align(
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  width: coverWidth,
+                  height: textHeight,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(2, 0, 2, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 书名：超长时自动滚动
+                        Expanded(
+                          child: ScrollingText(
+                            text: book.title,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                      height: 1.15,
+                                    ),
+                            duration: const Duration(seconds: 5),
+                            pauseDuration: const Duration(milliseconds: 1200),
+                          ),
+                        ),
+                        SizedBox(height: isTabletLandscape ? 1.5 : 2),
+                        // 作者信息
+                        Text(
+                          book.author,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface.withValues(
+                                          alpha: 0.6,
+                                        ),
+                                    fontSize: 11,
                                   ),
-                          duration: const Duration(seconds: 4),
-                          pauseDuration: const Duration(milliseconds: 1500),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      // 作者信息
-                      Text(
-                        book.author,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.6),
-                              fontSize: 11,
-                            ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1579,23 +1587,6 @@ class _BookCoverItem extends StatelessWidget {
         },
       ),
     );
-  }
-
-  Rect? _resolveCoverRect(GlobalKey key) {
-    final keyContext = key.currentContext;
-    if (keyContext == null) {
-      return null;
-    }
-    final renderObject = keyContext.findRenderObject();
-    if (renderObject is! RenderBox || !renderObject.attached) {
-      return null;
-    }
-    final size = renderObject.size;
-    if (size.isEmpty) {
-      return null;
-    }
-    final origin = renderObject.localToGlobal(Offset.zero);
-    return origin & size;
   }
 
   Widget _buildCoverImage(BuildContext context, Book book) {

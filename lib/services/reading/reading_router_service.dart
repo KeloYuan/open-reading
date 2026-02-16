@@ -19,14 +19,13 @@ class ReadingRouterService {
     'mobi',
     'azw',
     'azw3',
+    'fb2',
+    'rtf',
+    'docx',
   };
 
   /// 打开书籍（使用阅读内核页面）
-  static Future<void> openBook(
-    BuildContext context,
-    Book book,
-    {Rect? sourceRect}
-  ) async {
+  static Future<void> openBook(BuildContext context, Book book) async {
     final repairedBook =
         await BookStorageRepairService().repairSingleBookIfNeeded(book);
 
@@ -43,40 +42,27 @@ class ReadingRouterService {
       return;
     }
 
-    await _navigateToReader(
-      context,
-      repairedBook,
-      sourceRect: sourceRect,
-    );
+    await _navigateToReader(context, repairedBook);
   }
 
-  static Future<void> _navigateToReader(
-    BuildContext context,
-    Book book,
-    {Rect? sourceRect}
-  ) async {
+  static Future<void> _navigateToReader(BuildContext context, Book book) async {
     final format = book.format.toLowerCase();
     if (!_supportedFormats.contains(format)) {
       if (context.mounted) {
         showSideToast(
           context,
-          '暂不支持 ${book.format.toUpperCase()}，当前支持 TXT / EPUB / MOBI / AZW3。',
+          '暂不支持 ${book.format.toUpperCase()}，当前支持 TXT / EPUB / MOBI / AZW / AZW3 / FB2 / RTF / DOCX。',
         );
       }
       return;
     }
 
-    await _openReaderKernelPage(
-      context,
-      book,
-      sourceRect: sourceRect,
-    );
+    await _openReaderKernelPage(context, book);
   }
 
   static Future<void> _openReaderKernelPage(
     BuildContext context,
     Book book,
-    {Rect? sourceRect}
   ) async {
     final hostBrightness = Theme.of(context).brightness;
     final page = ReaderKernelPage(book: book);
@@ -85,35 +71,35 @@ class ReadingRouterService {
 
     await Navigator.push(
       context,
-      sourceRect == null
-          ? PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => page,
-              transitionsBuilder:
-                  (context, animation, secondaryAnimation, child) {
-                const begin = 0.95;
-                const end = 1.0;
-                final tween = Tween(begin: begin, end: end);
-                final scaleAnimation = animation.drive(tween);
-
-                return FadeTransition(
-                  opacity: animation,
-                  child: ScaleTransition(
-                    scale: scaleAnimation,
-                    child: child,
-                  ),
-                );
-              },
-              transitionDuration: const Duration(milliseconds: 300),
-            )
-          : _CardExpandPageRoute(
-              page: page,
-              sourceRect: sourceRect,
-            ),
+      _buildReaderOpenRoute(page: page),
     );
 
     _restoreHostSystemUI(hostBrightness);
     await _recordRecentReadingFromDatabase(book.id);
     LibraryEventBus().notifyLibraryChanged();
+  }
+
+  static Route<void> _buildReaderOpenRoute({required Widget page}) {
+    return PageRouteBuilder<void>(
+      transitionDuration: const Duration(milliseconds: 280),
+      reverseTransitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (context, animation, secondaryAnimation) => page,
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        final curve = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        final scale = Tween<double>(begin: 0.985, end: 1.0).animate(curve);
+        return FadeTransition(
+          opacity: curve,
+          child: ScaleTransition(
+            scale: scale,
+            child: child,
+          ),
+        );
+      },
+    );
   }
 
   static void _restoreHostSystemUI(Brightness hostBrightness) {
@@ -151,58 +137,4 @@ class ReadingRouterService {
       debugPrint('⚠️ 回写最近阅读失败: $e');
     }
   }
-}
-
-class _CardExpandPageRoute<T> extends PageRouteBuilder<T> {
-  _CardExpandPageRoute({
-    required Widget page,
-    required Rect sourceRect,
-  }) : super(
-          transitionDuration: const Duration(milliseconds: 420),
-          reverseTransitionDuration: const Duration(milliseconds: 320),
-          pageBuilder: (context, animation, secondaryAnimation) => page,
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            final curved = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-              reverseCurve: Curves.easeInCubic,
-            );
-            final fade = CurvedAnimation(
-              parent: animation,
-              curve: const Interval(0.08, 1.0, curve: Curves.easeOut),
-              reverseCurve: Curves.easeIn,
-            );
-            final targetRect = Offset.zero & MediaQuery.of(context).size;
-
-            return AnimatedBuilder(
-              animation: curved,
-              child: child,
-              builder: (context, routeChild) {
-                final t = curved.value;
-                final currentRect = Rect.lerp(sourceRect, targetRect, t)!;
-                final radius = BorderRadius.lerp(
-                  BorderRadius.circular(20),
-                  BorderRadius.zero,
-                  t,
-                )!;
-
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Positioned.fromRect(
-                      rect: currentRect,
-                      child: Opacity(
-                        opacity: 0.88 + (0.12 * fade.value),
-                        child: ClipRRect(
-                          borderRadius: radius,
-                          child: routeChild!,
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            );
-          },
-        );
 }

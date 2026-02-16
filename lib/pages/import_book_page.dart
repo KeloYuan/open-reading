@@ -86,7 +86,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
 
     try {
       final book = await BookImportService().importBook(
-        encodingOverride: _encodingOverride == 'auto' ? null : _encodingOverride,
+        encodingOverride:
+            _encodingOverride == 'auto' ? null : _encodingOverride,
         progressCallback: (progress, message) {
           if (mounted) {
             setState(() {
@@ -261,7 +262,10 @@ class _ImportBookPageState extends State<ImportBookPage> {
             child: Icon(
               Icons.arrow_back_ios_new_rounded,
               size: 20,
-              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.82),
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.82),
             ),
           ),
         ),
@@ -278,10 +282,13 @@ class _ImportBookPageState extends State<ImportBookPage> {
               ),
             ),
             Text(
-              '支持 TXT / EPUB / PDF',
+              '支持 TXT / EPUB / PDF / MOBI / AZW / AZW3 / FB2 / RTF / DOCX',
               style: TextStyle(
                 fontSize: 13,
-                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.78),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurfaceVariant
+                    .withValues(alpha: 0.78),
               ),
             ),
           ],
@@ -399,7 +406,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
                   color: scheme.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(Icons.upload_file_rounded, color: scheme.primary, size: 24),
+                child: Icon(Icons.upload_file_rounded,
+                    color: scheme.primary, size: 24),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -429,7 +437,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
             style: FilledButton.styleFrom(
               backgroundColor: scheme.primary,
               foregroundColor: scheme.onPrimary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
             ),
             icon: const Icon(Icons.file_open_rounded, size: 20),
@@ -451,7 +460,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
       decoration: BoxDecoration(
         color: scheme.surface.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.outline.withValues(alpha: 0.12), width: 0.8),
+        border: Border.all(
+            color: scheme.outline.withValues(alpha: 0.12), width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -464,7 +474,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
                   color: scheme.primary.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(Icons.tune_rounded, size: 18, color: scheme.primary),
+                child:
+                    Icon(Icons.tune_rounded, size: 18, color: scheme.primary),
               ),
               const SizedBox(width: 10),
               Text(
@@ -502,7 +513,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
                     .map(
                       (option) => DropdownMenuItem(
                         value: option['value'],
-                        child: Text(option['label']!, style: const TextStyle(fontSize: 14)),
+                        child: Text(option['label']!,
+                            style: const TextStyle(fontSize: 14)),
                       ),
                     )
                     .toList(),
@@ -545,7 +557,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
                   color: scheme.tertiary.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(Icons.lightbulb_outline_rounded, size: 18, color: scheme.tertiary),
+                child: Icon(Icons.lightbulb_outline_rounded,
+                    size: 18, color: scheme.tertiary),
               ),
               const SizedBox(width: 10),
               Text(
@@ -574,7 +587,10 @@ class _ImportBookPageState extends State<ImportBookPage> {
         text,
         style: TextStyle(
           fontSize: 13,
-          color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.84),
+          color: Theme.of(context)
+              .colorScheme
+              .onSurfaceVariant
+              .withValues(alpha: 0.84),
         ),
       ),
     );
@@ -589,7 +605,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
           fontSize: 13,
           letterSpacing: 0.4,
           fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.68),
+          color:
+              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.68),
         ),
       ),
     );
@@ -605,7 +622,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
       decoration: BoxDecoration(
         color: scheme.surface.withValues(alpha: 0.88),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.outline.withValues(alpha: 0.12), width: 0.8),
+        border: Border.all(
+            color: scheme.outline.withValues(alpha: 0.12), width: 0.8),
       ),
       child: _isLoadingRecent
           ? const SizedBox(
@@ -639,7 +657,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
                         '暂无导入记录，先导入一本书试试',
                         style: TextStyle(
                           fontSize: 14,
-                          color: scheme.onSurfaceVariant.withValues(alpha: 0.80),
+                          color:
+                              scheme.onSurfaceVariant.withValues(alpha: 0.80),
                         ),
                       ),
                     ),
@@ -661,7 +680,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
                               child: Image.file(
                                 File(latestBook.coverImagePath!),
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                errorBuilder: (_, __, ___) =>
+                                    const SizedBox.shrink(),
                               ),
                             )
                           : null,
@@ -685,7 +705,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
                             '${_formatImportDate(latestBook.importDate)} · ${latestBook.format.toUpperCase()}',
                             style: TextStyle(
                               fontSize: 12,
-                              color: scheme.onSurfaceVariant.withValues(alpha: 0.70),
+                              color: scheme.onSurfaceVariant
+                                  .withValues(alpha: 0.70),
                             ),
                           ),
                         ],
@@ -711,7 +732,8 @@ class _ImportBookPageState extends State<ImportBookPage> {
       decoration: BoxDecoration(
         color: scheme.surface.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.outline.withValues(alpha: 0.12), width: 0.8),
+        border: Border.all(
+            color: scheme.outline.withValues(alpha: 0.12), width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -725,7 +747,9 @@ class _ImportBookPageState extends State<ImportBookPage> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  _progress >= 1.0 ? Icons.check_circle_rounded : Icons.sync_rounded,
+                  _progress >= 1.0
+                      ? Icons.check_circle_rounded
+                      : Icons.sync_rounded,
                   size: 20,
                   color: scheme.primary,
                 ),

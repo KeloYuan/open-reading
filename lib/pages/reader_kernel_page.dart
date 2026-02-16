@@ -62,6 +62,9 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   bool _chapterSwitching = false;
   ChapterBoundaryDirection? _chapterTransitionDirection;
   bool _chromeVisible = false;
+  bool _isAndroidTabletViewport = false;
+  double _stableAndroidTopInset = 24.0;
+  double _stableAndroidBottomInset = 20.0;
   Timer? _immersiveTimer;
   final List<_ReaderThemePreset> _themes = const [
     _ReaderThemePreset(
@@ -163,6 +166,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   @override
   void initState() {
     super.initState();
+    _isAndroidTabletViewport = _detectAndroidTabletViewport();
     WidgetsBinding.instance.addObserver(this);
     _readerKeysChannel.setMethodCallHandler(_handleReaderKeyCall);
     _controller = ReaderKernelController();
@@ -170,7 +174,27 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     _lastPersistedTotalPages = widget.book.totalPages;
     _applyReaderSystemUI(immersive: true);
     _startStatsTracking();
-    _bootstrap();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      unawaited(_bootstrap());
+    });
+  }
+
+  bool _detectAndroidTabletViewport() {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return false;
+    }
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) {
+      return false;
+    }
+    final view = views.first;
+    final logicalWidth = view.physicalSize.width / view.devicePixelRatio;
+    final logicalHeight = view.physicalSize.height / view.devicePixelRatio;
+    final shortestSide = math.min(logicalWidth, logicalHeight);
+    return shortestSide >= 600.0;
   }
 
   Future<void> _bootstrap() async {
@@ -824,7 +848,10 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     final isMobilePlatform = defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS;
     if (isMobilePlatform) {
-      if (immersive) {
+      if (defaultTargetPlatform == TargetPlatform.android &&
+          _isAndroidTabletViewport) {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      } else if (immersive) {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       } else {
         SystemChrome.setEnabledSystemUIMode(
@@ -918,6 +945,25 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
       }
       _setChromeVisible(false);
     });
+  }
+
+  bool _isAndroidTabletByMedia(MediaQueryData media) {
+    if (defaultTargetPlatform != TargetPlatform.android) {
+      return false;
+    }
+    final shortestSide = math.min(media.size.width, media.size.height);
+    return shortestSide >= 600.0;
+  }
+
+  void _captureStableAndroidInsets(MediaQueryData media) {
+    _stableAndroidTopInset = math.max(
+      _stableAndroidTopInset,
+      math.max(media.viewPadding.top, 24.0),
+    );
+    _stableAndroidBottomInset = math.max(
+      _stableAndroidBottomInset,
+      math.max(media.viewPadding.bottom, 20.0),
+    );
   }
 
   void _setChromeVisible(bool visible) {
@@ -1160,12 +1206,33 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                 final enableSpread = constraints.maxWidth >= 900 && isLandscape;
                 final platform = Theme.of(context).platform;
                 final isAndroid = platform == TargetPlatform.android;
+                final isAndroidTablet = _isAndroidTabletByMedia(media);
+                if (isAndroidTablet) {
+                  _captureStableAndroidInsets(media);
+                }
+                if (_isAndroidTabletViewport != isAndroidTablet) {
+                  _isAndroidTabletViewport = isAndroidTablet;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) {
+                      return;
+                    }
+                    _applyReaderSystemUI(immersive: !_chromeVisible);
+                  });
+                }
                 // Use viewPadding to keep pagination area stable when chrome toggles.
-                final topInset = media.viewPadding.top;
-                final bottomInset = media.viewPadding.bottom;
-                const topUiReserve = 8.0;
+                final topInset = isAndroidTablet
+                    ? _stableAndroidTopInset
+                    : media.viewPadding.top;
+                final bottomInset = isAndroidTablet
+                    ? _stableAndroidBottomInset
+                    : media.viewPadding.bottom;
+                final topUiReserve = isAndroidTablet ? 38.0 : 8.0;
                 // Keep a dedicated footer-safe lane for bottom page label to avoid text overlap.
-                final bottomUiReserve = isAndroid ? 32.0 : 28.0;
+                final bottomUiReserve = isAndroidTablet
+                    ? 36.0
+                    : isAndroid
+                        ? 32.0
+                        : 28.0;
                 final padding = EdgeInsets.fromLTRB(
                   16,
                   topInset + topUiReserve,

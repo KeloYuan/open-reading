@@ -8,9 +8,12 @@ import 'data/reader_models.dart';
 import 'document/flow_doc.dart';
 import 'paginator/flow_paginator.dart';
 import 'paginator/page_plan.dart';
+import 'parser/docx_parser.dart';
 import 'parser/epub_parser.dart';
+import 'parser/fb2_parser.dart';
 import 'parser/mobi_parser.dart';
 import 'parser/parser_models.dart';
+import 'parser/rtf_parser.dart';
 import 'parser/txt_parser.dart';
 import 'selection/reader_selection.dart';
 import 'storage/reader_storage.dart';
@@ -119,13 +122,27 @@ class ReaderKernelController extends ChangeNotifier {
         );
       }
 
-      final position = await _storage.getReadingPosition(bookId);
+      final skipLegacyPosition = _shouldSkipLegacyPositionRestore(
+        format: format,
+        requestedTitle: title,
+        parsedTitle: parsed.book.title,
+      );
+      final position =
+          skipLegacyPosition ? null : await _storage.getReadingPosition(bookId);
       if (position != null) {
         final chapter = parsed.chapters
             .indexWhere((e) => e.chapter.id == position.chapterId);
         if (chapter >= 0) {
           _chapterIndex = chapter;
         }
+      } else if (skipLegacyPosition && parsed.chapters.isNotEmpty) {
+        await _storage.saveReadingPosition(
+          bookId: bookId,
+          position: ReadingPosition(
+            chapterId: parsed.chapters.first.chapter.id,
+            anchorOffset: 0,
+          ),
+        );
       }
 
       await _loadAnnotations();
@@ -203,7 +220,49 @@ class ReaderKernelController extends ChangeNotifier {
     if (normalized == 'mobi' || normalized == 'azw' || normalized == 'azw3') {
       return MobiParser();
     }
+    if (normalized == 'fb2') {
+      return Fb2Parser();
+    }
+    if (normalized == 'rtf') {
+      return RtfParser();
+    }
+    if (normalized == 'docx') {
+      return DocxParser();
+    }
     return TxtParser();
+  }
+
+  bool _shouldSkipLegacyPositionRestore({
+    required String format,
+    required String requestedTitle,
+    required String parsedTitle,
+  }) {
+    final normalizedFormat = format.toLowerCase();
+    final isMobiLike = normalizedFormat == 'mobi' ||
+        normalizedFormat == 'azw' ||
+        normalizedFormat == 'azw3';
+    if (!isMobiLike) {
+      return false;
+    }
+
+    final req = requestedTitle.trim();
+    final parsed = parsedTitle.trim();
+    if (req.isEmpty || parsed.isEmpty || req == parsed) {
+      return false;
+    }
+
+    final hasFileNoise = RegExp(
+      r'(z-library|1lib|z-lib|\.azw3|\.azw|\.mobi|\(|\)|_)',
+      caseSensitive: false,
+    ).hasMatch(req);
+    if (hasFileNoise) {
+      return true;
+    }
+
+    if (req.length > parsed.length + 8 && req.contains(parsed)) {
+      return true;
+    }
+    return false;
   }
 
   Future<void> updateViewport({
