@@ -40,6 +40,7 @@ class _SettingsPageState extends State<SettingsPage> {
   // 阅读设置
   bool _enablePageAnimation = true;
   bool _enableVolumeKeyTurn = true;
+  bool _showSystemStatusBarInReader = false;
   // 只使用沉浸式阅读器，不需要引擎选择
 
   // 书源设置
@@ -60,7 +61,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _enablePerformanceMonitor = false;
   bool _enableMemoryStats = false;
   bool _showFPS = false;
-  String _appVersion = '520.1314';
+  String _appVersion = '2.2026.0216';
 
   @override
   void initState() {
@@ -101,6 +102,8 @@ class _SettingsPageState extends State<SettingsPage> {
       // 阅读设置
       _enablePageAnimation = prefs.getBool('enablePageAnimation') ?? true;
       _enableVolumeKeyTurn = prefs.getBool('enableVolumeKeyTurn') ?? true;
+      _showSystemStatusBarInReader =
+          prefs.getBool('readerShowSystemStatusBar') ?? false;
 
       // 引擎选择相关配置已移除，只使用沉浸式阅读器
 
@@ -135,7 +138,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _loadAppVersion() {
-    _appVersion = '520.1314';
+    _appVersion = '2.2026.0216';
   }
 
   Future<void> _saveSettings() async {
@@ -151,6 +154,10 @@ class _SettingsPageState extends State<SettingsPage> {
     // 阅读设置
     await prefs.setBool('enablePageAnimation', _enablePageAnimation);
     await prefs.setBool('enableVolumeKeyTurn', _enableVolumeKeyTurn);
+    await prefs.setBool(
+      'readerShowSystemStatusBar',
+      _showSystemStatusBarInReader,
+    );
     // 引擎选择相关配置已移除，只使用沉浸式阅读器
 
     // 其他设置
@@ -266,6 +273,16 @@ class _SettingsPageState extends State<SettingsPage> {
                 onChanged: (value) =>
                     setState(() => _enableVolumeKeyTurn = value),
                 icon: Icons.volume_up,
+              ),
+              _buildSwitchSetting(
+                title: '阅读时显示系统状态栏',
+                subtitle: _showSystemStatusBarInReader
+                    ? '已隐藏阅读页电量/时间 UI'
+                    : '使用阅读页电量/时间 UI',
+                value: _showSystemStatusBarInReader,
+                onChanged: (value) =>
+                    setState(() => _showSystemStatusBarInReader = value),
+                icon: Icons.vertical_align_top_rounded,
               ),
             ],
           ),
@@ -1385,7 +1402,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             const SizedBox(width: 6),
                             Flexible(
                               child: Text(
-                                'GitHub仓库地址：https://github.com/KeloYuan/Origo-Reader',
+                                'GitHub 仓库',
                                 textAlign: TextAlign.center,
                                 style: Theme.of(context)
                                     .textTheme
@@ -1409,7 +1426,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '兄弟萌，情人节快乐！我喜欢哈基怡',
+                      '2026新年快乐！感谢大家的支持和反馈，祝大家在新的一年里阅读愉快，收获满满！',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Theme.of(

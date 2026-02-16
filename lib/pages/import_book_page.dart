@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/book.dart';
+import '../pages/online_book_search_page.dart';
+import '../pages/webdav_remote_import_page.dart';
 import '../services/books/book_services.dart';
+import '../services/sync/webdav_sync_service.dart';
 import '../utils/localization_extension.dart';
 import '../utils/page_style_helper.dart';
 import '../utils/system_ui_helper.dart';
@@ -60,11 +63,54 @@ class _ImportBookPageState extends State<ImportBookPage> {
   }
 
   void _onChannelSelected(_ImportChannel channel) {
-    if (channel != _ImportChannel.local) {
-      showSideToast(context, '该导入通道即将上线，当前可用：本地文件导入');
+    setState(() => _selectedChannel = channel);
+  }
+
+  Future<void> _startImport() async {
+    switch (_selectedChannel) {
+      case _ImportChannel.local:
+        await _pickFile();
+        break;
+      case _ImportChannel.webdav:
+        await _importFromWebDav();
+        break;
+      case _ImportChannel.source:
+        await _importFromSource();
+        break;
+    }
+  }
+
+  Future<void> _importFromWebDav() async {
+    final webDavService = WebDavSyncService();
+    if (!webDavService.isConfigured) {
+      showSideToast(context, '请先在设置中完成 WebDAV 配置');
       return;
     }
-    setState(() => _selectedChannel = channel);
+
+    final importedCount = await Navigator.push<int>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const WebDavRemoteImportPage(),
+      ),
+    );
+
+    if (!mounted) return;
+    if ((importedCount ?? 0) > 0) {
+      await _loadLatestImportedBook();
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    }
+  }
+
+  Future<void> _importFromSource() async {
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const OnlineBookSearchPage.aggregate(),
+      ),
+    );
+    if (!mounted) return;
+    await _loadLatestImportedBook();
   }
 
   String _formatImportDate(DateTime date) {
@@ -162,8 +208,10 @@ class _ImportBookPageState extends State<ImportBookPage> {
                         _buildImportChannelSelector(),
                         const SizedBox(height: 16),
                         _buildUploadCard(),
-                        const SizedBox(height: 12),
-                        _buildEncodingCard(),
+                        if (_selectedChannel == _ImportChannel.local) ...[
+                          const SizedBox(height: 12),
+                          _buildEncodingCard(),
+                        ],
                         const SizedBox(height: 12),
                         _buildTipsCard(),
                         const SizedBox(height: 12),
@@ -214,6 +262,17 @@ class _ImportBookPageState extends State<ImportBookPage> {
   }
 
   Widget _buildBottomActionBar(ColorScheme scheme, Color actionBarColor) {
+    final actionLabel = switch (_selectedChannel) {
+      _ImportChannel.local => '选择文件并导入',
+      _ImportChannel.webdav => '从 WebDAV 远端导入',
+      _ImportChannel.source => '打开书源搜索导入',
+    };
+    final actionIcon = switch (_selectedChannel) {
+      _ImportChannel.local => Icons.file_open_rounded,
+      _ImportChannel.webdav => Icons.cloud_download_rounded,
+      _ImportChannel.source => Icons.travel_explore_rounded,
+    };
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       decoration: BoxDecoration(
@@ -231,7 +290,7 @@ class _ImportBookPageState extends State<ImportBookPage> {
           width: double.infinity,
           height: 52,
           child: FilledButton.icon(
-            onPressed: _isLoading ? null : _pickFile,
+            onPressed: _isLoading ? null : _startImport,
             style: FilledButton.styleFrom(
               backgroundColor: scheme.primary,
               foregroundColor: scheme.onPrimary,
@@ -239,9 +298,9 @@ class _ImportBookPageState extends State<ImportBookPage> {
                 borderRadius: BorderRadius.circular(16),
               ),
             ),
-            icon: const Icon(Icons.file_open_rounded, size: 20),
+            icon: Icon(actionIcon, size: 20),
             label: Text(
-              _isLoading ? '导入中...' : '选择文件并导入',
+              _isLoading ? '导入中...' : actionLabel,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
           ),
@@ -383,6 +442,27 @@ class _ImportBookPageState extends State<ImportBookPage> {
 
   Widget _buildUploadCard() {
     final scheme = Theme.of(context).colorScheme;
+    final cardTitle = switch (_selectedChannel) {
+      _ImportChannel.local => '拖拽或点击上传',
+      _ImportChannel.webdav => '浏览 WebDAV 远端书籍',
+      _ImportChannel.source => '从在线书源下载导入',
+    };
+    final cardDesc = switch (_selectedChannel) {
+      _ImportChannel.local => '导入后自动生成目录与分页，支持较大文件分段处理。',
+      _ImportChannel.webdav => '连接你的 WebDAV 云端，选择远端书籍导入到本地书架。',
+      _ImportChannel.source => '一键聚合搜索已启用书源，下载后进入与本地一致的阅读体验。',
+    };
+    final cardButton = switch (_selectedChannel) {
+      _ImportChannel.local => '选择文件',
+      _ImportChannel.webdav => '打开远端列表',
+      _ImportChannel.source => '打开书源搜索',
+    };
+    final cardIcon = switch (_selectedChannel) {
+      _ImportChannel.local => Icons.upload_file_rounded,
+      _ImportChannel.webdav => Icons.cloud_sync_outlined,
+      _ImportChannel.source => Icons.travel_explore_outlined,
+    };
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -406,13 +486,12 @@ class _ImportBookPageState extends State<ImportBookPage> {
                   color: scheme.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(Icons.upload_file_rounded,
-                    color: scheme.primary, size: 24),
+                child: Icon(cardIcon, color: scheme.primary, size: 24),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Text(
-                  '拖拽或点击上传',
+                  cardTitle,
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
@@ -424,7 +503,7 @@ class _ImportBookPageState extends State<ImportBookPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            '导入后自动生成目录与分页，支持较大文件分段处理。',
+            cardDesc,
             style: TextStyle(
               fontSize: 14,
               color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
@@ -433,7 +512,7 @@ class _ImportBookPageState extends State<ImportBookPage> {
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
-            onPressed: _isLoading ? null : _pickFile,
+            onPressed: _isLoading ? null : _startImport,
             style: FilledButton.styleFrom(
               backgroundColor: scheme.primary,
               foregroundColor: scheme.onPrimary,
@@ -441,10 +520,10 @@ class _ImportBookPageState extends State<ImportBookPage> {
                   borderRadius: BorderRadius.circular(12)),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
             ),
-            icon: const Icon(Icons.file_open_rounded, size: 20),
-            label: const Text(
-              '选择文件',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            icon: Icon(cardIcon, size: 20),
+            label: Text(
+              cardButton,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
             ),
           ),
         ],

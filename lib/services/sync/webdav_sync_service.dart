@@ -556,6 +556,181 @@ class WebDavSyncService {
     }
   }
 
+  /// 获取远端可导入书籍列表（来自 books/books.json）
+  Future<List<Book>> listRemoteBooksForImport() async {
+    if (!_isConfigured) {
+      throw Exception('WebDAV 未配置');
+    }
+    final books = <Book>[];
+
+    try {
+      final response = await _retryRequest<Response<dynamic>>(
+        label: '读取远端书籍列表',
+        action: () => _dio.get<dynamic>(WebDavSyncPathHelper.booksFile),
+      );
+
+      final payload = response.data;
+      dynamic decoded = payload;
+      if (payload is String) {
+        decoded = jsonDecode(payload);
+      }
+
+      if (decoded is List) {
+        for (final item in decoded) {
+          if (item is! Map) {
+            continue;
+          }
+          try {
+            final map = Map<String, dynamic>.from(item);
+            books.add(Book.fromMap(map));
+          } catch (e) {
+            debugPrint('解析远端书籍失败: $e');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('读取 books.json 失败，准备回退 files 列表: $e');
+    }
+
+    final fileFallbackBooks = await _listRemoteBooksFromFilesDir();
+    final mergedByPath = <String, Book>{};
+    for (final book in books) {
+      mergedByPath[book.filePath] = book;
+    }
+    for (final book in fileFallbackBooks) {
+      mergedByPath.putIfAbsent(book.filePath, () => book);
+    }
+
+    final merged = mergedByPath.values.toList()
+      ..sort((a, b) => b.importDate.compareTo(a.importDate));
+    return merged;
+  }
+
+  Future<List<Book>> _listRemoteBooksFromFilesDir() async {
+    try {
+      final response = await _retryRequest<Response<dynamic>>(
+        label: '列出远端文件目录',
+        action: () => _dio.request<dynamic>(
+          WebDavSyncPathHelper.filesDir,
+          options: Options(
+            method: 'PROPFIND',
+            headers: {'Depth': '1'},
+            responseType: ResponseType.plain,
+          ),
+          data:
+              '<?xml version="1.0"?><propfind xmlns="DAV:"><prop><displayname/></prop></propfind>',
+        ),
+      );
+
+      final body = response.data?.toString() ?? '';
+      if (body.trim().isEmpty) {
+        return const <Book>[];
+      }
+
+      final matches =
+          RegExp(r'<[^>]*href[^>]*>([^<]+)</[^>]*href>').allMatches(body);
+      final books = <Book>[];
+      final seen = <String>{};
+
+      for (final match in matches) {
+        final rawHref = match.group(1)?.trim() ?? '';
+        if (rawHref.isEmpty) {
+          continue;
+        }
+        final decodedHref = Uri.decodeFull(rawHref);
+        final normalizedPath = decodedHref.split('?').first;
+        if (normalizedPath.endsWith('/')) {
+          continue;
+        }
+        final fileName = p.basename(normalizedPath);
+        if (fileName.isEmpty || !seen.add(fileName)) {
+          continue;
+        }
+
+        final extension =
+            p.extension(fileName).replaceFirst('.', '').toLowerCase();
+        final supported = <String>{
+          'txt',
+          'epub',
+          'pdf',
+          'mobi',
+          'azw',
+          'azw3',
+          'fb2',
+          'rtf',
+          'docx',
+          'html',
+        };
+        if (!supported.contains(extension)) {
+          continue;
+        }
+
+        final title = p.basenameWithoutExtension(fileName);
+        books.add(
+          Book(
+            title: title.isEmpty ? fileName : title,
+            author: '未知',
+            filePath: fileName,
+            format: extension,
+            importDate: DateTime.now(),
+          ),
+        );
+      }
+
+      return books;
+    } catch (e) {
+      debugPrint('通过 PROPFIND 读取 files 目录失败: $e');
+      return const <Book>[];
+    }
+  }
+
+  /// 下载远端书籍文件并返回本地路径
+  Future<String?> downloadRemoteBookForImport(Book remoteBook) async {
+    if (!_isConfigured) {
+      throw Exception('WebDAV 未配置');
+    }
+
+    final bytes = await _downloadRemoteBookBytes(remoteBook);
+    if (bytes == null || bytes.isEmpty) {
+      return null;
+    }
+
+    final docsDir = await getApplicationDocumentsDirectory();
+    final booksDir = Directory(p.join(docsDir.path, 'books'));
+    if (!await booksDir.exists()) {
+      await booksDir.create(recursive: true);
+    }
+
+    final extension = _normalizeBookExtension(remoteBook.format);
+    final stem = _localBookFileStem(remoteBook);
+    var localPath = p.join(booksDir.path, '$stem$extension');
+    var index = 1;
+    while (await File(localPath).exists()) {
+      localPath = p.join(booksDir.path, '${stem}_$index$extension');
+      index++;
+    }
+
+    await File(localPath).writeAsBytes(bytes, flush: true);
+    return localPath;
+  }
+
+  /// 下载并导入远端书籍到本地书架
+  Future<Book?> importRemoteBook(Book remoteBook) async {
+    final localPath = await downloadRemoteBookForImport(remoteBook);
+    if (localPath == null) {
+      return null;
+    }
+
+    final insertedId = await _bookDao.insertBook(
+      remoteBook.copyWith(
+        id: null,
+        filePath: localPath,
+        importDate: DateTime.now(),
+      ),
+    );
+    return _bookDao.getBookById(insertedId);
+  }
+
   /// 执行同步
   Future<bool> _performSync() async {
     if (!_isConfigured) {

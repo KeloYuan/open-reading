@@ -1,17 +1,34 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import 'package:xxread/models/book_source.dart';
-import 'package:xxread/services/books/online_book_source_service.dart';
+import 'package:xxread/models/book.dart';
+import 'package:xxread/services/books/book_services.dart';
+import 'package:xxread/services/library/library_event_bus_service.dart';
+import 'package:xxread/services/reading/reading_router_service.dart';
 import 'package:xxread/widgets/side_toast.dart';
 
 class OnlineBookSearchPage extends StatefulWidget {
   const OnlineBookSearchPage({
     super.key,
-    required this.source,
+    this.source,
+    this.aggregateEnabledSources = false,
     this.initialKeyword = '',
   });
 
-  final BookSource source;
+  const OnlineBookSearchPage.aggregate({
+    super.key,
+    this.initialKeyword = '',
+  })  : source = null,
+        aggregateEnabledSources = true;
+
+  final BookSource? source;
+  final bool aggregateEnabledSources;
   final String initialKeyword;
 
   @override
@@ -20,23 +37,26 @@ class OnlineBookSearchPage extends StatefulWidget {
 
 class _OnlineBookSearchPageState extends State<OnlineBookSearchPage> {
   final _service = OnlineBookSourceService.instance();
+  final _sourceService = BookSourceService();
+  final _bookDao = BookDao();
   late final TextEditingController _keywordController;
+  final Map<String, BookSource> _sourceById = <String, BookSource>{};
+  List<BookSource> _searchSources = const <BookSource>[];
 
   List<OnlineBookItem> _results = const <OnlineBookItem>[];
   bool _isLoading = false;
+  bool _isDownloading = false;
+  bool _sourcesReady = false;
   bool _hasSearched = false;
   int _page = 1;
   String _error = '';
+  String _downloadMessage = '';
 
   @override
   void initState() {
     super.initState();
     _keywordController = TextEditingController(text: widget.initialKeyword);
-    if (widget.initialKeyword.trim().isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _search(resetPage: true);
-      });
-    }
+    _prepareSearchSources();
   }
 
   @override
@@ -45,7 +65,53 @@ class _OnlineBookSearchPageState extends State<OnlineBookSearchPage> {
     super.dispose();
   }
 
+  Future<void> _prepareSearchSources() async {
+    if (widget.aggregateEnabledSources) {
+      final enabledSources = await _sourceService.getEnabledSources();
+      if (!mounted) return;
+      setState(() {
+        _searchSources = enabledSources;
+        _sourcesReady = true;
+      });
+      for (final source in enabledSources) {
+        _sourceById[source.id] = source;
+      }
+    } else {
+      final singleSource = widget.source;
+      if (singleSource != null) {
+        _searchSources = <BookSource>[singleSource];
+        _sourceById[singleSource.id] = singleSource;
+      }
+      _sourcesReady = true;
+    }
+
+    if (widget.initialKeyword.trim().isNotEmpty && mounted) {
+      _search(resetPage: true);
+    }
+  }
+
+  BookSource? _resolveSource(OnlineBookItem item) {
+    final matched = _sourceById[item.sourceId];
+    if (matched != null) {
+      return matched;
+    }
+    final fallback = _searchSources.where((s) => s.id == item.sourceId);
+    if (fallback.isNotEmpty) {
+      return fallback.first;
+    }
+    return widget.source;
+  }
+
   Future<void> _search({required bool resetPage}) async {
+    if (!_sourcesReady) {
+      showSideToast(context, '正在加载书源，请稍候');
+      return;
+    }
+    if (_searchSources.isEmpty) {
+      showSideToast(context, '没有可用书源，请先启用书源');
+      return;
+    }
+
     final keyword = _keywordController.text.trim();
     if (keyword.isEmpty) {
       showSideToast(context, '请输入关键词');
@@ -63,11 +129,17 @@ class _OnlineBookSearchPageState extends State<OnlineBookSearchPage> {
 
     try {
       final pageToSearch = resetPage ? 1 : _page + 1;
-      final list = await _service.searchBooks(
-        source: widget.source,
-        keyword: keyword,
-        page: pageToSearch,
-      );
+      final list = widget.aggregateEnabledSources
+          ? await _service.searchBooksAcrossSources(
+              sources: _searchSources,
+              keyword: keyword,
+              page: pageToSearch,
+            )
+          : await _service.searchBooks(
+              source: _searchSources.first,
+              keyword: keyword,
+              page: pageToSearch,
+            );
 
       if (!mounted) return;
       setState(() {
@@ -98,15 +170,156 @@ class _OnlineBookSearchPageState extends State<OnlineBookSearchPage> {
   }
 
   void _openBookChapters(OnlineBookItem book) {
+    final source = _resolveSource(book);
+    if (source == null) {
+      showSideToast(context, '无法定位该结果对应的书源');
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => OnlineChapterListPage(
-          source: widget.source,
+          source: source,
           book: book,
+          onDownloadAndRead: () => _downloadAndOpen(book),
         ),
       ),
     );
+  }
+
+  String _safeFileName(String input) {
+    return input
+        .trim()
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+        .replaceAll(RegExp(r'\s+'), '_')
+        .replaceAll(RegExp(r'_+'), '_');
+  }
+
+  Future<void> _downloadAndOpen(OnlineBookItem book) async {
+    if (_isDownloading) {
+      showSideToast(context, '已有下载任务进行中');
+      return;
+    }
+
+    final source = _resolveSource(book);
+    if (source == null) {
+      showSideToast(context, '无法定位该结果对应的书源');
+      return;
+    }
+
+    setState(() {
+      _isDownloading = true;
+      _downloadMessage = '正在获取目录...';
+    });
+
+    try {
+      final chapters = await _service.getChapters(
+        source: source,
+        bookUrl: book.bookUrl,
+      );
+      if (chapters.isEmpty) {
+        throw Exception('未获取到可下载章节');
+      }
+
+      final txtBuffer = StringBuffer();
+      final htmlBuffer = StringBuffer()
+        ..writeln('<!doctype html>')
+        ..writeln('<html><head><meta charset="utf-8">')
+        ..writeln('<title>${htmlEscape.convert(book.title)}</title>')
+        ..writeln(
+          '<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.7;padding:20px;max-width:820px;margin:0 auto;}h1{font-size:24px;}h2{font-size:18px;margin-top:28px;}p{white-space:pre-wrap;}</style>',
+        )
+        ..writeln('</head><body>')
+        ..writeln('<h1>${htmlEscape.convert(book.title)}</h1>')
+        ..writeln('<p>作者：${htmlEscape.convert(book.author)}</p>')
+        ..writeln('<p>来源：${htmlEscape.convert(source.bookSourceName)}</p>');
+
+      int successCount = 0;
+      for (int i = 0; i < chapters.length; i++) {
+        final chapter = chapters[i];
+        if (!mounted) return;
+        setState(() {
+          _downloadMessage = '下载正文 ${i + 1}/${chapters.length}';
+        });
+        try {
+          final content = await _service.getChapterContent(
+            source: source,
+            chapter: chapter,
+          );
+          final chapterText = content.content.trim();
+          if (chapterText.isEmpty) {
+            continue;
+          }
+          successCount++;
+          txtBuffer
+            ..writeln(chapter.title)
+            ..writeln()
+            ..writeln(chapterText)
+            ..writeln();
+          htmlBuffer
+            ..writeln('<h2>${htmlEscape.convert(chapter.title)}</h2>')
+            ..writeln('<p>${htmlEscape.convert(chapterText)}</p>');
+        } catch (_) {
+          continue;
+        }
+      }
+
+      htmlBuffer.writeln('</body></html>');
+
+      if (successCount == 0 || txtBuffer.toString().trim().isEmpty) {
+        throw Exception('章节内容为空或规则不兼容');
+      }
+
+      setState(() {
+        _downloadMessage = '写入文件并入库...';
+      });
+
+      final docsDir = await getApplicationDocumentsDirectory();
+      final importDir = Directory(p.join(docsDir.path, 'online_imports'));
+      if (!await importDir.exists()) {
+        await importDir.create(recursive: true);
+      }
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final baseName = _safeFileName('${book.title}_${source.bookSourceName}');
+      final txtPath = p.join(importDir.path, '${baseName}_$timestamp.txt');
+      final htmlPath = p.join(importDir.path, '${baseName}_$timestamp.html');
+
+      final txtContent = txtBuffer.toString().trim();
+      await File(txtPath).writeAsString(txtContent, flush: true);
+      await File(htmlPath).writeAsString(htmlBuffer.toString(), flush: true);
+
+      final hash = md5.convert(utf8.encode(txtContent)).toString();
+      final insertedId = await _bookDao.insertBook(
+        Book(
+          title: '${book.title} [${source.bookSourceName}]',
+          author: book.author.isEmpty ? '未知' : book.author,
+          filePath: txtPath,
+          format: 'txt',
+          contentHash: hash,
+        ),
+      );
+
+      final inserted = await _bookDao.getBookById(insertedId);
+      if (!mounted || inserted == null) {
+        return;
+      }
+
+      LibraryEventBus().notifyLibraryChanged();
+      showSideToast(context, '下载完成，已保存 TXT + HTML');
+      await ReadingRouterService.openBook(context, inserted);
+    } catch (e) {
+      if (mounted) {
+        showSideToast(context, '下载失败：$e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDownloading = false;
+          _downloadMessage = '';
+        });
+      }
+    }
   }
 
   @override
@@ -115,7 +328,13 @@ class _OnlineBookSearchPageState extends State<OnlineBookSearchPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.source.bookSourceName),
+        title: Text(
+          widget.aggregateEnabledSources
+              ? '全源搜索'
+              : (_searchSources.isNotEmpty
+                  ? _searchSources.first.bookSourceName
+                  : '书源搜索'),
+        ),
         actions: [
           IconButton(
             onPressed: _isLoading ? null : () => _search(resetPage: true),
@@ -144,13 +363,37 @@ class _OnlineBookSearchPageState extends State<OnlineBookSearchPage> {
                 ),
                 const SizedBox(width: 8),
                 FilledButton(
-                  onPressed: _isLoading ? null : () => _search(resetPage: true),
+                  onPressed: (_isLoading || _isDownloading)
+                      ? null
+                      : () => _search(resetPage: true),
                   child: const Text('搜索'),
                 ),
               ],
             ),
           ),
           if (_isLoading) const LinearProgressIndicator(minHeight: 2),
+          if (_isDownloading)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _downloadMessage.isEmpty ? '下载中...' : _downloadMessage,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: _buildBody(theme),
           ),
@@ -221,6 +464,14 @@ class _OnlineBookSearchPageState extends State<OnlineBookSearchPage> {
                       book.author.isEmpty ? '作者未知' : '作者：${book.author}',
                       style: theme.textTheme.bodySmall,
                     ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '来源：${book.sourceName}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     if (book.latestChapter.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
@@ -250,6 +501,14 @@ class _OnlineBookSearchPageState extends State<OnlineBookSearchPage> {
                           icon: const Icon(Icons.list_alt),
                           label: const Text('目录'),
                         ),
+                        const SizedBox(width: 6),
+                        FilledButton.icon(
+                          onPressed: _isDownloading
+                              ? null
+                              : () => _downloadAndOpen(book),
+                          icon: const Icon(Icons.download_rounded, size: 18),
+                          label: const Text('下载并阅读'),
+                        ),
                       ],
                     ),
                   ],
@@ -268,10 +527,12 @@ class OnlineChapterListPage extends StatefulWidget {
     super.key,
     required this.source,
     required this.book,
+    this.onDownloadAndRead,
   });
 
   final BookSource source;
   final OnlineBookItem book;
+  final Future<void> Function()? onDownloadAndRead;
 
   @override
   State<OnlineChapterListPage> createState() => _OnlineChapterListPageState();
@@ -319,18 +580,13 @@ class _OnlineChapterListPageState extends State<OnlineChapterListPage> {
     }
   }
 
-  void _openReader(int index) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => OnlineReaderPage(
-          source: widget.source,
-          book: widget.book,
-          chapters: _chapters,
-          initialIndex: index,
-        ),
-      ),
-    );
+  Future<void> _downloadAndRead() async {
+    final callback = widget.onDownloadAndRead;
+    if (callback == null) {
+      showSideToast(context, '当前页面未接入下载能力');
+      return;
+    }
+    await callback();
   }
 
   @override
@@ -344,6 +600,11 @@ class _OnlineChapterListPageState extends State<OnlineChapterListPage> {
             onPressed: _isLoading ? null : _loadChapters,
             icon: const Icon(Icons.refresh),
             tooltip: '刷新目录',
+          ),
+          IconButton(
+            onPressed: _isLoading ? null : _downloadAndRead,
+            icon: const Icon(Icons.download_rounded),
+            tooltip: '下载并阅读',
           ),
         ],
       ),
@@ -375,7 +636,10 @@ class _OnlineChapterListPageState extends State<OnlineChapterListPage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text('第 ${index + 1} 章'),
-                          onTap: () => _openReader(index),
+                          onTap: () => showSideToast(
+                            context,
+                            '为保证体验一致，请使用右上角“下载并阅读”',
+                          ),
                         );
                       },
                     ),

@@ -519,7 +519,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.520.1314;
+				MARKETING_VERSION = 2.2026.0216;
 				PRODUCT_BUNDLE_IDENTIFIER = com.niki.xxread;
 				PRODUCT_NAME = "Origo Reader";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -537,7 +537,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 2.2026.0216;
 				PRODUCT_BUNDLE_IDENTIFIER = com.niki.xxread.RunnerTests;
 				PRODUCT_NAME = "Origo Reader";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -555,7 +555,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 2.2026.0216;
 				PRODUCT_BUNDLE_IDENTIFIER = com.niki.xxread.RunnerTests;
 				PRODUCT_NAME = "Origo Reader";
 				SWIFT_VERSION = 5.0;
@@ -571,7 +571,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 2.2026.0216;
 				PRODUCT_BUNDLE_IDENTIFIER = com.niki.xxread.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -708,7 +708,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.520.1314;
+				MARKETING_VERSION = 2.2026.0216;
 				PRODUCT_BUNDLE_IDENTIFIER = com.niki.xxread;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -737,7 +737,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.520.1314;
+				MARKETING_VERSION = 2.2026.0216;
 				PRODUCT_BUNDLE_IDENTIFIER = com.niki.xxread;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";

@@ -251,6 +251,12 @@ class BookSourcePageState extends State<BookSourcePage>
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildHeaderButton(
+          icon: Icons.travel_explore_rounded,
+          onTap: _openAllSourceSearch,
+          tooltip: '全源搜索',
+        ),
+        const SizedBox(width: 8),
+        _buildHeaderButton(
           icon: Icons.add_rounded,
           onTap: _showAddSourceDialog,
           tooltip: '添加书源',
@@ -769,6 +775,21 @@ class BookSourcePageState extends State<BookSourcePage>
       context,
       MaterialPageRoute(
         builder: (context) => OnlineBookSearchPage(source: source),
+      ),
+    );
+  }
+
+  Future<void> _openAllSourceSearch() async {
+    final enabled = await _sourceService.getEnabledSources();
+    if (!mounted) return;
+    if (enabled.isEmpty) {
+      _showToast('没有已启用书源，请先启用至少一个书源');
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const OnlineBookSearchPage.aggregate(),
       ),
     );
   }

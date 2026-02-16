@@ -79,6 +79,57 @@ class OnlineBookSourceService {
     }
   }
 
+  Future<List<OnlineBookItem>> searchBooksAcrossSources({
+    required List<BookSource> sources,
+    required String keyword,
+    int page = 1,
+    int maxConcurrent = 4,
+  }) async {
+    final trimmedKeyword = keyword.trim();
+    if (trimmedKeyword.isEmpty || sources.isEmpty) {
+      return const <OnlineBookItem>[];
+    }
+
+    final effectiveConcurrency = maxConcurrent.clamp(1, 10);
+    final merged = <OnlineBookItem>[];
+    final seenKeys = <String>{};
+
+    for (var start = 0; start < sources.length; start += effectiveConcurrency) {
+      final end = (start + effectiveConcurrency) > sources.length
+          ? sources.length
+          : (start + effectiveConcurrency);
+      final chunk = sources.sublist(start, end);
+
+      final chunkResults = await Future.wait(
+        chunk.map(
+          (source) => searchBooks(
+            source: source,
+            keyword: trimmedKeyword,
+            page: page,
+          ),
+        ),
+      );
+
+      for (final list in chunkResults) {
+        for (final item in list) {
+          final key = '${item.sourceId}|${item.bookUrl}';
+          if (seenKeys.add(key)) {
+            merged.add(item);
+          }
+        }
+      }
+    }
+
+    merged.sort((a, b) {
+      final sourceCompare = a.sourceName.compareTo(b.sourceName);
+      if (sourceCompare != 0) return sourceCompare;
+      final titleCompare = a.title.compareTo(b.title);
+      if (titleCompare != 0) return titleCompare;
+      return a.author.compareTo(b.author);
+    });
+    return merged;
+  }
+
   Future<List<OnlineChapterItem>> getChapters({
     required BookSource source,
     required String bookUrl,
@@ -93,8 +144,47 @@ class OnlineBookSourceService {
 
     try {
       final preferredCharset = _resolvePreferredCharset(source: source);
+      var tocTargetUrl = bookUrl;
+
+      final tocUrlRule = source.ruleBookInfo?.tocUrl.trim() ?? '';
+      if (tocUrlRule.isNotEmpty) {
+        try {
+          final detailRequest = _buildRequest(
+            rawRule: bookUrl,
+            source: source,
+          );
+          final detailResponse = await _sendRequest(
+            source: source,
+            request: detailRequest,
+          );
+          final detailBody = _decodeBody(
+            detailResponse.bodyBytes,
+            preferredCharset: preferredCharset,
+            responseHeaders: detailResponse.headers,
+          );
+          final detailBaseUrl =
+              detailResponse.request?.url.toString() ?? detailRequest.url;
+          final detailJson = _tryParseJson(detailBody);
+          final detailDoc =
+              detailJson == null ? html_parser.parse(detailBody) : null;
+          final parsedTocUrl = _extractField(
+            item: detailJson ?? detailDoc?.documentElement,
+            rule: tocUrlRule,
+            baseUrl: detailBaseUrl,
+            isUrl: true,
+            rootJson: detailJson,
+            rootDocument: detailDoc,
+          );
+          if (parsedTocUrl.trim().isNotEmpty) {
+            tocTargetUrl = parsedTocUrl.trim();
+          }
+        } catch (e) {
+          debugPrint('解析目录地址失败(${source.bookSourceName}): $e');
+        }
+      }
+
       final request = _buildRequest(
-        rawRule: bookUrl,
+        rawRule: tocTargetUrl,
         source: source,
       );
       final response = await _sendRequest(source: source, request: request);

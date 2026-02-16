@@ -152,28 +152,173 @@ class EnhancedTxtImportService {
         ? bytes.sublist(0, _encodingSampleSize)
         : bytes;
 
-    final candidates = <String>['utf8', 'gbk', 'utf16le', 'utf16be'];
-    String bestEncoding = 'utf8';
-    double bestScore = -1e9;
+    final utf8Valid = _isValidUtf8Bytes(sample);
+    final utf16Likely = _isLikelyUtf16Bytes(sample);
+    final gbkConfidence = _estimateGbkByteConfidence(sample);
 
-    for (final encoding in candidates) {
-      String decoded;
+    final candidateScores = <String, double>{};
+
+    if (utf8Valid) {
       try {
-        decoded = _decodeWithSpecifiedEncoding(sample, encoding).content;
+        final utf8Text = utf8.decode(sample, allowMalformed: false);
+        candidateScores['utf8'] = _quickContentScore(utf8Text, 'utf8') + 0.35;
       } catch (_) {
-        continue;
-      }
-      if (decoded.isEmpty) {
-        continue;
-      }
-      final score = _quickContentScore(decoded, encoding);
-      if (score > bestScore) {
-        bestScore = score;
-        bestEncoding = encoding;
+        // ignore
       }
     }
 
-    return _decodeWithSpecifiedEncoding(bytes, bestEncoding);
+    try {
+      final gbkText = _decodeGbkBestEffort(sample);
+      candidateScores['gbk'] = _quickContentScore(gbkText, 'gbk') + gbkConfidence;
+    } catch (_) {
+      // ignore
+    }
+
+    if (utf16Likely) {
+      try {
+        final leText = _decodeUtf16LE(sample);
+        candidateScores['utf16le'] =
+            _quickContentScore(leText, 'utf16le') + 0.22;
+      } catch (_) {
+        // ignore
+      }
+      try {
+        final beText = _decodeUtf16BE(sample);
+        candidateScores['utf16be'] =
+            _quickContentScore(beText, 'utf16be') + 0.22;
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    // 兜底：若严格UTF-8无效且GBK有较高置信度，优先GBK
+    if (!utf8Valid && gbkConfidence > 0.18) {
+      return _decodeWithSpecifiedEncoding(bytes, 'gbk');
+    }
+
+    if (candidateScores.isEmpty) {
+      // 最后兜底策略：先GBK，再UTF-8宽松
+      try {
+        final gbkResult = _decodeWithSpecifiedEncoding(bytes, 'gbk');
+        if (_quickContentScore(gbkResult.content, 'gbk') > -0.45) {
+          return gbkResult;
+        }
+      } catch (_) {
+        // ignore
+      }
+      return TxtDecodeResult(
+        content: utf8.decode(bytes, allowMalformed: true),
+        encoding: 'utf8',
+      );
+    }
+
+    final best = candidateScores.entries.reduce(
+      (a, b) => a.value >= b.value ? a : b,
+    );
+    return _decodeWithSpecifiedEncoding(bytes, best.key);
+  }
+
+  bool _isValidUtf8Bytes(Uint8List bytes) {
+    int i = 0;
+    while (i < bytes.length) {
+      final b = bytes[i];
+      if (b <= 0x7F) {
+        i++;
+        continue;
+      }
+
+      int needed;
+      if ((b & 0xE0) == 0xC0) {
+        needed = 1;
+        if (b < 0xC2) return false;
+      } else if ((b & 0xF0) == 0xE0) {
+        needed = 2;
+      } else if ((b & 0xF8) == 0xF0) {
+        needed = 3;
+        if (b > 0xF4) return false;
+      } else {
+        return false;
+      }
+
+      if (i + needed >= bytes.length) {
+        return false;
+      }
+
+      for (int j = 1; j <= needed; j++) {
+        final c = bytes[i + j];
+        if ((c & 0xC0) != 0x80) {
+          return false;
+        }
+      }
+
+      // 排除部分过长编码与非法区间
+      if ((b & 0xF0) == 0xE0) {
+        final b1 = bytes[i + 1];
+        if (b == 0xE0 && b1 < 0xA0) return false;
+        if (b == 0xED && b1 >= 0xA0) return false;
+      }
+      if ((b & 0xF8) == 0xF0) {
+        final b1 = bytes[i + 1];
+        if (b == 0xF0 && b1 < 0x90) return false;
+        if (b == 0xF4 && b1 >= 0x90) return false;
+      }
+
+      i += needed + 1;
+    }
+    return true;
+  }
+
+  bool _isLikelyUtf16Bytes(Uint8List bytes) {
+    if (bytes.length < 64) {
+      return false;
+    }
+
+    final checkLength = bytes.length.isEven ? bytes.length : bytes.length - 1;
+    int zeroEven = 0;
+    int zeroOdd = 0;
+    int pairs = 0;
+
+    for (int i = 0; i < checkLength; i += 2) {
+      pairs++;
+      if (bytes[i] == 0) zeroEven++;
+      if (bytes[i + 1] == 0) zeroOdd++;
+    }
+
+    if (pairs == 0) return false;
+    final evenRatio = zeroEven / pairs;
+    final oddRatio = zeroOdd / pairs;
+
+    // 中文UTF-16通常零字节比例不会很高；英文UTF-16会非常高
+    // 这里允许较宽阈值，后续由文本评分再筛选
+    return evenRatio > 0.18 || oddRatio > 0.18;
+  }
+
+  double _estimateGbkByteConfidence(Uint8List bytes) {
+    if (bytes.isEmpty) return 0.0;
+
+    int leadCount = 0;
+    int validPairs = 0;
+    int invalidPairs = 0;
+
+    for (int i = 0; i < bytes.length - 1; i++) {
+      final b1 = bytes[i];
+      if (b1 < 0x81 || b1 > 0xFE) {
+        continue;
+      }
+      leadCount++;
+      final b2 = bytes[i + 1];
+      if (b2 >= 0x40 && b2 <= 0xFE && b2 != 0x7F) {
+        validPairs++;
+        i++;
+      } else {
+        invalidPairs++;
+      }
+    }
+
+    if (leadCount == 0) return -0.08;
+    final validRatio = validPairs / leadCount;
+    final invalidRatio = invalidPairs / leadCount;
+    return validRatio * 0.45 - invalidRatio * 0.28;
   }
 
   double _quickContentScore(String text, String encoding) {
@@ -186,6 +331,8 @@ class EnhancedTxtImportService {
     int cjk = 0;
     int ascii = 0;
     int zero = 0;
+    int punctuation = 0;
+    int mojibake = 0;
 
     for (final rune in sample.runes) {
       total++;
@@ -205,6 +352,18 @@ class EnhancedTxtImportService {
       if (rune >= 0x20 && rune <= 0x7e) {
         ascii++;
       }
+      if ('，。！？：；、“”‘’（）《》【】—…,.!?;:()[]'.runes
+          .contains(rune)) {
+        punctuation++;
+      }
+      // 常见乱码特征字符（UTF-8 被按西文错误解码）
+      if (rune == 0x00C3 ||
+          rune == 0x00A2 ||
+          rune == 0x00A4 ||
+          rune == 0x00A5 ||
+          rune == 0x00E2) {
+        mojibake++;
+      }
     }
 
     if (total == 0) return -1e9;
@@ -213,17 +372,26 @@ class EnhancedTxtImportService {
     final cjkRatio = cjk / total;
     final asciiRatio = ascii / total;
     final zeroRatio = zero / total;
+    final punctRatio = punctuation / total;
+    final mojibakeRatio = mojibake / total;
 
     var score = cjkRatio * 1.4 +
         asciiRatio * 0.45 -
         replacementRatio * 6.0 -
         controlRatio * 2.2 -
-        zeroRatio * 3.0;
+        zeroRatio * 3.0 +
+        punctRatio * 0.35 -
+        mojibakeRatio * 4.0;
 
     if (encoding == 'gbk') {
-      score += 0.15;
+      score += 0.12;
     } else if (encoding.startsWith('utf16') && zeroRatio > 0.06) {
       score -= 0.6;
+    }
+
+    // 对过多“问号方块替代”倾向惩罚
+    if (sample.contains('��')) {
+      score -= 0.45;
     }
     return score;
   }

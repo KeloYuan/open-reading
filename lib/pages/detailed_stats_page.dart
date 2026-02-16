@@ -9,6 +9,25 @@ import '../services/reading/reading_services.dart';
 import '../utils/glass_config.dart';
 import '../models/book.dart';
 
+class _StatsBlurScope extends InheritedWidget {
+  final bool suspendBlur;
+
+  const _StatsBlurScope({
+    required this.suspendBlur,
+    required super.child,
+  });
+
+  static bool shouldSuspend(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<_StatsBlurScope>();
+    return scope?.suspendBlur ?? false;
+  }
+
+  @override
+  bool updateShouldNotify(_StatsBlurScope oldWidget) {
+    return oldWidget.suspendBlur != suspendBlur;
+  }
+}
+
 class _GlassAwareBackdropFilter extends StatelessWidget {
   final ImageFilter filter;
   final Widget child;
@@ -20,8 +39,9 @@ class _GlassAwareBackdropFilter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final suspendBlur = _StatsBlurScope.shouldSuspend(context);
     return fw.BackdropFilter(
-      enabled: !GlassEffectConfig.shouldDisableBlur,
+      enabled: !GlassEffectConfig.shouldDisableBlur && !suspendBlur,
       filter: filter,
       child: child,
     );
@@ -43,6 +63,8 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
 
   late TabController _tabController;
   late PageController _pageController;
+  bool _isAnimatingFromTabTap = false;
+  bool _suspendBlurEffects = false;
 
   // 统计数据
   Map<String, int> _overallStats = {};
@@ -172,18 +194,28 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     _tabController = TabController(length: 4, vsync: this);
     _pageController = PageController();
 
-    // 监听TabController变化，同步PageController
-    _tabController.addListener(() {
-      if (_tabController.indexIsChanging) {
-        _pageController.animateToPage(
-          _tabController.index,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
-      }
-    });
-
     _loadAllStats();
+  }
+
+  Future<void> _handleTabTap(int index) async {
+    if (_isAnimatingFromTabTap || !_pageController.hasClients) {
+      return;
+    }
+    final currentPage =
+        (_pageController.page ?? _tabController.index.toDouble()).round();
+    if (currentPage == index) {
+      return;
+    }
+    _isAnimatingFromTabTap = true;
+    try {
+      await _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    } finally {
+      _isAnimatingFromTabTap = false;
+    }
   }
 
   @override
@@ -211,6 +243,15 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
     } catch (e) {
       setState(() => _isLoading = false);
     }
+  }
+
+  void _setSuspendBlurEffects(bool value) {
+    if (!mounted || _suspendBlurEffects == value) {
+      return;
+    }
+    setState(() {
+      _suspendBlurEffects = value;
+    });
   }
 
   Future<void> _loadHourlyDistribution() async {
@@ -377,56 +418,83 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            stops: const [0.0, 0.22, 0.48, 0.74, 1.0],
-            colors: [
-              scheme.primary.withValues(alpha: 0.08),
-              scheme.secondary.withValues(alpha: 0.10),
-              scheme.tertiary.withValues(alpha: 0.07),
-              scheme.primaryContainer.withValues(alpha: 0.12),
-              scheme.surface.withValues(alpha: 0.98),
-            ],
+    return _StatsBlurScope(
+      suspendBlur: _suspendBlurEffects,
+      child: Scaffold(
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              stops: const [0.0, 0.22, 0.48, 0.74, 1.0],
+              colors: [
+                scheme.primary.withValues(alpha: 0.08),
+                scheme.secondary.withValues(alpha: 0.10),
+                scheme.tertiary.withValues(alpha: 0.07),
+                scheme.primaryContainer.withValues(alpha: 0.12),
+                scheme.surface.withValues(alpha: 0.98),
+              ],
+            ),
           ),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              _buildTopBar(),
-              const SizedBox(height: 10),
-              _buildTabBarContainer(),
-              const SizedBox(height: 10),
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : PageView.builder(
-                        controller: _pageController,
-                        itemCount: 4,
-                        onPageChanged: (index) {
-                          _tabController.animateTo(index);
-                        },
-                        itemBuilder: (context, index) {
-                          switch (index) {
-                            case 0:
-                              return _buildOverviewTab();
-                            case 1:
-                              return _buildChartsTab();
-                            case 2:
-                              return _buildBooksTab();
-                            case 3:
-                              return _buildAchievementsTab();
-                            default:
-                              return const SizedBox.shrink();
-                          }
-                        },
-                      ),
-              ),
-            ],
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                _buildTopBar(),
+                const SizedBox(height: 10),
+                _buildTabBarContainer(),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : NotificationListener<ScrollNotification>(
+                          onNotification: (notification) {
+                            if (notification.metrics.axis != Axis.horizontal) {
+                              return false;
+                            }
+                            if (notification is ScrollStartNotification) {
+                              _setSuspendBlurEffects(true);
+                            } else if (notification is ScrollEndNotification) {
+                              _setSuspendBlurEffects(false);
+                            }
+                            return false;
+                          },
+                          child: PageView.builder(
+                            controller: _pageController,
+                            physics: const PageScrollPhysics(),
+                            itemCount: 4,
+                            onPageChanged: (index) {
+                              if (_tabController.index != index) {
+                                _tabController.index = index;
+                              }
+                            },
+                            itemBuilder: (context, index) {
+                              switch (index) {
+                                case 0:
+                                  return RepaintBoundary(
+                                    child: _buildOverviewTab(),
+                                  );
+                                case 1:
+                                  return RepaintBoundary(
+                                    child: _buildChartsTab(),
+                                  );
+                                case 2:
+                                  return RepaintBoundary(
+                                    child: _buildBooksTab(),
+                                  );
+                                case 3:
+                                  return RepaintBoundary(
+                                    child: _buildAchievementsTab(),
+                                  );
+                                default:
+                                  return const SizedBox.shrink();
+                              }
+                            },
+                          ),
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -543,6 +611,9 @@ class _DetailedStatsPageState extends State<DetailedStatsPage>
                 ),
                 child: TabBar(
                   controller: _tabController,
+                  onTap: (index) {
+                    _handleTabTap(index);
+                  },
                   tabs: const [
                     Tab(text: '总览'),
                     Tab(text: '图表'),

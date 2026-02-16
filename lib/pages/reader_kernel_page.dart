@@ -46,6 +46,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   static const String _volumeKeyTurnPrefKey = 'enableVolumeKeyTurn';
   static const String _themePrefKey = 'reader_theme_index_v1';
   static const String _ttsEnabledPrefKey = 'reader_tts_enabled_v1';
+  static const String _showSystemStatusBarPrefKey = 'readerShowSystemStatusBar';
   static const String _readerFontPrefKey = 'reader_font_family_v1';
   static const String _readerTypographyPrefKey = 'reader_typography_v1';
   static const String _bookmarkPrefKeyPrefix = 'reader_bookmarks_v1';
@@ -156,6 +157,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   bool _exitFlushScheduled = false;
   bool _ttsEnabled = true;
   bool _enableVolumeKeyTurn = true;
+  bool _showSystemStatusBarInReader = false;
   DateTime? _lastVolumeKeyTurnAt;
   String? _pendingReaderFontFamily;
   core.ReaderStyle? _pendingReaderStyle;
@@ -202,6 +204,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     await _restoreTheme();
     await _restoreTtsPreference();
     await _restoreVolumeKeyTurnPreference();
+    await _restoreReaderSystemStatusBarPreference();
     await _restoreReaderFontPreference();
     await _restoreReaderTypographyPreference();
     if (!mounted) {
@@ -241,6 +244,18 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     final prefs = await SharedPreferences.getInstance();
     _enableVolumeKeyTurn = prefs.getBool(_volumeKeyTurnPrefKey) ?? true;
     await _syncVolumeKeyPagingEnabled();
+  }
+
+  Future<void> _restoreReaderSystemStatusBarPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool(_showSystemStatusBarPrefKey) ?? false;
+    if (!mounted || enabled == _showSystemStatusBarInReader) {
+      return;
+    }
+    setState(() {
+      _showSystemStatusBarInReader = enabled;
+    });
+    _applyReaderSystemUI(immersive: !_chromeVisible);
   }
 
   Future<void> _restoreReaderFontPreference() async {
@@ -849,6 +864,14 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     final isMobilePlatform = defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS;
     if (isMobilePlatform) {
+      if (_showSystemStatusBarInReader) {
+        SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.manual,
+          overlays: const [SystemUiOverlay.top],
+        );
+        _syncIOSReaderImmersive(false);
+        return;
+      }
       if (defaultTargetPlatform == TargetPlatform.android &&
           _isAndroidTabletViewport) {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -1011,7 +1034,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     _pointerLatestPosition = event.localPosition;
     _pointerDownTime = DateTime.now();
     _pointerMovedTooMuch = false;
-    if (!_chromeVisible) {
+    if (!_chromeVisible && !_showSystemStatusBarInReader) {
       _syncIOSReaderImmersive(true);
     }
   }
@@ -1227,7 +1250,9 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                 final bottomInset = isAndroidTablet
                     ? _stableAndroidBottomInset
                     : media.viewPadding.bottom;
-                final topUiReserve = isAndroidTablet ? 38.0 : 8.0;
+                final topUiReserve = _showSystemStatusBarInReader
+                    ? (isAndroidTablet ? 10.0 : 6.0)
+                    : (isAndroidTablet ? 38.0 : 8.0);
                 // Keep a dedicated footer-safe lane for bottom page label to avoid text overlap.
                 final bottomUiReserve = isAndroidTablet
                     ? 36.0
@@ -1269,7 +1294,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                     _markReadingInteraction();
                     _trackPageTurn(index);
                     _controller.setPageIndex(index);
-                    if (!_chromeVisible) {
+                    if (!_chromeVisible && !_showSystemStatusBarInReader) {
                       _syncIOSReaderImmersive(true);
                     }
                     if (_chromeVisible) {
@@ -1334,21 +1359,22 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                   child: Stack(
                     children: [
                       Positioned.fill(child: animatedReader),
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: IgnorePointer(
-                          child: AnimatedOpacity(
-                            duration: const Duration(milliseconds: 160),
-                            curve: Curves.easeOut,
-                            opacity: _chromeVisible ? 0 : 1,
-                            child: _ReaderTopStatusOverlay(
-                              foreground: _activeTheme.foreground,
+                      if (!_showSystemStatusBarInReader)
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: IgnorePointer(
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 160),
+                              curve: Curves.easeOut,
+                              opacity: _chromeVisible ? 0 : 1,
+                              child: _ReaderTopStatusOverlay(
+                                foreground: _activeTheme.foreground,
+                              ),
                             ),
                           ),
                         ),
-                      ),
                       Positioned.fill(
                         child: IgnorePointer(
                           child: _buildBottomReadingInfoOverlay(
