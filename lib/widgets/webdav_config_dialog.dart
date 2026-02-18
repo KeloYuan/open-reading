@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../services/sync/webdav_sync_service.dart';
 import '../utils/glass_config.dart';
+import '../utils/ui_style.dart';
 import 'side_toast.dart';
 
 /// WebDAV配置对话框
@@ -30,6 +31,16 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
   String? _statusMessage;
   bool _statusIsError = false;
 
+  bool get _isMaterial3Style {
+    return Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
+  }
+
+  bool get _useBlur =>
+      !_isMaterial3Style && !GlassEffectConfig.shouldDisableBlur;
+
   @override
   void initState() {
     super.initState();
@@ -55,6 +66,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.sizeOf(context).width;
     final screenHeight = MediaQuery.sizeOf(context).height;
     final targetWidth = screenWidth >= 1200
@@ -65,66 +77,83 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
                 ? 700.0
                 : screenWidth - 20;
 
-    return BackdropFilter(
-      enabled: !GlassEffectConfig.shouldDisableBlur,
-      filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-      child: Dialog(
-        backgroundColor: Colors.transparent,
-        shadowColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 18),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
-          child: BackdropFilter(
-            enabled: !GlassEffectConfig.shouldDisableBlur,
-            filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-            child: Container(
-              width: targetWidth,
-              constraints: BoxConstraints(maxHeight: screenHeight * 0.9),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(28),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    _getDialogSurfaceColor(),
-                    _getDialogSurfaceColor().withValues(
-                      alpha: GlassEffectConfig.effectiveOpacity(0.7),
-                    ),
-                  ],
-                ),
-                border: Border.all(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white.withValues(alpha: 0.15)
-                      : Colors.white.withValues(alpha: 0.55),
-                  width: 1.2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.16),
-                    blurRadius: 28,
-                    offset: const Offset(0, 16),
-                  ),
-                ],
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildHeader(),
-                    _buildForm(),
-                    if (_statusMessage != null) _buildStatusBanner(),
-                    _buildActions(),
-                  ],
-                ),
-              ),
+    final dialogSurface = _getDialogSurfaceColor();
+    final dialogContent = Container(
+      width: targetWidth,
+      constraints: BoxConstraints(maxHeight: screenHeight * 0.9),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            dialogSurface,
+            dialogSurface.withValues(
+              alpha: _isMaterial3Style
+                  ? 1.0
+                  : GlassEffectConfig.effectiveOpacity(0.7),
             ),
+          ],
+        ),
+        border: Border.all(
+          color:
+              scheme.outline.withValues(alpha: _isMaterial3Style ? 0.24 : 0.2),
+          width: _isMaterial3Style ? 1.0 : 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: scheme.shadow
+                .withValues(alpha: _isMaterial3Style ? 0.10 : 0.16),
+            blurRadius: _isMaterial3Style ? 16 : 28,
+            offset: const Offset(0, 16),
           ),
+        ],
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildHeader(),
+            _buildForm(),
+            if (_statusMessage != null) _buildStatusBanner(),
+            _buildActions(),
+          ],
         ),
       ),
+    );
+
+    final dialogBody = ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: _useBlur
+          ? BackdropFilter(
+              enabled: _useBlur,
+              filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+              child: dialogContent,
+            )
+          : dialogContent,
+    );
+
+    final dialog = Dialog(
+      backgroundColor:
+          _isMaterial3Style ? scheme.surfaceContainerHigh : Colors.transparent,
+      shadowColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 18),
+      child: dialogBody,
+    );
+
+    if (!_useBlur) {
+      return dialog;
+    }
+
+    return BackdropFilter(
+      enabled: _useBlur,
+      filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+      child: dialog,
     );
   }
 
   Widget _buildHeader() {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(24),
       child: Row(
@@ -132,10 +161,18 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.blue.withValues(alpha: 0.1),
+              color: _isMaterial3Style
+                  ? scheme.primaryContainer
+                  : scheme.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.cloud_sync, color: Colors.blue, size: 24),
+            child: Icon(
+              Icons.cloud_sync,
+              color: _isMaterial3Style
+                  ? scheme.onPrimaryContainer
+                  : scheme.primary,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -227,6 +264,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
   }
 
   Widget _buildSyncPreferenceCard() {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -234,9 +272,8 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
         color: _getFieldBackgroundColor(),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.white.withValues(alpha: 0.55),
+          color:
+              scheme.outline.withValues(alpha: _isMaterial3Style ? 0.22 : 0.18),
           width: 1,
         ),
       ),
@@ -299,7 +336,8 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
   }
 
   Widget _buildStatusBanner() {
-    final color = _statusIsError ? Colors.red : Colors.green;
+    final scheme = Theme.of(context).colorScheme;
+    final color = _statusIsError ? scheme.error : scheme.tertiary;
     return Container(
       margin: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       padding: const EdgeInsets.all(12),
@@ -335,6 +373,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
     bool isPassword = false,
     String? Function(String?)? validator,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     return TextFormField(
       controller: controller,
       obscureText: isPassword && !_isPasswordVisible,
@@ -367,17 +406,18 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.blue, width: 2),
+          borderSide: BorderSide(color: scheme.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.red, width: 1),
+          borderSide: BorderSide(color: scheme.error, width: 1),
         ),
       ),
     );
   }
 
   Widget _buildActions() {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -408,8 +448,8 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
                 child: ElevatedButton(
                   onPressed: _isWorking ? null : _saveConfiguration,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
+                    backgroundColor: scheme.primary,
+                    foregroundColor: scheme.onPrimary,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -437,9 +477,9 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
                 Expanded(
                   child: TextButton(
                     onPressed: _isWorking ? null : _clearConfiguration,
-                    child: const Text(
+                    child: Text(
                       '清除配置',
-                      style: TextStyle(color: Colors.red),
+                      style: TextStyle(color: scheme.error),
                     ),
                   ),
                 ),
@@ -523,6 +563,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
   }
 
   Future<void> _clearConfiguration() async {
+    final scheme = Theme.of(context).colorScheme;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -535,7 +576,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: scheme.error),
             child: const Text('清除'),
           ),
         ],
@@ -551,33 +592,37 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
   }
 
   Color _getDialogSurfaceColor() {
-    final base = Theme.of(context).brightness == Brightness.dark
-        ? const Color(0xCC1A1E2A)
-        : const Color(0xCCF6FAFF);
-    return base.withValues(alpha: GlassEffectConfig.effectiveOpacity(0.8));
+    final scheme = Theme.of(context).colorScheme;
+    if (_isMaterial3Style) {
+      return scheme.surfaceContainerHigh;
+    }
+    return scheme.surface.withValues(
+      alpha: GlassEffectConfig.effectiveOpacity(0.82),
+    );
   }
 
   Color _getTextColor() {
-    return Theme.of(context).brightness == Brightness.dark
-        ? Colors.white
-        : Colors.black87;
+    return Theme.of(context).colorScheme.onSurface;
   }
 
   Color _getSubtitleColor() {
-    return Theme.of(context).brightness == Brightness.dark
-        ? Colors.grey[300]!
-        : Colors.black.withValues(alpha: 0.62);
+    return Theme.of(context)
+        .colorScheme
+        .onSurfaceVariant
+        .withValues(alpha: 0.8);
   }
 
   Color _getIconColor() {
-    return Theme.of(context).brightness == Brightness.dark
-        ? Colors.grey[400]!
-        : Colors.grey[600]!;
+    return Theme.of(context)
+        .colorScheme
+        .onSurfaceVariant
+        .withValues(alpha: 0.86);
   }
 
   Color _getFieldBackgroundColor() {
-    return Theme.of(context).brightness == Brightness.dark
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.white.withValues(alpha: 0.52);
+    final scheme = Theme.of(context).colorScheme;
+    return _isMaterial3Style
+        ? scheme.surfaceContainer
+        : scheme.surface.withValues(alpha: 0.66);
   }
 }

@@ -125,8 +125,20 @@ class FlowPaginator {
     int debugImagePages = 0;
     int debugAdjustments = 0;
 
-    Future<void> flushPage() async {
+    Future<void> flushPage({bool forcePlaceholder = false}) async {
       if (currentFragments.isEmpty) {
+        if (forcePlaceholder) {
+          pages.add(
+            Page(
+              index: pages.length,
+              startOffset: lastCommittedOffset,
+              endOffset: lastCommittedOffset,
+              fragments: const [],
+            ),
+          );
+          onProgress?.call(List<Page>.from(pages), false);
+          await Future<void>.delayed(Duration.zero);
+        }
         return;
       }
 
@@ -366,11 +378,10 @@ class FlowPaginator {
           pageHeight: pageHeight,
         );
         final spacing = hasLaterBlocks ? _imageSpacing(block.style) : 0.0;
-        final requiredHeight =
-            imageHeight +
-                _estimatedImageVerticalPadding +
-                _imageFragmentSafety +
-                spacing;
+        final requiredHeight = imageHeight +
+            _estimatedImageVerticalPadding +
+            _imageFragmentSafety +
+            spacing;
         _logDebug(
           'image block=${block.id} required=${requiredHeight.toStringAsFixed(2)} '
           'img=${imageHeight.toStringAsFixed(2)} spacing=${spacing.toStringAsFixed(2)} '
@@ -440,7 +451,7 @@ class FlowPaginator {
     }
 
     if (currentFragments.isNotEmpty || pages.isEmpty) {
-      await flushPage();
+      await flushPage(forcePlaceholder: pages.isEmpty);
     }
 
     for (final p in paragraphCache.values) {
@@ -647,9 +658,8 @@ class FlowPaginator {
     final startLine = _lineIndexForStart(layout, start);
     var endLine = _lineIndexForEnd(layout, candidate);
     while (endLine > startLine) {
-      final previousLineEnd = layout.lineEnds[endLine - 1]
-          .clamp(start + 1, candidate)
-          .toInt();
+      final previousLineEnd =
+          layout.lineEnds[endLine - 1].clamp(start + 1, candidate).toInt();
       if (previousLineEnd <= start) {
         break;
       }
@@ -825,9 +835,8 @@ class FlowPaginator {
     String? chapterTitle,
   }) {
     final titleText = chapterTitle?.trim() ?? '';
-    final text = titleText.isNotEmpty
-        ? titleText
-        : _fallbackHeadingText(flowDoc.blocks);
+    final text =
+        titleText.isNotEmpty ? titleText : _fallbackHeadingText(flowDoc.blocks);
     if (text.isEmpty) {
       return 0.0;
     }
@@ -892,7 +901,8 @@ class FlowPaginator {
       final startLine = _lineIndexForStart(layout, safeStart);
       final endLine = _lineIndexForEnd(layout, safeEnd);
       final safeStartLine = startLine.clamp(0, layout.lineEnds.length - 1);
-      final safeEndLine = endLine.clamp(safeStartLine, layout.lineEnds.length - 1);
+      final safeEndLine =
+          endLine.clamp(safeStartLine, layout.lineEnds.length - 1);
       final h = layout.cumulativeHeights[safeEndLine + 1] -
           layout.cumulativeHeights[safeStartLine];
       if (h > 0) {
@@ -1048,10 +1058,9 @@ class FlowPaginator {
       pageHeight: pageHeight,
     );
     var overflowTrimLoop = 0;
-    while (
-        strictHeight > pageHeight + _strictFitTolerance &&
-            fragments.isNotEmpty &&
-            overflowTrimLoop < 180) {
+    while (strictHeight > pageHeight + _strictFitTolerance &&
+        fragments.isNotEmpty &&
+        overflowTrimLoop < 180) {
       overflowTrimLoop += 1;
       final lastTextIndex =
           fragments.lastIndexWhere((fragment) => fragment is TextFragment);
@@ -1070,7 +1079,8 @@ class FlowPaginator {
 
       final current = fragments[lastTextIndex] as TextFragment;
       final block = blockById[current.blockId];
-      if (block == null || (block is! ParagraphBlock && block is! HeadingBlock)) {
+      if (block == null ||
+          (block is! ParagraphBlock && block is! HeadingBlock)) {
         fragments.removeAt(lastTextIndex);
         strictHeight = _measurePageStrictHeight(
           fragments: fragments,
@@ -1083,8 +1093,9 @@ class FlowPaginator {
         continue;
       }
 
-      final plainText =
-          block is ParagraphBlock ? block.plainText : (block as HeadingBlock).plainText;
+      final plainText = block is ParagraphBlock
+          ? block.plainText
+          : (block as HeadingBlock).plainText;
       final key = '${block.id}|$pageWidth|${readerStyle.cacheSignature()}';
       final layoutData = paragraphCache.putIfAbsent(
         key,
@@ -1135,13 +1146,14 @@ class FlowPaginator {
 
       final current = fragments[lastTextIndex] as TextFragment;
       final block = blockById[current.blockId];
-      if (block == null || (block is! ParagraphBlock && block is! HeadingBlock)) {
+      if (block == null ||
+          (block is! ParagraphBlock && block is! HeadingBlock)) {
         break;
       }
-      final plainText =
-          block is ParagraphBlock ? block.plainText : (block as HeadingBlock).plainText;
-      final hasFollowingContent =
-          current.end < plainText.length ||
+      final plainText = block is ParagraphBlock
+          ? block.plainText
+          : (block as HeadingBlock).plainText;
+      final hasFollowingContent = current.end < plainText.length ||
           (hasFollowingContentByBlockId[current.blockId] ?? false);
       if (!hasFollowingContent) {
         break;
@@ -1343,15 +1355,18 @@ class FlowPaginator {
         return 'lines=0';
       }
       final lastOffset = math.max(0, slice.length - 1);
-      final boundary = painter.getLineBoundary(TextPosition(offset: lastOffset));
+      final boundary =
+          painter.getLineBoundary(TextPosition(offset: lastOffset));
       final tailStart = boundary.start.clamp(0, slice.length).toInt();
       final tailEnd = boundary.end.clamp(tailStart, slice.length).toInt();
-      final tail = tailEnd > tailStart ? slice.substring(tailStart, tailEnd) : '';
+      final tail =
+          tailEnd > tailStart ? slice.substring(tailStart, tailEnd) : '';
       final compact = tail.replaceAll(RegExp(r'\s+'), '');
       final semantic = compact.replaceAll(_tailNoiseRegExp, '');
       final previewRaw = tail.replaceAll('\n', r'\n').replaceAll('\r', r'\r');
-      final preview =
-          previewRaw.length > 16 ? '${previewRaw.substring(0, 16)}…' : previewRaw;
+      final preview = previewRaw.length > 16
+          ? '${previewRaw.substring(0, 16)}…'
+          : previewRaw;
       return 'lines=${metrics.length} tail="$preview" compact=${compact.length} semantic=${semantic.length}';
     } finally {
       painter.dispose();
@@ -1390,11 +1405,13 @@ class FlowPaginator {
     for (final fragment in fragments) {
       if (fragment is TextFragment) {
         final block = blockById[fragment.blockId];
-        if (block == null || (block is! ParagraphBlock && block is! HeadingBlock)) {
+        if (block == null ||
+            (block is! ParagraphBlock && block is! HeadingBlock)) {
           continue;
         }
-        final plainText =
-            block is ParagraphBlock ? block.plainText : (block as HeadingBlock).plainText;
+        final plainText = block is ParagraphBlock
+            ? block.plainText
+            : (block as HeadingBlock).plainText;
         final key = '${block.id}|$pageWidth|${readerStyle.cacheSignature()}';
         final layoutData = paragraphCache.putIfAbsent(
           key,
@@ -1421,8 +1438,9 @@ class FlowPaginator {
             pageWidth: pageWidth,
             pageHeight: pageHeight,
           );
-          total +=
-              imageHeight + _estimatedImageVerticalPadding + _imageFragmentSafety;
+          total += imageHeight +
+              _estimatedImageVerticalPadding +
+              _imageFragmentSafety;
         }
         continue;
       }

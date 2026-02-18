@@ -10,6 +10,7 @@ import '../services/library/library_event_bus_service.dart';
 import '../services/reading/reading_services.dart';
 import '../utils/layout_helper.dart';
 import '../utils/page_transitions.dart';
+import '../utils/ui_style.dart';
 import '../widgets/app_brand_icon.dart';
 import '../widgets/side_toast.dart';
 import 'detailed_stats_page.dart';
@@ -32,6 +33,7 @@ class _HomeContentMetrics {
 }
 
 class _HomePalette {
+  final bool isMaterial3Style;
   final Color pageGradientStart;
   final Color pageGradientMiddle;
   final Color pageGradientEnd;
@@ -48,6 +50,7 @@ class _HomePalette {
   final Color refreshBackgroundColor;
 
   const _HomePalette({
+    required this.isMaterial3Style,
     required this.pageGradientStart,
     required this.pageGradientMiddle,
     required this.pageGradientEnd,
@@ -67,36 +70,68 @@ class _HomePalette {
   factory _HomePalette.fromTheme(ThemeData theme) {
     final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+    final isMaterial3Style =
+        theme.extension<UiStyleThemeExtension>()?.isMaterial3Style ?? false;
 
     return _HomePalette(
-      pageGradientStart: Color.alphaBlend(
-        scheme.primary.withValues(alpha: isDark ? 0.26 : 0.10),
-        scheme.surface,
-      ),
-      pageGradientMiddle: Color.alphaBlend(
-        scheme.secondary.withValues(alpha: isDark ? 0.18 : 0.08),
-        scheme.surface,
-      ),
+      isMaterial3Style: isMaterial3Style,
+      pageGradientStart: isMaterial3Style
+          ? Color.alphaBlend(
+              scheme.surfaceContainerHigh
+                  .withValues(alpha: isDark ? 0.86 : 0.94),
+              scheme.surface,
+            )
+          : Color.alphaBlend(
+              scheme.primary.withValues(alpha: isDark ? 0.26 : 0.10),
+              scheme.surface,
+            ),
+      pageGradientMiddle: isMaterial3Style
+          ? Color.alphaBlend(
+              scheme.surfaceContainerLow.withValues(alpha: isDark ? 0.8 : 0.9),
+              scheme.surface,
+            )
+          : Color.alphaBlend(
+              scheme.secondary.withValues(alpha: isDark ? 0.18 : 0.08),
+              scheme.surface,
+            ),
       pageGradientEnd: scheme.surface,
-      cardColor: scheme.surface.withValues(alpha: isDark ? 0.72 : 0.88),
-      heroColor: Color.alphaBlend(
-        scheme.primary.withValues(alpha: isDark ? 0.25 : 0.14),
-        scheme.primaryContainer.withValues(alpha: isDark ? 0.40 : 0.56),
-      ),
-      topActionColor: scheme.surface.withValues(alpha: isDark ? 0.76 : 0.84),
+      cardColor: isMaterial3Style
+          ? scheme.surfaceContainerLow.withValues(alpha: isDark ? 0.98 : 1.0)
+          : scheme.surface.withValues(alpha: isDark ? 0.72 : 0.88),
+      heroColor: isMaterial3Style
+          ? Color.alphaBlend(
+              scheme.primary.withValues(alpha: isDark ? 0.20 : 0.12),
+              scheme.surfaceContainerHigh,
+            )
+          : Color.alphaBlend(
+              scheme.primary.withValues(alpha: isDark ? 0.25 : 0.14),
+              scheme.primaryContainer.withValues(alpha: isDark ? 0.40 : 0.56),
+            ),
+      topActionColor: isMaterial3Style
+          ? scheme.surfaceContainer
+          : scheme.surface.withValues(alpha: isDark ? 0.76 : 0.84),
       primaryTextColor: scheme.onSurface,
       secondaryTextColor: scheme.onSurfaceVariant.withValues(
         alpha: isDark ? 0.92 : 0.84,
       ),
       sectionLabelColor: scheme.onSurfaceVariant.withValues(
-        alpha: isDark ? 0.82 : 0.76,
+        alpha:
+            isMaterial3Style ? (isDark ? 0.9 : 0.82) : (isDark ? 0.82 : 0.76),
       ),
       accentColor: scheme.primary,
-      softAccentColor: scheme.primary.withValues(alpha: isDark ? 0.76 : 0.62),
-      inactiveDotColor: scheme.outline.withValues(alpha: isDark ? 0.38 : 0.30),
-      coverPlaceholderColor:
-          scheme.primary.withValues(alpha: isDark ? 0.66 : 0.56),
-      refreshBackgroundColor: scheme.surface,
+      softAccentColor: isMaterial3Style
+          ? scheme.tertiary.withValues(alpha: isDark ? 0.7 : 0.58)
+          : scheme.primary.withValues(alpha: isDark ? 0.76 : 0.62),
+      inactiveDotColor: scheme.outline.withValues(
+        alpha:
+            isMaterial3Style ? (isDark ? 0.46 : 0.36) : (isDark ? 0.38 : 0.30),
+      ),
+      coverPlaceholderColor: scheme.primary.withValues(
+          alpha: isMaterial3Style
+              ? (isDark ? 0.52 : 0.4)
+              : (isDark ? 0.66 : 0.56)),
+      refreshBackgroundColor:
+          isMaterial3Style ? scheme.surfaceContainerHigh : scheme.surface,
     );
   }
 }
@@ -347,11 +382,17 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
     final currentGoal = _readingPlan?.dailyGoalMinutes ??
         await _planService.getDailyGoalMinutes();
     if (!mounted) return;
+    final isMaterial3Style = Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
 
     const options = [15, 20, 30, 45, 60, 90, 120, 150, 180];
     final selected = await showModalBottomSheet<int>(
       context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: isMaterial3Style
+          ? Theme.of(context).colorScheme.surfaceContainerHigh
+          : Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -736,7 +777,32 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
   }) {
     final palette = _palette;
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
+
+    if (palette.isMaterial3Style) {
+      return BoxDecoration(
+        color: gradient == null
+            ? (stronger ? scheme.surfaceContainer : scheme.surfaceContainerLow)
+            : null,
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: scheme.outline.withValues(alpha: stronger ? 0.24 : 0.18),
+          width: 0.9,
+        ),
+        boxShadow: stronger
+            ? [
+                BoxShadow(
+                  color: scheme.shadow.withValues(alpha: isDark ? 0.20 : 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ]
+            : null,
+      );
+    }
+
     return BoxDecoration(
       color: gradient == null ? palette.cardColor : null,
       gradient: gradient,
@@ -1172,6 +1238,7 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
 
   Widget _buildPlanTaskRow(ReadingPlanTask task) {
     final palette = _palette;
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -1181,7 +1248,8 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
                 ? Icons.check_circle_rounded
                 : Icons.radio_button_unchecked_rounded,
             size: 18,
-            color: task.completed ? Colors.green : palette.secondaryTextColor,
+            color:
+                task.completed ? scheme.tertiary : palette.secondaryTextColor,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1348,7 +1416,9 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
                               borderRadius: BorderRadius.circular(10),
                               child: Image.file(
                                 File(book.coverImagePath!),
-                                fit: BoxFit.cover,
+                                fit: Platform.isAndroid
+                                    ? BoxFit.contain
+                                    : BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) {
                                   return const SizedBox.shrink();
                                 },

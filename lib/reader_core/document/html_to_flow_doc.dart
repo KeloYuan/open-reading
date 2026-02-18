@@ -50,11 +50,12 @@ class HtmlToFlowDocConverter {
       return;
     }
 
-    if (tag == 'img') {
+    if (tag == 'img' || tag == 'image') {
+      final src = _resolveImageSrc(node);
       blocks.add(
         ImageBlock(
           id: _nextId('img'),
-          src: node.attributes['src'] ?? '',
+          src: src,
           alt: node.attributes['alt'],
           width: _parseDouble(node.attributes['width']),
           height: _parseDouble(node.attributes['height']),
@@ -273,6 +274,34 @@ class HtmlToFlowDocConverter {
   double? _parseDouble(String? value) {
     if (value == null || value.isEmpty) return null;
     return double.tryParse(value.replaceAll('px', '').trim());
+  }
+
+  String _resolveImageSrc(dom.Element node) {
+    final directSrc = node.attributes['src'];
+    if (directSrc != null && directSrc.trim().isNotEmpty) {
+      return directSrc.trim();
+    }
+
+    final href = node.attributes['href'];
+    if (href != null && href.trim().isNotEmpty) {
+      return href.trim();
+    }
+
+    final xlinkHref = node.attributes['xlink:href'];
+    if (xlinkHref != null && xlinkHref.trim().isNotEmpty) {
+      return xlinkHref.trim();
+    }
+
+    for (final entry in node.attributes.entries) {
+      final key = entry.key.toString().toLowerCase();
+      if (key.endsWith(':href') || key == 'href') {
+        final value = entry.value.trim();
+        if (value.isNotEmpty) {
+          return value;
+        }
+      }
+    }
+    return '';
   }
 
   String _nextId(String prefix) {

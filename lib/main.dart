@@ -21,6 +21,7 @@ import 'package:path_provider/path_provider.dart';
 import 'utils/glass_config.dart';
 import 'utils/localization_extension.dart';
 import 'utils/font_catalog_helper.dart';
+import 'utils/ui_style.dart';
 import 'widgets/app_brand_icon.dart';
 
 void main() async {
@@ -67,32 +68,86 @@ void main() async {
   );
 
   runApp(
-    ProviderScope(
-      child: provider.MultiProvider(
-        providers: [
-          provider.ChangeNotifierProvider(create: (_) => ThemeNotifier()),
-          provider.ChangeNotifierProvider(create: (_) => AppSettingsNotifier()),
-          provider.ChangeNotifierProvider(create: (_) => TtsService()),
-          provider.ChangeNotifierProvider(create: (_) => ShareService()),
-        ],
-        child: const XxReadApp(),
+    RestartableApp(
+      child: ProviderScope(
+        child: provider.MultiProvider(
+          providers: [
+            provider.ChangeNotifierProvider(create: (_) => ThemeNotifier()),
+            provider.ChangeNotifierProvider(
+              create: (_) => AppSettingsNotifier(),
+            ),
+            provider.ChangeNotifierProvider(create: (_) => TtsService()),
+            provider.ChangeNotifierProvider(create: (_) => ShareService()),
+          ],
+          child: const XxReadApp(),
+        ),
       ),
     ),
   );
 }
 
+class RestartableApp extends StatefulWidget {
+  const RestartableApp({super.key, required this.child});
+
+  final Widget child;
+
+  static void restart(BuildContext context) {
+    final state = context.findAncestorStateOfType<_RestartableAppState>();
+    state?.restartApp();
+  }
+
+  @override
+  State<RestartableApp> createState() => _RestartableAppState();
+}
+
+class _RestartableAppState extends State<RestartableApp> {
+  Key _subtreeKey = UniqueKey();
+
+  void restartApp() {
+    setState(() => _subtreeKey = UniqueKey());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return KeyedSubtree(
+      key: _subtreeKey,
+      child: widget.child,
+    );
+  }
+}
+
 class ThemeNotifier extends ChangeNotifier {
+  static const String _themeModePrefKey = 'isDarkMode';
+  static const String _disableGlassEffectsPrefKey = 'disable_glass_effects';
+  static const String _uiStylePrefKey = 'ui_style_mode';
+  static const String _appThemePrefKey = 'appTheme';
+  static const String _customAccentPrefKey = 'customAccentColor';
+  static const String _globalAccentPrefKey = 'globalAccentColor';
+  static const String _lastPresetThemePrefKey = 'last_preset_app_theme';
+
   ThemeMode _themeMode = ThemeMode.system;
   bool _isInitialized = false;
   AppTheme _currentAppTheme = AppThemes.blueTheme; // 默认蓝色主题
   Color? _customAccentColor; // 存储自定义强调色
   Color? _globalAccentColor; // 全局强调色（与应用主题分离）
+  String _lastPresetThemeName = AppThemes.blueTheme.name;
+  AppUiStyle _uiStyle = AppUiStyle.glass;
+  bool _disableGlassEffectsPreference = false;
 
   ThemeMode get themeMode => _themeMode;
   bool get isInitialized => _isInitialized;
   AppTheme get currentAppTheme => _currentAppTheme;
   Color? get customAccentColor => _customAccentColor;
   Color? get globalAccentColor => _globalAccentColor;
+  Color? get effectiveAccentColor =>
+      _globalAccentColor ??
+      (_currentAppTheme.name == 'custom' ? _customAccentColor : null);
+  bool get isUsingThemeAccent => effectiveAccentColor == null;
+  String get lastPresetThemeName => _lastPresetThemeName;
+  AppUiStyle get uiStyle => _uiStyle;
+  bool get disableGlassEffectsPreference => _disableGlassEffectsPreference;
+  bool get shouldDisableGlassEffects =>
+      _uiStyle == AppUiStyle.material3 || _disableGlassEffectsPreference;
 
   ThemeNotifier() {
     _loadTheme();
@@ -100,15 +155,18 @@ class ThemeNotifier extends ChangeNotifier {
 
   void _loadTheme() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    final isDarkMode = prefs.getBool('isDarkMode');
-    final disableGlassEffects = prefs.getBool('disable_glass_effects') ?? false;
-    final appThemeName = prefs.getString('appTheme') ?? 'blue';
-    final customColorValue = prefs.getInt('customAccentColor');
-    final globalAccentColorValue = prefs.getInt('globalAccentColor');
+    final isDarkMode = prefs.getBool(_themeModePrefKey);
+    _disableGlassEffectsPreference =
+        prefs.getBool(_disableGlassEffectsPrefKey) ?? false;
+    _uiStyle = appUiStyleFromStorage(prefs.getString(_uiStylePrefKey));
+    final appThemeName =
+        prefs.getString(_appThemePrefKey) ?? AppThemes.blueTheme.name;
+    final customColorValue = prefs.getInt(_customAccentPrefKey);
+    final globalAccentColorValue = prefs.getInt(_globalAccentPrefKey);
+    _lastPresetThemeName =
+        prefs.getString(_lastPresetThemePrefKey) ?? AppThemes.blueTheme.name;
 
-    // 根据设置恢复毛玻璃全局状态
-    GlassEffectConfig.setDisableAllGlassEffects(disableGlassEffects);
-    GlassEffectConfig.applyPerformanceMode(reduceEffects: disableGlassEffects);
+    _syncGlassEffectState();
     if (prefs.getBool('enableAnimations') != true) {
       await prefs.setBool('enableAnimations', true);
     }
@@ -120,15 +178,12 @@ class ThemeNotifier extends ChangeNotifier {
       _themeMode = isDarkMode ? ThemeMode.dark : ThemeMode.light;
     }
 
-    // 加载全局强调色
-    if (globalAccentColorValue != null) {
-      _globalAccentColor = Color(globalAccentColorValue);
-      AppThemes.setGlobalAccentColor(_globalAccentColor);
+    if (appThemeName != 'custom') {
+      _lastPresetThemeName = appThemeName;
     }
 
-    // 加载应用主题
+    // 加载应用主题（兼容历史 custom 方案）
     if (appThemeName == 'custom' && customColorValue != null) {
-      // 加载自定义主题
       _customAccentColor = Color(customColorValue);
       _currentAppTheme = AppThemes.createCustomTheme(_customAccentColor!);
       debugPrint('🎨 加载自定义主题: ${_customAccentColor.toString()}');
@@ -136,6 +191,15 @@ class ThemeNotifier extends ChangeNotifier {
       _customAccentColor = null;
       _currentAppTheme = AppThemes.getThemeByName(appThemeName);
       debugPrint('🎨 加载预设主题: ${_currentAppTheme.displayName}');
+    }
+
+    // 加载全局强调色（优先于主题内强调色）
+    if (globalAccentColorValue != null) {
+      _globalAccentColor = Color(globalAccentColorValue);
+      AppThemes.setGlobalAccentColor(_globalAccentColor);
+    } else {
+      _globalAccentColor = null;
+      AppThemes.setGlobalAccentColor(null);
     }
 
     _isInitialized = true;
@@ -159,7 +223,7 @@ class ThemeNotifier extends ChangeNotifier {
 
     // 异步保存设置
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isDarkMode', isDarkMode);
+    await prefs.setBool(_themeModePrefKey, isDarkMode);
   }
 
   // 切换应用主题
@@ -169,20 +233,30 @@ class ThemeNotifier extends ChangeNotifier {
     debugPrint('🎨 切换应用主题到: ${theme.displayName}');
     _currentAppTheme = theme;
     _customAccentColor = null; // 清除自定义强调色
+    if (theme.name != 'custom') {
+      _lastPresetThemeName = theme.name;
+    }
 
     // 立即通知监听器更新UI
     notifyListeners();
 
     // 异步保存设置
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('appTheme', theme.name);
-    await prefs.remove('customAccentColor'); // 移除自定义颜色设置
+    await prefs.setString(_appThemePrefKey, theme.name);
+    await prefs.remove(_customAccentPrefKey); // 移除自定义颜色设置
+    if (theme.name != 'custom') {
+      await prefs.setString(_lastPresetThemePrefKey, _lastPresetThemeName);
+    }
     debugPrint('🎨 主题已保存: ${theme.name}');
   }
 
   // 设置自定义强调色
   void setCustomAccentColor(Color color) async {
     debugPrint('🎨 设置自定义强调色: ${color.toString()}');
+
+    if (_currentAppTheme.name != 'custom') {
+      _lastPresetThemeName = _currentAppTheme.name;
+    }
 
     // 清除可能冲突的全局强调色
     _globalAccentColor = null;
@@ -203,9 +277,10 @@ class ThemeNotifier extends ChangeNotifier {
 
     // 异步保存设置
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('appTheme', 'custom');
-    await prefs.setInt('customAccentColor', color.toARGB32());
-    await prefs.remove('globalAccentColor'); // 清除全局强调色设置
+    await prefs.setString(_appThemePrefKey, 'custom');
+    await prefs.setInt(_customAccentPrefKey, color.toARGB32());
+    await prefs.remove(_globalAccentPrefKey); // 清除全局强调色设置
+    await prefs.setString(_lastPresetThemePrefKey, _lastPresetThemeName);
     debugPrint('🎨 自定义颜色已保存: ${color.toARGB32()}');
   }
 
@@ -223,10 +298,41 @@ class ThemeNotifier extends ChangeNotifier {
     // 异步保存设置
     SharedPreferences prefs = await SharedPreferences.getInstance();
     if (color != null) {
-      await prefs.setInt('globalAccentColor', color.toARGB32());
+      await prefs.setInt(_globalAccentPrefKey, color.toARGB32());
     } else {
-      await prefs.remove('globalAccentColor');
+      await prefs.remove(_globalAccentPrefKey);
     }
+  }
+
+  /// 统一的强调色设置入口：
+  /// - `null` 表示跟随当前应用主题
+  /// - 非空颜色表示覆盖强调色
+  ///
+  /// 如果用户历史上使用的是 `custom` 主题，这里会回退到最近一次预设主题，
+  /// 然后再应用全局强调色，避免“主题+强调色双层状态”让设置变得难理解。
+  Future<void> setAccentColor(Color? color) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (_currentAppTheme.name == 'custom') {
+      _currentAppTheme = AppThemes.getThemeByName(_lastPresetThemeName);
+      _customAccentColor = null;
+      await prefs.setString(_appThemePrefKey, _currentAppTheme.name);
+      await prefs.remove(_customAccentPrefKey);
+    }
+
+    if (_globalAccentColor == color) {
+      return;
+    }
+    _globalAccentColor = color;
+    AppThemes.setGlobalAccentColor(color);
+    notifyListeners();
+
+    if (color != null) {
+      await prefs.setInt(_globalAccentPrefKey, color.toARGB32());
+    } else {
+      await prefs.remove(_globalAccentPrefKey);
+    }
+    await prefs.setString(_lastPresetThemePrefKey, _lastPresetThemeName);
   }
 
   void setThemeMode(ThemeMode mode) {
@@ -245,10 +351,37 @@ class ThemeNotifier extends ChangeNotifier {
   void _saveThemeMode(ThemeMode mode) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     if (mode == ThemeMode.system) {
-      await prefs.remove('isDarkMode');
+      await prefs.remove(_themeModePrefKey);
     } else {
-      await prefs.setBool('isDarkMode', mode == ThemeMode.dark);
+      await prefs.setBool(_themeModePrefKey, mode == ThemeMode.dark);
     }
+  }
+
+  Future<void> setUiStyle(AppUiStyle style) async {
+    if (_uiStyle == style) return;
+    _uiStyle = style;
+    _syncGlassEffectState();
+    notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_uiStylePrefKey, style.storageValue);
+  }
+
+  Future<void> setDisableGlassEffects(bool disabled) async {
+    if (_disableGlassEffectsPreference == disabled) return;
+    _disableGlassEffectsPreference = disabled;
+    _syncGlassEffectState();
+    notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_disableGlassEffectsPrefKey, disabled);
+  }
+
+  void _syncGlassEffectState() {
+    GlassEffectConfig.setDisableAllGlassEffects(shouldDisableGlassEffects);
+    GlassEffectConfig.applyPerformanceMode(
+      reduceEffects: shouldDisableGlassEffects,
+    );
   }
 }
 
@@ -384,10 +517,12 @@ class _XxReadAppState extends State<XxReadApp> {
           theme: _buildLightTheme(
             themeNotifier.currentAppTheme,
             appSettings.appFontFamily,
+            themeNotifier.uiStyle,
           ),
           darkTheme: _buildDarkTheme(
             themeNotifier.currentAppTheme,
             appSettings.appFontFamily,
+            themeNotifier.uiStyle,
           ),
           themeMode: themeNotifier.themeMode,
           locale: appSettings.locale,
@@ -533,7 +668,11 @@ class _XxReadAppState extends State<XxReadApp> {
     );
   }
 
-  ThemeData _buildLightTheme(AppTheme appTheme, String? appFontFamily) {
+  ThemeData _buildLightTheme(
+    AppTheme appTheme,
+    String? appFontFamily,
+    AppUiStyle uiStyle,
+  ) {
     ColorScheme colorScheme = appTheme.lightColorScheme;
     debugPrint('🎨 构建浅色主题 - 基础主题: ${appTheme.displayName}');
     debugPrint('🎨 基础主色调: ${colorScheme.primary.toString()}');
@@ -551,31 +690,19 @@ class _XxReadAppState extends State<XxReadApp> {
       debugPrint('🎨 没有全局强调色，使用主题默认色');
     }
 
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.light,
+    return _buildThemeData(
       colorScheme: colorScheme,
-      fontFamily: appFontFamily,
-      fontFamilyFallback: FontCatalog.appFallbacks(appFontFamily),
-      // fontFamily: GoogleFonts.notoSansSc().fontFamily, // 中文字体支持
-      appBarTheme: const AppBarTheme(
-        elevation: 0,
-        backgroundColor: Colors.transparent,
-        systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.dark,
-          statusBarBrightness: Brightness.light,
-          systemNavigationBarColor: Colors.transparent,
-          systemNavigationBarIconBrightness: Brightness.dark,
-          systemNavigationBarDividerColor: Colors.transparent,
-          systemStatusBarContrastEnforced: false,
-          systemNavigationBarContrastEnforced: false,
-        ),
-      ),
+      brightness: Brightness.light,
+      appFontFamily: appFontFamily,
+      uiStyle: uiStyle,
     );
   }
 
-  ThemeData _buildDarkTheme(AppTheme appTheme, String? appFontFamily) {
+  ThemeData _buildDarkTheme(
+    AppTheme appTheme,
+    String? appFontFamily,
+    AppUiStyle uiStyle,
+  ) {
     ColorScheme colorScheme = appTheme.darkColorScheme;
 
     // 如果有全局强调色，应用到color scheme
@@ -589,27 +716,66 @@ class _XxReadAppState extends State<XxReadApp> {
       debugPrint('🎨 新的主要颜色: ${colorScheme.primary.toString()}');
     }
 
+    return _buildThemeData(
+      colorScheme: colorScheme,
+      brightness: Brightness.dark,
+      appFontFamily: appFontFamily,
+      uiStyle: uiStyle,
+    );
+  }
+
+  ThemeData _buildThemeData({
+    required ColorScheme colorScheme,
+    required Brightness brightness,
+    required String? appFontFamily,
+    required AppUiStyle uiStyle,
+  }) {
+    final isDark = brightness == Brightness.dark;
+    final isMaterial3Style = uiStyle == AppUiStyle.material3;
+    final systemBarColor =
+        isMaterial3Style ? colorScheme.surface : Colors.transparent;
+
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: brightness,
       colorScheme: colorScheme,
+      scaffoldBackgroundColor: colorScheme.surface,
+      cardColor: isMaterial3Style
+          ? colorScheme.surfaceContainerLow
+          : colorScheme.surface.withValues(alpha: isDark ? 0.82 : 0.9),
+      dialogTheme: DialogThemeData(
+        backgroundColor: isMaterial3Style
+            ? colorScheme.surfaceContainerHigh
+            : colorScheme.surface.withValues(alpha: isDark ? 0.9 : 0.96),
+      ),
       fontFamily: appFontFamily,
       fontFamilyFallback: FontCatalog.appFallbacks(appFontFamily),
-      // fontFamily: GoogleFonts.notoSansSc().fontFamily, // 中文字体支持
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         elevation: 0,
-        backgroundColor: Colors.transparent,
+        scrolledUnderElevation: 0,
+        backgroundColor: systemBarColor,
+        surfaceTintColor: Colors.transparent,
         systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: Brightness.light,
-          statusBarBrightness: Brightness.dark,
-          systemNavigationBarColor: Colors.transparent,
-          systemNavigationBarIconBrightness: Brightness.light,
+          statusBarColor: systemBarColor,
+          statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+          statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+          systemNavigationBarColor: systemBarColor,
+          systemNavigationBarIconBrightness:
+              isDark ? Brightness.light : Brightness.dark,
           systemNavigationBarDividerColor: Colors.transparent,
           systemStatusBarContrastEnforced: false,
           systemNavigationBarContrastEnforced: false,
         ),
       ),
+      dividerTheme: DividerThemeData(
+        color: colorScheme.outline.withValues(
+          alpha: isMaterial3Style ? 0.32 : 0.18,
+        ),
+        thickness: 0.7,
+      ),
+      extensions: <ThemeExtension<dynamic>>[
+        UiStyleThemeExtension(style: uiStyle),
+      ],
     );
   }
 }

@@ -11,6 +11,16 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
     return route?.isCurrent ?? true;
   }
 
+  bool get _isMaterial3Style {
+    return Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
+  }
+
+  bool get _disableShellBlur =>
+      _isMaterial3Style || GlassEffectConfig.shouldDisableBlur;
+
   // 页面级沉浸式设置
   void _setupPageImmersiveMode() {
     if (!_shouldApplySystemUI()) {
@@ -48,115 +58,100 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
   /// - 这里不走 PageView，因为宽屏更适合“立刻切页”的应用范式。
   /// - 右侧直接渲染当前 index 对应页面，结构更直观。
   Widget _buildNavigationRail() {
+    final scheme = Theme.of(context).colorScheme;
+    final palette = PageStyleHelper.palette(context);
+    final railPanel = Container(
+      width: LayoutHelper.getValue(
+        context,
+        mobile: 80, // 不会用到，但保持一致性
+        tablet: 200, // 平板使用中等宽度
+        desktop: 250, // 桌面使用最大宽度
+      ),
+      decoration: BoxDecoration(
+        color: _isMaterial3Style
+            ? scheme.surfaceContainerLow
+            : GlassEffectConfig.surfaceColor(
+                context,
+                opacity: 0.8,
+              ),
+        border: Border(
+          right: BorderSide(
+            color: scheme.outline
+                .withValues(alpha: _isMaterial3Style ? 0.24 : 0.2),
+            width: 1,
+          ),
+        ),
+      ),
+      child: NavigationRail(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: _updateSelectedIndex,
+        extended: LayoutHelper.getValue(
+          context,
+          mobile: false,
+          tablet: true, // 平板显示扩展导航，方便使用
+          desktop: true, // 桌面也显示扩展导航
+        ),
+        labelType: LayoutHelper.getValue(
+          context,
+          mobile: NavigationRailLabelType.all,
+          tablet: NavigationRailLabelType.none, // 平板使用扩展模式，不需要额外标签
+          desktop: NavigationRailLabelType.none, // 桌面同样
+        ),
+        leading: LayoutHelper.isWideScreen(context)
+            ? _buildNavigationHeader()
+            : null,
+        minWidth: 60,
+        minExtendedWidth: LayoutHelper.getValue(
+          context,
+          mobile: 200,
+          tablet: 200,
+          desktop: 250,
+        ),
+        backgroundColor: Colors.transparent,
+        indicatorColor:
+            scheme.primary.withValues(alpha: _isMaterial3Style ? 0.18 : 0.2),
+        selectedIconTheme: IconThemeData(
+          color: scheme.primary,
+        ),
+        unselectedIconTheme: IconThemeData(
+          color: scheme.onSurface.withValues(alpha: 0.6),
+        ),
+        selectedLabelTextStyle: TextStyle(
+          color: scheme.primary,
+          fontWeight: FontWeight.w600,
+        ),
+        unselectedLabelTextStyle: TextStyle(
+          color: scheme.onSurface.withValues(alpha: 0.6),
+          fontWeight: FontWeight.w500,
+        ),
+        destinations: _navigationItems
+            .map(
+              (item) => NavigationRailDestination(
+                icon: Icon(item.icon),
+                selectedIcon: Icon(item.selectedIcon),
+                label: Text(item.label),
+              ),
+            )
+            .toList(),
+      ),
+    );
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            stops: const [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-            colors: [
-              // 使用主题的主色调创建更丰富的渐变
-              Theme.of(context).colorScheme.primary.withValues(alpha: 0.06),
-              Theme.of(context).colorScheme.secondary.withValues(alpha: 0.10),
-              Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.04),
-              Theme.of(
-                context,
-              ).colorScheme.primaryContainer.withValues(alpha: 0.12),
-              Theme.of(
-                context,
-              ).colorScheme.secondaryContainer.withValues(alpha: 0.08),
-              Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
-            ],
-          ),
+          gradient: PageStyleHelper.backgroundGradient(context),
         ),
         child: Row(
           children: [
             ClipRRect(
-              child: BackdropFilter(
-                enabled: !GlassEffectConfig.shouldDisableBlur,
-                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: Container(
-                  width: LayoutHelper.getValue(
-                    context,
-                    mobile: 80, // 不会用到，但保持一致性
-                    tablet: 200, // 平板使用中等宽度
-                    desktop: 250, // 桌面使用最大宽度
-                  ),
-                  decoration: BoxDecoration(
-                    color: GlassEffectConfig.surfaceColor(
-                      context,
-                      opacity: 0.8,
+              child: _disableShellBlur
+                  ? railPanel
+                  : BackdropFilter(
+                      enabled: !_disableShellBlur,
+                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                      child: railPanel,
                     ),
-                    border: Border(
-                      right: BorderSide(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.outline.withValues(alpha: 0.2),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                  child: NavigationRail(
-                    selectedIndex: _selectedIndex,
-                    onDestinationSelected: _updateSelectedIndex,
-                    extended: LayoutHelper.getValue(
-                      context,
-                      mobile: false,
-                      tablet: true, // 平板显示扩展导航，方便使用
-                      desktop: true, // 桌面也显示扩展导航
-                    ),
-                    labelType: LayoutHelper.getValue(
-                      context,
-                      mobile: NavigationRailLabelType.all,
-                      tablet: NavigationRailLabelType.none, // 平板使用扩展模式，不需要额外标签
-                      desktop: NavigationRailLabelType.none, // 桌面同样
-                    ),
-                    leading: LayoutHelper.isWideScreen(context)
-                        ? _buildNavigationHeader()
-                        : null,
-                    minWidth: 60,
-                    minExtendedWidth: LayoutHelper.getValue(
-                      context,
-                      mobile: 200,
-                      tablet: 200,
-                      desktop: 250,
-                    ),
-                    backgroundColor: Colors.transparent,
-                    indicatorColor: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.2),
-                    selectedIconTheme: IconThemeData(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    unselectedIconTheme: IconThemeData(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                    selectedLabelTextStyle: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    unselectedLabelTextStyle: TextStyle(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.6),
-                      fontWeight: FontWeight.w500,
-                    ),
-                    destinations: _navigationItems
-                        .map(
-                          (item) => NavigationRailDestination(
-                            icon: Icon(item.icon),
-                            selectedIcon: Icon(item.selectedIcon),
-                            label: Text(item.label),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-              ),
             ),
             Expanded(
               child: NavigationContext(
@@ -168,37 +163,43 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
         ),
       ),
       floatingActionButton: _selectedIndex < 2
-          ? Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
+          ? (_isMaterial3Style
+              ? FloatingActionButton.extended(
+                  onPressed: () => _navigateToImport(),
+                  backgroundColor: scheme.primaryContainer,
+                  foregroundColor: scheme.onPrimaryContainer,
+                  elevation: 2,
+                  icon: const Icon(Icons.add),
+                  label: Text(context.l10n.importBooks),
+                )
+              : Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: palette.backgroundStart.withValues(alpha: 0.28),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: BackdropFilter(
-                  enabled: !GlassEffectConfig.shouldDisableBlur,
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: FloatingActionButton.extended(
-                    onPressed: () => _navigateToImport(),
-                    backgroundColor: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: BackdropFilter(
+                      enabled: !_disableShellBlur,
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: FloatingActionButton.extended(
+                        onPressed: () => _navigateToImport(),
+                        backgroundColor: scheme.primary.withValues(
                           alpha: GlassEffectConfig.effectiveOpacity(0.9),
                         ),
-                    icon: const Icon(Icons.add),
-                    label: Text(context.l10n.importBooks),
+                        foregroundColor: scheme.onPrimary,
+                        icon: const Icon(Icons.add),
+                        label: Text(context.l10n.importBooks),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            )
+                ))
           : null,
     );
   }
@@ -211,6 +212,7 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
   /// - 两者通过 `_selectedIndex` + `_pageController` 保持同步。
   Widget _buildBottomNavigation() {
     final mediaQuery = MediaQuery.of(context);
+    final scheme = Theme.of(context).colorScheme;
     final metrics = _computeBottomNavMetrics(mediaQuery);
     final navigationCount = _navigationItems.length;
     const desiredItemWidth = 72.0;
@@ -226,9 +228,12 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         // 使用与书库页面完全相同的设置 - 完全透明且高度为0
-        backgroundColor: Colors.transparent,
+        backgroundColor:
+            _isMaterial3Style ? scheme.surface : Colors.transparent,
         elevation: 0,
         toolbarHeight: 0, // 设置高度为0，让毛玻璃标题栏在body中实现
+        surfaceTintColor:
+            _isMaterial3Style ? scheme.surface : Colors.transparent,
         systemOverlayStyle: SystemUiHelper.overlayStyleForBrightness(
           Theme.of(context).brightness,
         ),
@@ -270,13 +275,8 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
                   padding: EdgeInsets.only(bottom: metrics.navBottomInset),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(60),
-                    child: BackdropFilter(
-                      enabled: !GlassEffectConfig.shouldDisableBlur,
-                      filter: ImageFilter.blur(
-                        sigmaX: GlassEffectConfig.navigationBarBlur,
-                        sigmaY: GlassEffectConfig.navigationBarBlur,
-                      ),
-                      child: Container(
+                    child: (() {
+                      final navBar = Container(
                         width: navWidth,
                         height: kHomeMobileFloatingNavHeight,
                         padding: const EdgeInsets.symmetric(
@@ -284,29 +284,34 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: GlassEffectConfig.surfaceColor(
-                            context,
-                            opacity: GlassEffectConfig.navigationBarOpacity,
-                          ),
+                          color: _isMaterial3Style
+                              ? scheme.surfaceContainerHigh
+                              : GlassEffectConfig.surfaceColor(
+                                  context,
+                                  opacity:
+                                      GlassEffectConfig.navigationBarOpacity,
+                                ),
                           borderRadius: BorderRadius.circular(60),
                           border: Border.all(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .outline
-                                .withValues(alpha: 0.15),
-                            width: 0.5,
+                            color: scheme.outline.withValues(
+                              alpha: _isMaterial3Style ? 0.22 : 0.15,
+                            ),
+                            width: 0.6,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.12),
-                              blurRadius: 30,
+                              color: scheme.shadow.withValues(
+                                alpha: _isMaterial3Style ? 0.07 : 0.12,
+                              ),
+                              blurRadius: _isMaterial3Style ? 12 : 30,
                               offset: const Offset(0, 8),
                             ),
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.06),
-                              blurRadius: 60,
-                              offset: const Offset(0, 16),
-                            ),
+                            if (!_isMaterial3Style)
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 60,
+                                offset: const Offset(0, 16),
+                              ),
                           ],
                         ),
                         child: Row(
@@ -327,8 +332,20 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
                             );
                           }).toList(),
                         ),
-                      ),
-                    ),
+                      );
+
+                      if (_disableShellBlur) {
+                        return navBar;
+                      }
+                      return BackdropFilter(
+                        enabled: !_disableShellBlur,
+                        filter: ImageFilter.blur(
+                          sigmaX: GlassEffectConfig.navigationBarBlur,
+                          sigmaY: GlassEffectConfig.navigationBarBlur,
+                        ),
+                        child: navBar,
+                      );
+                    })(),
                   ),
                 ),
               ),
@@ -389,6 +406,8 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
     required VoidCallback onTap,
     String? tooltip,
   }) {
+    final scheme = Theme.of(context).colorScheme;
+    final palette = PageStyleHelper.palette(context);
     final button = InkWell(
       borderRadius: BorderRadius.circular(22),
       onTap: onTap,
@@ -396,19 +415,19 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.84),
+          color:
+              _isMaterial3Style ? scheme.surfaceContainer : palette.cardStrong,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
-            color:
-                Theme.of(context).colorScheme.outline.withValues(alpha: 0.12),
-            width: 0.5,
+            color: scheme.outline
+                .withValues(alpha: _isMaterial3Style ? 0.22 : 0.12),
+            width: 0.6,
           ),
         ),
         child: Icon(
           icon,
           size: 20,
-          color:
-              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.78),
+          color: scheme.onSurface.withValues(alpha: 0.78),
         ),
       ),
     );
@@ -514,6 +533,7 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
 
   // 导航头部组件 - 专为平板和桌面优化
   Widget _buildNavigationHeader() {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 24, 12, 16),
       child: Column(
@@ -533,10 +553,9 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.primary.withValues(alpha: 0.3),
-                  blurRadius: 8,
+                  color: scheme.primary
+                      .withValues(alpha: _isMaterial3Style ? 0.16 : 0.3),
+                  blurRadius: _isMaterial3Style ? 5 : 8,
                   offset: const Offset(0, 2),
                 ),
               ],
@@ -563,7 +582,7 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
                   desktop: 20.0,
                 ),
                 fontWeight: FontWeight.w700,
-                color: Theme.of(context).colorScheme.onSurface,
+                color: scheme.onSurface,
                 letterSpacing: 0.5,
               ),
             ),
@@ -572,9 +591,7 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
               context.l10n.homeTagline,
               style: TextStyle(
                 fontSize: 12,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.6),
+                color: scheme.onSurface.withValues(alpha: 0.6),
                 letterSpacing: 0.3,
               ),
             ),

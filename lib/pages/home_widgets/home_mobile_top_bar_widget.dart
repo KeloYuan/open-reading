@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../utils/glass_config.dart';
+import '../../utils/ui_style.dart';
 import '../home_layout_constants.dart';
 
 /// 手机首页顶部毛玻璃标题栏。
@@ -26,58 +27,68 @@ class HomeMobileTopBarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      child: BackdropFilter(
-        enabled: !GlassEffectConfig.shouldDisableBlur,
-        filter: ImageFilter.blur(
-          sigmaX: GlassEffectConfig.appBarBlur,
-          sigmaY: GlassEffectConfig.appBarBlur,
-        ),
-        child: Container(
-          height: MediaQuery.of(context).padding.top + kHomeMobileTopBarHeight,
-          decoration: BoxDecoration(
-            color: GlassEffectConfig.surfaceColor(
-              context,
-              opacity: GlassEffectConfig.appBarOpacity,
-            ),
-            border: Border(
-              bottom: BorderSide(
-                color: Theme.of(context)
-                    .colorScheme
-                    .outline
-                    .withValues(alpha: 0.2),
-                width: 0.5,
+    final scheme = Theme.of(context).colorScheme;
+    final isMaterial3Style = Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
+    final useBlur = !isMaterial3Style && !GlassEffectConfig.shouldDisableBlur;
+    final content = Container(
+      height: MediaQuery.of(context).padding.top + kHomeMobileTopBarHeight,
+      decoration: BoxDecoration(
+        color: isMaterial3Style
+            ? scheme.surfaceContainerHigh
+            : GlassEffectConfig.surfaceColor(
+                context,
+                opacity: GlassEffectConfig.appBarOpacity,
               ),
-            ),
-          ),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              horizontalPadding,
-              MediaQuery.of(context).padding.top + 8,
-              horizontalPadding,
-              8,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: titleFontSize,
-                      fontWeight: titleFontWeight,
-                      color: Theme.of(context).colorScheme.onSurface,
-                      height: 1.0,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (trailing != null) trailing!,
-              ],
-            ),
+        border: Border(
+          bottom: BorderSide(
+            color:
+                scheme.outline.withValues(alpha: isMaterial3Style ? 0.24 : 0.2),
+            width: isMaterial3Style ? 0.7 : 0.5,
           ),
         ),
       ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          horizontalPadding,
+          MediaQuery.of(context).padding.top + 8,
+          horizontalPadding,
+          8,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: titleFontSize,
+                  fontWeight: titleFontWeight,
+                  color: scheme.onSurface,
+                  height: 1.0,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (trailing != null) trailing!,
+          ],
+        ),
+      ),
+    );
+
+    return ClipRRect(
+      child: useBlur
+          ? BackdropFilter(
+              enabled: useBlur,
+              filter: ImageFilter.blur(
+                sigmaX: GlassEffectConfig.appBarBlur,
+                sigmaY: GlassEffectConfig.appBarBlur,
+              ),
+              child: content,
+            )
+          : content,
     );
   }
 }

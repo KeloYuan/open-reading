@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../utils/glass_config.dart';
+import '../utils/ui_style.dart';
 
 OverlayEntry? _activeSideToastEntry;
 
@@ -119,11 +120,82 @@ class _SideToastState extends State<_SideToast>
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isMaterial3Style = Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
+    final useBlur = !isMaterial3Style && !GlassEffectConfig.shouldDisableBlur;
     final topInset = MediaQuery.of(context).padding.top;
     final background = widget.backgroundColor ??
-        GlassEffectConfig.surfaceColor(context, opacity: 0.82);
+        (isMaterial3Style
+            ? scheme.surfaceContainerHigh
+            : GlassEffectConfig.surfaceColor(context, opacity: 0.82));
     final foreground = widget.textColor ?? scheme.onSurface;
     final icon = widget.icon ?? Icons.notifications_rounded;
+    final toastCard = Container(
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color:
+              scheme.outline.withValues(alpha: isMaterial3Style ? 0.24 : 0.22),
+          width: isMaterial3Style ? 0.9 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color:
+                scheme.shadow.withValues(alpha: isMaterial3Style ? 0.07 : 0.14),
+            blurRadius: isMaterial3Style ? 12 : 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        child: Row(
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: isMaterial3Style
+                    ? scheme.primaryContainer
+                    : scheme.primary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                icon,
+                size: 17,
+                color: isMaterial3Style
+                    ? scheme.onPrimaryContainer
+                    : scheme.primary,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                widget.message,
+                style: TextStyle(
+                  color: foreground,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  height: 1.25,
+                ),
+              ),
+            ),
+            IconButton(
+              icon: Icon(
+                Icons.close_rounded,
+                size: 18,
+                color: foreground.withValues(alpha: 0.75),
+              ),
+              splashRadius: 18,
+              onPressed: _dismissWithAnimation,
+            ),
+          ],
+        ),
+      ),
+    );
 
     return Positioned(
       top: topInset + 10,
@@ -145,65 +217,13 @@ class _SideToastState extends State<_SideToast>
                   color: Colors.transparent,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(18),
-                    child: BackdropFilter(
-                      enabled: !GlassEffectConfig.shouldDisableBlur,
-                      filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: background,
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.22),
-                            width: 1,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.14),
-                              blurRadius: 24,
-                              offset: const Offset(0, 12),
-                            ),
-                          ],
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 30,
-                                height: 30,
-                                decoration: BoxDecoration(
-                                  color: scheme.primary.withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child:
-                                    Icon(icon, size: 17, color: scheme.primary),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  widget.message,
-                                  style: TextStyle(
-                                    color: foreground,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.25,
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.close_rounded,
-                                  size: 18,
-                                  color: foreground.withValues(alpha: 0.75),
-                                ),
-                                splashRadius: 18,
-                                onPressed: _dismissWithAnimation,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+                    child: useBlur
+                        ? BackdropFilter(
+                            enabled: useBlur,
+                            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                            child: toastCard,
+                          )
+                        : toastCard,
                   ),
                 ),
               ),

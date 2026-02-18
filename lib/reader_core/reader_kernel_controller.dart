@@ -700,6 +700,23 @@ class ReaderKernelController extends ChangeNotifier {
   }
 
   PagePlan _repairPagePlanIfNeeded(PagePlan plan, String chapterText) {
+    if (plan.pages.isEmpty) {
+      if (chapterText.trim().isNotEmpty) {
+        return PagePlan(
+          chapterId: plan.chapterId,
+          pages: _paginatePlainText(chapterText),
+          cacheKey: plan.cacheKey,
+        );
+      }
+      return PagePlan(
+        chapterId: plan.chapterId,
+        pages: const [
+          Page(index: 0, startOffset: 0, endOffset: 0, fragments: []),
+        ],
+        cacheKey: plan.cacheKey,
+      );
+    }
+
     if (chapterText.trim().isEmpty) {
       return plan;
     }

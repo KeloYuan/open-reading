@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/glass_config.dart';
+import '../utils/ui_style.dart';
 import '../widgets/app_brand_icon.dart';
 
 /// 用户协议页面
@@ -41,6 +42,16 @@ class _UserAgreementPageState extends State<UserAgreementPage>
   late Animation<Offset> _slideAnimation;
 
   bool _showContent = false;
+
+  bool get _isMaterial3Style {
+    return Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
+  }
+
+  bool get _useBlur =>
+      !_isMaterial3Style && !GlassEffectConfig.shouldDisableBlur;
 
   @override
   void initState() {
@@ -317,6 +328,105 @@ class _UserAgreementPageState extends State<UserAgreementPage>
   Widget _buildAgreementCard() {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBody = Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: _isMaterial3Style
+            ? scheme.surfaceContainerHigh
+            : (isDark
+                ? Colors.black.withValues(
+                    alpha: GlassEffectConfig.effectiveOpacity(0.4),
+                  )
+                : Colors.white.withValues(
+                    alpha: GlassEffectConfig.effectiveOpacity(0.85),
+                  )),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: _isMaterial3Style
+              ? scheme.outline.withValues(alpha: 0.24)
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.white.withValues(alpha: 0.5)),
+          width: _isMaterial3Style ? 1.0 : 1.5,
+        ),
+      ),
+      child: Column(
+        children: [
+          // 卡片标题 - 渐变背景
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  scheme.primary.withValues(alpha: 0.12),
+                  scheme.secondary.withValues(alpha: 0.08),
+                ],
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(24),
+                topRight: Radius.circular(24),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: scheme.primary.withValues(alpha: 0.20),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.verified_user_rounded,
+                    color: scheme.primary,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '用户服务协议',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '请仔细阅读以下内容',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 协议内容
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              physics: const BouncingScrollPhysics(),
+              child: _buildAgreementContent(),
+            ),
+          ),
+        ],
+      ),
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -331,112 +441,13 @@ class _UserAgreementPageState extends State<UserAgreementPage>
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          enabled: !GlassEffectConfig.shouldDisableBlur,
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.black.withValues(
-                      alpha: GlassEffectConfig.effectiveOpacity(0.4),
-                    )
-                  : Colors.white.withValues(
-                      alpha: GlassEffectConfig.effectiveOpacity(0.85),
-                    ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.1)
-                    : Colors.white.withValues(alpha: 0.5),
-                width: 1.5,
-              ),
-            ),
-            child: Column(
-              children: [
-                // 卡片标题 - 渐变背景
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        scheme.primary.withValues(alpha: 0.12),
-                        scheme.secondary.withValues(alpha: 0.08),
-                      ],
-                    ),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(24),
-                      topRight: Radius.circular(24),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: scheme.primary.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: scheme.primary.withValues(alpha: 0.20),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          Icons.verified_user_rounded,
-                          color: scheme.primary,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '用户服务协议',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleLarge
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '请仔细阅读以下内容',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface
-                                        .withValues(alpha: 0.6),
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // 协议内容
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    physics: const BouncingScrollPhysics(),
-                    child: _buildAgreementContent(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        child: _useBlur
+            ? BackdropFilter(
+                enabled: _useBlur,
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: cardBody,
+              )
+            : cardBody,
       ),
     );
   }
@@ -584,10 +595,13 @@ class _UserAgreementPageState extends State<UserAgreementPage>
     required String description,
     required Color accent,
   }) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.58),
+        color: _isMaterial3Style
+            ? scheme.surfaceContainerLow
+            : scheme.surface.withValues(alpha: 0.58),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: accent.withValues(alpha: 0.24),
@@ -678,6 +692,53 @@ class _UserAgreementPageState extends State<UserAgreementPage>
     required bool isPrimary,
   }) {
     final scheme = Theme.of(context).colorScheme;
+    final buttonBody = Material(
+      color: isPrimary ? Colors.transparent : Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(28),
+        child: Container(
+          decoration: BoxDecoration(
+            border: isPrimary
+                ? null
+                : Border.all(
+                    color: scheme.outline.withValues(alpha: 0.3),
+                    width: 1.5,
+                  ),
+            borderRadius: BorderRadius.circular(28),
+            color: isPrimary
+                ? Colors.transparent
+                : (_isMaterial3Style
+                    ? scheme.surfaceContainer
+                    : scheme.surface.withValues(alpha: 0.8)),
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (isPrimary)
+                Icon(
+                  Icons.check_circle_rounded,
+                  color: scheme.onPrimary,
+                  size: 22,
+                ),
+              if (isPrimary) const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                  color: isPrimary
+                      ? scheme.onPrimary
+                      : scheme.onSurface.withValues(alpha: 0.8),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
     return Container(
       height: 56,
       decoration: BoxDecoration(
@@ -709,63 +770,13 @@ class _UserAgreementPageState extends State<UserAgreementPage>
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(28),
-        child: BackdropFilter(
-          enabled: !GlassEffectConfig.shouldDisableBlur,
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Material(
-            color: isPrimary ? Colors.transparent : Colors.transparent,
-            child: InkWell(
-              onTap: onPressed,
-              borderRadius: BorderRadius.circular(28),
-              child: Container(
-                decoration: BoxDecoration(
-                  border: isPrimary
-                      ? null
-                      : Border.all(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .outline
-                              .withValues(alpha: 0.3),
-                          width: 1.5,
-                        ),
-                  borderRadius: BorderRadius.circular(28),
-                  color: isPrimary
-                      ? Colors.transparent
-                      : Theme.of(context)
-                          .colorScheme
-                          .surface
-                          .withValues(alpha: 0.8),
-                ),
-                alignment: Alignment.center,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (isPrimary)
-                      const Icon(
-                        Icons.check_circle_rounded,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    if (isPrimary) const SizedBox(width: 8),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 17,
-                        color: isPrimary
-                            ? Colors.white
-                            : Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withValues(alpha: 0.8),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
+        child: _useBlur
+            ? BackdropFilter(
+                enabled: _useBlur,
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: buttonBody,
+              )
+            : buttonBody,
       ),
     );
   }

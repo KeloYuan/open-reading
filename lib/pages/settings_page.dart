@@ -17,10 +17,10 @@ import '../widgets/webdav_config_dialog.dart';
 import '../widgets/app_brand_icon.dart';
 import 'home_shell_page.dart';
 import 'home_layout_constants.dart';
-import '../utils/glass_config.dart';
 import '../utils/localization_extension.dart';
 import '../utils/page_style_helper.dart';
 import '../utils/system_ui_helper.dart';
+import '../utils/ui_style.dart';
 
 part 'settings_page_cover_actions_part.dart';
 
@@ -124,12 +124,6 @@ class _SettingsPageState extends State<SettingsPage> {
       await prefs.setBool('enableAnimations', true);
     }
 
-    // 应用毛玻璃全局设置
-    GlassEffectConfig.setDisableAllGlassEffects(_disableGlassEffects);
-    GlassEffectConfig.applyPerformanceMode(
-      reduceEffects: _disableGlassEffects,
-    );
-
     // 初始化WebDAV服务
     await _webdavService.initialize();
     if (mounted) {
@@ -177,6 +171,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final themeNotifier = Provider.of<ThemeNotifier>(context);
     final appSettings = Provider.of<AppSettingsNotifier>(context);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final isMaterial3Style = themeNotifier.uiStyle == AppUiStyle.material3;
 
     // 检查是否在侧边导航栏模式下
     final navContext = NavigationContext.of(context);
@@ -192,7 +187,9 @@ class _SettingsPageState extends State<SettingsPage> {
       extendBody: true,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: isMaterial3Style
+            ? Theme.of(context).colorScheme.surface
+            : Colors.transparent,
         elevation: 0,
         toolbarHeight: 0, // 关闭系统AppBar，使用自绘毛玻璃顶栏
         systemOverlayStyle: SystemUiHelper.overlayStyleForBrightness(
@@ -213,6 +210,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final l10n = context.l10n;
     final useRailNavigation =
         NavigationContext.of(context)?.useRailNavigation ?? false;
+    final isMaterial3Style = themeNotifier.uiStyle == AppUiStyle.material3;
     return Container(
       decoration: BoxDecoration(
         gradient: PageStyleHelper.backgroundGradient(context),
@@ -239,12 +237,15 @@ class _SettingsPageState extends State<SettingsPage> {
             children: [
               _buildSwitchSetting(
                 title: '低性能模式（关闭毛玻璃）',
-                subtitle: _disableGlassEffects ? '已关闭所有毛玻璃效果' : '保留毛玻璃效果',
-                value: _disableGlassEffects,
+                subtitle: isMaterial3Style
+                    ? 'Material 3 风格下自动关闭毛玻璃'
+                    : _disableGlassEffects
+                        ? '已关闭所有毛玻璃效果'
+                        : '保留毛玻璃效果',
+                value: isMaterial3Style ? true : _disableGlassEffects,
                 onChanged: (value) {
                   setState(() => _disableGlassEffects = value);
-                  GlassEffectConfig.setDisableAllGlassEffects(value);
-                  GlassEffectConfig.applyPerformanceMode(reduceEffects: value);
+                  themeNotifier.setDisableGlassEffects(value);
                   showSideToast(
                     context,
                     value ? '已关闭毛玻璃效果' : '已恢复毛玻璃效果',
@@ -254,11 +255,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   );
                 },
                 icon: Icons.tune_rounded,
+                enabled: !isMaterial3Style,
               ),
+              _buildUiStyleSelector(themeNotifier),
               _buildThemeToggle(themeNotifier),
               _buildAppThemeSelector(themeNotifier),
-              _buildCustomAccentColorSelector(themeNotifier),
-              _buildGlobalAccentColorSelector(themeNotifier),
+              _buildAccentColorSelector(themeNotifier),
             ],
           ),
           const SizedBox(height: 20),
@@ -299,7 +301,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   setState(() => _enableBooksource = value);
                   _saveSettings();
                   // 通知主页面刷新导航栏
-                  _showRestartDialog();
+                  _showRestartDialog(
+                    reason: '书源功能的开启/关闭需要重启应用才能生效。',
+                  );
                 },
                 icon: Icons.cloud_download,
               ),
@@ -587,6 +591,14 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  bool get _shouldDisableBlurForCurrentTheme {
+    final isMaterial3Style = Theme.of(
+          context,
+        ).extension<UiStyleThemeExtension>()?.isMaterial3Style ??
+        false;
+    return _disableGlassEffects || isMaterial3Style;
+  }
+
   Widget _buildSectionCard({
     required String title,
     required IconData icon,
@@ -596,7 +608,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
-        enabled: !_disableGlassEffects,
+        enabled: !_shouldDisableBlurForCurrentTheme,
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
           decoration: BoxDecoration(
@@ -655,7 +667,203 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Widget _buildUiStyleSelector(ThemeNotifier themeNotifier) {
+    final currentStyle = themeNotifier.uiStyle;
+    return _buildActionSetting(
+      title: '界面风格',
+      subtitle: '当前：${currentStyle.displayName}',
+      onTap: () => _showUiStyleModal(themeNotifier),
+      icon: currentStyle.icon,
+    );
+  }
+
+  void _showUiStyleModal(ThemeNotifier themeNotifier) {
+    const options = [
+      _UiStyleOption(style: AppUiStyle.glass),
+      _UiStyleOption(style: AppUiStyle.material3),
+    ];
+    final isMaterial3Style = Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
+    final scheme = Theme.of(context).colorScheme;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor:
+          isMaterial3Style ? scheme.surfaceContainerHigh : Colors.transparent,
+      builder: (modalContext) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isMaterial3Style
+                ? Theme.of(modalContext).colorScheme.surfaceContainerHigh
+                : Theme.of(modalContext).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border(
+              top: BorderSide(
+                color: Theme.of(modalContext).colorScheme.outline.withValues(
+                      alpha: isMaterial3Style ? 0.24 : 0.16,
+                    ),
+              ),
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 14),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(modalContext)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 2, 24, 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        themeNotifier.uiStyle.icon,
+                        color: Theme.of(modalContext).colorScheme.primary,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '界面风格',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(modalContext).colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ...options.map((item) {
+                  final selected = themeNotifier.uiStyle == item.style;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () async {
+                          if (selected) {
+                            Navigator.of(modalContext).pop();
+                            return;
+                          }
+
+                          Navigator.of(modalContext).pop();
+                          await themeNotifier.setUiStyle(item.style);
+                          if (!mounted) return;
+                          _showRestartDialog(
+                            reason:
+                                '界面风格已切换为 ${item.style.displayName}，重启后会完整应用到所有页面。',
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: selected
+                                  ? Theme.of(modalContext).colorScheme.primary
+                                  : Theme.of(modalContext)
+                                      .colorScheme
+                                      .outline
+                                      .withValues(alpha: 0.35),
+                              width: selected ? 1.6 : 1,
+                            ),
+                            color: selected
+                                ? Theme.of(modalContext)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.08)
+                                : Colors.transparent,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                item.style.icon,
+                                color: selected
+                                    ? Theme.of(modalContext).colorScheme.primary
+                                    : Theme.of(modalContext)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.75),
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.style.displayName,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: selected
+                                            ? Theme.of(
+                                                modalContext,
+                                              ).colorScheme.primary
+                                            : Theme.of(
+                                                modalContext,
+                                              ).colorScheme.onSurface,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      item.style.subtitle,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Theme.of(modalContext)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.62),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (selected)
+                                Icon(
+                                  Icons.check_circle,
+                                  color: Theme.of(modalContext)
+                                      .colorScheme
+                                      .primary,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildAppThemeSelector(ThemeNotifier themeNotifier) {
+    final accentSummary = themeNotifier.isUsingThemeAccent
+        ? '强调色：跟随主题'
+        : '强调色：${AppThemes.getAccentColorName(themeNotifier.effectiveAccentColor!)}';
     return Container(
       margin: const EdgeInsets.only(bottom: 1),
       child: Material(
@@ -692,7 +900,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                       ),
                       Text(
-                        '当前: ${themeNotifier.currentAppTheme.displayName}',
+                        '当前: ${themeNotifier.currentAppTheme.displayName} · $accentSummary',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: Theme.of(
                                 context,
@@ -702,6 +910,88 @@ class _SettingsPageState extends State<SettingsPage> {
                     ],
                   ),
                 ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccentColorSelector(ThemeNotifier themeNotifier) {
+    final accentColor = themeNotifier.effectiveAccentColor;
+    final subtitle = accentColor == null
+        ? '跟随应用主题'
+        : AppThemes.getAccentColorName(accentColor);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showAccentColorModal(themeNotifier),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.secondary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    Icons.color_lens_rounded,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.secondary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '强调色',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                      ),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (accentColor != null)
+                  Container(
+                    width: 24,
+                    height: 24,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: accentColor,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outline.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ),
                 Icon(
                   Icons.arrow_forward_ios,
                   size: 16,
@@ -1195,22 +1485,292 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  void _showAccentColorModal(ThemeNotifier themeNotifier) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final selectedColor = themeNotifier.effectiveAccentColor;
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.58,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 20),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.color_lens_rounded,
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        '强调色',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    '推荐优先选择应用主题，再按需覆盖强调色。',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () async {
+                        await themeNotifier.setAccentColor(null);
+                        setModalState(() {});
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: selectedColor == null
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.outline.withValues(alpha: 0.3),
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.auto_awesome,
+                              color: selectedColor == null
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.6),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '跟随主题',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: selectedColor == null
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.primary
+                                          : Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  Text(
+                                    '使用当前应用主题默认强调色',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface
+                                          .withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (selectedColor == null)
+                              Icon(
+                                Icons.check_circle,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 24),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest
+                          .withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outline.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: GridView.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 4,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: 1.2,
+                      ),
+                      itemCount: AppThemes.accentColors.length,
+                      itemBuilder: (context, index) {
+                        final color = AppThemes.accentColors[index];
+                        final isSelected =
+                            selectedColor?.toARGB32() == color.toARGB32();
+                        final colorName = AppThemes.getAccentColorName(color);
+
+                        return GestureDetector(
+                          onTap: () async {
+                            await themeNotifier.setAccentColor(color);
+                            setModalState(() {});
+                          },
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface
+                                          : Colors.transparent,
+                                      width: 2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: color.withValues(alpha: 0.3),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: isSelected
+                                      ? Icon(
+                                          Icons.check,
+                                          color: color.computeLuminance() > 0.5
+                                              ? Colors.black
+                                              : Colors.white,
+                                          size: 20,
+                                        )
+                                      : null,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                colorName,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurface
+                                      .withValues(alpha: 0.8),
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    16,
+                    24,
+                    MediaQuery.of(context).padding.bottom + 16,
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        '完成',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildSwitchSetting({
     required String title,
     required String subtitle,
     required bool value,
     required Function(bool) onChanged,
     required IconData icon,
+    bool enabled = true,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 1),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () {
-            onChanged(!value);
-            _saveSettings();
-          },
+          onTap: enabled
+              ? () {
+                  onChanged(!value);
+                  _saveSettings();
+                }
+              : null,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
@@ -1253,10 +1813,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 Switch(
                   value: value,
-                  onChanged: (newValue) {
-                    onChanged(newValue);
-                    _saveSettings();
-                  },
+                  onChanged: enabled
+                      ? (newValue) {
+                          onChanged(newValue);
+                          _saveSettings();
+                        }
+                      : null,
                   activeTrackColor: Theme.of(context).colorScheme.primary,
                   thumbColor: WidgetStateProperty.resolveWith(
                     (states) => states.contains(WidgetState.selected)
@@ -1276,7 +1838,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
-        enabled: !_disableGlassEffects,
+        enabled: !_shouldDisableBlurForCurrentTheme,
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           padding: const EdgeInsets.all(20),
@@ -1444,342 +2006,12 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildCustomAccentColorSelector(ThemeNotifier themeNotifier) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 1),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _showCustomAccentColorModal(themeNotifier),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.tertiary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    Icons.color_lens,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.tertiary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '自定义主题强调色',
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
-                      ),
-                      Text(
-                        (themeNotifier.currentAppTheme.name == 'custom' &&
-                                themeNotifier.customAccentColor != null)
-                            ? '已选择自定义颜色'
-                            : '点击选择强调色',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.6),
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (themeNotifier.currentAppTheme.name == 'custom' &&
-                    themeNotifier.customAccentColor != null)
-                  Container(
-                    width: 24,
-                    height: 24,
-                    margin: const EdgeInsets.only(right: 8),
-                    decoration: BoxDecoration(
-                      color: themeNotifier.customAccentColor,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.outline.withValues(alpha: 0.3),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.4),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> _openGithubRepo() async {
     final uri = Uri.parse('https://github.com/KeloYuan/Origo-Reader');
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       showSideToast(context, '无法打开 GitHub 链接', icon: Icons.error_outline);
     }
-  }
-
-  void _showCustomAccentColorModal(ThemeNotifier themeNotifier) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return Container(
-            height: MediaQuery.of(context).size.height * 0.5,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-            ),
-            child: Column(
-              children: [
-                // 拖拽指示条
-                Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 20),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                // 标题
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.color_lens,
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        '选择自定义强调色',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // 颜色网格
-                Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 24),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest
-                          .withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.outline.withValues(alpha: 0.2),
-                      ),
-                    ),
-                    child: GridView.builder(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 6,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: 1,
-                      ),
-                      itemCount: AppThemes.accentColors.length,
-                      itemBuilder: (context, index) {
-                        final color = AppThemes.accentColors[index];
-                        final isSelected =
-                            themeNotifier.currentAppTheme.name == 'custom' &&
-                                themeNotifier.customAccentColor?.toARGB32() ==
-                                    color.toARGB32();
-                        debugPrint(
-                          '🎨 颜色 ${color.toString()} 选中状态: $isSelected',
-                        );
-
-                        return GestureDetector(
-                          onTap: () {
-                            debugPrint('🎨 用户选择了颜色: ${color.toString()}');
-                            themeNotifier.setCustomAccentColor(color);
-                            setModalState(() {});
-                            // 关闭弹窗以立即看到效果
-                            Navigator.pop(context);
-                          },
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: color,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: isSelected
-                                    ? Theme.of(context).colorScheme.onSurface
-                                    : Colors.transparent,
-                                width: 2,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: color.withValues(alpha: 0.3),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: isSelected
-                                ? Icon(
-                                    Icons.check,
-                                    color: color.computeLuminance() > 0.5
-                                        ? Colors.black
-                                        : Colors.white,
-                                    size: 20,
-                                  )
-                                : null,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                // 底部按钮
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    24,
-                    16,
-                    24,
-                    MediaQuery.of(context).padding.bottom + 16,
-                  ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text(
-                        '完成',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  // 全局强调色选择器（与应用主题分离）
-  Widget _buildGlobalAccentColorSelector(ThemeNotifier themeNotifier) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 1),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _showGlobalAccentColorModal(themeNotifier),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.secondary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    Icons.palette,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.secondary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '全局强调色',
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
-                      ),
-                      Text(
-                        themeNotifier.globalAccentColor != null
-                            ? AppThemes.getAccentColorName(
-                                themeNotifier.globalAccentColor!,
-                              )
-                            : '跟随系统',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.6),
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (themeNotifier.globalAccentColor != null)
-                  Container(
-                    width: 24,
-                    height: 24,
-                    margin: const EdgeInsets.only(right: 8),
-                    decoration: BoxDecoration(
-                      color: themeNotifier.globalAccentColor,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.outline.withValues(alpha: 0.3),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.4),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   // WebDAV配置对话框
@@ -1928,279 +2160,6 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  void _showGlobalAccentColorModal(ThemeNotifier themeNotifier) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return Container(
-            height: MediaQuery.of(context).size.height * 0.6,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-            ),
-            child: Column(
-              children: [
-                // 拖拽指示条
-                Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 20),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                // 标题
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.palette,
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        '全局强调色',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Text(
-                    '设置应用界面的全局强调色，独立于阅读主题',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onSurface.withValues(alpha: 0.7),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // 跟随系统选项
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () {
-                        themeNotifier.setGlobalAccentColor(null);
-                        setModalState(() {});
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: themeNotifier.globalAccentColor == null
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(
-                                    context,
-                                  ).colorScheme.outline.withValues(alpha: 0.3),
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.auto_mode,
-                              color: themeNotifier.globalAccentColor == null
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withValues(alpha: 0.6),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '跟随系统',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      color: themeNotifier.globalAccentColor ==
-                                              null
-                                          ? Theme.of(
-                                              context,
-                                            ).colorScheme.primary
-                                          : Theme.of(
-                                              context,
-                                            ).colorScheme.onSurface,
-                                    ),
-                                  ),
-                                  Text(
-                                    '使用当前应用主题的默认强调色',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurface
-                                          .withValues(alpha: 0.6),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (themeNotifier.globalAccentColor == null)
-                              Icon(
-                                Icons.check_circle,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // 颜色网格
-                Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 24),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .surfaceContainerHighest
-                          .withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.outline.withValues(alpha: 0.2),
-                      ),
-                    ),
-                    child: GridView.builder(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 4,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: 1.2,
-                      ),
-                      itemCount: AppThemes.accentColors.length,
-                      itemBuilder: (context, index) {
-                        final color = AppThemes.accentColors[index];
-                        final isSelected =
-                            themeNotifier.globalAccentColor?.toARGB32() ==
-                                color.toARGB32();
-                        final colorName = AppThemes.getAccentColorName(color);
-
-                        return GestureDetector(
-                          onTap: () {
-                            themeNotifier.setGlobalAccentColor(color);
-                            setModalState(() {});
-                          },
-                          child: Column(
-                            children: [
-                              Expanded(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: color,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? Theme.of(
-                                              context,
-                                            ).colorScheme.onSurface
-                                          : Colors.transparent,
-                                      width: 2,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: color.withValues(alpha: 0.3),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
-                                  ),
-                                  child: isSelected
-                                      ? Icon(
-                                          Icons.check,
-                                          color: color.computeLuminance() > 0.5
-                                              ? Colors.black
-                                              : Colors.white,
-                                          size: 20,
-                                        )
-                                      : null,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                colorName,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurface
-                                      .withValues(alpha: 0.8),
-                                ),
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                // 底部按钮
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    24,
-                    16,
-                    24,
-                    MediaQuery.of(context).padding.bottom + 16,
-                  ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text(
-                        '完成',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
       ),
     );
   }
@@ -2525,4 +2484,10 @@ class _LanguageOption {
     required this.code,
     required this.label,
   });
+}
+
+class _UiStyleOption {
+  final AppUiStyle style;
+
+  const _UiStyleOption({required this.style});
 }

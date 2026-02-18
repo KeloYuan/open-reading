@@ -19,6 +19,7 @@ import '../utils/glass_config.dart';
 import '../utils/localization_extension.dart';
 import '../utils/page_style_helper.dart';
 import '../utils/system_ui_helper.dart';
+import '../utils/ui_style.dart';
 import '../widgets/app_brand_icon.dart';
 
 enum _LibraryFilter {
@@ -43,6 +44,55 @@ class _LibraryPageState extends State<LibraryPage> {
   Timer? _searchDebounce;
   String _searchQuery = '';
   _LibraryFilter _selectedFilter = _LibraryFilter.all;
+
+  bool get _isMaterial3Style {
+    return Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
+  }
+
+  BoxDecoration _panelDecoration({
+    double radius = 16,
+    bool stronger = false,
+    bool addShadow = false,
+    double borderAlpha = 0.12,
+    Color? color,
+  }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final palette = PageStyleHelper.palette(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final isMaterial3Style = _isMaterial3Style;
+    return BoxDecoration(
+      color: color ??
+          (isMaterial3Style
+              ? (stronger
+                  ? scheme.surfaceContainer
+                  : scheme.surfaceContainerLow)
+              : (stronger ? palette.cardStrong : palette.card)),
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+        color: scheme.outline.withValues(
+          alpha: isMaterial3Style ? 0.22 : borderAlpha,
+        ),
+        width: 0.9,
+      ),
+      boxShadow: addShadow
+          ? [
+              BoxShadow(
+                color: scheme.shadow.withValues(
+                  alpha: isMaterial3Style
+                      ? (isDark ? 0.16 : 0.07)
+                      : (isDark ? 0.24 : 0.09),
+                ),
+                blurRadius: isMaterial3Style ? 12 : 16,
+                offset: Offset(0, isMaterial3Style ? 6 : 8),
+              ),
+            ]
+          : null,
+    );
+  }
 
   @override
   void initState() {
@@ -116,6 +166,8 @@ class _LibraryPageState extends State<LibraryPage> {
     // 检查是否在侧边导航栏模式下
     final navContext = NavigationContext.of(context);
     final useRailNavigation = navContext?.useRailNavigation ?? false;
+    final scheme = Theme.of(context).colorScheme;
+    final appBarColor = _isMaterial3Style ? scheme.surface : Colors.transparent;
 
     // 在侧边导航栏模式下，不显示 Scaffold 和 AppBar
     if (useRailNavigation) {
@@ -127,10 +179,10 @@ class _LibraryPageState extends State<LibraryPage> {
       extendBody: true, // 让内容延伸到导航区，配合手势小白条
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: appBarColor,
         elevation: 0,
         toolbarHeight: 0,
-        surfaceTintColor: Colors.transparent,
+        surfaceTintColor: appBarColor,
         scrolledUnderElevation: 0,
         systemOverlayStyle: SystemUiHelper.overlayStyleForBrightness(
           Theme.of(context).brightness,
@@ -225,6 +277,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
   Widget _buildTopBar() {
     final palette = PageStyleHelper.palette(context);
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Row(
@@ -253,9 +306,11 @@ class _LibraryPageState extends State<LibraryPage> {
             child: Container(
               width: 44,
               height: 44,
-              decoration: BoxDecoration(
-                color: palette.card,
-                borderRadius: BorderRadius.circular(22),
+              decoration: _panelDecoration(
+                radius: 22,
+                stronger: true,
+                color:
+                    _isMaterial3Style ? scheme.surfaceContainer : palette.card,
               ),
               child: Icon(
                 Icons.add_rounded,
@@ -270,17 +325,16 @@ class _LibraryPageState extends State<LibraryPage> {
 
   Widget _buildSearchBar() {
     final palette = PageStyleHelper.palette(context);
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
         height: 52,
         padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: palette.card,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: palette.border,
-          ),
+        decoration: _panelDecoration(
+          radius: 14,
+          stronger: true,
+          color: _isMaterial3Style ? scheme.surfaceContainerLow : palette.card,
         ),
         child: Row(
           children: [
@@ -321,6 +375,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
   Widget _buildShelfSummaryCard() {
     final palette = PageStyleHelper.palette(context);
+    final scheme = Theme.of(context).colorScheme;
     final total = _books.length;
     final inReading = _books.where(_isReadingBook).length;
     final finished = _books.where(_isFinishedBook).length;
@@ -330,9 +385,10 @@ class _LibraryPageState extends State<LibraryPage> {
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: palette.hero,
-          borderRadius: BorderRadius.circular(18),
+        decoration: _panelDecoration(
+          radius: 18,
+          stronger: true,
+          color: _isMaterial3Style ? scheme.surfaceContainerHigh : palette.hero,
         ),
         child: Wrap(
           spacing: 8,
@@ -367,6 +423,7 @@ class _LibraryPageState extends State<LibraryPage> {
     required VoidCallback onTap,
   }) {
     final palette = PageStyleHelper.palette(context);
+    final scheme = Theme.of(context).colorScheme;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -378,9 +435,21 @@ class _LibraryPageState extends State<LibraryPage> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: active
-                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.16)
-                : palette.cardStrong,
+                ? (_isMaterial3Style
+                    ? scheme.primaryContainer
+                    : scheme.primary.withValues(alpha: 0.16))
+                : (_isMaterial3Style
+                    ? scheme.surfaceContainerLow
+                    : palette.cardStrong),
             borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: active
+                  ? scheme.primary
+                      .withValues(alpha: _isMaterial3Style ? 0.30 : 0.2)
+                  : scheme.outline
+                      .withValues(alpha: _isMaterial3Style ? 0.18 : 0.08),
+              width: 0.8,
+            ),
           ),
           child: Text(
             label,
@@ -402,12 +471,37 @@ class _LibraryPageState extends State<LibraryPage> {
     final isDesktop = LayoutHelper.isDesktop(context);
     final useRailNav = isTablet || isDesktop;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final scheme = Theme.of(context).colorScheme;
 
     // 侧边导航栏模式：FAB 在右下角，边距较小
     // 底部导航栏模式：FAB 需要避开导航栏
     final double bottomMargin = useRailNav
         ? bottomPadding + 16 // 侧边导航：只需避开安全区域
         : 68 + 25 + bottomPadding.clamp(0.0, 50.0) + 15; // 底部导航：避开悬浮导航栏
+
+    if (_isMaterial3Style) {
+      return Container(
+        margin: EdgeInsets.only(bottom: bottomMargin),
+        child: FloatingActionButton(
+          onPressed: () async {
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ImportBookPage(),
+              ),
+            );
+            if (result == true && mounted) {
+              _loadBooks();
+            }
+          },
+          backgroundColor: scheme.primaryContainer,
+          foregroundColor: scheme.onPrimaryContainer,
+          elevation: 2,
+          heroTag: "add_book_fab",
+          child: const Icon(Icons.add, size: 28),
+        ),
+      );
+    }
 
     return Container(
       margin: EdgeInsets.only(bottom: bottomMargin),
@@ -460,102 +554,104 @@ class _LibraryPageState extends State<LibraryPage> {
   Widget _buildEmptyLibrary({bool compactTop = false}) {
     final topInset =
         compactTop ? 20.0 : MediaQuery.of(context).padding.top + 100;
+    final scheme = Theme.of(context).colorScheme;
+    final useBlur = !_isMaterial3Style && !GlassEffectConfig.shouldDisableBlur;
+    final card = Container(
+      padding: const EdgeInsets.all(32),
+      decoration: _panelDecoration(
+        radius: 24,
+        stronger: true,
+        addShadow: true,
+        borderAlpha: 0.2,
+        color: _isMaterial3Style
+            ? scheme.surfaceContainerHigh
+            : GlassEffectConfig.surfaceColor(context, opacity: 0.8),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: AppBrandIcon(
+              size: 60,
+              borderRadius: 16,
+              border: Border.all(
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.24),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            '开启阅读之旅',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '你的书架还是空的\n点击右上角的 "+" 按钮\n添加你的第一本书吧',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.7),
+                  height: 1.5,
+                ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ImportBookPage(),
+                ),
+              );
+              _loadBooks();
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('导入书籍'),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 12,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
     return Center(
       child: Padding(
         padding: EdgeInsets.fromLTRB(40, topInset, 40, 40),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
-          // 毛玻璃效果 - 空书架提示卡片
-          // ClipRRect + BackdropFilter 组合：圆角 + 模糊背景
-          // 适合用于卡片、弹窗等需要突出显示的元素
-          child: BackdropFilter(
-            enabled: !GlassEffectConfig.shouldDisableBlur,
-            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20), // 中等模糊强度
-            child: Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                color: GlassEffectConfig.surfaceColor(context, opacity: 0.8),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.outline.withValues(alpha: 0.2),
-                  width: 1,
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: AppBrandIcon(
-                      size: 60,
-                      borderRadius: 16,
-                      border: Border.all(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primary
-                            .withValues(alpha: 0.24),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    '开启阅读之旅',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    '你的书架还是空的\n点击右上角的 "+" 按钮\n添加你的第一本书吧',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withValues(alpha: 0.7),
-                          height: 1.5,
-                        ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ImportBookPage(),
-                        ),
-                      );
-                      _loadBooks();
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('导入书籍'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          child: useBlur
+              ? BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: card,
+                )
+              : card,
         ),
       ),
     );
   }
 
   Widget _buildNoSearchResult() {
+    final palette = PageStyleHelper.palette(context);
     final hasSearch = _searchQuery.trim().isNotEmpty;
     final message = hasSearch
         ? '没有匹配的书籍'
@@ -570,7 +666,7 @@ class _LibraryPageState extends State<LibraryPage> {
         message,
         style: TextStyle(
           fontSize: 16,
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+          color: palette.textMuted,
         ),
       ),
     );
@@ -618,7 +714,7 @@ class _LibraryPageState extends State<LibraryPage> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // 让网格高度为 3:4 封面 + 文本区域预留高度
+        // 让网格高度为 2:3 封面 + 文本区域预留高度（更接近常见书封比例）
         const double horizontalPadding = 32.0;
         final totalSpacing = spacing * (crossAxisCount - 1);
         final availableWidth = math.max(
@@ -627,7 +723,7 @@ class _LibraryPageState extends State<LibraryPage> {
         );
         final itemWidth = availableWidth / crossAxisCount;
         final itemHeight =
-            ((itemWidth * coverWidthScale) * 4 / 3) + textHeight + gap;
+            ((itemWidth * coverWidthScale) * 3 / 2) + textHeight + gap;
         final childAspectRatio = itemWidth > 0 ? itemWidth / itemHeight : 0.75;
 
         return Container(
@@ -691,6 +787,8 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   Widget _buildBooksList(List<Book> books) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return ListView.builder(
       cacheExtent: 720,
       padding: EdgeInsets.fromLTRB(
@@ -710,8 +808,21 @@ class _LibraryPageState extends State<LibraryPage> {
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
           child: Material(
-            color:
-                Theme.of(context).colorScheme.surface.withValues(alpha: 0.86),
+            color: _isMaterial3Style
+                ? scheme.surfaceContainerLow
+                : scheme.surface.withValues(alpha: 0.86),
+            surfaceTintColor: Colors.transparent,
+            elevation: _isMaterial3Style ? 1 : 0,
+            shadowColor:
+                scheme.shadow.withValues(alpha: _isMaterial3Style ? 0.07 : 0.0),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: scheme.outline
+                    .withValues(alpha: _isMaterial3Style ? 0.2 : 0.12),
+                width: 0.8,
+              ),
+            ),
             borderRadius: BorderRadius.circular(16),
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
@@ -795,9 +906,10 @@ class _LibraryPageState extends State<LibraryPage> {
 
   Widget _buildListCover(BuildContext context, Book book) {
     if (book.coverImagePath != null && book.coverImagePath!.isNotEmpty) {
+      final fit = Platform.isAndroid ? BoxFit.contain : BoxFit.cover;
       return Image.file(
         File(book.coverImagePath!),
-        fit: BoxFit.cover,
+        fit: fit,
         errorBuilder: (context, error, stackTrace) =>
             _buildListDefaultCover(context, book),
       );
@@ -828,255 +940,248 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   void _showBookOptions(Book book) {
+    final scheme = Theme.of(context).colorScheme;
+    final isMaterial3Style = _isMaterial3Style;
+    final useBlur = !isMaterial3Style && !GlassEffectConfig.shouldDisableBlur;
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent,
+      backgroundColor:
+          isMaterial3Style ? scheme.surfaceContainerHigh : Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        child: BackdropFilter(
-          enabled: !GlassEffectConfig.shouldDisableBlur,
-          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-          child: Container(
-            decoration: BoxDecoration(
-              color: GlassEffectConfig.surfaceColor(context, opacity: 0.95),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(28)),
-              border: Border(
-                top: BorderSide(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .outline
-                      .withValues(alpha: 0.2),
-                  width: 1,
+      builder: (context) {
+        final localScheme = Theme.of(context).colorScheme;
+        final content = Container(
+          decoration: BoxDecoration(
+            color: isMaterial3Style
+                ? localScheme.surfaceContainerHigh
+                : GlassEffectConfig.surfaceColor(context, opacity: 0.95),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border(
+              top: BorderSide(
+                color: localScheme.outline.withValues(
+                  alpha: isMaterial3Style ? 0.24 : 0.2,
                 ),
+                width: 1,
               ),
             ),
-            child: SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 拖拽指示条
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12, bottom: 8),
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+            boxShadow: isMaterial3Style
+                ? [
+                    BoxShadow(
+                      color: localScheme.shadow.withValues(alpha: 0.08),
+                      blurRadius: 16,
+                      offset: const Offset(0, -2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 12, bottom: 8),
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: localScheme.onSurface.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-
-                  // 书籍信息头部
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                    child: Row(
-                      children: [
-                        // 书籍封面缩略图
-                        Container(
-                          width: 50,
-                          height: 70,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.8),
-                                Theme.of(context)
-                                    .colorScheme
-                                    .secondary
-                                    .withValues(alpha: 0.6),
-                              ],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.1),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 50,
+                        height: 70,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              localScheme.primary.withValues(alpha: 0.8),
+                              localScheme.secondary.withValues(alpha: 0.6),
                             ],
                           ),
-                          child: book.coverImagePath != null &&
-                                  book.coverImagePath!.isNotEmpty
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.file(
-                                    File(book.coverImagePath!),
-                                    fit: BoxFit.cover,
-                                  ),
-                                )
-                              : const Center(
-                                  child: AppBrandIcon(
-                                    size: 24,
-                                    borderRadius: 6,
-                                  ),
-                                ),
-                        ),
-                        const SizedBox(width: 16),
-                        // 书籍信息
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                book.title,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                book.author,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurface
-                                          .withValues(alpha: 0.6),
-                                    ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
-                              // 阅读进度
-                              Row(
-                                children: [
-                                  AppBrandIcon(
-                                    size: 14,
-                                    borderRadius: 4,
-                                    border: Border.all(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary
-                                          .withValues(alpha: 0.22),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '${((book.currentPage / (book.totalPages > 0 ? book.totalPages : 1)) * 100).toStringAsFixed(1)}%',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
-                                          fontWeight: FontWeight.w500,
-                                        ),
+                          border: Border.all(
+                            color: localScheme.outline.withValues(
+                              alpha: isMaterial3Style ? 0.22 : 0.12,
+                            ),
+                            width: 0.8,
+                          ),
+                          boxShadow: isMaterial3Style
+                              ? null
+                              : [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.1),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
                                   ),
                                 ],
+                        ),
+                        child: book.coverImagePath != null &&
+                                book.coverImagePath!.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(
+                                  File(book.coverImagePath!),
+                                  fit: Platform.isAndroid
+                                      ? BoxFit.contain
+                                      : BoxFit.cover,
+                                ),
+                              )
+                            : const Center(
+                                child: AppBrandIcon(
+                                  size: 24,
+                                  borderRadius: 6,
+                                ),
                               ),
-                            ],
-                          ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              book.title,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              book.author,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: localScheme.onSurface
+                                        .withValues(alpha: 0.6),
+                                  ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                AppBrandIcon(
+                                  size: 14,
+                                  borderRadius: 4,
+                                  border: Border.all(
+                                    color: localScheme.primary
+                                        .withValues(alpha: 0.22),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${((book.currentPage / (book.totalPages > 0 ? book.totalPages : 1)) * 100).toStringAsFixed(1)}%',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: localScheme.primary,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-
-                  // 分隔线
-                  Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .outline
-                        .withValues(alpha: 0.15),
+                ),
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: localScheme.outline.withValues(alpha: 0.15),
+                ),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Column(
+                    children: [
+                      _buildOptionItem(
+                        context: context,
+                        icon: Icons.play_circle_outline,
+                        iconColor: localScheme.primary,
+                        title: '继续阅读',
+                        subtitle: book.currentPage > 0
+                            ? '第 ${book.currentPage} 页'
+                            : '从头开始',
+                        backgroundColor:
+                            localScheme.primaryContainer.withValues(
+                          alpha: isMaterial3Style ? 0.42 : 0.15,
+                        ),
+                        onTap: () async {
+                          Navigator.pop(context);
+                          final fullBook = await _bookDao.getBookById(book.id!);
+                          if (fullBook != null && context.mounted) {
+                            await ReadingRouterService.openBook(
+                                context, fullBook);
+                            _loadBooks();
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _buildOptionItem(
+                        context: context,
+                        icon: Icons.info_outline,
+                        iconColor: localScheme.tertiary,
+                        title: '书籍信息',
+                        subtitle:
+                            '${book.format.toUpperCase()} · ${book.totalPages} 页',
+                        backgroundColor:
+                            localScheme.tertiaryContainer.withValues(
+                          alpha: isMaterial3Style ? 0.44 : 0.15,
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _showBookInfo(book);
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _buildOptionItem(
+                        context: context,
+                        icon: Icons.delete_outline_rounded,
+                        iconColor: localScheme.error,
+                        title: '删除书籍',
+                        subtitle: '将永久删除此书籍',
+                        backgroundColor: localScheme.errorContainer.withValues(
+                          alpha: isMaterial3Style ? 0.46 : 0.15,
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _confirmDeleteBook(book);
+                        },
+                      ),
+                    ],
                   ),
-
-                  // 操作选项
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Column(
-                      children: [
-                        // 继续阅读
-                        _buildOptionItem(
-                          context: context,
-                          icon: Icons.play_circle_outline,
-                          iconColor: Theme.of(context).colorScheme.primary,
-                          title: '继续阅读',
-                          subtitle: book.currentPage > 0
-                              ? '第 ${book.currentPage} 页'
-                              : '从头开始',
-                          backgroundColor: Theme.of(context)
-                              .colorScheme
-                              .primaryContainer
-                              .withValues(alpha: 0.15),
-                          onTap: () async {
-                            Navigator.pop(context);
-                            final fullBook =
-                                await _bookDao.getBookById(book.id!);
-                            if (fullBook != null && context.mounted) {
-                              await ReadingRouterService.openBook(
-                                  context, fullBook);
-                              _loadBooks();
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 8),
-
-                        // 书籍信息
-                        _buildOptionItem(
-                          context: context,
-                          icon: Icons.info_outline,
-                          iconColor: Theme.of(context).colorScheme.tertiary,
-                          title: '书籍信息',
-                          subtitle:
-                              '${book.format.toUpperCase()} · ${book.totalPages} 页',
-                          backgroundColor: Theme.of(context)
-                              .colorScheme
-                              .tertiaryContainer
-                              .withValues(alpha: 0.15),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _showBookInfo(book);
-                          },
-                        ),
-                        const SizedBox(height: 8),
-
-                        // 删除书籍
-                        _buildOptionItem(
-                          context: context,
-                          icon: Icons.delete_outline_rounded,
-                          iconColor: Theme.of(context).colorScheme.error,
-                          title: '删除书籍',
-                          subtitle: '将永久删除此书籍',
-                          backgroundColor: Theme.of(context)
-                              .colorScheme
-                              .errorContainer
-                              .withValues(alpha: 0.15),
-                          onTap: () {
-                            Navigator.pop(context);
-                            _confirmDeleteBook(book);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-                ],
-              ),
+                ),
+                const SizedBox(height: 12),
+              ],
             ),
           ),
-        ),
-      ),
+        );
+
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          child: useBlur
+              ? BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                  child: content,
+                )
+              : content,
+        );
+      },
     );
   }
 
@@ -1090,6 +1195,10 @@ class _LibraryPageState extends State<LibraryPage> {
     required Color backgroundColor,
     required VoidCallback onTap,
   }) {
+    final isMaterial3Style = Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1101,8 +1210,8 @@ class _LibraryPageState extends State<LibraryPage> {
             color: backgroundColor,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: iconColor.withValues(alpha: 0.2),
-              width: 1,
+              color: iconColor.withValues(alpha: isMaterial3Style ? 0.28 : 0.2),
+              width: isMaterial3Style ? 0.9 : 1,
             ),
           ),
           child: Row(
@@ -1161,11 +1270,14 @@ class _LibraryPageState extends State<LibraryPage> {
 
   /// 显示书籍详细信息
   void _showBookInfo(Book book) {
+    final scheme = Theme.of(context).colorScheme;
+    final isMaterial3Style = _isMaterial3Style;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor:
-            Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
+        backgroundColor: isMaterial3Style
+            ? scheme.surfaceContainerHigh
+            : scheme.surface.withValues(alpha: 0.95),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
@@ -1241,102 +1353,102 @@ class _LibraryPageState extends State<LibraryPage> {
   }
 
   void _confirmDeleteBook(Book book) {
+    final isMaterial3Style = _isMaterial3Style;
+    final scheme = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (context) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          // 毛玻璃效果 - 确认对话框
-          // 为删除确认对话框添加精美的毛玻璃背景
-          child: BackdropFilter(
-            enabled: !GlassEffectConfig.shouldDisableBlur,
-            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30), // 高强度模糊突出对话框
-            child: AlertDialog(
-              backgroundColor: GlassEffectConfig.surfaceColor(
-                context,
-                opacity: 0.95,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              title: Text(
-                '确认删除',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              content: Text('确定要删除《${book.title}》吗？文件将从设备中永久移除。'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
+        final dialog = AlertDialog(
+          backgroundColor: isMaterial3Style
+              ? scheme.surfaceContainerHigh
+              : GlassEffectConfig.surfaceColor(
+                  context,
+                  opacity: 0.95,
                 ),
-                TextButton(
-                  onPressed: () async {
-                    // Store the Navigator and toast context before the async gap.
-                    final navigator = Navigator.of(context);
-                    final toastContext = this.context;
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
+            '确认删除',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          content: Text('确定要删除《${book.title}》吗？文件将从设备中永久移除。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final navigator = Navigator.of(context);
+                final toastContext = this.context;
+                navigator.pop();
 
-                    // 关闭确认对话框
-                    navigator.pop();
-
-                    // 显示删除进度对话框
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (context) => PopScope(
-                        canPop: false,
-                        child: AlertDialog(
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.surface.withValues(alpha: 0.95),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          content: Row(
-                            children: [
-                              const CircularProgressIndicator(),
-                              const SizedBox(width: 20),
-                              Expanded(
-                                child: Text(
-                                  '正在删除《${book.title}》...',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => PopScope(
+                    canPop: false,
+                    child: AlertDialog(
+                      backgroundColor: isMaterial3Style
+                          ? scheme.surfaceContainerHigh
+                          : Theme.of(
+                              context,
+                            ).colorScheme.surface.withValues(alpha: 0.95),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                    );
-
-                    try {
-                      // 在后台执行删除操作
-                      await _performBookDeletion(book);
-                      if (!mounted) return;
-
-                      // 关闭进度对话框
-                      navigator.pop();
-
-                      _loadBooks();
-                      if (!toastContext.mounted) return;
-                      showSideToast(toastContext, '《${book.title}》已删除');
-                    } catch (e) {
-                      if (!mounted) return;
-                      // 关闭进度对话框
-                      navigator.pop();
-
-                      // Handle error
-                      if (!toastContext.mounted) return;
-                      showSideToast(toastContext, '删除失败: $e');
-                    }
-                  },
-                  child: Text(
-                    '删除',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+                      content: Row(
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            child: Text(
+                              '正在删除《${book.title}》...',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
+                );
+
+                try {
+                  await _performBookDeletion(book);
+                  if (!mounted) return;
+
+                  navigator.pop();
+                  _loadBooks();
+                  if (!toastContext.mounted) return;
+                  showSideToast(toastContext, '《${book.title}》已删除');
+                } catch (e) {
+                  if (!mounted) return;
+                  navigator.pop();
+
+                  if (!toastContext.mounted) return;
+                  showSideToast(toastContext, '删除失败: $e');
+                }
+              },
+              child: Text(
+                '删除',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
                 ),
-              ],
+              ),
             ),
+          ],
+        );
+
+        if (isMaterial3Style || GlassEffectConfig.shouldDisableBlur) {
+          return dialog;
+        }
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: dialog,
           ),
         );
       },
@@ -1433,6 +1545,11 @@ class _BookCoverItem extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: LayoutBuilder(
         builder: (context, constraints) {
+          final theme = Theme.of(context);
+          final scheme = theme.colorScheme;
+          final isMaterial3Style =
+              theme.extension<UiStyleThemeExtension>()?.isMaterial3Style ??
+                  false;
           final isTablet = LayoutHelper.isTablet(context);
           final media = MediaQuery.of(context);
           final isTabletLandscape =
@@ -1451,7 +1568,7 @@ class _BookCoverItem extends StatelessWidget {
           final maxWidth = constraints.maxWidth;
           final maxHeight = constraints.maxHeight;
           final coverWidth = maxWidth * coverWidthScale;
-          final targetCoverHeight = coverWidth * 4 / 3;
+          final targetCoverHeight = coverWidth * 3 / 2;
           final availableCoverHeight =
               math.max(0.0, maxHeight - textHeight - gap);
           final coverHeight = math.min(availableCoverHeight, targetCoverHeight);
@@ -1459,7 +1576,7 @@ class _BookCoverItem extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 书籍封面区域 - 3:4比例，但不超过可用高度
+              // 书籍封面区域 - 2:3比例，但不超过可用高度
               Align(
                 alignment: Alignment.topCenter,
                 child: SizedBox(
@@ -1470,8 +1587,10 @@ class _BookCoverItem extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.15),
-                          blurRadius: 8,
+                          color: scheme.shadow.withValues(
+                            alpha: isMaterial3Style ? 0.08 : 0.15,
+                          ),
+                          blurRadius: isMaterial3Style ? 6 : 8,
                           offset: const Offset(0, 3),
                           spreadRadius: 0,
                         ),
@@ -1493,7 +1612,9 @@ class _BookCoverItem extends StatelessWidget {
                             child: Container(
                               height: 4,
                               decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.3),
+                                color: scheme.scrim.withValues(
+                                  alpha: isMaterial3Style ? 0.2 : 0.3,
+                                ),
                                 borderRadius: const BorderRadius.only(
                                   bottomLeft: Radius.circular(12),
                                   bottomRight: Radius.circular(12),
@@ -1504,8 +1625,7 @@ class _BookCoverItem extends StatelessWidget {
                                 widthFactor: progress.clamp(0.0, 1.0),
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
+                                    color: scheme.primary,
                                     borderRadius: const BorderRadius.only(
                                       bottomLeft: Radius.circular(12),
                                       bottomRight: Radius.circular(12),
@@ -1526,21 +1646,23 @@ class _BookCoverItem extends StatelessWidget {
                                 vertical: 3,
                               ),
                               decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary,
+                                color: scheme.primary,
                                 borderRadius: BorderRadius.circular(8),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.2),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
+                                boxShadow: isMaterial3Style
+                                    ? null
+                                    : [
+                                        BoxShadow(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.2),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
                               ),
                               child: Text(
                                 '在读',
                                 style: TextStyle(
-                                  color:
-                                      Theme.of(context).colorScheme.onPrimary,
+                                  color: scheme.onPrimary,
                                   fontSize: 9,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -1586,11 +1708,8 @@ class _BookCoverItem extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface.withValues(
-                                          alpha: 0.6,
-                                        ),
+                                    color: scheme.onSurfaceVariant
+                                        .withValues(alpha: 0.78),
                                     fontSize: 11,
                                   ),
                         ),
@@ -1607,17 +1726,26 @@ class _BookCoverItem extends StatelessWidget {
   }
 
   Widget _buildCoverImage(BuildContext context, Book book) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isMaterial3Style =
+        theme.extension<UiStyleThemeExtension>()?.isMaterial3Style ?? false;
     if (book.coverImagePath != null && book.coverImagePath!.isNotEmpty) {
+      final fit = Platform.isAndroid ? BoxFit.contain : BoxFit.cover;
       // 有封面图片时，直接显示真实的书籍封面
       return SizedBox(
         width: double.infinity,
         height: double.infinity,
-        child: Image.file(
-          File(book.coverImagePath!),
-          fit: BoxFit.cover, // 填充整个容器，保持图片比例
-          errorBuilder: (context, error, stackTrace) {
-            return _buildDefaultCover(context);
-          },
+        child: ColoredBox(
+          color:
+              scheme.surface.withValues(alpha: isMaterial3Style ? 0.2 : 0.12),
+          child: Image.file(
+            File(book.coverImagePath!),
+            fit: fit,
+            errorBuilder: (context, error, stackTrace) {
+              return _buildDefaultCover(context);
+            },
+          ),
         ),
       );
     } else {
@@ -1628,6 +1756,7 @@ class _BookCoverItem extends StatelessWidget {
 
   /// 构建默认封面设计
   Widget _buildDefaultCover(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       height: double.infinity,
@@ -1657,8 +1786,8 @@ class _BookCoverItem extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: scheme.onPrimary,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
                 height: 1.2,

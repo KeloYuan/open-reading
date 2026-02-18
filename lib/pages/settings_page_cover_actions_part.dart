@@ -1,7 +1,9 @@
 part of 'settings_page.dart';
 
 extension _SettingsPageCoverActions on _SettingsPageState {
-  void _showRestartDialog() {
+  void _showRestartDialog({
+    String reason = '该设置变更需要重启应用才能完全生效。',
+  }) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -12,7 +14,7 @@ extension _SettingsPageCoverActions on _SettingsPageState {
             Text('需要重启应用'),
           ],
         ),
-        content: const Text('书源功能的开启/关闭需要重启应用才能生效。\n\n是否现在重启应用？'),
+        content: Text('$reason\n\n是否现在重启应用？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -21,8 +23,7 @@ extension _SettingsPageCoverActions on _SettingsPageState {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              // Flutter 在 iOS 上不推荐主动退出应用，统一提示用户手动重启。
-              _showInfoPopup('请手动重启应用以应用设置');
+              RestartableApp.restart(this.context);
             },
             child: const Text('重启'),
           ),
