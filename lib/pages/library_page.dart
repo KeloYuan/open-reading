@@ -823,7 +823,6 @@ class _LibraryPageState extends State<LibraryPage> {
                 width: 0.8,
               ),
             ),
-            borderRadius: BorderRadius.circular(16),
             child: InkWell(
               borderRadius: BorderRadius.circular(16),
               onTap: () async {

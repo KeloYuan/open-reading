@@ -11,6 +11,7 @@ import '../services/sync/webdav_sync_service.dart';
 import '../utils/localization_extension.dart';
 import '../utils/page_style_helper.dart';
 import '../utils/system_ui_helper.dart';
+import '../utils/ui_style.dart';
 import '../widgets/side_toast.dart';
 
 enum _ImportChannel { local, webdav, source }
@@ -40,6 +41,35 @@ class _ImportBookPageState extends State<ImportBookPage> {
     {'label': 'UTF-16 LE', 'value': 'utf16le'},
     {'label': 'UTF-16 BE', 'value': 'utf16be'},
   ];
+
+  bool get _isMaterial3Style {
+    return Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
+  }
+
+  BoxDecoration _panelDecoration({
+    double glassAlpha = 0.9,
+    double radius = 16,
+    double borderAlpha = 0.12,
+    Color? color,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return BoxDecoration(
+      color: color ??
+          (_isMaterial3Style
+              ? scheme.surfaceContainerLow
+              : scheme.surface.withValues(alpha: glassAlpha)),
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+        color: scheme.outline.withValues(
+          alpha: _isMaterial3Style ? 0.22 : borderAlpha,
+        ),
+        width: 0.9,
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -176,15 +206,16 @@ class _ImportBookPageState extends State<ImportBookPage> {
       scheme: scheme,
       isDark: isDark,
     );
-    final actionBarColor = isDark
-        ? palette.cardStrong
-        : const Color(0xFFF7F9FD).withValues(alpha: 0.92);
+    final actionBarColor = _isMaterial3Style
+        ? scheme.surfaceContainerHigh
+        : isDark
+            ? palette.cardStrong
+            : const Color(0xFFF7F9FD).withValues(alpha: 0.92);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlayStyle,
       child: Scaffold(
-        // 浅色模式强制使用明亮底色，避免出现“黑漆漆”观感。
-        backgroundColor: isDark ? scheme.surface : const Color(0xFFF8FAFE),
+        backgroundColor: scheme.surface,
         body: Container(
           decoration: BoxDecoration(
             gradient: backgroundGradient,
@@ -239,7 +270,7 @@ class _ImportBookPageState extends State<ImportBookPage> {
     required ColorScheme scheme,
     required bool isDark,
   }) {
-    if (isDark) {
+    if (isDark || _isMaterial3Style) {
       return PageStyleHelper.backgroundGradient(context);
     }
 
@@ -279,7 +310,9 @@ class _ImportBookPageState extends State<ImportBookPage> {
         color: actionBarColor,
         border: Border(
           top: BorderSide(
-            color: scheme.outline.withValues(alpha: 0.12),
+            color: scheme.outline.withValues(
+              alpha: _isMaterial3Style ? 0.24 : 0.12,
+            ),
             width: 0.5,
           ),
         ),
@@ -403,13 +436,21 @@ class _ImportBookPageState extends State<ImportBookPage> {
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
           color: selected
-              ? scheme.primary.withValues(alpha: 0.18)
-              : scheme.surface.withValues(alpha: 0.88),
+              ? (_isMaterial3Style
+                  ? scheme.secondaryContainer
+                  : scheme.primary.withValues(alpha: 0.18))
+              : (_isMaterial3Style
+                  ? scheme.surfaceContainerLow
+                  : scheme.surface.withValues(alpha: 0.88)),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: selected
-                ? scheme.primary.withValues(alpha: 0.30)
-                : scheme.outline.withValues(alpha: 0.12),
+                ? scheme.primary.withValues(
+                    alpha: _isMaterial3Style ? 0.42 : 0.3,
+                  )
+                : scheme.outline.withValues(
+                    alpha: _isMaterial3Style ? 0.2 : 0.12,
+                  ),
             width: 0.8,
           ),
         ),
@@ -466,13 +507,10 @@ class _ImportBookPageState extends State<ImportBookPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: 0.90),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: scheme.outline.withValues(alpha: 0.15),
-          width: 1,
-        ),
+      decoration: _panelDecoration(
+        glassAlpha: 0.9,
+        radius: 20,
+        borderAlpha: 0.15,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -536,11 +574,10 @@ class _ImportBookPageState extends State<ImportBookPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: scheme.outline.withValues(alpha: 0.12), width: 0.8),
+      decoration: _panelDecoration(
+        glassAlpha: 0.85,
+        radius: 16,
+        borderAlpha: 0.12,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -579,10 +616,13 @@ class _ImportBookPageState extends State<ImportBookPage> {
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-            decoration: BoxDecoration(
-              color: scheme.surface.withValues(alpha: 0.92),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: scheme.outline.withValues(alpha: 0.20)),
+            decoration: _panelDecoration(
+              glassAlpha: 0.92,
+              radius: 12,
+              borderAlpha: 0.2,
+              color: _isMaterial3Style
+                  ? scheme.surfaceContainerHigh
+                  : scheme.surface.withValues(alpha: 0.92),
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
@@ -618,10 +658,16 @@ class _ImportBookPageState extends State<ImportBookPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: scheme.tertiaryContainer.withValues(alpha: isDark ? 0.15 : 0.20),
+        color: scheme.tertiaryContainer.withValues(
+          alpha: _isMaterial3Style
+              ? (isDark ? 0.42 : 0.66)
+              : (isDark ? 0.15 : 0.2),
+        ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: scheme.tertiary.withValues(alpha: isDark ? 0.20 : 0.15),
+          color: scheme.tertiary.withValues(
+            alpha: _isMaterial3Style ? 0.34 : (isDark ? 0.2 : 0.15),
+          ),
           width: 0.8,
         ),
       ),
@@ -698,11 +744,10 @@ class _ImportBookPageState extends State<ImportBookPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: 0.88),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: scheme.outline.withValues(alpha: 0.12), width: 0.8),
+      decoration: _panelDecoration(
+        glassAlpha: 0.88,
+        radius: 16,
+        borderAlpha: 0.12,
       ),
       child: _isLoadingRecent
           ? const SizedBox(
@@ -758,7 +803,9 @@ class _ImportBookPageState extends State<ImportBookPage> {
                               borderRadius: BorderRadius.circular(10),
                               child: Image.file(
                                 File(latestBook.coverImagePath!),
-                                fit: BoxFit.cover,
+                                fit: Platform.isAndroid
+                                    ? BoxFit.contain
+                                    : BoxFit.cover,
                                 errorBuilder: (_, __, ___) =>
                                     const SizedBox.shrink(),
                               ),
@@ -808,11 +855,10 @@ class _ImportBookPageState extends State<ImportBookPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-            color: scheme.outline.withValues(alpha: 0.12), width: 0.8),
+      decoration: _panelDecoration(
+        glassAlpha: 0.92,
+        radius: 16,
+        borderAlpha: 0.12,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -27,6 +27,9 @@ class BlockStyle {
   final TextAlign? textAlign;
   final FontWeight? fontWeight;
   final FontStyle? fontStyle;
+  final Color? textColor;
+  final double? fontSizeScale;
+  final double? letterSpacing;
   final double? lineHeight;
   final double? textIndent;
   final EdgeInsets? margin;
@@ -35,6 +38,9 @@ class BlockStyle {
     this.textAlign,
     this.fontWeight,
     this.fontStyle,
+    this.textColor,
+    this.fontSizeScale,
+    this.letterSpacing,
     this.lineHeight,
     this.textIndent,
     this.margin,
@@ -46,6 +52,9 @@ class BlockStyle {
       textAlign: other.textAlign ?? textAlign,
       fontWeight: other.fontWeight ?? fontWeight,
       fontStyle: other.fontStyle ?? fontStyle,
+      textColor: other.textColor ?? textColor,
+      fontSizeScale: other.fontSizeScale ?? fontSizeScale,
+      letterSpacing: other.letterSpacing ?? letterSpacing,
       lineHeight: other.lineHeight ?? lineHeight,
       textIndent: other.textIndent ?? textIndent,
       margin: other.margin ?? margin,

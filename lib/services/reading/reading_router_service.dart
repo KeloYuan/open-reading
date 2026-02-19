@@ -57,6 +57,9 @@ class ReadingRouterService {
       return;
     }
 
+    if (!context.mounted) {
+      return;
+    }
     await _openReaderKernelPage(context, book);
   }
 

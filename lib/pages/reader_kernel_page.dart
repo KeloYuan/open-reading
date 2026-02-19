@@ -43,6 +43,7 @@ class ReaderKernelPage extends StatefulWidget {
 
 class _ReaderKernelPageState extends State<ReaderKernelPage>
     with WidgetsBindingObserver {
+  static const String _pageAnimationPrefKey = 'enablePageAnimation';
   static const String _volumeKeyTurnPrefKey = 'enableVolumeKeyTurn';
   static const String _themePrefKey = 'reader_theme_index_v1';
   static const String _ttsEnabledPrefKey = 'reader_tts_enabled_v1';
@@ -156,6 +157,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   bool _exitingReader = false;
   bool _exitFlushScheduled = false;
   bool _ttsEnabled = true;
+  bool _enablePageAnimation = true;
   bool _enableVolumeKeyTurn = true;
   bool _showSystemStatusBarInReader = false;
   DateTime? _lastVolumeKeyTurnAt;
@@ -204,6 +206,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     await _restoreReaderSystemStatusBarPreference();
     await _restoreTheme();
     await _restoreTtsPreference();
+    await _restorePageAnimationPreference();
     await _restoreVolumeKeyTurnPreference();
     await _restoreReaderFontPreference();
     await _restoreReaderTypographyPreference();
@@ -245,6 +248,11 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     final prefs = await SharedPreferences.getInstance();
     _enableVolumeKeyTurn = prefs.getBool(_volumeKeyTurnPrefKey) ?? true;
     await _syncVolumeKeyPagingEnabled();
+  }
+
+  Future<void> _restorePageAnimationPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    _enablePageAnimation = prefs.getBool(_pageAnimationPrefKey) ?? true;
   }
 
   Future<void> _restoreReaderSystemStatusBarPreference() async {
@@ -1229,8 +1237,6 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                 final isLandscape =
                     constraints.maxWidth > constraints.maxHeight;
                 final enableSpread = constraints.maxWidth >= 900 && isLandscape;
-                final platform = Theme.of(context).platform;
-                final isAndroid = platform == TargetPlatform.android;
                 final isAndroidTablet = _isAndroidTabletByMedia(media);
                 if (isAndroidTablet) {
                   _captureStableAndroidInsets(media);
@@ -1254,12 +1260,9 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                 final topUiReserve = _showSystemStatusBarInReader
                     ? (isAndroidTablet ? 10.0 : 6.0)
                     : (isAndroidTablet ? 38.0 : 8.0);
-                // Keep a dedicated footer-safe lane for bottom page label to avoid text overlap.
-                final bottomUiReserve = isAndroidTablet
-                    ? 36.0
-                    : isAndroid
-                        ? 32.0
-                        : 28.0;
+                // Keep a slim footer lane for reading info while maximizing
+                // text area usage.
+                const bottomUiReserve = 10.0;
                 final padding = EdgeInsets.fromLTRB(
                   16,
                   topInset + topUiReserve,
@@ -1290,6 +1293,10 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                   style: _controller.style,
                   layout: _controller.layout,
                   annotations: _controller.annotations,
+                  enablePageAnimation: _enablePageAnimation,
+                  pageTurnAnimation: _enablePageAnimation
+                      ? ReaderPageTurnAnimation.cover
+                      : ReaderPageTurnAnimation.slide,
                   initialPageIndex: _controller.pageIndex,
                   onPageChanged: (index) {
                     _markReadingInteraction();
@@ -1378,9 +1385,15 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                         ),
                       Positioned.fill(
                         child: IgnorePointer(
-                          child: _buildBottomReadingInfoOverlay(
-                            chapter: chapter,
-                            plan: plan,
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 160),
+                            curve: Curves.easeOut,
+                            opacity: _chromeVisible ? 0 : 1,
+                            child: _buildBottomReadingInfoOverlay(
+                              chapter: chapter,
+                              plan: plan,
+                              bottomInset: bottomInset,
+                            ),
                           ),
                         ),
                       ),
@@ -1630,6 +1643,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   Widget _buildBottomReadingInfoOverlay({
     required ParsedChapter chapter,
     required PagePlan plan,
+    required double bottomInset,
   }) {
     final parsedBook = _controller.parsedBook;
     if (parsedBook == null) {
@@ -1646,31 +1660,24 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     final pageNo =
         (_controller.pageIndex + 1).clamp(1, math.max(1, plan.pages.length));
     final pageTotal = math.max(1, plan.pages.length);
-    final media = MediaQuery.of(context);
-    final platform = Theme.of(context).platform;
-    final isMobilePlatform =
-        platform == TargetPlatform.android || platform == TargetPlatform.iOS;
-    final isIOS = platform == TargetPlatform.iOS;
-    final bottomInset = media.viewPadding.bottom > 0 ? 1.0 : 0.0;
-    final mobileLift = isIOS
-        ? 10.0
-        : isMobilePlatform
-            ? 6.0
-            : 0.0;
+    final baseBottom =
+        bottomInset > 0 ? math.max(0.0, bottomInset - 12.0) : 2.0;
 
     return Align(
       alignment: Alignment.bottomCenter,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(12, 0, 12, bottomInset + mobileLift),
+        padding: EdgeInsets.fromLTRB(12, 0, 12, baseBottom),
         child: Text(
           '第 $chapterNo/$chapterTotal 块 · 第 $pageNo/$pageTotal 页',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: _activeTheme.foreground.withValues(alpha: 0.92),
+            color: _activeTheme.foreground.withValues(alpha: 0.90),
             fontSize: 12,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
             shadows: [
               Shadow(
-                color: _activeTheme.background.withValues(alpha: 0.65),
+                color: _activeTheme.background.withValues(alpha: 0.60),
                 blurRadius: 4,
               ),
             ],

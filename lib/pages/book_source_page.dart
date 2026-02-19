@@ -10,6 +10,7 @@ import 'online_book_search_page.dart';
 import '../services/books/book_services.dart';
 import '../utils/page_style_helper.dart';
 import '../utils/system_ui_helper.dart';
+import '../utils/ui_style.dart';
 import '../widgets/side_toast.dart';
 import 'home_layout_constants.dart';
 import 'home_shell_page.dart';
@@ -41,6 +42,13 @@ class BookSourcePageState extends State<BookSourcePage>
 
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
+
+  bool get _isMaterial3Style {
+    return Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
+  }
 
   @override
   void initState() {
@@ -152,6 +160,7 @@ class BookSourcePageState extends State<BookSourcePage>
   Widget build(BuildContext context) {
     final navContext = NavigationContext.of(context);
     final useRailNavigation = navContext?.useRailNavigation ?? false;
+    final scheme = Theme.of(context).colorScheme;
 
     if (useRailNavigation) {
       return _buildContent(useRailNavigation: true);
@@ -160,9 +169,10 @@ class BookSourcePageState extends State<BookSourcePage>
     return Scaffold(
       extendBody: true,
       extendBodyBehindAppBar: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: _isMaterial3Style ? scheme.surface : Colors.transparent,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor:
+            _isMaterial3Style ? scheme.surface : Colors.transparent,
         elevation: 0,
         toolbarHeight: 0,
         surfaceTintColor: Colors.transparent,
@@ -294,6 +304,7 @@ class BookSourcePageState extends State<BookSourcePage>
     required String tooltip,
   }) {
     final palette = PageStyleHelper.palette(context);
+    final scheme = Theme.of(context).colorScheme;
     return Tooltip(
       message: tooltip,
       child: InkWell(
@@ -303,8 +314,14 @@ class BookSourcePageState extends State<BookSourcePage>
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: palette.card,
+            color:
+                _isMaterial3Style ? scheme.surfaceContainerLow : palette.card,
             borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: scheme.outline.withValues(
+                alpha: _isMaterial3Style ? 0.22 : 0.12,
+              ),
+            ),
           ),
           child: Icon(
             icon,
@@ -317,15 +334,18 @@ class BookSourcePageState extends State<BookSourcePage>
 
   Widget _buildSearchBar() {
     final palette = PageStyleHelper.palette(context);
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       height: 52,
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: palette.card,
+        color: _isMaterial3Style ? scheme.surfaceContainerLow : palette.card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: palette.border,
+          color: scheme.outline.withValues(
+            alpha: _isMaterial3Style ? 0.22 : 0.12,
+          ),
         ),
       ),
       child: TextField(
@@ -391,8 +411,9 @@ class BookSourcePageState extends State<BookSourcePage>
           FilterChip(
             label: const Text('仅启用'),
             selected: _showEnabledOnly,
-            selectedColor:
-                Theme.of(context).colorScheme.primary.withValues(alpha: 0.16),
+            selectedColor: Theme.of(context).colorScheme.primary.withValues(
+                  alpha: _isMaterial3Style ? 0.26 : 0.16,
+                ),
             onSelected: (value) {
               setState(() => _showEnabledOnly = value);
               _applyFilters();
@@ -405,6 +426,7 @@ class BookSourcePageState extends State<BookSourcePage>
 
   Widget _buildSummaryCard() {
     final palette = PageStyleHelper.palette(context);
+    final scheme = Theme.of(context).colorScheme;
     final total = _stats['total'] ?? _allSources.length;
     final enabled = _stats['enabled'] ??
         _allSources.where((source) => source.enabled).length;
@@ -415,8 +437,13 @@ class BookSourcePageState extends State<BookSourcePage>
       margin: const EdgeInsets.fromLTRB(16, 10, 16, 6),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: palette.hero,
+        color: _isMaterial3Style ? scheme.surfaceContainerHigh : palette.hero,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: scheme.outline.withValues(
+            alpha: _isMaterial3Style ? 0.2 : 0.0,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -445,12 +472,15 @@ class BookSourcePageState extends State<BookSourcePage>
     void Function(String?) onChanged,
   ) {
     final palette = PageStyleHelper.palette(context);
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: palette.card,
+        color: _isMaterial3Style ? scheme.surfaceContainerLow : palette.card,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: palette.border,
+          color: scheme.outline.withValues(
+            alpha: _isMaterial3Style ? 0.22 : 0.12,
+          ),
         ),
       ),
       child: DropdownButtonHideUnderline(
@@ -528,20 +558,29 @@ class BookSourcePageState extends State<BookSourcePage>
     final colorScheme = Theme.of(context).colorScheme;
     final onSurface = colorScheme.onSurface;
     final surface = colorScheme.surface;
+    final idleCardColor = _isMaterial3Style
+        ? colorScheme.surfaceContainerLow
+        : surface.withValues(alpha: 0.86);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: surface.withValues(alpha: 0.86),
+        color: idleCardColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.12)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+        border: Border.all(
+          color: colorScheme.outline.withValues(
+            alpha: _isMaterial3Style ? 0.22 : 0.12,
           ),
-        ],
+        ),
+        boxShadow: _isMaterial3Style
+            ? const []
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
       child: InkWell(
         onTap: () => _showSourceDetail(source),
@@ -601,7 +640,7 @@ class BookSourcePageState extends State<BookSourcePage>
                               _buildFeatureChip(
                                 '发现',
                                 Icons.explore,
-                                Colors.green,
+                                colorScheme.tertiary,
                               ),
                             ],
                           ],
@@ -839,6 +878,7 @@ class BookSourcePageState extends State<BookSourcePage>
   }
 
   void _showSourceDetail(BookSource source) {
+    final scheme = Theme.of(context).colorScheme;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -863,7 +903,7 @@ class BookSourcePageState extends State<BookSourcePage>
                   source.enabled
                       ? Icons.check_circle_outline
                       : Icons.pause_circle_outline,
-                  color: source.enabled ? Colors.green : Colors.orange,
+                  color: source.enabled ? scheme.tertiary : scheme.secondary,
                 ),
               ),
               const Divider(height: 1),

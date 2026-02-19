@@ -37,7 +37,7 @@ class CoverGenerator {
 
     final colorScheme = _getColorScheme(
       format: normalizedFormat,
-      seedText: normalizedTitle,
+      seedText: '$normalizedTitle|$normalizedAuthor|$normalizedFormat',
     );
 
     // 背景渐变

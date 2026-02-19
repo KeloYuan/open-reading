@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'package:xxread/models/book.dart';
 import 'package:xxread/services/library/library_event_bus_service.dart';
 import 'package:xxread/services/sync/webdav_sync_service.dart';
+import 'package:xxread/utils/page_style_helper.dart';
+import 'package:xxread/utils/ui_style.dart';
 import 'package:xxread/widgets/side_toast.dart';
 
 class WebDavRemoteImportPage extends StatefulWidget {
@@ -21,6 +25,34 @@ class _WebDavRemoteImportPageState extends State<WebDavRemoteImportPage> {
   bool _isImporting = false;
   String _error = '';
   String _progress = '';
+
+  bool get _isMaterial3Style {
+    return Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
+  }
+
+  BoxDecoration _panelDecoration({
+    double glassAlpha = 0.88,
+    double radius = 16,
+    double borderAlpha = 0.12,
+    Color? color,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return BoxDecoration(
+      color: color ??
+          (_isMaterial3Style
+              ? scheme.surfaceContainerLow
+              : scheme.surface.withValues(alpha: glassAlpha)),
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+        color: scheme.outline.withValues(
+          alpha: _isMaterial3Style ? 0.22 : borderAlpha,
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -117,15 +149,90 @@ class _WebDavRemoteImportPageState extends State<WebDavRemoteImportPage> {
     });
   }
 
+  void _toggleBook(Book book) {
+    final key = _keyOf(book);
+    setState(() {
+      if (_selectedKeys.contains(key)) {
+        _selectedKeys.remove(key);
+      } else {
+        _selectedKeys.add(key);
+      }
+    });
+  }
+
+  String _formatImportDate(DateTime date) {
+    final now = DateTime.now();
+    final diff = now.difference(date);
+    if (diff.inDays <= 0) return '今天';
+    if (diff.inDays == 1) return '昨天';
+    return '${date.month}月${date.day}日';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final palette = PageStyleHelper.palette(context);
     final allSelected =
         _remoteBooks.isNotEmpty && _selectedKeys.length == _remoteBooks.length;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('WebDAV 远端导入'),
-        actions: [
+      backgroundColor: scheme.surface,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: PageStyleHelper.backgroundGradient(context),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              if (_isImporting) _buildProgressBanner(),
+              if (_isLoading) const LinearProgressIndicator(minHeight: 2),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: _buildBody(allSelected, palette),
+                ),
+              ),
+              _buildBottomActionBar(scheme, palette),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: _isImporting ? null : () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'WebDAV 远端导入',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurface,
+                  ),
+                ),
+                Text(
+                  '同步封面 + 书籍文件，导入后可直接阅读',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onSurfaceVariant.withValues(alpha: 0.78),
+                  ),
+                ),
+              ],
+            ),
+          ),
           IconButton(
             onPressed: _isLoading || _isImporting ? null : _loadRemoteBooks,
             icon: const Icon(Icons.refresh_rounded),
@@ -133,118 +240,360 @@ class _WebDavRemoteImportPageState extends State<WebDavRemoteImportPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_isImporting)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Row(
-                children: [
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _progress,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (_isLoading) const LinearProgressIndicator(minHeight: 2),
-          if (_error.isNotEmpty)
-            Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text('加载失败：$_error'),
-                ),
-              ),
-            )
-          else if (_remoteBooks.isEmpty && !_isLoading)
-            const Expanded(
-              child: Center(
-                child: Text('远端没有可导入书籍'),
-              ),
-            )
-          else
-            Expanded(
-              child: Column(
-                children: [
-                  CheckboxListTile(
-                    value: allSelected,
-                    onChanged: _isImporting
-                        ? null
-                        : (value) => _toggleAll(value ?? false),
-                    title: Text(
-                        '全选（${_selectedKeys.length}/${_remoteBooks.length}）'),
-                  ),
-                  const Divider(height: 1),
-                  Expanded(
-                    child: ListView.separated(
-                      itemCount: _remoteBooks.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final book = _remoteBooks[index];
-                        final key = _keyOf(book);
-                        final selected = _selectedKeys.contains(key);
-                        return CheckboxListTile(
-                          value: selected,
-                          onChanged: _isImporting
-                              ? null
-                              : (value) {
-                                  setState(() {
-                                    if (value ?? false) {
-                                      _selectedKeys.add(key);
-                                    } else {
-                                      _selectedKeys.remove(key);
-                                    }
-                                  });
-                                },
-                          title: Text(
-                            book.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            '${book.author} · ${book.format.toUpperCase()}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          secondary: const Icon(Icons.menu_book_rounded),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-              child: SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton.icon(
-                  onPressed: _isImporting || _remoteBooks.isEmpty
-                      ? null
-                      : _importSelected,
-                  icon: const Icon(Icons.download_rounded),
-                  label: Text(
-                    _isImporting ? '导入中...' : '导入选中书籍',
-                  ),
-                ),
-              ),
+    );
+  }
+
+  Widget _buildProgressBanner() {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: scheme.primaryContainer.withValues(
+            alpha: _isMaterial3Style ? 0.72 : 0.45,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: scheme.primary.withValues(
+              alpha: _isMaterial3Style ? 0.34 : 0.18,
             ),
           ),
-        ],
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.2,
+                color: scheme.primary,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _progress,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: scheme.onSurface,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _buildBody(bool allSelected, PageVisualPalette palette) {
+    final scheme = Theme.of(context).colorScheme;
+    if (_error.isNotEmpty) {
+      return Center(
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: _panelDecoration(
+            radius: 16,
+            color: _isMaterial3Style
+                ? scheme.errorContainer.withValues(alpha: 0.36)
+                : palette.cardStrong,
+            borderAlpha: 0.24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off_rounded, color: scheme.error, size: 28),
+              const SizedBox(height: 8),
+              Text(
+                '加载失败',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: scheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _error,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.85),
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _isImporting ? null : _loadRemoteBooks,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_remoteBooks.isEmpty && !_isLoading) {
+      return Center(
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: _panelDecoration(
+            radius: 16,
+            color: palette.cardStrong,
+            borderAlpha: 0.14,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.menu_book_rounded,
+                size: 30,
+                color: scheme.onSurfaceVariant.withValues(alpha: 0.72),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '远端没有可导入书籍',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: _panelDecoration(
+            radius: 14,
+            color: palette.cardStrong,
+            borderAlpha: 0.14,
+          ),
+          child: Row(
+            children: [
+              Checkbox(
+                value: allSelected,
+                onChanged:
+                    _isImporting ? null : (value) => _toggleAll(value ?? false),
+              ),
+              Expanded(
+                child: Text(
+                  '全选 ${_selectedKeys.length}/${_remoteBooks.length}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurface,
+                  ),
+                ),
+              ),
+              Text(
+                '远端书籍',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.78),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        Expanded(
+          child: ListView.separated(
+            itemCount: _remoteBooks.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final book = _remoteBooks[index];
+              final key = _keyOf(book);
+              final selected = _selectedKeys.contains(key);
+              return _buildBookCard(book, selected);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBookCard(Book book, bool selected) {
+    final scheme = Theme.of(context).colorScheme;
+    final palette = PageStyleHelper.palette(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: _isImporting ? null : () => _toggleBook(book),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 170),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? (_isMaterial3Style
+                  ? scheme.secondaryContainer
+                  : scheme.primaryContainer.withValues(alpha: 0.34))
+              : (_isMaterial3Style ? scheme.surfaceContainerLow : palette.card),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected
+                ? scheme.primary.withValues(
+                    alpha: _isMaterial3Style ? 0.42 : 0.38,
+                  )
+                : scheme.outline.withValues(
+                    alpha: _isMaterial3Style ? 0.2 : 0.12,
+                  ),
+          ),
+        ),
+        child: Row(
+          children: [
+            _buildBookCover(book),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    book.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    book.author.isEmpty ? '未知作者' : book.author,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.85),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${book.format.toUpperCase()} · ${_formatImportDate(book.importDate)}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.72),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Checkbox(
+              value: selected,
+              onChanged: _isImporting ? null : (_) => _toggleBook(book),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBookCover(Book book) {
+    final coverPath = (book.coverImagePath ?? '').trim();
+    final coverFile = coverPath.isEmpty ? null : File(coverPath);
+    final hasLocalCover = coverFile != null && coverFile.existsSync();
+    final borderRadius = BorderRadius.circular(10);
+    if (hasLocalCover) {
+      return ClipRRect(
+        borderRadius: borderRadius,
+        child: Image.file(
+          coverFile,
+          width: 44,
+          height: 62,
+          fit: Platform.isAndroid ? BoxFit.contain : BoxFit.cover,
+        ),
+      );
+    }
+    return _RemoteBookFallbackCover(book: book);
+  }
+
+  Widget _buildBottomActionBar(ColorScheme scheme, PageVisualPalette palette) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+      decoration: BoxDecoration(
+        color: _isMaterial3Style
+            ? scheme.surfaceContainerHigh
+            : palette.cardStrong,
+        border: Border(
+          top: BorderSide(
+            color: scheme.outline
+                .withValues(alpha: _isMaterial3Style ? 0.24 : 0.12),
+            width: 0.6,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: FilledButton.icon(
+            onPressed:
+                _isImporting || _remoteBooks.isEmpty ? null : _importSelected,
+            icon: Icon(
+                _isImporting ? Icons.sync_rounded : Icons.download_rounded),
+            label: Text(_isImporting ? '导入中...' : '导入选中书籍'),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RemoteBookFallbackCover extends StatelessWidget {
+  final Book book;
+
+  const _RemoteBookFallbackCover({required this.book});
+
+  @override
+  Widget build(BuildContext context) {
+    final seed = '${book.title}|${book.author}|${book.format}'.hashCode.abs();
+    final colors = _palette(seed);
+    final title = book.title.trim();
+    final initial = title.isNotEmpty ? title.characters.first : '书';
+    return Container(
+      width: 44,
+      height: 62,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: colors,
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  List<Color> _palette(int seed) {
+    const groups = <List<Color>>[
+      [Color(0xFF2C5AA0), Color(0xFF4C8BF5)],
+      [Color(0xFF1D6F5F), Color(0xFF2FBF9F)],
+      [Color(0xFF8A3E2E), Color(0xFFD9745B)],
+      [Color(0xFF5B3B8C), Color(0xFF8D69C8)],
+      [Color(0xFF4A4A2E), Color(0xFF9E9B5F)],
+      [Color(0xFF2E4A73), Color(0xFF5C86C2)],
+    ];
+    return groups[seed % groups.length];
   }
 }

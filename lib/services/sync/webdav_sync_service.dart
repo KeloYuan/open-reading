@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:xxread/services/books/cover_generator_service.dart';
 import 'package:xxread/services/books/book_dao.dart';
 import 'package:xxread/services/books/bookmark_dao.dart';
 import 'package:xxread/services/books/book_note_dao.dart';
@@ -77,6 +78,8 @@ class WebDavSyncService {
   final Set<int> _selectedBooksForSync = {};
   final List<String> _lastSyncWarnings = <String>[];
   String? _importRootPrefix;
+  final Map<String, Map<String, dynamic>> _remoteBookMetaCache =
+      <String, Map<String, dynamic>>{};
 
   // 网络监听
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
@@ -640,7 +643,16 @@ class WebDavSyncService {
       throw Exception('WebDAV 未配置');
     }
     await _resolveImportRootPrefix();
+    _remoteBookMetaCache.clear();
     final books = <Book>[];
+    final booksRawMeta = <String, Map<String, dynamic>>{};
+    String keyOf(Book book) {
+      final base = p.basename(book.filePath.trim());
+      if (base.isNotEmpty) {
+        return base.toLowerCase();
+      }
+      return book.title.trim().toLowerCase();
+    }
 
     try {
       final booksPath = _importPath('books/books.json');
@@ -669,7 +681,11 @@ class WebDavSyncService {
           }
           try {
             final map = Map<String, dynamic>.from(item);
-            books.add(Book.fromMap(map));
+            final normalizedMap = Map<String, dynamic>.from(map)
+              ..remove('cover_image_path');
+            final parsedBook = Book.fromMap(normalizedMap);
+            books.add(parsedBook);
+            booksRawMeta[keyOf(parsedBook)] = map;
           } catch (e) {
             debugPrint('解析远端书籍失败: $e');
           }
@@ -680,14 +696,6 @@ class WebDavSyncService {
     }
 
     final fileFallbackBooks = await _listRemoteBooksFromFilesDir();
-    String keyOf(Book book) {
-      final base = p.basename(book.filePath.trim());
-      if (base.isNotEmpty) {
-        return base.toLowerCase();
-      }
-      return book.title.trim().toLowerCase();
-    }
-
     final mergedByPath = <String, Book>{};
     for (final book in books) {
       mergedByPath[keyOf(book)] = book;
@@ -698,6 +706,12 @@ class WebDavSyncService {
 
     final merged = mergedByPath.values.toList()
       ..sort((a, b) => b.importDate.compareTo(a.importDate));
+    for (final book in merged) {
+      final meta = booksRawMeta[keyOf(book)];
+      if (meta != null) {
+        _remoteBookMetaCache[_remoteBookCacheKey(book)] = meta;
+      }
+    }
     return merged;
   }
 
@@ -827,12 +841,19 @@ class WebDavSyncService {
     if (localPath == null) {
       return null;
     }
+    final remoteMeta = _remoteBookMetaCache[_remoteBookCacheKey(remoteBook)];
+    final coverPath = await _resolveCoverPathForRemoteBook(
+      remoteBook: remoteBook,
+      remoteRawMap: remoteMeta,
+      localBook: null,
+    );
 
     final insertedId = await _bookDao.insertBook(
       remoteBook.copyWith(
         id: null,
         filePath: localPath,
         importDate: DateTime.now(),
+        coverImagePath: coverPath,
       ),
     );
     return _bookDao.getBookById(insertedId);
@@ -971,6 +992,7 @@ class WebDavSyncService {
   /// 上传本地数据
   Future<void> _uploadLocalData() async {
     await _runSyncStage('上传书籍列表', _uploadBooks);
+    await _runSyncStage('上传封面', _uploadCoverFiles, optional: true);
     await _runSyncStage('上传书签', _uploadBookmarks);
     await _runSyncStage('上传笔记', _uploadNotes);
     await _runSyncStage('上传高亮与批注', _uploadHighlightsAndAnnotations);
@@ -986,18 +1008,22 @@ class WebDavSyncService {
   Future<void> _uploadBooks() async {
     try {
       final books = await _bookDao.getAllBooks();
+      final booksMetadata = <Map<String, dynamic>>[];
 
-      // 生成书籍元数据（不包含大字段）
-      final booksMetadata = books.map((book) {
+      // 生成书籍元数据（不包含大字段，且不暴露设备私有封面路径）
+      for (final book in books) {
         final map = book.toMap();
-        // 移除大字段以减少上传数据量
         map.remove('cached_content');
         map.remove('cached_pages');
         map.remove('table_of_contents');
-        // 添加更新时间
+        map.remove('cover_image_path');
+        final remoteCoverFile = await _deriveRemoteCoverFileName(book);
+        if (remoteCoverFile != null) {
+          map['remote_cover_file'] = remoteCoverFile;
+        }
         map['update_time'] = DateTime.now().toIso8601String();
-        return map;
-      }).toList();
+        booksMetadata.add(map);
+      }
 
       final booksData = {
         'version': 3,
@@ -1245,6 +1271,54 @@ class WebDavSyncService {
       );
     } catch (e) {
       throw Exception('上传同步清单失败: $e');
+    }
+  }
+
+  /// 上传封面文件（按书籍元数据中的 remote_cover_file 约定）
+  Future<void> _uploadCoverFiles() async {
+    try {
+      final books = await _bookDao.getAllBooks();
+      int uploadedCount = 0;
+      int skippedCount = 0;
+
+      for (final book in books) {
+        final coverPath = (book.coverImagePath ?? '').trim();
+        if (coverPath.isEmpty) {
+          skippedCount++;
+          continue;
+        }
+        final coverFile = File(coverPath);
+        if (!await coverFile.exists()) {
+          skippedCount++;
+          continue;
+        }
+        final remoteCoverFile = await _deriveRemoteCoverFileName(book);
+        if (remoteCoverFile == null || remoteCoverFile.isEmpty) {
+          skippedCount++;
+          continue;
+        }
+        final coverBytes = await coverFile.readAsBytes();
+        final remotePath =
+            WebDavSyncPathHelper.buildCoverFilePath(remoteCoverFile);
+
+        await _retryRequest(
+          label: '上传封面 ${book.title}',
+          action: () => _dio.put(
+            remotePath,
+            data: coverBytes,
+            options: Options(
+              headers: {
+                'Content-Type': _imageContentTypeForPath(coverPath),
+              },
+            ),
+          ),
+        );
+        uploadedCount++;
+      }
+
+      debugPrint('🖼️ 封面上传完成: 上传 $uploadedCount 个, 跳过 $skippedCount 个');
+    } catch (e) {
+      throw Exception('上传封面失败: $e');
     }
   }
 
@@ -1783,7 +1857,9 @@ class WebDavSyncService {
     for (final remoteBook in remoteBooks) {
       Book book;
       try {
-        book = Book.fromMap(remoteBook);
+        final normalizedRemoteMap = Map<String, dynamic>.from(remoteBook)
+          ..remove('cover_image_path');
+        book = Book.fromMap(normalizedRemoteMap);
       } catch (e) {
         debugPrint('解析远程书籍失败: $e');
         continue;
@@ -1811,7 +1887,16 @@ class WebDavSyncService {
           debugPrint('⏭️ 跳过仅元数据书籍（远端文件不可用）: ${book.title}');
           continue;
         }
-        final insertBook = book.copyWith(id: null, filePath: resolvedPath);
+        final resolvedCoverPath = await _resolveCoverPathForRemoteBook(
+          remoteBook: book,
+          remoteRawMap: remoteBook,
+          localBook: null,
+        );
+        final insertBook = book.copyWith(
+          id: null,
+          filePath: resolvedPath,
+          coverImagePath: resolvedCoverPath,
+        );
         final insertedId = await _bookDao.insertBook(insertBook);
         final inserted = insertBook.copyWith(id: insertedId);
         localById[insertedId] = inserted;
@@ -1830,10 +1915,24 @@ class WebDavSyncService {
         if (resolvedPath != null && resolvedPath != localBook.filePath) {
           mergedBook = mergedBook.copyWith(filePath: resolvedPath);
         }
+        final hasLocalCover =
+            await _hasUsableLocalCoverPath(localBook.coverImagePath);
+        if (!hasLocalCover) {
+          final resolvedCoverPath = await _resolveCoverPathForRemoteBook(
+            remoteBook: book,
+            remoteRawMap: remoteBook,
+            localBook: localBook,
+          );
+          if (resolvedCoverPath != null &&
+              resolvedCoverPath != localBook.coverImagePath) {
+            mergedBook = mergedBook.copyWith(coverImagePath: resolvedCoverPath);
+          }
+        }
         if (mergedBook.currentPage != localBook.currentPage ||
             mergedBook.totalPages != localBook.totalPages ||
             mergedBook.contentHash != localBook.contentHash ||
-            mergedBook.filePath != localBook.filePath) {
+            mergedBook.filePath != localBook.filePath ||
+            mergedBook.coverImagePath != localBook.coverImagePath) {
           await _bookDao.updateBook(mergedBook);
           if (mergedBook.id != null) {
             localById[mergedBook.id!] = mergedBook;
@@ -1955,6 +2054,203 @@ class WebDavSyncService {
         .replaceAll(RegExp(r'\s+'), '_');
     final compactTitle = titlePart.isEmpty ? 'book' : titlePart;
     return '${idPart}_$compactTitle';
+  }
+
+  String _remoteBookCacheKey(Book book) {
+    final idPart = book.id?.toString() ?? 'null';
+    return '$idPart|${book.filePath}|${book.title}|${book.author}|'
+        '${book.format}|${book.importDate.millisecondsSinceEpoch}';
+  }
+
+  Future<bool> _hasUsableLocalCoverPath(String? coverPath) async {
+    final normalized = coverPath?.trim() ?? '';
+    if (normalized.isEmpty) {
+      return false;
+    }
+    return File(normalized).exists();
+  }
+
+  Future<String?> _resolveCoverPathForRemoteBook({
+    required Book remoteBook,
+    required Map<String, dynamic>? remoteRawMap,
+    required Book? localBook,
+  }) async {
+    if (localBook != null &&
+        await _hasUsableLocalCoverPath(localBook.coverImagePath)) {
+      return localBook.coverImagePath;
+    }
+
+    final remoteCoverFile = _extractRemoteCoverFileName(
+      remoteRawMap: remoteRawMap,
+      remoteBook: remoteBook,
+    );
+    if (remoteCoverFile != null && remoteCoverFile.isNotEmpty) {
+      final downloaded = await _downloadAndSaveRemoteCoverFile(
+        remoteBook: remoteBook,
+        remoteCoverFile: remoteCoverFile,
+      );
+      if (downloaded != null && downloaded.isNotEmpty) {
+        return downloaded;
+      }
+    }
+
+    return _generateFallbackCoverForBook(remoteBook);
+  }
+
+  String? _extractRemoteCoverFileName({
+    required Map<String, dynamic>? remoteRawMap,
+    required Book remoteBook,
+  }) {
+    final candidates = <String>[];
+    void addCandidate(dynamic value) {
+      final raw = value?.toString().trim() ?? '';
+      if (raw.isNotEmpty) {
+        candidates.add(raw);
+      }
+    }
+
+    if (remoteRawMap != null) {
+      addCandidate(remoteRawMap['remote_cover_file']);
+      addCandidate(remoteRawMap['cover_file']);
+      addCandidate(remoteRawMap['exported_cover_file']);
+      addCandidate(remoteRawMap['cover_image_path']);
+    }
+    addCandidate(remoteBook.coverImagePath);
+
+    for (final candidate in candidates) {
+      var value = candidate.replaceAll('\\', '/');
+      if (value.startsWith('http://') || value.startsWith('https://')) {
+        continue;
+      }
+      if (value.contains('/')) {
+        value = p.basename(value);
+      }
+      final ext = p.extension(value).toLowerCase();
+      if (value.isNotEmpty &&
+          <String>{'.png', '.jpg', '.jpeg', '.webp'}.contains(ext)) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  Future<String?> _downloadAndSaveRemoteCoverFile({
+    required Book remoteBook,
+    required String remoteCoverFile,
+  }) async {
+    await _resolveImportRootPrefix();
+    final candidates = <String>[
+      _importPath('covers/$remoteCoverFile'),
+      _importPath('books/covers/$remoteCoverFile'),
+    ];
+
+    for (final remotePath in candidates) {
+      try {
+        final response = await _retryRequest<Response<dynamic>>(
+          label: '下载封面 ${remoteBook.title}',
+          action: () => _dio.get<dynamic>(
+            remotePath,
+            options: Options(responseType: ResponseType.bytes),
+          ),
+        );
+        if (response.statusCode != 200 || response.data == null) {
+          continue;
+        }
+        final bytes = _bytesFromResponseData(response.data);
+        if (bytes == null || bytes.isEmpty) {
+          continue;
+        }
+        return CoverGenerator.saveCover(
+          bytes,
+          '${_localBookFileStem(remoteBook)}_cover',
+        );
+      } catch (e) {
+        if (_isRemoteFileMissing(e)) {
+          continue;
+        }
+        debugPrint('下载封面失败(${remoteBook.title}/$remoteCoverFile): $e');
+      }
+    }
+    return null;
+  }
+
+  Uint8List? _bytesFromResponseData(dynamic data) {
+    if (data is Uint8List) {
+      return data;
+    }
+    if (data is List<int>) {
+      return Uint8List.fromList(data);
+    }
+    if (data is List) {
+      return Uint8List.fromList(data.cast<int>());
+    }
+    return null;
+  }
+
+  Future<String?> _generateFallbackCoverForBook(Book book) async {
+    try {
+      final bytes = await CoverGenerator.generateTextCover(
+        title: book.title,
+        author: book.author,
+        format: book.format.toUpperCase(),
+      );
+      return CoverGenerator.saveCover(
+        bytes,
+        '${_localBookFileStem(book)}_fallback',
+      );
+    } catch (e) {
+      debugPrint('生成兜底封面失败(${book.title}): $e');
+      return null;
+    }
+  }
+
+  Future<String?> _deriveRemoteCoverFileName(Book book) async {
+    final coverPath = (book.coverImagePath ?? '').trim();
+    if (coverPath.isEmpty) {
+      return null;
+    }
+    if (!await File(coverPath).exists()) {
+      return null;
+    }
+    return _buildRemoteCoverFileName(book, coverPath);
+  }
+
+  String _buildRemoteCoverFileName(Book book, String coverPath) {
+    final extension = _normalizeCoverExtension(coverPath);
+    final hash = (book.contentHash ?? '').trim();
+    if (hash.isNotEmpty) {
+      return '${hash}_cover$extension';
+    }
+    final seed =
+        '${book.id ?? 0}|${book.title}|${book.author}|${book.format}|$coverPath';
+    final encoded = base64Url.encode(utf8.encode(seed)).replaceAll('=', '');
+    final token = encoded.length > 28 ? encoded.substring(0, 28) : encoded;
+    return '${token}_cover$extension';
+  }
+
+  String _normalizeCoverExtension(String coverPath) {
+    final ext = p.extension(coverPath.trim()).toLowerCase();
+    if (ext == '.jpg' || ext == '.jpeg') {
+      return '.jpg';
+    }
+    if (ext == '.webp') {
+      return '.webp';
+    }
+    return '.png';
+  }
+
+  String _imageContentTypeForPath(String path) {
+    final ext = p.extension(path.trim()).toLowerCase();
+    switch (ext) {
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.webp':
+        return 'image/webp';
+      case '.png':
+      default:
+        return 'image/png';
+    }
   }
 
   /// 合并书籍数据（以阅读进度更大的为准）

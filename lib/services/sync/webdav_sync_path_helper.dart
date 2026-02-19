@@ -18,6 +18,7 @@ class WebDavSyncPathHelper {
   static const String sourcesDir = '${rootDir}sources/';
   static const String settingsDir = '${rootDir}settings/';
   static const String filesDir = '${rootDir}files/';
+  static const String coversDir = '${rootDir}covers/';
 
   static const String deviceMetaFile = '${metaDir}device_id.json';
   static const String syncManifestFile = '${metaDir}sync_manifest.json';
@@ -44,9 +45,14 @@ class WebDavSyncPathHelper {
     sourcesDir,
     settingsDir,
     filesDir,
+    coversDir,
   ];
 
   static String buildBookFilePath(String fileName) {
     return '$filesDir$fileName';
+  }
+
+  static String buildCoverFilePath(String fileName) {
+    return '$coversDir$fileName';
   }
 }

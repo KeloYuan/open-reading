@@ -13,14 +13,12 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
-
-    // Ensure all compilation uses Java 17+
-    compileOptions.isCoreLibraryDesugaringEnabled = false
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
@@ -40,6 +38,16 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+
+    implementation("androidx.appcompat:appcompat:1.7.1")
+    implementation("org.readium.kotlin-toolkit:readium-shared:3.1.2")
+    implementation("org.readium.kotlin-toolkit:readium-streamer:3.1.2")
+    implementation("org.readium.kotlin-toolkit:readium-navigator:3.1.2")
+    implementation("org.readium.kotlin-toolkit:readium-adapter-pdfium:3.1.2")
 }
 
 flutter {

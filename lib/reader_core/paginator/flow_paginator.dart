@@ -12,24 +12,26 @@ typedef PaginationProgress = void Function(List<Page> pages, bool done);
 
 class FlowPaginator {
   static final Map<String, PagePlan> _memoryCache = <String, PagePlan>{};
-  static const double _eps = 0.8;
-  static const double _renderSafetyBottom = 8.0;
+  static const double _eps = 0.05;
+  static const bool _promoteChapterTitleOnFirstPage = false;
+  static const int _tinyTailSemanticThreshold = 4;
+  static const double _renderSafetyBottom = 1.0;
   static const double _estimatedImageVerticalPadding = 0.0;
   static const double _imageFragmentSafety = 1.2;
-  static const double _textFragmentSafety = 0.35;
-  static const double _strictFitTolerance = 0.02;
-  static const double _layoutWidthSafety = 1.0;
-  static const String _cacheAlgoVersion = 'v25';
+  static const double _textFragmentSafety = 0.0;
+  static const double _strictFitTolerance = 0.0;
+  static const double _layoutWidthSafety = 0.0;
+  static const String _cacheAlgoVersion = 'v36';
   static const TextScaler _textScaler = TextScaler.noScaling;
   static const TextHeightBehavior _textHeightBehavior = TextHeightBehavior(
-    applyHeightToFirstAscent: false,
-    applyHeightToLastDescent: false,
+    applyHeightToFirstAscent: true,
+    applyHeightToLastDescent: true,
   );
   static final RegExp _tailNoiseRegExp = RegExp(
     r'''[，。！？；：,.!?;、“”"'‘’（）()\[\]{}<>《》〈〉【】「」『』—…·•~`@#$%^&*_+=|\\/]+''',
   );
-  static const bool _debugPaginationLogs = true;
-  static const bool _debugPaginationVerbose = true;
+  static const bool _debugPaginationLogs = false;
+  static const bool _debugPaginationVerbose = false;
 
   static String buildCacheKey({
     required String chapterId,
@@ -106,15 +108,16 @@ class FlowPaginator {
     final pageWidth = layout.usableWidth;
     final pageHeight = _effectivePageHeight(
       usableHeight: layout.usableHeight,
-      style: style,
     );
 
-    final firstPageHeadingReserve = _estimatePromotedHeadingReserve(
-      flowDoc: flowDoc,
-      style: style,
-      pageWidth: pageWidth,
-      chapterTitle: chapterTitle,
-    );
+    final firstPageHeadingReserve = _promoteChapterTitleOnFirstPage
+        ? _estimatePromotedHeadingReserve(
+            flowDoc: flowDoc,
+            style: style,
+            pageWidth: pageWidth,
+            chapterTitle: chapterTitle,
+          )
+        : 0.0;
     _logDebug(
       'layout prepared chapter=$chapterId page=(${pageWidth.toStringAsFixed(1)}x${pageHeight.toStringAsFixed(1)}) '
       'firstPageTitleReserve=${firstPageHeadingReserve.toStringAsFixed(2)}',
@@ -236,9 +239,11 @@ class FlowPaginator {
             maxWidth: pageWidth,
           ),
         );
+        final blockBase = blockOffsets[block.id] ?? 0;
 
         var cursor = 0;
         while (cursor < plainText.length) {
+          final loopStartCursor = cursor;
           if (currentFragments.isEmpty) {
             cursor = _skipLeadingBreaks(plainText, cursor);
             if (cursor >= plainText.length) {
@@ -261,7 +266,6 @@ class FlowPaginator {
             layoutData,
             start: cursor,
             remainingHeight: math.max(remaining, layoutData.minLineHeight),
-            maxWidth: layoutData.maxWidth,
           );
           final probeEnd = end;
 
@@ -270,7 +274,7 @@ class FlowPaginator {
               await flushPage();
               continue;
             }
-            end = (cursor + 1).clamp(0, plainText.length);
+            end = _nextLineEnd(layoutData, cursor);
           }
 
           end = _shrinkTextEndToFit(
@@ -301,16 +305,23 @@ class FlowPaginator {
             pageHeight: pageHeight,
           );
           final orphanEnd = end;
+          end = _snapEndToLineBoundary(
+            layoutData,
+            start: cursor,
+            end: end,
+          );
+          final lineSnapEnd = end;
           if (probeEnd != shrinkEnd ||
               shrinkEnd != expandEnd ||
               expandEnd != trimEnd ||
-              trimEnd != orphanEnd) {
+              trimEnd != orphanEnd ||
+              orphanEnd != lineSnapEnd) {
             debugAdjustments += 1;
             final localUsed =
                 _measureSliceHeight(layoutData, start: cursor, end: end);
             _logDebug(
               'adjust block=${block.id} cursor=$cursor probe=$probeEnd shrink=$shrinkEnd '
-              'expand=$expandEnd trim=$trimEnd orphan=$orphanEnd '
+              'expand=$expandEnd trim=$trimEnd orphan=$orphanEnd lineSnap=$lineSnapEnd '
               'sliceH=${localUsed.toStringAsFixed(2)} remaining=${remaining.toStringAsFixed(2)}',
             );
           }
@@ -319,10 +330,12 @@ class FlowPaginator {
               await flushPage();
               continue;
             }
+            end = _nextLineEnd(layoutData, cursor);
+          }
+          if (end <= cursor) {
             end = (cursor + 1).clamp(0, plainText.length);
           }
 
-          final blockBase = blockOffsets[block.id] ?? 0;
           final globalStart = blockBase + cursor;
           final globalEnd = blockBase + end;
 
@@ -351,13 +364,33 @@ class FlowPaginator {
               beforeConsumed: beforeConsumed,
               afterConsumed: consumedHeight,
               note:
-                  'probe=$probeEnd shrink=$shrinkEnd expand=$expandEnd trim=$trimEnd orphan=$orphanEnd',
+                  'probe=$probeEnd shrink=$shrinkEnd expand=$expandEnd trim=$trimEnd orphan=$orphanEnd lineSnap=$lineSnapEnd',
             ),
           );
           cursor = end;
 
           if (cursor < plainText.length) {
+            final requestedCursor = cursor;
             await flushPage();
+            // Strict-fit may trim the committed page tail; keep cursor aligned
+            // with committed end to avoid skipping or overflowing content.
+            final committedCursor =
+                (lastCommittedOffset - blockBase).clamp(0, plainText.length);
+            if (committedCursor < requestedCursor) {
+              cursor = committedCursor.toInt();
+            }
+          }
+
+          if (cursor <= loopStartCursor && loopStartCursor < plainText.length) {
+            final forcedCursor =
+                (loopStartCursor + 1).clamp(0, plainText.length).toInt();
+            if (forcedCursor <= loopStartCursor) {
+              break;
+            }
+            _logDebug(
+              'cursor-guard block=${block.id} loopStart=$loopStartCursor forced=$forcedCursor',
+            );
+            cursor = forcedCursor;
           }
         }
 
@@ -366,6 +399,10 @@ class FlowPaginator {
           if (consumedHeight + spacing > pageHeight &&
               currentFragments.isNotEmpty) {
             await flushPage();
+          }
+          // 间距只作为段间距，不作为新页顶部留白。
+          if (currentFragments.isEmpty) {
+            continue;
           }
           currentFragments
               .add(SpaceFragment(blockId: block.id, height: spacing));
@@ -411,6 +448,10 @@ class FlowPaginator {
           if (consumedHeight + spacing > pageHeight &&
               currentFragments.isNotEmpty) {
             await flushPage();
+          }
+          // 间距只作为图后段间距，不作为新页顶部留白。
+          if (currentFragments.isEmpty) {
+            continue;
           }
           currentFragments
               .add(SpaceFragment(blockId: block.id, height: spacing));
@@ -517,19 +558,24 @@ class FlowPaginator {
     required double maxWidth,
   }) {
     final layoutWidth = math.max(40.0, maxWidth - _layoutWidthSafety);
+    final fontScale =
+        (blockStyle.fontSizeScale ?? 1.0).clamp(0.72, 2.4).toDouble();
+    final resolvedFontSize = readerStyle.fontSize * fontScale;
     final resolvedLineHeight = _normalizeBlockLineHeight(
       blockStyle.lineHeight,
       readerStyle.lineHeight,
     );
     final textStyle = readerStyle.toTextStyle().copyWith(
+          fontSize: resolvedFontSize,
           fontWeight: blockStyle.fontWeight ?? readerStyle.fontWeight,
           fontStyle: blockStyle.fontStyle ??
               (readerStyle.italic ? FontStyle.italic : FontStyle.normal),
+          letterSpacing: blockStyle.letterSpacing ?? readerStyle.letterSpacing,
           height: resolvedLineHeight,
         );
     final strutStyle = StrutStyle(
       fontFamily: textStyle.fontFamily,
-      fontSize: textStyle.fontSize ?? readerStyle.fontSize,
+      fontSize: textStyle.fontSize ?? resolvedFontSize,
       fontWeight: textStyle.fontWeight,
       fontStyle: textStyle.fontStyle,
       height: resolvedLineHeight,
@@ -549,7 +595,7 @@ class FlowPaginator {
     )..layout(maxWidth: layoutWidth);
 
     final lineHeight =
-        (textStyle.fontSize ?? readerStyle.fontSize) * resolvedLineHeight;
+        (textStyle.fontSize ?? resolvedFontSize) * resolvedLineHeight;
     final metrics = painter.computeLineMetrics();
     final lineEnds = <int>[];
     final cumulativeHeights = <double>[0];
@@ -599,39 +645,32 @@ class FlowPaginator {
     _ParagraphLayout layout, {
     required int start,
     required double remainingHeight,
-    required double maxWidth,
   }) {
-    final painter = layout.painter;
     final textLength = layout.text.length;
 
     if (start >= textLength) {
       return textLength;
     }
 
-    final startCaret =
-        painter.getOffsetForCaret(TextPosition(offset: start), Rect.zero);
-    final targetDy = (startCaret.dy + remainingHeight - _eps)
-        .clamp(0, math.max(0.0, painter.height - _eps))
-        .toDouble();
-    var end = painter
-        .getLineBoundary(
-          painter.getPositionForOffset(Offset(maxWidth - _eps, targetDy)),
-        )
-        .end;
+    final startLine = _lineIndexForStart(layout, start);
+    final endLine = _lineIndexByRemainingHeight(
+      layout,
+      startLine: startLine,
+      remainingHeight: remainingHeight,
+    );
+    var end = layout.lineEnds[endLine.clamp(0, layout.lineEnds.length - 1)];
 
     if (end <= start) {
-      final startLine = _lineIndexForStart(layout, start);
-      final endLine = _lineIndexByRemainingHeight(
-        layout,
-        startLine: startLine,
-        remainingHeight: remainingHeight,
-      );
-      end = layout.lineEnds[endLine.clamp(0, layout.lineEnds.length - 1)];
+      for (final lineEnd in layout.lineEnds) {
+        if (lineEnd > start) {
+          end = lineEnd;
+          break;
+        }
+      }
     }
 
     if (end <= start && start + 1 < textLength) {
-      final word = painter.getWordBoundary(TextPosition(offset: start + 1));
-      end = word.end;
+      end = _nextLineEnd(layout, start);
     }
 
     return end.clamp(start + 1, textLength).toInt();
@@ -675,21 +714,9 @@ class FlowPaginator {
       }
       endLine -= 1;
     }
-
-    while (candidate > start + 1) {
-      candidate -= 1;
-      if (_canFitTextSlice(
-        layout,
-        start: start,
-        end: candidate,
-        consumedHeight: consumedHeight,
-        pageHeight: pageHeight,
-      )) {
-        return candidate;
-      }
-    }
-
-    return (start + 1).clamp(0, layout.text.length).toInt();
+    // Keep hard line boundaries to ensure pagination and renderer break at
+    // exactly the same positions, preventing occasional 1-line overflows.
+    return start.clamp(0, layout.text.length).toInt();
   }
 
   int _expandTextEndToFill(
@@ -777,20 +804,20 @@ class FlowPaginator {
     }
     final semanticTail = compact.replaceAll(_tailNoiseRegExp, '');
 
-    // 硬规则：末行语义只剩 1 字（哪怕带标点）且后面还有内容，直接回推一行。
-    if (semanticTail.length <= 1) {
+    // 硬规则：末行语义只剩 1-2 字（哪怕带标点）且后面还有内容，直接回推一行。
+    if (semanticTail.length <= _tinyTailSemanticThreshold) {
       return previousLineEnd;
     }
 
-    if (compact.length <= 1) {
+    if (compact.length <= _tinyTailSemanticThreshold) {
       if (forceTinyTailFix || remainingAfter <= layout.minLineHeight * 1.8) {
         return previousLineEnd;
       }
       return end;
     }
-    if (compact.length == 2) {
+    if (compact.length == _tinyTailSemanticThreshold + 1) {
       final noPunc = semanticTail;
-      if (noPunc.length <= 1) {
+      if (noPunc.length <= _tinyTailSemanticThreshold) {
         if (forceTinyTailFix || remainingAfter <= layout.minLineHeight * 1.2) {
           return previousLineEnd;
         }
@@ -995,14 +1022,49 @@ class FlowPaginator {
     return (bestExclusive - 1).clamp(startLine, lineCount - 1);
   }
 
+  int _nextLineEnd(_ParagraphLayout layout, int start) {
+    for (final lineEnd in layout.lineEnds) {
+      if (lineEnd > start) {
+        return lineEnd.clamp(start + 1, layout.text.length).toInt();
+      }
+    }
+    return (start + 1).clamp(0, layout.text.length).toInt();
+  }
+
+  int _snapEndToLineBoundary(
+    _ParagraphLayout layout, {
+    required int start,
+    required int end,
+  }) {
+    final safeStart = start.clamp(0, layout.text.length).toInt();
+    final safeEnd = end.clamp(safeStart, layout.text.length).toInt();
+    if (safeEnd <= safeStart || layout.lineEnds.isEmpty) {
+      return safeStart;
+    }
+
+    final endLine = _lineIndexForEnd(layout, safeEnd);
+    final endLineBoundary = layout.lineEnds[endLine];
+    if (endLineBoundary == safeEnd) {
+      return safeEnd;
+    }
+    if (endLineBoundary < safeEnd) {
+      return endLineBoundary.clamp(safeStart + 1, safeEnd).toInt();
+    }
+    if (endLine <= 0) {
+      return safeStart;
+    }
+    return layout.lineEnds[endLine - 1].clamp(safeStart + 1, safeEnd).toInt();
+  }
+
   double _paragraphSpacing(BlockStyle style) {
-    final raw = style.margin?.bottom ?? 0.0;
-    return raw.clamp(0.0, 6.0);
+    final fontScale = (style.fontSizeScale ?? 1.0).clamp(0.8, 1.8).toDouble();
+    final emphasisBoost = fontScale > 1.12 ? 0.9 : 0.4;
+    return (1.8 + emphasisBoost).clamp(1.8, 3.0);
   }
 
   double _imageSpacing(BlockStyle style) {
-    final raw = style.margin?.bottom ?? 0.0;
-    return raw.clamp(0.0, 4.0);
+    final fontScale = (style.fontSizeScale ?? 1.0).clamp(0.8, 1.8).toDouble();
+    return (2.0 + (fontScale - 1.0) * 0.6).clamp(1.8, 2.8);
   }
 
   double _estimateImageHeight({
@@ -1010,7 +1072,10 @@ class FlowPaginator {
     required double pageWidth,
     required double pageHeight,
   }) {
-    final maxImageHeight = math.max(84.0, pageHeight * 0.36);
+    final isCoverImage = _isCoverImageBlock(block);
+    final maxImageHeight = isCoverImage
+        ? math.max(180.0, pageHeight * 0.90)
+        : math.max(84.0, pageHeight * 0.44);
 
     var targetWidth = pageWidth;
     var targetHeight = block.height;
@@ -1026,17 +1091,18 @@ class FlowPaginator {
     }
 
     if (targetHeight != null) {
-      return targetHeight.clamp(38.0, maxImageHeight).toDouble();
+      final minHeight = isCoverImage ? 120.0 : 38.0;
+      return targetHeight.clamp(minHeight, maxImageHeight).toDouble();
     }
-    return (pageHeight * 0.22).clamp(38.0, maxImageHeight).toDouble();
+    final fallbackHeight = isCoverImage ? pageHeight * 0.78 : pageHeight * 0.24;
+    final minHeight = isCoverImage ? 120.0 : 38.0;
+    return fallbackHeight.clamp(minHeight, maxImageHeight).toDouble();
   }
 
   double _effectivePageHeight({
     required double usableHeight,
-    required ReaderStyle style,
   }) {
-    final lineGuard = math.max(2.0, style.fontSize * style.lineHeight * 0.10);
-    return math.max(80.0, usableHeight - _renderSafetyBottom - lineGuard);
+    return math.max(80.0, usableHeight - _renderSafetyBottom);
   }
 
   double _fitPageFragmentsToHeight({
@@ -1170,7 +1236,7 @@ class FlowPaginator {
         ),
       );
 
-      final widowAdjustedEnd = _widowAdjustedEndBySlicePainter(
+      final widowAdjustedEnd = _widowAdjustedEndByLineBoundary(
         layoutData: layoutData,
         start: current.start,
         end: current.end,
@@ -1178,7 +1244,7 @@ class FlowPaginator {
       );
       if (widowAdjustedEnd == null || widowAdjustedEnd >= current.end) {
         if (_debugPaginationVerbose && kDebugMode) {
-          final tailDebug = _tailDebugSummaryBySlicePainter(
+          final tailDebug = _tailDebugSummaryByLineBoundary(
             layoutData: layoutData,
             start: current.start,
             end: current.end,
@@ -1260,117 +1326,78 @@ class FlowPaginator {
       return true;
     }
     final semanticTail = compact.replaceAll(_tailNoiseRegExp, '');
-    return semanticTail.length <= 1;
+    return semanticTail.length <= _tinyTailSemanticThreshold;
   }
 
-  int? _widowAdjustedEndBySlicePainter({
+  int? _widowAdjustedEndByLineBoundary({
     required _ParagraphLayout layoutData,
     required int start,
     required int end,
     required bool allowDropWholeFragment,
   }) {
     final safeStart = start.clamp(0, layoutData.text.length).toInt();
-    final safeEnd = end.clamp(safeStart, layoutData.text.length).toInt();
-    if (safeEnd <= safeStart) {
+    final snappedEnd = _snapEndToLineBoundary(
+      layoutData,
+      start: safeStart,
+      end: end,
+    );
+    if (snappedEnd <= safeStart) {
+      return allowDropWholeFragment ? safeStart : null;
+    }
+
+    final startLine = _lineIndexForStart(layoutData, safeStart);
+    final endLine = _lineIndexForEnd(layoutData, snappedEnd);
+    if (endLine <= startLine) {
       return null;
     }
 
-    final slice = layoutData.text.substring(safeStart, safeEnd);
-    if (slice.isEmpty) {
+    final lastLineStart =
+        layoutData.lineEnds[endLine - 1].clamp(0, snappedEnd).toInt();
+    if (!_isTinySemanticTail(
+      layoutData.text,
+      start: lastLineStart,
+      end: snappedEnd,
+    )) {
       return null;
     }
 
-    final slicePainter = TextPainter(
-      text: TextSpan(text: slice, style: layoutData.textStyle),
-      textDirection: TextDirection.ltr,
-      textAlign: layoutData.textAlign,
-      locale: layoutData.locale,
-      textScaler: _textScaler,
-      strutStyle: layoutData.strutStyle,
-      textHeightBehavior: _textHeightBehavior,
-      textWidthBasis: TextWidthBasis.parent,
-    )..layout(maxWidth: layoutData.maxWidth);
-
-    try {
-      final metrics = slicePainter.computeLineMetrics();
-      if (metrics.isEmpty) {
-        return null;
-      }
-      final lastOffset = math.max(0, slice.length - 1);
-      final boundary =
-          slicePainter.getLineBoundary(TextPosition(offset: lastOffset));
-      final tailStart = boundary.start.clamp(0, slice.length).toInt();
-      final tailEnd = boundary.end.clamp(tailStart, slice.length).toInt();
-      if (tailEnd <= tailStart) {
-        return null;
-      }
-
-      final tinyTail = _isTinySemanticTail(
-        slice,
-        start: tailStart,
-        end: tailEnd,
-      );
-      if (!tinyTail) {
-        return null;
-      }
-
-      if (tailStart <= 0) {
-        return allowDropWholeFragment ? safeStart : null;
-      }
-      return (safeStart + tailStart).clamp(safeStart, safeEnd - 1).toInt();
-    } finally {
-      slicePainter.dispose();
+    final adjustedEnd = lastLineStart.clamp(safeStart, snappedEnd - 1).toInt();
+    if (adjustedEnd <= safeStart) {
+      return allowDropWholeFragment ? safeStart : null;
     }
+    return adjustedEnd;
   }
 
-  String? _tailDebugSummaryBySlicePainter({
+  String? _tailDebugSummaryByLineBoundary({
     required _ParagraphLayout layoutData,
     required int start,
     required int end,
   }) {
     final safeStart = start.clamp(0, layoutData.text.length).toInt();
-    final safeEnd = end.clamp(safeStart, layoutData.text.length).toInt();
-    if (safeEnd <= safeStart) {
-      return null;
-    }
-    final slice = layoutData.text.substring(safeStart, safeEnd);
-    if (slice.isEmpty) {
+    final snappedEnd = _snapEndToLineBoundary(
+      layoutData,
+      start: safeStart,
+      end: end,
+    );
+    if (snappedEnd <= safeStart) {
       return null;
     }
 
-    final painter = TextPainter(
-      text: TextSpan(text: slice, style: layoutData.textStyle),
-      textDirection: TextDirection.ltr,
-      textAlign: layoutData.textAlign,
-      locale: layoutData.locale,
-      textScaler: _textScaler,
-      strutStyle: layoutData.strutStyle,
-      textHeightBehavior: _textHeightBehavior,
-      textWidthBasis: TextWidthBasis.parent,
-    )..layout(maxWidth: layoutData.maxWidth);
-
-    try {
-      final metrics = painter.computeLineMetrics();
-      if (metrics.isEmpty) {
-        return 'lines=0';
-      }
-      final lastOffset = math.max(0, slice.length - 1);
-      final boundary =
-          painter.getLineBoundary(TextPosition(offset: lastOffset));
-      final tailStart = boundary.start.clamp(0, slice.length).toInt();
-      final tailEnd = boundary.end.clamp(tailStart, slice.length).toInt();
-      final tail =
-          tailEnd > tailStart ? slice.substring(tailStart, tailEnd) : '';
-      final compact = tail.replaceAll(RegExp(r'\s+'), '');
-      final semantic = compact.replaceAll(_tailNoiseRegExp, '');
-      final previewRaw = tail.replaceAll('\n', r'\n').replaceAll('\r', r'\r');
-      final preview = previewRaw.length > 16
-          ? '${previewRaw.substring(0, 16)}…'
-          : previewRaw;
-      return 'lines=${metrics.length} tail="$preview" compact=${compact.length} semantic=${semantic.length}';
-    } finally {
-      painter.dispose();
+    final startLine = _lineIndexForStart(layoutData, safeStart);
+    final endLine = _lineIndexForEnd(layoutData, snappedEnd);
+    if (endLine < startLine) {
+      return null;
     }
+    final lastLineStart = endLine > 0
+        ? layoutData.lineEnds[endLine - 1].clamp(0, snappedEnd).toInt()
+        : 0;
+    final tail = layoutData.text.substring(lastLineStart, snappedEnd);
+    final compact = tail.replaceAll(RegExp(r'\s+'), '');
+    final semantic = compact.replaceAll(_tailNoiseRegExp, '');
+    final previewRaw = tail.replaceAll('\n', r'\n').replaceAll('\r', r'\r');
+    final preview =
+        previewRaw.length > 16 ? '${previewRaw.substring(0, 16)}…' : previewRaw;
+    return 'lines=${endLine - startLine + 1} tail="$preview" compact=${compact.length} semantic=${semantic.length}';
   }
 
   int _reduceTextFragmentByOneLine({
@@ -1379,14 +1406,18 @@ class FlowPaginator {
     required int end,
   }) {
     final safeStart = start.clamp(0, layoutData.text.length).toInt();
-    final safeEnd = end.clamp(safeStart, layoutData.text.length).toInt();
+    final safeEnd = _snapEndToLineBoundary(
+      layoutData,
+      start: safeStart,
+      end: end,
+    );
     if (safeEnd <= safeStart) {
       return safeStart;
     }
     final startLine = _lineIndexForStart(layoutData, safeStart);
     final endLine = _lineIndexForEnd(layoutData, safeEnd);
     if (endLine <= startLine) {
-      return (safeEnd - 1).clamp(safeStart, safeEnd);
+      return (safeEnd - 1).clamp(safeStart, safeEnd).toInt();
     }
     return layoutData.lineEnds[endLine - 1]
         .clamp(safeStart, safeEnd - 1)
@@ -1553,7 +1584,20 @@ class FlowPaginator {
     if (raw > 4.0) {
       return fallbackValue;
     }
-    return raw.clamp(1.0, 3.2).toDouble();
+    final minPreferred = (fallbackValue - 0.22).clamp(1.0, 2.4).toDouble();
+    final maxPreferred = (fallbackValue + 0.32).clamp(1.2, 2.6).toDouble();
+    return raw.clamp(minPreferred, maxPreferred).toDouble();
+  }
+
+  bool _isCoverImageBlock(ImageBlock block) {
+    final id = block.id.toLowerCase();
+    final alt = (block.alt ?? '').toLowerCase();
+    final src = block.src.toLowerCase();
+    return id.startsWith('cover-') ||
+        alt.contains('封面') ||
+        alt.contains('cover') ||
+        src.contains('/cover') ||
+        src.contains('cover.');
   }
 }
 

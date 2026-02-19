@@ -41,7 +41,6 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _enablePageAnimation = true;
   bool _enableVolumeKeyTurn = true;
   bool _showSystemStatusBarInReader = false;
-  // 只使用沉浸式阅读器，不需要引擎选择
 
   // 书源设置
   bool _enableBooksource = true;
@@ -105,8 +104,6 @@ class _SettingsPageState extends State<SettingsPage> {
       _showSystemStatusBarInReader =
           prefs.getBool('readerShowSystemStatusBar') ?? false;
 
-      // 引擎选择相关配置已移除，只使用沉浸式阅读器
-
       // 其他设置
       _enableFullscreen = prefs.getBool('enableFullscreen') ?? false;
 
@@ -152,7 +149,6 @@ class _SettingsPageState extends State<SettingsPage> {
       'readerShowSystemStatusBar',
       _showSystemStatusBarInReader,
     );
-    // 引擎选择相关配置已移除，只使用沉浸式阅读器
 
     // 其他设置
     await prefs.setBool('enableFullscreen', _enableFullscreen);
@@ -269,6 +265,14 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.book_outlined,
             children: [
               _buildSwitchSetting(
+                title: '覆盖翻页动画',
+                subtitle: _enablePageAnimation ? '下一页覆盖当前页' : '使用普通平移翻页',
+                value: _enablePageAnimation,
+                onChanged: (value) =>
+                    setState(() => _enablePageAnimation = value),
+                icon: Icons.auto_awesome_motion_rounded,
+              ),
+              _buildSwitchSetting(
                 title: '音量键翻页',
                 subtitle: '使用音量键控制翻页',
                 value: _enableVolumeKeyTurn,
@@ -285,6 +289,29 @@ class _SettingsPageState extends State<SettingsPage> {
                 onChanged: (value) =>
                     setState(() => _showSystemStatusBarInReader = value),
                 icon: Icons.vertical_align_top_rounded,
+              ),
+              _buildStaticSetting(
+                title: 'EPUB 排版引擎',
+                subtitle: '已固定为 Flutter 可控内核（封面/排版/UI 均可控）',
+                icon: Icons.auto_fix_high_rounded,
+                trailing: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '可控',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -2089,6 +2116,66 @@ class _SettingsPageState extends State<SettingsPage> {
         setState(() => _isIosCloudSyncing = false);
       }
     }
+  }
+
+  Widget _buildStaticSetting({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    Widget? trailing,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 1),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Icon(
+                icon,
+                size: 16,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface
+                              .withValues(alpha: 0.6),
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: 8),
+              trailing,
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   // 构建操作设置

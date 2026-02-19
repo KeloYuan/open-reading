@@ -1,12 +1,16 @@
-//___FILEHEADER___
-
 import SwiftUI
 
 @main
-struct ___PACKAGENAME:identifier___App: App {
+struct XiaoYuanReaderPlusApp: App {
+    @State private var store = ReaderAppStore()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(store)
+                .task {
+                    await store.bootstrap()
+                }
         }
     }
 }

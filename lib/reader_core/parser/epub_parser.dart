@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:epubx/epubx.dart';
+import 'package:html/parser.dart' as html_parser;
 
 import '../data/reader_models.dart';
 import '../document/flow_doc.dart';
@@ -40,10 +41,19 @@ class EpubParser implements BookParser {
       required String chapterTitle,
       required String html,
       required int level,
+      String? contentFileName,
     }) async {
+      final stylesheetText = _resolveChapterStylesheetText(
+        epubBook,
+        html: html,
+        contentFileName: contentFileName,
+      );
       final flowDoc = html.trim().isEmpty
           ? const FlowDoc(blocks: [])
-          : _converter.convert(html);
+          : _converter.convert(
+              html,
+              stylesheetText: stylesheetText,
+            );
 
       final plain = flowDoc.toPlainText();
       final chapterId = '$bookId-epub-$chapterOrder';
@@ -82,7 +92,12 @@ class EpubParser implements BookParser {
           : chapter.Title!.trim();
       final html = _resolveChapterHtml(epubBook, chapter);
 
-      await appendChapter(chapterTitle: chapterTitle, html: html, level: level);
+      await appendChapter(
+        chapterTitle: chapterTitle,
+        html: html,
+        level: level,
+        contentFileName: chapter.ContentFileName,
+      );
 
       final children = chapter.SubChapters ?? const <EpubChapter>[];
       for (final child in children) {
@@ -100,7 +115,12 @@ class EpubParser implements BookParser {
         final html = htmlFile.Content ?? '';
         final chapterTitle =
             htmlFile.FileName?.split('/').last ?? 'Chapter ${chapterOrder + 1}';
-        await appendChapter(chapterTitle: chapterTitle, html: html, level: 0);
+        await appendChapter(
+          chapterTitle: chapterTitle,
+          html: html,
+          level: 0,
+          contentFileName: htmlFile.FileName,
+        );
       }
     }
 
@@ -118,41 +138,75 @@ class EpubParser implements BookParser {
           final html = htmlFile.Content ?? '';
           final chapterTitle = htmlFile.FileName?.split('/').last ??
               'Chapter ${chapterOrder + 1}';
-          await appendChapter(chapterTitle: chapterTitle, html: html, level: 0);
+          await appendChapter(
+            chapterTitle: chapterTitle,
+            html: html,
+            level: 0,
+            contentFileName: htmlFile.FileName,
+          );
         }
       }
     }
 
-    if (parsedChapters.isNotEmpty &&
-        coverResourcePath != null &&
-        !_hasRenderableContent(parsedChapters.first.flowDoc)) {
-      final first = parsedChapters.first;
+    if (coverResourcePath != null &&
+        !_firstChapterIsCover(parsedChapters, coverResourcePath)) {
       final coverChapter = Chapter(
-        id: first.chapter.id,
-        bookId: first.chapter.bookId,
+        id: '$bookId-epub-cover',
+        bookId: bookId,
         title: '封面',
-        order: first.chapter.order,
+        order: -1,
         content: '',
       );
-      parsedChapters[0] = ParsedChapter(
-        chapter: coverChapter,
-        flowDoc: _buildCoverFlowDoc(coverResourcePath),
-        htmlContent: first.htmlContent,
-        resources: resources,
+      parsedChapters.insert(
+        0,
+        ParsedChapter(
+          chapter: coverChapter,
+          flowDoc: _buildCoverFlowDoc(coverResourcePath),
+          resources: resources,
+        ),
       );
-      if (toc.isNotEmpty) {
-        toc[0] = TocItem(
+      toc.insert(
+        0,
+        TocItem(
           chapterId: coverChapter.id,
-          title: '封面',
+          title: coverChapter.title,
           level: 0,
           anchorOffset: 0,
-        );
-      }
+        ),
+      );
     }
 
     if (parsedChapters.isEmpty && coverResourcePath != null) {
       final coverChapter = Chapter(
-        id: '$bookId-epub-0',
+        id: '$bookId-epub-cover',
+        bookId: bookId,
+        title: '封面',
+        order: -1,
+        content: '',
+      );
+      parsedChapters.add(
+        ParsedChapter(
+          chapter: coverChapter,
+          flowDoc: _buildCoverFlowDoc(coverResourcePath),
+          resources: resources,
+        ),
+      );
+      toc.add(
+        TocItem(
+          chapterId: coverChapter.id,
+          title: '封面',
+          level: 0,
+          anchorOffset: 0,
+        ),
+      );
+    }
+
+    _trimLeadingEmptyChapters(parsedChapters, toc);
+    _rebuildChapterOrderAndAnchors(parsedChapters, toc);
+
+    if (parsedChapters.isEmpty && coverResourcePath != null) {
+      final coverChapter = Chapter(
+        id: '$bookId-epub-cover',
         bookId: bookId,
         title: '封面',
         order: 0,
@@ -168,7 +222,7 @@ class EpubParser implements BookParser {
       toc.add(
         TocItem(
           chapterId: coverChapter.id,
-          title: '封面',
+          title: coverChapter.title,
           level: 0,
           anchorOffset: 0,
         ),
@@ -265,7 +319,7 @@ class EpubParser implements BookParser {
     if (normalized.isNotEmpty && htmlFiles.containsKey(normalized)) {
       return htmlFiles[normalized];
     }
-    final decoded = Uri.decodeFull(normalized);
+    final decoded = _safeUriDecodeFull(normalized);
     if (decoded.isNotEmpty && htmlFiles.containsKey(decoded)) {
       return htmlFiles[decoded];
     }
@@ -284,6 +338,211 @@ class EpubParser implements BookParser {
       }
     }
     return null;
+  }
+
+  String? _resolveChapterStylesheetText(
+    EpubBook epubBook, {
+    required String html,
+    String? contentFileName,
+  }) {
+    final cssFiles = epubBook.Content?.Css;
+    if (cssFiles == null || cssFiles.isEmpty) {
+      return null;
+    }
+
+    final htmlDir = _extractDirectory(contentFileName);
+    final resolvedCssTexts = <String>[];
+    final seen = <String>{};
+
+    final document = html_parser.parse(html);
+    final links = document.querySelectorAll('link[rel]');
+    for (final link in links) {
+      final rel = (link.attributes['rel'] ?? '').toLowerCase();
+      if (!rel.contains('stylesheet')) {
+        continue;
+      }
+      final href = (link.attributes['href'] ?? '').trim();
+      if (href.isEmpty) {
+        continue;
+      }
+      final resolvedPath = _resolveRelativePath(baseDir: htmlDir, path: href);
+      final css = _findCssFileByPath(cssFiles, resolvedPath);
+      final key =
+          css?.FileName == null ? null : _normalizeResourceKey(css!.FileName!);
+      if (css?.Content != null && key != null && seen.add(key)) {
+        resolvedCssTexts.add(css!.Content!);
+      }
+    }
+
+    if (resolvedCssTexts.isEmpty) {
+      for (final file in cssFiles.values) {
+        final fileName = file.FileName;
+        if (fileName == null || file.Content == null) {
+          continue;
+        }
+        final key = _normalizeResourceKey(fileName);
+        if (seen.add(key)) {
+          resolvedCssTexts.add(file.Content!);
+        }
+      }
+    }
+
+    if (resolvedCssTexts.isEmpty) {
+      return null;
+    }
+    return resolvedCssTexts.join('\n');
+  }
+
+  EpubTextContentFile? _findCssFileByPath(
+    Map<String, EpubTextContentFile> cssFiles,
+    String rawPath,
+  ) {
+    final normalized = _normalizeResourceKey(rawPath);
+    if (normalized.isEmpty) {
+      return null;
+    }
+    if (cssFiles.containsKey(rawPath)) {
+      return cssFiles[rawPath];
+    }
+    if (cssFiles.containsKey(normalized)) {
+      return cssFiles[normalized];
+    }
+    final decoded = _safeUriDecodeFull(normalized);
+    if (cssFiles.containsKey(decoded)) {
+      return cssFiles[decoded];
+    }
+
+    final normalizedLower = normalized.toLowerCase();
+    final baseName = normalized.split('/').last.toLowerCase();
+    for (final entry in cssFiles.entries) {
+      final key = _normalizeResourceKey(entry.key);
+      final keyLower = key.toLowerCase();
+      if (keyLower == normalizedLower ||
+          keyLower.endsWith('/$normalizedLower') ||
+          normalizedLower.endsWith('/$keyLower') ||
+          (baseName.isNotEmpty &&
+              key.split('/').last.toLowerCase() == baseName)) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
+
+  String _extractDirectory(String? path) {
+    if (path == null || path.trim().isEmpty) {
+      return '';
+    }
+    final normalized = _normalizeResourceKey(path);
+    final index = normalized.lastIndexOf('/');
+    if (index <= 0) {
+      return '';
+    }
+    return normalized.substring(0, index);
+  }
+
+  String _resolveRelativePath({
+    required String baseDir,
+    required String path,
+  }) {
+    final trimmed = path.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final lower = trimmed.toLowerCase();
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/')) {
+      return _normalizeResourceKey(trimmed);
+    }
+
+    final normalizedPath = _normalizeResourceKey(path);
+    if (normalizedPath.isEmpty) {
+      return '';
+    }
+    if (!normalizedPath.startsWith('../') && !normalizedPath.startsWith('./')) {
+      if (baseDir.isEmpty) {
+        return normalizedPath;
+      }
+      return _normalizeResourceKey('$baseDir/$normalizedPath');
+    }
+    return _normalizeResourceKey('$baseDir/$normalizedPath');
+  }
+
+  bool _firstChapterIsCover(
+    List<ParsedChapter> parsedChapters,
+    String coverResourcePath,
+  ) {
+    if (parsedChapters.isEmpty) {
+      return false;
+    }
+    final firstBlocks = parsedChapters.first.flowDoc.blocks;
+    if (firstBlocks.length != 1 || firstBlocks.first is! ImageBlock) {
+      return false;
+    }
+    final firstImage = firstBlocks.first as ImageBlock;
+    return _normalizeResourceKey(firstImage.src).toLowerCase() ==
+        _normalizeResourceKey(coverResourcePath).toLowerCase();
+  }
+
+  void _trimLeadingEmptyChapters(
+    List<ParsedChapter> parsedChapters,
+    List<TocItem> toc,
+  ) {
+    while (parsedChapters.length > 1 &&
+        !_hasRenderableContent(parsedChapters.first.flowDoc)) {
+      final removedChapterId = parsedChapters.removeAt(0).chapter.id;
+      toc.removeWhere((item) => item.chapterId == removedChapterId);
+    }
+  }
+
+  void _rebuildChapterOrderAndAnchors(
+    List<ParsedChapter> parsedChapters,
+    List<TocItem> toc,
+  ) {
+    if (parsedChapters.isEmpty) {
+      toc.clear();
+      return;
+    }
+
+    final tocByChapterId = <String, TocItem>{};
+    for (final item in toc) {
+      tocByChapterId.putIfAbsent(item.chapterId, () => item);
+    }
+
+    final rebuiltToc = <TocItem>[];
+    var anchor = 0;
+    for (var i = 0; i < parsedChapters.length; i++) {
+      final original = parsedChapters[i];
+      final chapter = Chapter(
+        id: original.chapter.id,
+        bookId: original.chapter.bookId,
+        title: original.chapter.title,
+        order: i,
+        content: original.chapter.content,
+      );
+      parsedChapters[i] = ParsedChapter(
+        chapter: chapter,
+        flowDoc: original.flowDoc,
+        htmlContent: original.htmlContent,
+        resources: original.resources,
+      );
+
+      final previousToc = tocByChapterId[chapter.id];
+      rebuiltToc.add(
+        TocItem(
+          chapterId: chapter.id,
+          title: previousToc?.title ?? chapter.title,
+          level: previousToc?.level ?? 0,
+          anchorOffset: anchor,
+        ),
+      );
+      anchor += chapter.content.length;
+    }
+
+    toc
+      ..clear()
+      ..addAll(rebuiltToc);
   }
 
   bool _hasRenderableContent(FlowDoc flowDoc) {
@@ -420,7 +679,7 @@ class EpubParser implements BookParser {
     }
 
     final normalized = _normalizeResourceKey(rawPath);
-    final decoded = Uri.decodeFull(normalized);
+    final decoded = _safeUriDecodeFull(normalized);
     final baseName = normalized.split('/').last;
 
     final candidates = <String>{
@@ -457,7 +716,7 @@ class EpubParser implements BookParser {
     if (value.contains('#')) {
       value = value.split('#').first;
     }
-    value = Uri.decodeFull(value);
+    value = _safeUriDecodeFull(value);
     while (value.startsWith('./')) {
       value = value.substring(2);
     }
@@ -465,5 +724,13 @@ class EpubParser implements BookParser {
       value = value.substring(1);
     }
     return value;
+  }
+
+  String _safeUriDecodeFull(String value) {
+    try {
+      return Uri.decodeFull(value);
+    } catch (_) {
+      return value;
+    }
   }
 }

@@ -6,18 +6,30 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as provider;
 
 import 'package:xxread/main.dart';
+import 'package:xxread/services/core/core_services.dart';
+import 'package:xxread/services/tts_service.dart';
 
 void main() {
   testWidgets('小元读书 app smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
     await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => ThemeNotifier(),
-        child: const XxReadApp(),
+      ProviderScope(
+        child: provider.MultiProvider(
+          providers: [
+            provider.ChangeNotifierProvider(create: (_) => ThemeNotifier()),
+            provider.ChangeNotifierProvider(
+              create: (_) => AppSettingsNotifier(),
+            ),
+            provider.ChangeNotifierProvider(create: (_) => TtsService()),
+            provider.ChangeNotifierProvider(create: (_) => ShareService()),
+          ],
+          child: const XxReadApp(),
+        ),
       ),
     );
 
