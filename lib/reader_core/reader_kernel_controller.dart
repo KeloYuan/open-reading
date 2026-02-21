@@ -272,17 +272,36 @@ class ReaderKernelController extends ChangeNotifier {
   }) async {
     if (_parsedBook == null) return;
 
+    final dpr = _devicePixelRatio();
+    final snappedViewport = Size(
+      _snapToPixelFloor(viewport.width, dpr),
+      _snapToPixelFloor(viewport.height, dpr),
+    );
+    final snappedPadding = EdgeInsets.fromLTRB(
+      _snapToPixelCeil(padding.left, dpr),
+      _snapToPixelCeil(padding.top, dpr),
+      _snapToPixelCeil(padding.right, dpr),
+      _snapToPixelCeil(padding.bottom, dpr),
+    );
+
     final nextColumns = enableSpread ? 2 : 1;
     const spreadGutter = 24.0;
-    final paneWidth =
-        enableSpread ? ((viewport.width - spreadGutter) / 2) : viewport.width;
-    final usableWidth = math.max(80.0, paneWidth - padding.horizontal);
-    final usableHeight = math.max(80.0, viewport.height - padding.vertical);
+    final paneWidth = enableSpread
+        ? _snapToPixelFloor((snappedViewport.width - spreadGutter) / 2, dpr)
+        : snappedViewport.width;
+    final usableWidth = math.max(
+      80.0,
+      _snapToPixelFloor(paneWidth - snappedPadding.horizontal, dpr),
+    );
+    final usableHeight = math.max(
+      80.0,
+      _snapToPixelFloor(snappedViewport.height - snappedPadding.vertical, dpr),
+    );
 
     final nextLayout = _layout.copyWith(
       usableWidth: usableWidth,
       usableHeight: usableHeight,
-      padding: padding,
+      padding: snappedPadding,
       columns: nextColumns,
       gutter: spreadGutter,
     );
@@ -292,8 +311,8 @@ class ReaderKernelController extends ChangeNotifier {
     if (kDebugMode && changed) {
       debugPrint(
         '[ReaderController] viewport=${viewport.width.toStringAsFixed(1)}x${viewport.height.toStringAsFixed(1)} '
-        'padding=(${padding.left.toStringAsFixed(1)},${padding.top.toStringAsFixed(1)},'
-        '${padding.right.toStringAsFixed(1)},${padding.bottom.toStringAsFixed(1)}) '
+        'padding=(${snappedPadding.left.toStringAsFixed(1)},${snappedPadding.top.toStringAsFixed(1)},'
+        '${snappedPadding.right.toStringAsFixed(1)},${snappedPadding.bottom.toStringAsFixed(1)}) '
         'usable=${usableWidth.toStringAsFixed(1)}x${usableHeight.toStringAsFixed(1)} '
         'columns=$nextColumns',
       );
@@ -307,6 +326,35 @@ class ReaderKernelController extends ChangeNotifier {
       notifyListeners();
       await paginateCurrentChapter(anchorOffset: anchor);
     }
+  }
+
+  double _devicePixelRatio() {
+    try {
+      final views = WidgetsBinding.instance.platformDispatcher.views;
+      if (views.isNotEmpty) {
+        final dpr = views.first.devicePixelRatio;
+        if (dpr.isFinite && dpr > 0) {
+          return dpr;
+        }
+      }
+    } catch (_) {
+      // Fall back to 1.0 in non-UI contexts such as unit tests.
+    }
+    return 1.0;
+  }
+
+  double _snapToPixelFloor(double value, double dpr) {
+    if (!value.isFinite) {
+      return value;
+    }
+    return (value * dpr).floorToDouble() / dpr;
+  }
+
+  double _snapToPixelCeil(double value, double dpr) {
+    if (!value.isFinite) {
+      return value;
+    }
+    return (value * dpr).ceilToDouble() / dpr;
   }
 
   Future<void> updateStyle(ReaderStyle nextStyle) async {

@@ -93,6 +93,7 @@ class TextFragment extends Fragment {
   final int end;
   final int globalStart;
   final int globalEnd;
+  final double? measuredHeight;
 
   const TextFragment({
     required String blockId,
@@ -100,6 +101,7 @@ class TextFragment extends Fragment {
     required this.end,
     required this.globalStart,
     required this.globalEnd,
+    this.measuredHeight,
   }) : super(blockId);
 
   @override
@@ -111,6 +113,7 @@ class TextFragment extends Fragment {
       'end': end,
       'global_start': globalStart,
       'global_end': globalEnd,
+      if (measuredHeight != null) 'measured_height': measuredHeight,
     };
   }
 
@@ -121,23 +124,37 @@ class TextFragment extends Fragment {
       end: map['end'] as int,
       globalStart: map['global_start'] as int,
       globalEnd: map['global_end'] as int,
+      measuredHeight: map['measured_height'] == null
+          ? null
+          : (map['measured_height'] as num).toDouble(),
     );
   }
 }
 
 class ImageFragment extends Fragment {
-  const ImageFragment({required String blockId}) : super(blockId);
+  final double? measuredHeight;
+
+  const ImageFragment({
+    required String blockId,
+    this.measuredHeight,
+  }) : super(blockId);
 
   @override
   Map<String, dynamic> toMap() {
     return {
       'type': 'image',
       'block_id': blockId,
+      if (measuredHeight != null) 'measured_height': measuredHeight,
     };
   }
 
   factory ImageFragment.fromMap(Map<String, dynamic> map) {
-    return ImageFragment(blockId: map['block_id'] as String);
+    return ImageFragment(
+      blockId: map['block_id'] as String,
+      measuredHeight: map['measured_height'] == null
+          ? null
+          : (map['measured_height'] as num).toDouble(),
+    );
   }
 }
 

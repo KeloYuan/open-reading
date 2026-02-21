@@ -15,7 +15,7 @@ Map<String, dynamic> _decodeAndDetectTxtInBackground(
   final content = TxtParser._decodeSmart(
     bytes,
     encodingOverride: encodingOverride,
-  ).replaceAll('\r\n', '\n');
+  ).replaceAll('\r\n', '\n').replaceAll('\r', '\n');
   final markers = TxtParser._detectChapters(content)
       .map(
         (e) => <String, dynamic>{
@@ -535,7 +535,11 @@ class TxtParser implements BookParser {
     );
 
     final normalizedTitle = _normalizeHeading(title);
-    final cleanedLines = content.replaceAll('\r\n', '\n').split('\n').toList();
+    final cleanedLines = content
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n')
+        .split('\n')
+        .toList();
 
     while (cleanedLines.isNotEmpty) {
       final first = cleanedLines.first.trim();

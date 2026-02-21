@@ -1,5 +1,3 @@
-import 'core-js/stable';
-
 console.log('book.js')
 console.log('AnxUA', navigator.userAgent)
 
@@ -337,11 +335,18 @@ const getCSS = ({ fontSize,
         background-color: transparent !important;
         letter-spacing: ${letterSpacing}px;
         font-size: ${fontSize}em;
+        text-size-adjust: 100% !important;
+        -webkit-text-size-adjust: 100% !important;
+        overflow-wrap: anywhere !important;
+        word-break: normal !important;
     }
 
     body {
         background: none !important;
         background-color: transparent;
+        overflow-wrap: anywhere !important;
+        word-break: normal !important;
+        max-width: 100% !important;
     }
 
     img {
@@ -358,6 +363,7 @@ const getCSS = ({ fontSize,
     * {
         line-height: ${spacing}em !important;
         ${fontFamily}
+        box-sizing: border-box !important;
     }
 
     p, li, blockquote, dd, div, font {
@@ -371,9 +377,12 @@ const getCSS = ({ fontSize,
         -webkit-hyphenate-limit-before: 3;
         -webkit-hyphenate-limit-after: 2;
         -webkit-hyphenate-limit-lines: 2;
-        hanging-punctuation: allow-end last;
+        hanging-punctuation: none !important;
+        overflow-wrap: anywhere !important;
+        word-break: normal !important;
         margin-top: 0 !important;
         margin-bottom: 0 !important;
+        orphans: 2;
         widows: 2;
     }
 
@@ -395,6 +404,25 @@ const getCSS = ({ fontSize,
 
     pre {
         white-space: pre-wrap !important;
+        overflow-wrap: anywhere !important;
+        word-break: break-word !important;
+        max-width: 100% !important;
+    }
+
+    code, samp, kbd {
+        overflow-wrap: anywhere !important;
+        word-break: break-word !important;
+    }
+
+    table {
+        width: 100% !important;
+        max-width: 100% !important;
+        table-layout: fixed !important;
+    }
+
+    td, th {
+        overflow-wrap: anywhere !important;
+        word-break: break-word !important;
     }
     aside[epub|type~="endnote"],
     aside[epub|type~="footnote"],
@@ -1019,8 +1047,17 @@ const open = async (file, cfi) => {
 
 
 const callFlutter = (name, data) => {
-  // console.log('callFlutter', name, data)
-  window.flutter_inappwebview.callHandler(name, data)
+  const bridge = window.flutter_inappwebview
+  if (!bridge || typeof bridge.callHandler !== 'function') {
+    console.log(`[XXReadBridge] missing handler bridge: ${name}`)
+    return Promise.resolve(null)
+  }
+  try {
+    return bridge.callHandler(name, data)
+  } catch (e) {
+    console.warn(`[XXReadBridge] callHandler failed: ${name}`, e)
+    return Promise.resolve(null)
+  }
 }
 
 const setStyle = () => {
@@ -1290,15 +1327,89 @@ window.pullUp = () => {
   callFlutter('onPullUp')
 }
 
-// get varible from url
-var urlParams = new URLSearchParams(window.location.search)
-var importing = JSON.parse(urlParams.get('importing'))
-var url = JSON.parse(urlParams.get('url'))
-var initialCfi = JSON.parse(urlParams.get('initialCfi'))
-var style = JSON.parse(urlParams.get('style'))
-var readingRules = JSON.parse(urlParams.get('readingRules'))
+const defaultStyle = {
+  fontSize: 1.25,
+  fontName: 'book',
+  fontPath: '',
+  fontWeight: 400.0,
+  letterSpacing: 0.0,
+  spacing: 1.5,
+  paragraphSpacing: 0.0,
+  textIndent: 0.0,
+  fontColor: '#111111ff',
+  backgroundColor: '#ffffffff',
+  topMargin: 12.0,
+  bottomMargin: 24.0,
+  sideMargin: 6.0,
+  justify: true,
+  textAlign: 'auto',
+  hyphenate: true,
+  pageTurnStyle: 'slide',
+  maxColumnCount: 1,
+  writingMode: 'horizontal-tb',
+  backgroundImage: 'none',
+  allowScript: true,
+  customCSS: '',
+  customCSSEnabled: false,
+}
 
-fetch(url)
-  .then(res => res.blob())
-  .then(blob => open(new File([blob], new URL(url, window.location.origin).pathname), initialCfi))
-  .catch(e => console.error(e))
+const defaultReadingRules = {
+  convertChineseMode: 'none',
+  bionicReadingMode: false,
+}
+
+const readJSONParam = (params, key, fallbackValue) => {
+  const raw = params.get(key)
+  if (raw == null || raw === '') {
+    return fallbackValue
+  }
+  try {
+    return JSON.parse(raw)
+  } catch (e) {
+    console.warn(`[XXReadConfig] invalid JSON for ${key}`, e)
+    return fallbackValue
+  }
+}
+
+const injectedConfig = globalThis.__XXREAD_CONFIG__
+let importing
+let url
+let initialCfi
+let style
+let readingRules
+
+if (injectedConfig && typeof injectedConfig === 'object') {
+  importing = Boolean(injectedConfig.importing)
+  url = injectedConfig.url ?? null
+  initialCfi = injectedConfig.initialCfi ?? null
+  style = {
+    ...defaultStyle,
+    ...(injectedConfig.style ?? {}),
+  }
+  readingRules = {
+    ...defaultReadingRules,
+    ...(injectedConfig.readingRules ?? {}),
+  }
+} else {
+  const urlParams = new URLSearchParams(window.location.search)
+  importing = Boolean(readJSONParam(urlParams, 'importing', false))
+  url = readJSONParam(urlParams, 'url', null)
+  initialCfi = readJSONParam(urlParams, 'initialCfi', null)
+  style = {
+    ...defaultStyle,
+    ...(readJSONParam(urlParams, 'style', {}) ?? {}),
+  }
+  readingRules = {
+    ...defaultReadingRules,
+    ...(readJSONParam(urlParams, 'readingRules', {}) ?? {}),
+  }
+}
+
+if (!url || typeof url !== 'string') {
+  console.error('[XXReadConfig] missing epub url')
+} else {
+  fetch(url)
+    .then(res => res.blob())
+    .then(blob => open(new File([blob], new URL(url, window.location.origin).pathname), initialCfi))
+    .catch(e => console.error(e))
+}

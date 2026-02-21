@@ -22,6 +22,37 @@ enum ChapterBoundaryDirection {
 enum ReaderPageTurnAnimation {
   slide,
   cover,
+  scroll,
+  simulation,
+}
+
+extension ReaderPageTurnAnimationPrefs on ReaderPageTurnAnimation {
+  String get prefValue {
+    switch (this) {
+      case ReaderPageTurnAnimation.slide:
+        return 'slide';
+      case ReaderPageTurnAnimation.cover:
+        return 'cover';
+      case ReaderPageTurnAnimation.scroll:
+        return 'scroll';
+      case ReaderPageTurnAnimation.simulation:
+        return 'simulation';
+    }
+  }
+
+  static ReaderPageTurnAnimation? fromPrefValue(String? value) {
+    switch (value) {
+      case 'slide':
+        return ReaderPageTurnAnimation.slide;
+      case 'cover':
+        return ReaderPageTurnAnimation.cover;
+      case 'scroll':
+        return ReaderPageTurnAnimation.scroll;
+      case 'simulation':
+        return ReaderPageTurnAnimation.simulation;
+    }
+    return null;
+  }
 }
 
 class ReaderView extends StatefulWidget {
@@ -256,6 +287,7 @@ class _ReaderViewState extends State<ReaderView> {
         showChapterTitle: false,
         pagePadding: pagePadding,
         maxVisibleLines: maxVisibleLines,
+        pageUsableWidth: widget.layout.usableWidth,
         pageUsableHeight: widget.layout.usableHeight,
         pageBackgroundColor: widget.pageBackgroundColor,
         textColor: widget.textColor,
@@ -267,11 +299,16 @@ class _ReaderViewState extends State<ReaderView> {
     if (widget.layout.columns <= 1) {
       _singleController ??=
           PageController(initialPage: _clampPageIndex(widget.initialPageIndex));
+      final scrollAxis =
+          widget.pageTurnAnimation == ReaderPageTurnAnimation.scroll
+              ? Axis.vertical
+              : Axis.horizontal;
       return NotificationListener<ScrollNotification>(
         onNotification: (notification) => _handleBoundaryOverscroll(
             notification, widget.onReachChapterBoundary),
         child: PageView.builder(
           controller: _singleController,
+          scrollDirection: scrollAxis,
           itemCount: pages.length,
           onPageChanged: (index) {
             widget.onPageChanged?.call(index);
@@ -367,6 +404,7 @@ class _ReaderViewState extends State<ReaderView> {
       showChapterTitle: showChapterTitle,
       pagePadding: pagePadding,
       maxVisibleLines: maxVisibleLines,
+      pageUsableWidth: widget.layout.usableWidth,
       pageUsableHeight: widget.layout.usableHeight,
       pageBackgroundColor: widget.pageBackgroundColor,
       textColor: widget.textColor,
@@ -380,9 +418,54 @@ class _ReaderViewState extends State<ReaderView> {
     required Widget child,
   }) {
     final controller = _singleController;
-    if (!widget.enablePageAnimation ||
-        widget.pageTurnAnimation != ReaderPageTurnAnimation.cover ||
-        controller == null) {
+    if (!widget.enablePageAnimation || controller == null) {
+      return child;
+    }
+
+    if (widget.pageTurnAnimation == ReaderPageTurnAnimation.simulation) {
+      return AnimatedBuilder(
+        animation: controller,
+        child: child,
+        builder: (context, animatedChild) {
+          if (!controller.hasClients || !controller.position.haveDimensions) {
+            return animatedChild!;
+          }
+          final currentPage =
+              controller.page ?? controller.initialPage.toDouble();
+          final delta = index - currentPage;
+          if (delta.abs() >= 1.0) {
+            return animatedChild!;
+          }
+
+          final viewportWidth = controller.position.viewportDimension;
+          if (viewportWidth <= 0) {
+            return animatedChild!;
+          }
+
+          final progress = (1.0 - delta.abs()).clamp(0.0, 1.0);
+          final translateX = -delta * viewportWidth * 0.22;
+          final rotateY = delta * 0.11;
+          final scale = (0.95 + progress * 0.05).clamp(0.9, 1.0);
+          final opacity = (0.85 + progress * 0.15).clamp(0.0, 1.0);
+
+          return Opacity(
+            opacity: opacity,
+            child: Transform(
+              alignment:
+                  delta >= 0 ? Alignment.centerLeft : Alignment.centerRight,
+              transform: Matrix4.identity()
+                ..setEntry(3, 2, 0.0012)
+                ..translateByDouble(translateX, 0, 0, 1)
+                ..rotateY(rotateY)
+                ..scaleByDouble(scale, 1.0, 1.0, 1.0),
+              child: animatedChild,
+            ),
+          );
+        },
+      );
+    }
+
+    if (widget.pageTurnAnimation != ReaderPageTurnAnimation.cover) {
       return child;
     }
 
@@ -406,30 +489,35 @@ class _ReaderViewState extends State<ReaderView> {
         }
 
         final direction = _singleScrollDirection;
-        final isOutgoing =
-            (direction >= 0 && delta < 0) || (direction < 0 && delta > 0);
-        if (!isOutgoing) {
+        final isForwardOutgoing = direction >= 0 && delta < 0;
+        final isBackwardOutgoing = direction < 0 && delta > 0;
+        final isBackwardIncoming = direction < 0 && delta < 0;
+        if (!isForwardOutgoing && !isBackwardOutgoing && !isBackwardIncoming) {
           return animatedChild!;
         }
 
-        Widget outgoing = Transform.translate(
-          offset: Offset(-delta * viewportWidth, 0),
-          child: animatedChild,
-        );
-
-        // For previous-page swipe, current page is painted above incoming page.
-        // Clip the outgoing page to expose the incoming page from the left edge.
-        if (direction < 0 && delta > 0) {
-          final progress = delta.clamp(0.0, 1.0);
-          outgoing = ClipRect(
-            child: Align(
-              alignment: Alignment.centerRight,
-              widthFactor: (1.0 - progress).clamp(0.0, 1.0),
-              child: outgoing,
-            ),
+        if (isForwardOutgoing) {
+          // Next-page cover: keep current page anchored, let next page slide
+          // above it.
+          return Transform.translate(
+            offset: Offset(-delta * viewportWidth, 0),
+            child: animatedChild,
           );
         }
-        return outgoing;
+
+        if (isBackwardIncoming) {
+          // Previous-page reveal: keep previous page anchored under the top
+          // page, so the current page can slide out to the right above it.
+          return Transform.translate(
+            offset: Offset(-delta * viewportWidth, 0),
+            child: animatedChild,
+          );
+        }
+
+        // Previous-page reveal: keep current(top) page on the natural PageView
+        // trajectory so it slides to the right and reveals the previous page
+        // beneath it.
+        return animatedChild!;
       },
     );
   }
@@ -438,8 +526,12 @@ class _ReaderViewState extends State<ReaderView> {
     ScrollNotification notification,
     ChapterBoundaryCallback? callback,
   ) {
+    final singleScrollAxis =
+        widget.pageTurnAnimation == ReaderPageTurnAnimation.scroll
+            ? Axis.vertical
+            : Axis.horizontal;
     if (notification is ScrollUpdateNotification &&
-        notification.metrics.axis == Axis.horizontal) {
+        notification.metrics.axis == singleScrollAxis) {
       final delta = notification.scrollDelta;
       if (delta != null && delta.abs() > 0.001) {
         _singleScrollDirection = delta.sign;
@@ -449,7 +541,7 @@ class _ReaderViewState extends State<ReaderView> {
     if (callback == null || notification is! OverscrollNotification) {
       return false;
     }
-    if (notification.metrics.axis != Axis.horizontal) {
+    if (notification.metrics.axis != singleScrollAxis) {
       return false;
     }
     final metrics = notification.metrics;
@@ -498,6 +590,7 @@ class _PagePane extends StatefulWidget {
   final bool showChapterTitle;
   final EdgeInsets pagePadding;
   final int maxVisibleLines;
+  final double pageUsableWidth;
   final double pageUsableHeight;
   final Color? pageBackgroundColor;
   final Color? textColor;
@@ -515,6 +608,7 @@ class _PagePane extends StatefulWidget {
     required this.showChapterTitle,
     required this.pagePadding,
     required this.maxVisibleLines,
+    required this.pageUsableWidth,
     required this.pageUsableHeight,
     required this.pageBackgroundColor,
     required this.textColor,
@@ -528,6 +622,7 @@ class _PagePane extends StatefulWidget {
 
 class _PagePaneState extends State<_PagePane> {
   static const bool _promoteChapterTitleOnFirstPage = false;
+  static const double _textInkHorizontalGuard = 1.0;
   static const TextHeightBehavior _textHeightBehavior = TextHeightBehavior(
     applyHeightToFirstAscent: true,
     applyHeightToLastDescent: true,
@@ -593,144 +688,165 @@ class _PagePaneState extends State<_PagePane> {
           Theme.of(context).scaffoldBackgroundColor,
       child: Padding(
         padding: widget.pagePadding,
-        child: ClipRect(
-          child: SelectionListener(
-            selectionNotifier: _selectionNotifier,
-            child: SelectionArea(
-              onSelectionChanged: (content) {
-                _selectedText = content?.plainText ?? '';
-              },
-              contextMenuBuilder: (context, selectableRegionState) {
-                final buttons = <ContextMenuButtonItem>[
-                  ...selectableRegionState.contextMenuButtonItems,
-                  ContextMenuButtonItem(
-                    label: 'Highlight',
-                    onPressed: () => _emitAction(
-                      ReaderSelectionAction.highlight,
-                      selectableRegionState,
-                    ),
+        child: SelectionListener(
+          selectionNotifier: _selectionNotifier,
+          child: SelectionArea(
+            onSelectionChanged: (content) {
+              _selectedText = content?.plainText ?? '';
+            },
+            contextMenuBuilder: (context, selectableRegionState) {
+              final buttons = <ContextMenuButtonItem>[
+                ...selectableRegionState.contextMenuButtonItems,
+                ContextMenuButtonItem(
+                  label: 'Highlight',
+                  onPressed: () => _emitAction(
+                    ReaderSelectionAction.highlight,
+                    selectableRegionState,
                   ),
-                  ContextMenuButtonItem(
-                    label: 'Note',
-                    onPressed: () => _emitAction(
-                      ReaderSelectionAction.note,
-                      selectableRegionState,
-                    ),
+                ),
+                ContextMenuButtonItem(
+                  label: 'Note',
+                  onPressed: () => _emitAction(
+                    ReaderSelectionAction.note,
+                    selectableRegionState,
                   ),
-                  ContextMenuButtonItem(
-                    label: 'Ask AI',
-                    onPressed: () => _emitAction(
-                      ReaderSelectionAction.askAi,
-                      selectableRegionState,
-                    ),
+                ),
+                ContextMenuButtonItem(
+                  label: 'Ask AI',
+                  onPressed: () => _emitAction(
+                    ReaderSelectionAction.askAi,
+                    selectableRegionState,
                   ),
-                ];
+                ),
+              ];
 
-                return AdaptiveTextSelectionToolbar.buttonItems(
-                  anchors: selectableRegionState.contextMenuAnchors,
-                  buttonItems: buttons,
-                );
-              },
-              child: Align(
-                alignment: Alignment.topLeft,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final maxWidth = constraints.maxWidth.isFinite
-                        ? constraints.maxWidth
-                        : 360.0;
-                    final children = <Widget>[
-                      if (promotedTitle != null && promotedTitle.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Text(
-                            promotedTitle,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            textScaler: TextScaler.noScaling,
-                            textHeightBehavior: _textHeightBehavior,
-                            style: baseStyle.copyWith(
-                              fontSize: (widget.style.fontSize *
-                                      (hasImageItem ? 1.12 : 1.18))
-                                  .clamp(16, 32),
-                              fontWeight: FontWeight.w700,
-                              height: 1.2,
-                            ),
+              return AdaptiveTextSelectionToolbar.buttonItems(
+                anchors: selectableRegionState.contextMenuAnchors,
+                buttonItems: buttons,
+              );
+            },
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final constraintWidth = constraints.maxWidth.isFinite
+                      ? constraints.maxWidth
+                      : widget.pageUsableWidth;
+                  final constraintHeight = constraints.maxHeight.isFinite
+                      ? constraints.maxHeight
+                      : widget.pageUsableHeight;
+                  final paneWidth = math.max(
+                    40.0,
+                    math.min(constraintWidth, widget.pageUsableWidth),
+                  );
+                  final paneHeight = math.max(
+                    80.0,
+                    math.min(constraintHeight, widget.pageUsableHeight),
+                  );
+                  final textWidth = math.max(
+                    24.0,
+                    paneWidth - (_textInkHorizontalGuard * 2),
+                  );
+                  final children = <Widget>[
+                    if (promotedTitle != null && promotedTitle.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          promotedTitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textScaler: TextScaler.noScaling,
+                          textHeightBehavior: _textHeightBehavior,
+                          style: baseStyle.copyWith(
+                            fontSize: (widget.style.fontSize *
+                                    (hasImageItem ? 1.12 : 1.18))
+                                .clamp(16, 32),
+                            fontWeight: FontWeight.w700,
+                            height: 1.2,
                           ),
                         ),
-                    ];
+                      ),
+                  ];
 
-                    for (final item in renderItems) {
-                      switch (item.type) {
-                        case _RenderItemType.text:
-                          final text = item.text;
-                          if (text == null || text.isEmpty) {
-                            continue;
-                          }
-                          final blockTextStyle = _resolveTextStyle(
-                            baseStyle,
-                            item.blockStyle,
-                          );
-                          final blockTextAlign = item.blockStyle?.textAlign ??
-                              widget.style.textAlign;
-                          final blockLineHeight = _normalizedLineHeight(
-                            item.blockStyle?.lineHeight,
-                          );
-                          children.addAll(
-                            _buildDeterministicTextLineWidgets(
+                  for (final item in renderItems) {
+                    switch (item.type) {
+                      case _RenderItemType.text:
+                        final text = item.text;
+                        if (text == null || text.isEmpty) {
+                          continue;
+                        }
+                        final blockTextStyle = _resolveTextStyle(
+                          baseStyle,
+                          item.blockStyle,
+                        );
+                        final blockTextAlign = item.blockStyle?.textAlign ??
+                            widget.style.textAlign;
+                        final blockLineHeight = _normalizedLineHeight(
+                          item.blockStyle?.lineHeight,
+                        );
+                        children.add(
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: _textInkHorizontalGuard,
+                            ),
+                            child: _buildNativeTextBlock(
                               text: text,
                               pageStartOffset:
                                   item.globalStart ?? widget.page.startOffset,
                               textStyle: blockTextStyle,
                               textAlign: blockTextAlign,
                               lineHeight: blockLineHeight,
-                              maxWidth: maxWidth,
+                              maxWidth: textWidth,
                             ),
-                          );
-                          break;
-                        case _RenderItemType.image:
-                          final imageBlock = item.imageBlock;
-                          if (imageBlock == null) {
-                            continue;
-                          }
-                          children.add(
-                            _buildImageWidget(
-                              imageBlock: imageBlock,
-                              maxWidth: maxWidth,
-                              textColor: textColor,
-                            ),
-                          );
-                          break;
-                        case _RenderItemType.space:
-                          children.add(
-                            SizedBox(height: item.spaceHeight ?? 8),
-                          );
-                          break;
-                      }
+                          ),
+                        );
+                        break;
+                      case _RenderItemType.image:
+                        final imageBlock = item.imageBlock;
+                        if (imageBlock == null) {
+                          continue;
+                        }
+                        children.add(
+                          _buildImageWidget(
+                            imageBlock: imageBlock,
+                            maxWidth: paneWidth,
+                            textColor: textColor,
+                            fixedHeight: item.measuredHeight,
+                          ),
+                        );
+                        break;
+                      case _RenderItemType.space:
+                        children.add(
+                          SizedBox(height: item.spaceHeight ?? 8),
+                        );
+                        break;
                     }
+                  }
 
-                    if (!hasContent) {
-                      children.add(
-                        Text(
-                          '本页暂无可显示内容',
-                          textScaler: TextScaler.noScaling,
-                          textHeightBehavior: _textHeightBehavior,
-                          style: baseStyle,
-                        ),
-                      );
-                    }
-
-                    _scheduleRenderOverflowDebug(constraints.maxHeight);
-                    return SizedBox(
-                      height: constraints.maxHeight,
-                      child: ListView(
-                        controller: _pageScrollController,
-                        physics: const NeverScrollableScrollPhysics(),
-                        padding: EdgeInsets.zero,
-                        children: children,
+                  if (!hasContent) {
+                    children.add(
+                      Text(
+                        '本页暂无可显示内容',
+                        textScaler: TextScaler.noScaling,
+                        textHeightBehavior: _textHeightBehavior,
+                        style: baseStyle,
                       ),
                     );
-                  },
-                ),
+                  }
+
+                  _scheduleRenderOverflowDebug(paneHeight);
+                  return SizedBox(
+                    width: paneWidth,
+                    height: paneHeight,
+                    child: ListView(
+                      controller: _pageScrollController,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: EdgeInsets.zero,
+                      clipBehavior: Clip.none,
+                      children: children,
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -807,12 +923,22 @@ class _PagePaneState extends State<_PagePane> {
         if (end <= start) {
           continue;
         }
+        final rawText = blockText.substring(start, end);
+        final normalized = _normalizeFragmentTextForPage(rawText);
+        if (normalized.isEmpty) {
+          final measured = fragment.measuredHeight;
+          if (measured != null && measured > 0) {
+            items.add(_RenderItem.space(measured));
+          }
+          continue;
+        }
         items.add(
           _RenderItem.text(
-            text: blockText.substring(start, end),
+            text: normalized,
             globalStart: fragment.globalStart,
             isHeading: block is HeadingBlock,
             blockStyle: blockStyle,
+            measuredHeight: fragment.measuredHeight,
           ),
         );
         continue;
@@ -823,7 +949,12 @@ class _PagePaneState extends State<_PagePane> {
         if (block is! ImageBlock) {
           continue;
         }
-        items.add(_RenderItem.image(block));
+        items.add(
+          _RenderItem.image(
+            block,
+            measuredHeight: fragment.measuredHeight,
+          ),
+        );
         continue;
       }
 
@@ -832,6 +963,29 @@ class _PagePaneState extends State<_PagePane> {
       }
     }
     return items;
+  }
+
+  String _normalizeFragmentTextForPage(String raw) {
+    if (raw.isEmpty) {
+      return raw;
+    }
+    var value = raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    int end = value.length;
+    while (end > 0) {
+      final code = value.codeUnitAt(end - 1);
+      if (code == 0x0A) {
+        end -= 1;
+        continue;
+      }
+      break;
+    }
+    if (end <= 0) {
+      return '';
+    }
+    if (end == value.length) {
+      return value;
+    }
+    return value.substring(0, end);
   }
 
   String? _extractLeadingTitleFromItems(
@@ -1118,200 +1272,58 @@ class _PagePaneState extends State<_PagePane> {
     return value.trim().replaceAll(RegExp(r'[\s:：\-—·•]+'), '').toLowerCase();
   }
 
-  List<Widget> _buildDeterministicTextLineWidgets({
+  Widget _buildNativeTextBlock({
     required String text,
     required int pageStartOffset,
     required TextStyle textStyle,
     required TextAlign textAlign,
     required double lineHeight,
     required double maxWidth,
+    double? fixedHeight,
   }) {
-    final lines = _measureTextLineRanges(
+    final spans = _buildHighlightedSpans(
       text: text,
-      textStyle: textStyle,
-      textAlign: textAlign,
-      lineHeight: lineHeight,
-      maxWidth: maxWidth,
+      pageStartOffset: pageStartOffset,
+      annotations: widget.annotations,
+      baseStyle: textStyle,
     );
-    if (lines.isEmpty) {
-      final spans = _buildHighlightedSpans(
-        text: text,
-        pageStartOffset: pageStartOffset,
-        annotations: widget.annotations,
-        baseStyle: textStyle,
-      );
-      return <Widget>[
-        Text.rich(
+    final resolvedLocale = textStyle.locale ??
+        widget.style.locale ??
+        Localizations.maybeLocaleOf(context);
+    final strut = StrutStyle(
+      fontFamily: textStyle.fontFamily,
+      fontSize: textStyle.fontSize ?? widget.style.fontSize,
+      fontWeight: textStyle.fontWeight,
+      fontStyle: textStyle.fontStyle,
+      height: lineHeight,
+      leading: 0,
+      forceStrutHeight: true,
+    );
+
+    return SizedBox(
+      width: maxWidth,
+      height: fixedHeight,
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: Text.rich(
           TextSpan(children: spans),
+          softWrap: true,
           textAlign: textAlign,
+          locale: resolvedLocale,
           textScaler: TextScaler.noScaling,
-          strutStyle: StrutStyle(
-            fontFamily: textStyle.fontFamily,
-            fontSize: textStyle.fontSize ?? widget.style.fontSize,
-            fontWeight: textStyle.fontWeight,
-            fontStyle: textStyle.fontStyle,
-            height: lineHeight,
-            leading: 0,
-            forceStrutHeight: true,
-          ),
+          textWidthBasis: TextWidthBasis.parent,
+          strutStyle: strut,
           textHeightBehavior: _textHeightBehavior,
         ),
-      ];
-    }
-
-    final strut = StrutStyle(
-      fontFamily: textStyle.fontFamily,
-      fontSize: textStyle.fontSize ?? widget.style.fontSize,
-      fontWeight: textStyle.fontWeight,
-      fontStyle: textStyle.fontStyle,
-      height: lineHeight,
-      leading: 0,
-      forceStrutHeight: true,
+      ),
     );
-
-    final safeAlign =
-        textAlign == TextAlign.justify ? TextAlign.start : textAlign;
-    final widgets = <Widget>[];
-    for (final line in lines) {
-      final lineText = text.substring(line.start, line.end);
-      final spans = _buildHighlightedSpans(
-        text: lineText,
-        pageStartOffset: pageStartOffset + line.start,
-        annotations: widget.annotations,
-        baseStyle: textStyle,
-      );
-      widgets.add(
-        SizedBox(
-          height: line.height,
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text.rich(
-              TextSpan(children: spans),
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.clip,
-              textAlign: safeAlign,
-              textScaler: TextScaler.noScaling,
-              strutStyle: strut,
-              textHeightBehavior: _textHeightBehavior,
-            ),
-          ),
-        ),
-      );
-    }
-    return widgets;
-  }
-
-  List<_MeasuredTextLine> _measureTextLineRanges({
-    required String text,
-    required TextStyle textStyle,
-    required TextAlign textAlign,
-    required double lineHeight,
-    required double maxWidth,
-  }) {
-    if (text.isEmpty) {
-      return const <_MeasuredTextLine>[];
-    }
-    final width = math.max(40.0, maxWidth);
-    final fallbackLineHeight =
-        (textStyle.fontSize ?? widget.style.fontSize) * lineHeight;
-    final strut = StrutStyle(
-      fontFamily: textStyle.fontFamily,
-      fontSize: textStyle.fontSize ?? widget.style.fontSize,
-      fontWeight: textStyle.fontWeight,
-      fontStyle: textStyle.fontStyle,
-      height: lineHeight,
-      leading: 0,
-      forceStrutHeight: true,
-    );
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: textStyle),
-      textDirection: TextDirection.ltr,
-      textAlign: textAlign,
-      locale: widget.style.locale,
-      textScaler: TextScaler.noScaling,
-      strutStyle: strut,
-      textHeightBehavior: _textHeightBehavior,
-      textWidthBasis: TextWidthBasis.parent,
-    )..layout(maxWidth: width);
-    try {
-      final metrics = painter.computeLineMetrics();
-      if (metrics.isEmpty) {
-        return <_MeasuredTextLine>[
-          _MeasuredTextLine(
-            start: 0,
-            end: text.length,
-            height: fallbackLineHeight,
-          ),
-        ];
-      }
-
-      final lines = <_MeasuredTextLine>[];
-      var cursor = 0;
-      for (final metric in metrics) {
-        final lineTop = metric.baseline - metric.ascent;
-        final probeDy = (lineTop +
-                (metric.height <= 0 ? fallbackLineHeight : metric.height) / 2)
-            .clamp(0, math.max(0, painter.height - 0.05))
-            .toDouble();
-        final probe =
-            painter.getPositionForOffset(Offset(width - 0.05, probeDy));
-        final boundary = painter.getLineBoundary(probe);
-        var end = boundary.end.clamp(0, text.length).toInt();
-        if (end <= cursor && cursor < text.length) {
-          end = math.min(text.length, cursor + 1);
-        }
-        if (end <= cursor) {
-          continue;
-        }
-        lines.add(
-          _MeasuredTextLine(
-            start: cursor,
-            end: end,
-            height: metric.height <= 0 ? fallbackLineHeight : metric.height,
-          ),
-        );
-        cursor = end;
-      }
-
-      if (lines.isEmpty) {
-        return <_MeasuredTextLine>[
-          _MeasuredTextLine(
-            start: 0,
-            end: text.length,
-            height: fallbackLineHeight,
-          ),
-        ];
-      }
-
-      if (lines.last.end < text.length) {
-        lines.add(
-          _MeasuredTextLine(
-            start: lines.last.end,
-            end: text.length,
-            height: fallbackLineHeight,
-          ),
-        );
-      } else if (lines.last.end > text.length) {
-        final last = lines.removeLast();
-        lines.add(
-          _MeasuredTextLine(
-            start: last.start,
-            end: text.length,
-            height: last.height,
-          ),
-        );
-      }
-      return lines;
-    } finally {
-      painter.dispose();
-    }
   }
 
   Widget _buildImageWidget({
     required ImageBlock imageBlock,
     required double maxWidth,
     required Color textColor,
+    double? fixedHeight,
   }) {
     final src = imageBlock.src.trim();
     final imageBytes = _resolveImageBytes(src);
@@ -1395,7 +1407,9 @@ class _PagePaneState extends State<_PagePane> {
       );
     }
 
-    final resolvedHeight = targetHeight.clamp(38.0, maxImageHeight).toDouble();
+    final resolvedHeight = fixedHeight == null
+        ? targetHeight.clamp(38.0, maxImageHeight).toDouble()
+        : fixedHeight.clamp(38.0, maxImageHeight).toDouble();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 0),
       child: SizedBox(
@@ -1666,9 +1680,7 @@ class _PagePaneState extends State<_PagePane> {
   }
 
   double _effectivePageHeight() {
-    final lineGuard =
-        math.max(2.0, widget.style.fontSize * widget.style.lineHeight * 0.10);
-    return math.max(80.0, widget.pageUsableHeight - 8.0 - lineGuard);
+    return math.max(80.0, widget.pageUsableHeight - 2.0);
   }
 
   double _normalizedLineHeight(double? rawLineHeight) {
@@ -1868,6 +1880,7 @@ class _RenderItem {
   final BlockStyle? blockStyle;
   final ImageBlock? imageBlock;
   final double? spaceHeight;
+  final double? measuredHeight;
 
   const _RenderItem._({
     required this.type,
@@ -1877,6 +1890,7 @@ class _RenderItem {
     this.blockStyle,
     this.imageBlock,
     this.spaceHeight,
+    this.measuredHeight,
   });
 
   factory _RenderItem.text({
@@ -1884,6 +1898,7 @@ class _RenderItem {
     required int globalStart,
     bool isHeading = false,
     BlockStyle? blockStyle,
+    double? measuredHeight,
   }) {
     return _RenderItem._(
       type: _RenderItemType.text,
@@ -1891,13 +1906,15 @@ class _RenderItem {
       globalStart: globalStart,
       isHeading: isHeading,
       blockStyle: blockStyle,
+      measuredHeight: measuredHeight,
     );
   }
 
-  factory _RenderItem.image(ImageBlock block) {
+  factory _RenderItem.image(ImageBlock block, {double? measuredHeight}) {
     return _RenderItem._(
       type: _RenderItemType.image,
       imageBlock: block,
+      measuredHeight: measuredHeight,
     );
   }
 
@@ -1907,16 +1924,4 @@ class _RenderItem {
       spaceHeight: height,
     );
   }
-}
-
-class _MeasuredTextLine {
-  final int start;
-  final int end;
-  final double height;
-
-  const _MeasuredTextLine({
-    required this.start,
-    required this.end,
-    required this.height,
-  });
 }

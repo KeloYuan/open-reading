@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xxread/reader_core/data/reader_models.dart';
@@ -135,4 +137,257 @@ void main() {
       expect(textFragments[i].end, greaterThan(textFragments[i].start));
     }
   });
+
+  test('FlowPaginator keeps mixed punctuation pages within width/height bounds',
+      () async {
+    const paragraphPiece =
+        '“经济学”里常见的“引号”、EnglishWordsAndNumbers123、括号（测试）和——破折号；这一行应稳定换行，不应超出可见区域。';
+    final mixedText = List.filled(220, paragraphPiece).join();
+    final flowDoc = FlowDoc(
+      blocks: [
+        ParagraphBlock(
+          id: 'p-mixed',
+          inlines: [TextInline(mixedText)],
+        ),
+      ],
+    );
+
+    const style = ReaderStyle(
+      fontSize: 19,
+      lineHeight: 1.72,
+      letterSpacing: 0.0,
+      textAlign: TextAlign.start,
+    );
+    const layout = PageLayout(
+      usableWidth: 360,
+      usableHeight: 640,
+      padding: EdgeInsets.zero,
+    );
+
+    final paginator = FlowPaginator();
+    final plan = await paginator.paginate(
+      chapterId: 'chapter-mixed-overflow-guard',
+      flowDoc: flowDoc,
+      style: style,
+      layout: layout,
+    );
+
+    expect(plan.pages.length, greaterThan(1));
+
+    final blockMap = <String, Block>{for (final b in flowDoc.blocks) b.id: b};
+    final effectivePageHeight = math.max(80.0, layout.usableHeight - 2.0);
+    const textHeightBehavior = TextHeightBehavior(
+      applyHeightToFirstAscent: true,
+      applyHeightToLastDescent: true,
+    );
+
+    for (final page in plan.pages) {
+      var totalHeight = 0.0;
+      for (final fragment in page.fragments) {
+        if (fragment is TextFragment) {
+          final block = blockMap[fragment.blockId];
+          final plainText = switch (block) {
+            ParagraphBlock p => p.plainText,
+            HeadingBlock h => h.plainText,
+            _ => '',
+          };
+          if (plainText.isEmpty) {
+            continue;
+          }
+          final start = fragment.start.clamp(0, plainText.length);
+          final end = fragment.end.clamp(start, plainText.length);
+          if (end <= start) {
+            continue;
+          }
+          final text = plainText.substring(start, end);
+          final textStyle = style.toTextStyle();
+          final strut = StrutStyle(
+            fontFamily: textStyle.fontFamily,
+            fontSize: textStyle.fontSize ?? style.fontSize,
+            fontWeight: textStyle.fontWeight,
+            fontStyle: textStyle.fontStyle,
+            height: style.lineHeight,
+            leading: 0,
+            forceStrutHeight: true,
+          );
+          final painter = TextPainter(
+            text: TextSpan(text: text, style: textStyle),
+            textDirection: TextDirection.ltr,
+            textAlign: style.textAlign,
+            locale: style.locale,
+            textScaler: TextScaler.noScaling,
+            strutStyle: strut,
+            textHeightBehavior: textHeightBehavior,
+            textWidthBasis: TextWidthBasis.parent,
+          )..layout(maxWidth: layout.usableWidth);
+
+          final metrics = painter.computeLineMetrics();
+          for (final line in metrics) {
+            expect(line.width, lessThanOrEqualTo(layout.usableWidth + 0.001),
+                reason: 'page=${page.index} width=${line.width}');
+          }
+
+          final measuredHeight = painter.height <= 0
+              ? style.fontSize * style.lineHeight
+              : painter.height;
+          totalHeight += measuredHeight.ceilToDouble();
+          painter.dispose();
+          continue;
+        }
+        if (fragment is ImageFragment) {
+          totalHeight +=
+              (fragment.measuredHeight ?? (effectivePageHeight * 0.24))
+                  .ceilToDouble();
+          continue;
+        }
+        if (fragment is SpaceFragment) {
+          totalHeight += fragment.height.ceilToDouble();
+        }
+      }
+
+      expect(
+        totalHeight,
+        lessThanOrEqualTo(effectivePageHeight + 0.01),
+        reason:
+            'page=${page.index} totalHeight=$totalHeight pageHeight=$effectivePageHeight',
+      );
+    }
+  });
+
+  test(
+      'FlowPaginator keeps newline-heavy TXT pages within height bounds after render normalization',
+      () async {
+    final lines = List<String>.generate(
+      900,
+      (i) => '第${i + 1}行：这是用于验证TXT换行分页稳定性的文本，避免行尾换行导致页面溢出。',
+    );
+    final text = lines.join('\n');
+    final flowDoc = FlowDoc(
+      blocks: [
+        ParagraphBlock(
+          id: 'p-newline-heavy',
+          inlines: [TextInline(text)],
+        ),
+      ],
+    );
+
+    const style = ReaderStyle(
+      fontSize: 19,
+      lineHeight: 1.72,
+      letterSpacing: 0.0,
+      textAlign: TextAlign.start,
+    );
+    const layout = PageLayout(
+      usableWidth: 360,
+      usableHeight: 640,
+      padding: EdgeInsets.zero,
+    );
+
+    final paginator = FlowPaginator();
+    final plan = await paginator.paginate(
+      chapterId: 'chapter-newline-heavy',
+      flowDoc: flowDoc,
+      style: style,
+      layout: layout,
+    );
+
+    expect(plan.pages.length, greaterThan(1));
+    final blockMap = <String, Block>{for (final b in flowDoc.blocks) b.id: b};
+    final effectivePageHeight = math.max(80.0, layout.usableHeight - 2.0);
+    const textHeightBehavior = TextHeightBehavior(
+      applyHeightToFirstAscent: true,
+      applyHeightToLastDescent: true,
+    );
+
+    for (final page in plan.pages) {
+      var totalHeight = 0.0;
+      for (final fragment in page.fragments) {
+        if (fragment is TextFragment) {
+          final block = blockMap[fragment.blockId];
+          final plainText = switch (block) {
+            ParagraphBlock p => p.plainText,
+            HeadingBlock h => h.plainText,
+            _ => '',
+          };
+          if (plainText.isEmpty) {
+            continue;
+          }
+          final start = fragment.start.clamp(0, plainText.length);
+          final end = fragment.end.clamp(start, plainText.length);
+          if (end <= start) {
+            continue;
+          }
+          final raw = plainText.substring(start, end);
+          final normalized = _normalizeFragmentTextForRenderTest(raw);
+          if (normalized.isEmpty) {
+            totalHeight +=
+                (fragment.measuredHeight ?? (style.fontSize * style.lineHeight))
+                    .ceilToDouble();
+            continue;
+          }
+          final textStyle = style.toTextStyle();
+          final strut = StrutStyle(
+            fontFamily: textStyle.fontFamily,
+            fontSize: textStyle.fontSize ?? style.fontSize,
+            fontWeight: textStyle.fontWeight,
+            fontStyle: textStyle.fontStyle,
+            height: style.lineHeight,
+            leading: 0,
+            forceStrutHeight: true,
+          );
+          final painter = TextPainter(
+            text: TextSpan(text: normalized, style: textStyle),
+            textDirection: TextDirection.ltr,
+            textAlign: style.textAlign,
+            locale: style.locale,
+            textScaler: TextScaler.noScaling,
+            strutStyle: strut,
+            textHeightBehavior: textHeightBehavior,
+            textWidthBasis: TextWidthBasis.parent,
+          )..layout(maxWidth: layout.usableWidth);
+
+          final measuredHeight = painter.height <= 0
+              ? style.fontSize * style.lineHeight
+              : painter.height;
+          totalHeight += measuredHeight.ceilToDouble();
+          painter.dispose();
+          continue;
+        }
+        if (fragment is ImageFragment) {
+          totalHeight +=
+              (fragment.measuredHeight ?? (effectivePageHeight * 0.24))
+                  .ceilToDouble();
+          continue;
+        }
+        if (fragment is SpaceFragment) {
+          totalHeight += fragment.height.ceilToDouble();
+        }
+      }
+
+      expect(
+        totalHeight,
+        lessThanOrEqualTo(effectivePageHeight + 0.01),
+        reason:
+            'page=${page.index} totalHeight=$totalHeight pageHeight=$effectivePageHeight',
+      );
+    }
+  });
+}
+
+String _normalizeFragmentTextForRenderTest(String raw) {
+  if (raw.isEmpty) {
+    return raw;
+  }
+  final normalized = raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  int end = normalized.length;
+  while (end > 0 && normalized.codeUnitAt(end - 1) == 0x0A) {
+    end -= 1;
+  }
+  if (end <= 0) {
+    return '';
+  }
+  if (end == normalized.length) {
+    return normalized;
+  }
+  return normalized.substring(0, end);
 }

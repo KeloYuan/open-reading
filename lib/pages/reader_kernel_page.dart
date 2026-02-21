@@ -43,7 +43,9 @@ class ReaderKernelPage extends StatefulWidget {
 
 class _ReaderKernelPageState extends State<ReaderKernelPage>
     with WidgetsBindingObserver {
+  // Legacy bool preference key, still written for compatibility.
   static const String _pageAnimationPrefKey = 'enablePageAnimation';
+  static const String _pageTurnModePrefKey = 'reader_page_turn_mode_v1';
   static const String _volumeKeyTurnPrefKey = 'enableVolumeKeyTurn';
   static const String _themePrefKey = 'reader_theme_index_v1';
   static const String _ttsEnabledPrefKey = 'reader_tts_enabled_v1';
@@ -157,7 +159,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   bool _exitingReader = false;
   bool _exitFlushScheduled = false;
   bool _ttsEnabled = true;
-  bool _enablePageAnimation = true;
+  ReaderPageTurnAnimation _pageTurnAnimation = ReaderPageTurnAnimation.cover;
   bool _enableVolumeKeyTurn = true;
   bool _showSystemStatusBarInReader = false;
   DateTime? _lastVolumeKeyTurnAt;
@@ -252,7 +254,22 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
 
   Future<void> _restorePageAnimationPreference() async {
     final prefs = await SharedPreferences.getInstance();
-    _enablePageAnimation = prefs.getBool(_pageAnimationPrefKey) ?? true;
+    final savedMode = ReaderPageTurnAnimationPrefs.fromPrefValue(
+      prefs.getString(_pageTurnModePrefKey),
+    );
+    if (savedMode != null) {
+      _pageTurnAnimation = savedMode;
+      return;
+    }
+
+    final legacyEnabled = prefs.getBool(_pageAnimationPrefKey) ?? true;
+    _pageTurnAnimation = legacyEnabled
+        ? ReaderPageTurnAnimation.cover
+        : ReaderPageTurnAnimation.slide;
+    await prefs.setString(
+      _pageTurnModePrefKey,
+      _pageTurnAnimation.prefValue,
+    );
   }
 
   Future<void> _restoreReaderSystemStatusBarPreference() async {
@@ -328,7 +345,14 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
       format: widget.book.format,
       textEncoding: widget.book.textEncoding,
     );
+    if (!mounted) {
+      return;
+    }
     var targetStyle = _controller.style;
+    final runtimeLocale = Localizations.maybeLocaleOf(context);
+    if (runtimeLocale != null && targetStyle.locale != runtimeLocale) {
+      targetStyle = targetStyle.copyWith(locale: runtimeLocale);
+    }
     if (_pendingReaderFontFamily != _controller.style.fontFamily) {
       targetStyle = targetStyle.copyWith(
         fontFamily: _pendingReaderFontFamily,
@@ -1201,6 +1225,21 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     });
   }
 
+  double _readerBottomInfoBaseOffset(double bottomInset) {
+    return bottomInset > 0 ? math.max(0.0, bottomInset - 16.0) : 0.0;
+  }
+
+  double _readerBottomInfoReserve(double bottomInset) {
+    const labelVisualHeight = 20.0;
+    const reserveFloor = 14.0;
+    const reserveGuard = 8.0;
+    final baseOffset = _readerBottomInfoBaseOffset(bottomInset);
+    return math.max(
+      reserveFloor,
+      baseOffset + labelVisualHeight + reserveGuard - bottomInset,
+    );
+  }
+
   _ReaderThemePreset get _activeTheme => _themes[_themeIndex % _themes.length];
 
   @override
@@ -1262,7 +1301,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                     : (isAndroidTablet ? 38.0 : 8.0);
                 // Keep a slim footer lane for reading info while maximizing
                 // text area usage.
-                const bottomUiReserve = 10.0;
+                final bottomUiReserve = _readerBottomInfoReserve(bottomInset);
                 final padding = EdgeInsets.fromLTRB(
                   16,
                   topInset + topUiReserve,
@@ -1293,10 +1332,9 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                   style: _controller.style,
                   layout: _controller.layout,
                   annotations: _controller.annotations,
-                  enablePageAnimation: _enablePageAnimation,
-                  pageTurnAnimation: _enablePageAnimation
-                      ? ReaderPageTurnAnimation.cover
-                      : ReaderPageTurnAnimation.slide,
+                  enablePageAnimation:
+                      _pageTurnAnimation != ReaderPageTurnAnimation.slide,
+                  pageTurnAnimation: _pageTurnAnimation,
                   initialPageIndex: _controller.pageIndex,
                   onPageChanged: (index) {
                     _markReadingInteraction();
@@ -1660,8 +1698,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     final pageNo =
         (_controller.pageIndex + 1).clamp(1, math.max(1, plan.pages.length));
     final pageTotal = math.max(1, plan.pages.length);
-    final baseBottom =
-        bottomInset > 0 ? math.max(0.0, bottomInset - 12.0) : 2.0;
+    final baseBottom = _readerBottomInfoBaseOffset(bottomInset);
 
     return Align(
       alignment: Alignment.bottomCenter,
@@ -1812,6 +1849,147 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   Future<void> _persistTheme(int index) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_themePrefKey, index);
+  }
+
+  String _pageTurnModeLabel(ReaderPageTurnAnimation mode) {
+    final l10n = context.l10n;
+    switch (mode) {
+      case ReaderPageTurnAnimation.cover:
+        return l10n.pageTurningCover;
+      case ReaderPageTurnAnimation.slide:
+        return l10n.pageTurningSlide;
+      case ReaderPageTurnAnimation.scroll:
+        return l10n.pageTurningScroll;
+      case ReaderPageTurnAnimation.simulation:
+        return l10n.pageTurningSimulation;
+    }
+  }
+
+  String _pageTurnModeHint(ReaderPageTurnAnimation mode) {
+    switch (mode) {
+      case ReaderPageTurnAnimation.cover:
+        return '下一页覆盖当前页，观感最接近纸张';
+      case ReaderPageTurnAnimation.slide:
+        return '左右平移翻页，轻量稳定';
+      case ReaderPageTurnAnimation.scroll:
+        return '上下滚动翻页，连续阅读';
+      case ReaderPageTurnAnimation.simulation:
+        return '3D 仿真翻页，层次更强';
+    }
+  }
+
+  IconData _pageTurnModeIcon(ReaderPageTurnAnimation mode) {
+    switch (mode) {
+      case ReaderPageTurnAnimation.cover:
+        return Icons.layers_rounded;
+      case ReaderPageTurnAnimation.slide:
+        return Icons.swipe_rounded;
+      case ReaderPageTurnAnimation.scroll:
+        return Icons.swap_vert_rounded;
+      case ReaderPageTurnAnimation.simulation:
+        return Icons.auto_awesome_motion_rounded;
+    }
+  }
+
+  Future<void> _persistPageTurnAnimation(ReaderPageTurnAnimation mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pageTurnModePrefKey, mode.prefValue);
+    // Keep legacy flag in sync for older settings entry.
+    await prefs.setBool(
+      _pageAnimationPrefKey,
+      mode != ReaderPageTurnAnimation.slide,
+    );
+  }
+
+  Future<void> _setPageTurnAnimation(
+    ReaderPageTurnAnimation mode, {
+    bool showSnackBar = true,
+  }) async {
+    if (mode == _pageTurnAnimation) {
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _pageTurnAnimation = mode;
+      });
+    } else {
+      _pageTurnAnimation = mode;
+    }
+    await _persistPageTurnAnimation(mode);
+    if (!mounted) {
+      return;
+    }
+    if (showSnackBar) {
+      showSideToast(
+        context,
+        '翻页方式：${_pageTurnModeLabel(mode)}',
+        icon: _pageTurnModeIcon(mode),
+      );
+    }
+    if (_chromeVisible) {
+      _scheduleAutoImmersive();
+    }
+  }
+
+  Future<void> _showPageTurningSheet(BuildContext context) async {
+    final fg = _activeTheme.foreground;
+    const modes = <ReaderPageTurnAnimation>[
+      ReaderPageTurnAnimation.cover,
+      ReaderPageTurnAnimation.slide,
+      ReaderPageTurnAnimation.scroll,
+      ReaderPageTurnAnimation.simulation,
+    ];
+    await _showReaderBottomSheet<void>(
+      context: context,
+      title: context.l10n.pageTurningSettings,
+      maxHeightFactor: 0.58,
+      builder: (sheetContext) {
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+          itemCount: modes.length,
+          separatorBuilder: (_, __) => Divider(
+            height: 1,
+            color: fg.withValues(alpha: 0.10),
+          ),
+          itemBuilder: (context, index) {
+            final mode = modes[index];
+            final selected = mode == _pageTurnAnimation;
+            return ListTile(
+              leading: Icon(
+                _pageTurnModeIcon(mode),
+                color: fg.withValues(alpha: selected ? 0.96 : 0.76),
+              ),
+              title: Text(
+                _pageTurnModeLabel(mode),
+                style: TextStyle(
+                  color: fg.withValues(alpha: selected ? 0.96 : 0.90),
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                ),
+              ),
+              subtitle: Text(
+                _pageTurnModeHint(mode),
+                style: TextStyle(
+                  color: fg.withValues(alpha: 0.68),
+                ),
+              ),
+              trailing: selected
+                  ? Icon(
+                      Icons.check_circle_rounded,
+                      color: fg.withValues(alpha: 0.90),
+                    )
+                  : null,
+              onTap: () {
+                Navigator.of(sheetContext).pop();
+                unawaited(_setPageTurnAnimation(mode, showSnackBar: false));
+              },
+            );
+          },
+        );
+      },
+    );
+    if (_chromeVisible) {
+      _scheduleAutoImmersive();
+    }
   }
 
   Future<void> _setReaderFontFamily(String? family) async {
@@ -2666,6 +2844,24 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                           );
                         }),
                       ),
+                      const SizedBox(height: 14),
+                      Text(context.l10n.pageTurningSettings,
+                          style: sectionTextStyle),
+                      const SizedBox(height: 8),
+                      _buildTypographyActionTile(
+                        title: context.l10n.pageTurningMode,
+                        subtitle: _pageTurnModeLabel(_pageTurnAnimation),
+                        icon: _pageTurnModeIcon(_pageTurnAnimation),
+                        foreground: fg,
+                        background: bg,
+                        onTap: () async {
+                          await _showPageTurningSheet(context);
+                          if (!mounted) {
+                            return;
+                          }
+                          setModalState(() {});
+                        },
+                      ),
                     ],
                   ),
                 );
@@ -2790,6 +2986,69 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
         fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
       ),
       onSelected: (_) => onTap(),
+    );
+  }
+
+  Widget _buildTypographyActionTile({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color foreground,
+    required Color background,
+    required VoidCallback onTap,
+  }) {
+    final cardColor =
+        Color.lerp(background, Colors.white, 0.10)!.withValues(alpha: 0.52);
+    final borderColor = foreground.withValues(alpha: 0.20);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: cardColor,
+            border: Border.all(color: borderColor),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: foreground.withValues(alpha: 0.90),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: foreground.withValues(alpha: 0.92),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: foreground.withValues(alpha: 0.72),
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: foreground.withValues(alpha: 0.70),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

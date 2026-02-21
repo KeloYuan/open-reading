@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:xxread/models/book.dart';
+import 'package:xxread/pages/epub_foliate_reader_page.dart';
 import 'package:xxread/pages/reader_kernel_page.dart';
 import 'package:xxread/services/books/book_dao.dart';
 import 'package:xxread/services/books/book_storage_repair_service.dart';
 import 'package:xxread/services/core/app_state_service.dart';
 import 'package:xxread/services/library/library_event_bus_service.dart';
+import 'package:xxread/services/reading/reader_engine_service.dart';
 import 'package:xxread/utils/system_ui_helper.dart';
 import 'package:xxread/widgets/side_toast.dart';
 
@@ -68,7 +70,17 @@ class ReadingRouterService {
     Book book,
   ) async {
     final hostBrightness = Theme.of(context).brightness;
-    final page = ReaderKernelPage(book: book);
+    Widget page = ReaderKernelPage(book: book);
+    final isEpub = book.format.toLowerCase() == 'epub';
+    if (isEpub) {
+      final engine = await ReaderEngineService.getEpubLayoutEngine();
+      if (engine != EpubLayoutEngine.flutter) {
+        page = EpubFoliateReaderPage(
+          book: book,
+          strictPagination: engine == EpubLayoutEngine.foliateStrict,
+        );
+      }
+    }
     await _recordRecentReading(book);
     if (!context.mounted) return;
 

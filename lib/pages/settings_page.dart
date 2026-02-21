@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -9,8 +10,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../main.dart';
 import '../utils/app_themes.dart';
 import '../l10n/app_localizations.dart';
+import '../reader_core/renderer/reader_view.dart';
 import '../services/books/book_services.dart';
 import '../services/core/core_services.dart';
+import '../services/reading/reader_engine_service.dart';
 import '../services/sync/sync_services.dart';
 import '../widgets/side_toast.dart';
 import '../widgets/webdav_config_dialog.dart';
@@ -38,7 +41,8 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _disableGlassEffects = false;
 
   // 阅读设置
-  bool _enablePageAnimation = true;
+  ReaderPageTurnAnimation _pageTurnAnimation = ReaderPageTurnAnimation.cover;
+  EpubLayoutEngine _epubLayoutEngine = EpubLayoutEngine.flutter;
   bool _enableVolumeKeyTurn = true;
   bool _showSystemStatusBarInReader = false;
 
@@ -90,6 +94,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _loadSettings() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
+    final epubLayoutEngine = await ReaderEngineService.getEpubLayoutEngine();
     setState(() {
       _enableAutoSave = prefs.getBool('enableAutoSave') ?? true;
       _keepScreenOn = prefs.getBool('keepScreenOn') ?? false;
@@ -99,10 +104,21 @@ class _SettingsPageState extends State<SettingsPage> {
       _enableAutoExtractCover = prefs.getBool('enableAutoExtractCover') ?? true;
 
       // 阅读设置
-      _enablePageAnimation = prefs.getBool('enablePageAnimation') ?? true;
+      final pageTurnMode = ReaderPageTurnAnimationPrefs.fromPrefValue(
+        prefs.getString('reader_page_turn_mode_v1'),
+      );
+      if (pageTurnMode != null) {
+        _pageTurnAnimation = pageTurnMode;
+      } else {
+        final legacyEnable = prefs.getBool('enablePageAnimation') ?? true;
+        _pageTurnAnimation = legacyEnable
+            ? ReaderPageTurnAnimation.cover
+            : ReaderPageTurnAnimation.slide;
+      }
       _enableVolumeKeyTurn = prefs.getBool('enableVolumeKeyTurn') ?? true;
       _showSystemStatusBarInReader =
           prefs.getBool('readerShowSystemStatusBar') ?? false;
+      _epubLayoutEngine = epubLayoutEngine;
 
       // 其他设置
       _enableFullscreen = prefs.getBool('enableFullscreen') ?? false;
@@ -143,12 +159,20 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setBool('enableAutoExtractCover', _enableAutoExtractCover);
 
     // 阅读设置
-    await prefs.setBool('enablePageAnimation', _enablePageAnimation);
+    await prefs.setString(
+      'reader_page_turn_mode_v1',
+      _pageTurnAnimation.prefValue,
+    );
+    await prefs.setBool(
+      'enablePageAnimation',
+      _pageTurnAnimation != ReaderPageTurnAnimation.slide,
+    );
     await prefs.setBool('enableVolumeKeyTurn', _enableVolumeKeyTurn);
     await prefs.setBool(
       'readerShowSystemStatusBar',
       _showSystemStatusBarInReader,
     );
+    await ReaderEngineService.setEpubLayoutEngine(_epubLayoutEngine);
 
     // 其他设置
     await prefs.setBool('enableFullscreen', _enableFullscreen);
@@ -264,13 +288,12 @@ class _SettingsPageState extends State<SettingsPage> {
             title: l10n.readingSettings,
             icon: Icons.book_outlined,
             children: [
-              _buildSwitchSetting(
-                title: '覆盖翻页动画',
-                subtitle: _enablePageAnimation ? '下一页覆盖当前页' : '使用普通平移翻页',
-                value: _enablePageAnimation,
-                onChanged: (value) =>
-                    setState(() => _enablePageAnimation = value),
-                icon: Icons.auto_awesome_motion_rounded,
+              _buildActionSetting(
+                title: l10n.pageTurningSettings,
+                subtitle:
+                    '${l10n.pageTurningMode}：${_pageTurnModeLabel(_pageTurnAnimation, l10n)}',
+                onTap: () => _showPageTurningModal(l10n),
+                icon: _pageTurnModeIcon(_pageTurnAnimation),
               ),
               _buildSwitchSetting(
                 title: '音量键翻页',
@@ -290,28 +313,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     setState(() => _showSystemStatusBarInReader = value),
                 icon: Icons.vertical_align_top_rounded,
               ),
-              _buildStaticSetting(
-                title: 'EPUB 排版引擎',
-                subtitle: '已固定为 Flutter 可控内核（封面/排版/UI 均可控）',
-                icon: Icons.auto_fix_high_rounded,
-                trailing: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    '可控',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                ),
+              _buildActionSetting(
+                title: 'EPUB 排版引擎（仅 EPUB）',
+                subtitle: _epubLayoutEngineSubtitle(_epubLayoutEngine),
+                onTap: _showEpubLayoutEngineModal,
+                icon: _epubLayoutEngineIcon(_epubLayoutEngine),
               ),
             ],
           ),
@@ -701,6 +707,470 @@ class _SettingsPageState extends State<SettingsPage> {
       subtitle: '当前：${currentStyle.displayName}',
       onTap: () => _showUiStyleModal(themeNotifier),
       icon: currentStyle.icon,
+    );
+  }
+
+  String _pageTurnModeLabel(
+    ReaderPageTurnAnimation mode,
+    AppLocalizations l10n,
+  ) {
+    switch (mode) {
+      case ReaderPageTurnAnimation.cover:
+        return l10n.pageTurningCover;
+      case ReaderPageTurnAnimation.slide:
+        return l10n.pageTurningSlide;
+      case ReaderPageTurnAnimation.scroll:
+        return l10n.pageTurningScroll;
+      case ReaderPageTurnAnimation.simulation:
+        return l10n.pageTurningSimulation;
+    }
+  }
+
+  String _pageTurnModeHint(ReaderPageTurnAnimation mode) {
+    switch (mode) {
+      case ReaderPageTurnAnimation.cover:
+        return '下一页覆盖当前页，纸张感更强';
+      case ReaderPageTurnAnimation.slide:
+        return '左右平移翻页，轻量稳定';
+      case ReaderPageTurnAnimation.scroll:
+        return '上下滚动翻页，连续阅读';
+      case ReaderPageTurnAnimation.simulation:
+        return '3D 仿真翻页，沉浸感更强';
+    }
+  }
+
+  IconData _pageTurnModeIcon(ReaderPageTurnAnimation mode) {
+    switch (mode) {
+      case ReaderPageTurnAnimation.cover:
+        return Icons.layers_rounded;
+      case ReaderPageTurnAnimation.slide:
+        return Icons.swipe_rounded;
+      case ReaderPageTurnAnimation.scroll:
+        return Icons.swap_vert_rounded;
+      case ReaderPageTurnAnimation.simulation:
+        return Icons.auto_awesome_motion_rounded;
+    }
+  }
+
+  String _epubLayoutEngineSubtitle(EpubLayoutEngine engine) {
+    switch (engine) {
+      case EpubLayoutEngine.flutter:
+        return 'Flutter（原生内核，推荐）';
+      case EpubLayoutEngine.foliate:
+        return 'Foliate（Web 内核，兼容模式）';
+      case EpubLayoutEngine.foliateStrict:
+        return 'Foliate（Web 内核，严格分页实验）';
+    }
+  }
+
+  IconData _epubLayoutEngineIcon(EpubLayoutEngine engine) {
+    switch (engine) {
+      case EpubLayoutEngine.flutter:
+        return Icons.auto_fix_high_rounded;
+      case EpubLayoutEngine.foliate:
+        return Icons.web_asset_rounded;
+      case EpubLayoutEngine.foliateStrict:
+        return Icons.grid_view_rounded;
+    }
+  }
+
+  void _showEpubLayoutEngineModal() {
+    final isMaterial3Style = Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
+    final scheme = Theme.of(context).colorScheme;
+    final options = <(
+      EpubLayoutEngine engine,
+      String title,
+      String subtitle,
+      IconData icon
+    )>[
+      (
+        EpubLayoutEngine.flutter,
+        'Flutter 原生内核（推荐）',
+        '原生分页与渲染链路，优先保证可控与稳定',
+        Icons.auto_fix_high_rounded,
+      ),
+      (
+        EpubLayoutEngine.foliate,
+        'Foliate 兼容模式',
+        'Web 分页引擎，适合做兼容性对照',
+        Icons.web_asset_rounded,
+      ),
+      (
+        EpubLayoutEngine.foliateStrict,
+        'Foliate 严格分页（实验）',
+        'Web 分页严格策略，优先规避缺字与边缘溢出',
+        Icons.grid_view_rounded,
+      ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor:
+          isMaterial3Style ? scheme.surfaceContainerHigh : Colors.transparent,
+      builder: (modalContext) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isMaterial3Style
+                ? Theme.of(modalContext).colorScheme.surfaceContainerHigh
+                : Theme.of(modalContext).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border(
+              top: BorderSide(
+                color: Theme.of(modalContext).colorScheme.outline.withValues(
+                      alpha: isMaterial3Style ? 0.24 : 0.16,
+                    ),
+              ),
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 14),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(modalContext)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 2, 24, 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.auto_stories_rounded,
+                        color: Theme.of(modalContext).colorScheme.primary,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'EPUB 排版引擎',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(modalContext).colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ...options.map((option) {
+                  final selected = _epubLayoutEngine == option.$1;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () async {
+                          if (selected) {
+                            Navigator.of(modalContext).pop();
+                            return;
+                          }
+                          setState(() => _epubLayoutEngine = option.$1);
+                          Navigator.of(modalContext).pop();
+                          await _saveSettings();
+                          if (!mounted) {
+                            return;
+                          }
+                          showSideToast(
+                            context,
+                            switch (option.$1) {
+                              EpubLayoutEngine.flutter => '已切换到 Flutter 可控内核',
+                              EpubLayoutEngine.foliate => '已切换到 Foliate 兼容模式',
+                              EpubLayoutEngine.foliateStrict =>
+                                '已切换到 Foliate 严格分页（实验）',
+                            },
+                            icon: option.$4,
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: selected
+                                  ? Theme.of(modalContext).colorScheme.primary
+                                  : Theme.of(modalContext)
+                                      .colorScheme
+                                      .outline
+                                      .withValues(alpha: 0.35),
+                              width: selected ? 1.6 : 1,
+                            ),
+                            color: selected
+                                ? Theme.of(modalContext)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.08)
+                                : Colors.transparent,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                option.$4,
+                                color: selected
+                                    ? Theme.of(modalContext).colorScheme.primary
+                                    : Theme.of(modalContext)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.75),
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      option.$2,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: selected
+                                            ? Theme.of(modalContext)
+                                                .colorScheme
+                                                .primary
+                                            : Theme.of(modalContext)
+                                                .colorScheme
+                                                .onSurface,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      option.$3,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Theme.of(modalContext)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.62),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (selected)
+                                Icon(
+                                  Icons.check_circle,
+                                  color: Theme.of(modalContext)
+                                      .colorScheme
+                                      .primary,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 14),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showPageTurningModal(AppLocalizations l10n) {
+    const modes = <ReaderPageTurnAnimation>[
+      ReaderPageTurnAnimation.cover,
+      ReaderPageTurnAnimation.slide,
+      ReaderPageTurnAnimation.scroll,
+      ReaderPageTurnAnimation.simulation,
+    ];
+    final isMaterial3Style = Theme.of(context)
+            .extension<UiStyleThemeExtension>()
+            ?.isMaterial3Style ??
+        false;
+    final scheme = Theme.of(context).colorScheme;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor:
+          isMaterial3Style ? scheme.surfaceContainerHigh : Colors.transparent,
+      builder: (modalContext) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isMaterial3Style
+                ? Theme.of(modalContext).colorScheme.surfaceContainerHigh
+                : Theme.of(modalContext).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border(
+              top: BorderSide(
+                color: Theme.of(modalContext).colorScheme.outline.withValues(
+                      alpha: isMaterial3Style ? 0.24 : 0.16,
+                    ),
+              ),
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 14),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(modalContext)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 2, 24, 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _pageTurnModeIcon(_pageTurnAnimation),
+                        color: Theme.of(modalContext).colorScheme.primary,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        l10n.pageTurningSettings,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(modalContext).colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ...modes.map((mode) {
+                  final selected = _pageTurnAnimation == mode;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () async {
+                          if (selected) {
+                            Navigator.of(modalContext).pop();
+                            return;
+                          }
+                          setState(() => _pageTurnAnimation = mode);
+                          Navigator.of(modalContext).pop();
+                          unawaited(_saveSettings());
+                          if (!mounted) {
+                            return;
+                          }
+                          showSideToast(
+                            context,
+                            '翻页方式已切换为 ${_pageTurnModeLabel(mode, l10n)}',
+                            icon: _pageTurnModeIcon(mode),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: selected
+                                  ? Theme.of(modalContext).colorScheme.primary
+                                  : Theme.of(modalContext)
+                                      .colorScheme
+                                      .outline
+                                      .withValues(alpha: 0.35),
+                              width: selected ? 1.6 : 1,
+                            ),
+                            color: selected
+                                ? Theme.of(modalContext)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.08)
+                                : Colors.transparent,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _pageTurnModeIcon(mode),
+                                color: selected
+                                    ? Theme.of(modalContext).colorScheme.primary
+                                    : Theme.of(modalContext)
+                                        .colorScheme
+                                        .onSurface
+                                        .withValues(alpha: 0.75),
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _pageTurnModeLabel(mode, l10n),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: selected
+                                            ? Theme.of(
+                                                modalContext,
+                                              ).colorScheme.primary
+                                            : Theme.of(
+                                                modalContext,
+                                              ).colorScheme.onSurface,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _pageTurnModeHint(mode),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Theme.of(modalContext)
+                                            .colorScheme
+                                            .onSurface
+                                            .withValues(alpha: 0.62),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (selected)
+                                Icon(
+                                  Icons.check_circle,
+                                  color: Theme.of(modalContext)
+                                      .colorScheme
+                                      .primary,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -2116,66 +2586,6 @@ class _SettingsPageState extends State<SettingsPage> {
         setState(() => _isIosCloudSyncing = false);
       }
     }
-  }
-
-  Widget _buildStaticSetting({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    Widget? trailing,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 1),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Theme.of(context)
-                    .colorScheme
-                    .primary
-                    .withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Icon(
-                icon,
-                size: 16,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurface
-                              .withValues(alpha: 0.6),
-                        ),
-                  ),
-                ],
-              ),
-            ),
-            if (trailing != null) ...[
-              const SizedBox(width: 8),
-              trailing,
-            ],
-          ],
-        ),
-      ),
-    );
   }
 
   // 构建操作设置
