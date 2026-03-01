@@ -1226,7 +1226,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
   }
 
   double _readerBottomInfoBaseOffset(double bottomInset) {
-    return bottomInset > 0 ? math.max(0.0, bottomInset - 16.0) : 0.0;
+    return bottomInset > 0 ? math.max(0.0, bottomInset - 22.0) : 0.0;
   }
 
   double _readerBottomInfoReserve(double bottomInset) {

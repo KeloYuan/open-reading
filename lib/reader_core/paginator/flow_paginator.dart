@@ -22,7 +22,7 @@ class FlowPaginator {
   static const double _layoutWidthSafety = 0.0;
   static const double _textInkHorizontalGuard = 1.0;
   static const int _shortLineWidowChars = 2;
-  static const String _cacheAlgoVersion = 'v49';
+  static const String _cacheAlgoVersion = 'v50';
   static const TextScaler _textScaler = TextScaler.noScaling;
   static const TextHeightBehavior _textHeightBehavior = TextHeightBehavior(
     applyHeightToFirstAscent: true,
@@ -230,6 +230,7 @@ class FlowPaginator {
         }
 
         var lineCursor = 0;
+        int? partialLineStart;
         while (lineCursor < lineCount) {
           final remaining = pageHeight - consumedHeight;
           if (remaining <= _eps && currentFragments.isNotEmpty) {
@@ -237,12 +238,24 @@ class FlowPaginator {
             continue;
           }
 
-          var endLineExclusive = _findLineEndExclusiveByHeight(
-            layoutData,
-            startLine: lineCursor,
-            consumedHeight: consumedHeight,
-            pageHeight: pageHeight,
-          );
+          final currentLineStart = layoutData.lineStarts[lineCursor];
+          final currentLineEnd = layoutData.lineEnds[lineCursor];
+          final start =
+              (partialLineStart ?? currentLineStart).clamp(0, currentLineEnd);
+          if (start >= currentLineEnd) {
+            partialLineStart = null;
+            lineCursor += 1;
+            continue;
+          }
+
+          var endLineExclusive = partialLineStart == null
+              ? _findLineEndExclusiveByHeight(
+                  layoutData,
+                  startLine: lineCursor,
+                  consumedHeight: consumedHeight,
+                  pageHeight: pageHeight,
+                )
+              : lineCursor + 1;
           if (endLineExclusive <= lineCursor) {
             if (currentFragments.isNotEmpty) {
               await flushPage();
@@ -269,11 +282,13 @@ class FlowPaginator {
             continue;
           }
 
-          endLineExclusive = _adjustEndLineExclusiveForWidow(
-            layoutData,
-            startLine: lineCursor,
-            endLineExclusive: endLineExclusive,
-          );
+          if (partialLineStart == null) {
+            endLineExclusive = _adjustEndLineExclusiveForWidow(
+              layoutData,
+              startLine: lineCursor,
+              endLineExclusive: endLineExclusive,
+            );
+          }
           if (endLineExclusive <= lineCursor) {
             if (currentFragments.isNotEmpty) {
               await flushPage();
@@ -282,8 +297,22 @@ class FlowPaginator {
             endLineExclusive = math.min(lineCount, lineCursor + 1);
           }
 
-          final start = layoutData.lineStarts[lineCursor];
           var end = layoutData.lineEnds[endLineExclusive - 1];
+          final fittedEnd = _fitSliceEnd(
+            layoutData,
+            start: start,
+            end: end,
+            availableHeight: pageHeight - consumedHeight,
+          );
+          if (fittedEnd <= start) {
+            if (currentFragments.isNotEmpty) {
+              await flushPage();
+              continue;
+            }
+            end = math.min(layoutData.text.length, start + 1);
+          } else {
+            end = fittedEnd;
+          }
           var measuredSliceHeight = _measureSliceStandaloneHeight(
             layoutData,
             start: start,
@@ -312,11 +341,12 @@ class FlowPaginator {
             await flushPage();
             continue;
           }
-          if (hasHorizontalOverflow) {
+          if (hasHorizontalOverflow ||
+              end < layoutData.lineEnds[endLineExclusive - 1]) {
             debugAdjustments += 1;
             _logDebug(
-              'line-overflow-guard block=${block.id} '
-              'lines=$lineCursor-$endLineExclusive width=${layoutData.maxWidth.toStringAsFixed(2)}',
+              'line-overflow-guard block=${block.id} lines=$lineCursor-$endLineExclusive '
+              'range=$start-$end width=${layoutData.maxWidth.toStringAsFixed(2)}',
             );
           }
 
@@ -349,7 +379,12 @@ class FlowPaginator {
             ),
           );
 
-          lineCursor = endLineExclusive;
+          final nextState = _advanceLineStateAfterSlice(
+            layoutData,
+            endOffset: end,
+          );
+          lineCursor = nextState.lineCursor;
+          partialLineStart = nextState.partialLineStart;
           if (lineCursor < lineCount) {
             await flushPage();
           }
@@ -763,6 +798,160 @@ class FlowPaginator {
     return measured;
   }
 
+  int _fitSliceEnd(
+    _ParagraphLayout layout, {
+    required int start,
+    required int end,
+    required double availableHeight,
+  }) {
+    final safeStart = start.clamp(0, layout.text.length).toInt();
+    final safeEnd = end.clamp(safeStart, layout.text.length).toInt();
+    if (safeEnd <= safeStart) {
+      return safeStart;
+    }
+    if (availableHeight <= _eps) {
+      return safeStart;
+    }
+
+    var low = safeStart + 1;
+    var high = safeEnd;
+    var best = safeStart;
+
+    while (low <= high) {
+      final mid = (low + high) >> 1;
+      final measuredHeight = _snapToPixelCeil(
+        _measureSliceStandaloneHeight(
+              layout,
+              start: safeStart,
+              end: mid,
+            ) +
+            _textFragmentSafety,
+      );
+      final hasHorizontalOverflow = _sliceHasHorizontalOverflowStandalone(
+        layout,
+        start: safeStart,
+        end: mid,
+      );
+      final fits =
+          !hasHorizontalOverflow && measuredHeight <= availableHeight + _eps;
+      if (fits) {
+        best = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    return best;
+  }
+
+  bool _sliceHasHorizontalOverflowStandalone(
+    _ParagraphLayout layout, {
+    required int start,
+    required int end,
+  }) {
+    final maxWidth = _measureSliceMaxLineWidthStandalone(
+      layout,
+      start: start,
+      end: end,
+    );
+    return maxWidth > layout.maxWidth + _horizontalOverflowTolerance;
+  }
+
+  double _measureSliceMaxLineWidthStandalone(
+    _ParagraphLayout layout, {
+    required int start,
+    required int end,
+  }) {
+    final safeStart = start.clamp(0, layout.text.length).toInt();
+    final safeEnd = end.clamp(safeStart, layout.text.length).toInt();
+    if (safeEnd <= safeStart) {
+      return 0.0;
+    }
+    final key = '$safeStart:$safeEnd';
+    final cached = layout.sliceMaxLineWidthCache[key];
+    if (cached != null) {
+      return cached;
+    }
+    final slice = layout.text.substring(safeStart, safeEnd);
+    final painter = TextPainter(
+      text: TextSpan(text: slice, style: layout.textStyle),
+      textDirection: TextDirection.ltr,
+      textAlign: layout.textAlign,
+      locale: layout.locale,
+      textScaler: _textScaler,
+      strutStyle: layout.strutStyle,
+      textHeightBehavior: _textHeightBehavior,
+      textWidthBasis: TextWidthBasis.parent,
+    )..layout(maxWidth: layout.maxWidth);
+
+    var maxLineWidth = 0.0;
+    final metrics = painter.computeLineMetrics();
+    if (metrics.isNotEmpty) {
+      for (final line in metrics) {
+        maxLineWidth = math.max(maxLineWidth, line.width);
+      }
+    } else {
+      maxLineWidth = painter.width;
+    }
+    final boxes = painter.getBoxesForSelection(
+      TextSelection(baseOffset: 0, extentOffset: slice.length),
+    );
+    if (boxes.isNotEmpty) {
+      var left = double.infinity;
+      var right = double.negativeInfinity;
+      for (final box in boxes) {
+        if (box.left < left) {
+          left = box.left;
+        }
+        if (box.right > right) {
+          right = box.right;
+        }
+      }
+      if (left.isFinite && right.isFinite && right > left) {
+        maxLineWidth = math.max(maxLineWidth, right - left);
+      }
+    }
+    painter.dispose();
+    layout.sliceMaxLineWidthCache[key] = maxLineWidth;
+    return maxLineWidth;
+  }
+
+  _LineCursorState _advanceLineStateAfterSlice(
+    _ParagraphLayout layout, {
+    required int endOffset,
+  }) {
+    final lineCount = layout.lineEnds.length;
+    if (lineCount <= 0) {
+      return const _LineCursorState(lineCursor: 0, partialLineStart: null);
+    }
+    if (endOffset >= layout.lineEnds.last) {
+      return _LineCursorState(lineCursor: lineCount, partialLineStart: null);
+    }
+
+    int low = 0;
+    int high = lineCount - 1;
+    var lineIndex = lineCount - 1;
+    while (low <= high) {
+      final mid = (low + high) >> 1;
+      if (endOffset < layout.lineEnds[mid]) {
+        lineIndex = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    final lineStart = layout.lineStarts[lineIndex];
+    if (endOffset <= lineStart) {
+      return _LineCursorState(lineCursor: lineIndex, partialLineStart: null);
+    }
+    return _LineCursorState(
+      lineCursor: lineIndex,
+      partialLineStart: endOffset,
+    );
+  }
+
   double _estimatePromotedHeadingReserve({
     required FlowDoc flowDoc,
     required ReaderStyle style,
@@ -1056,6 +1245,16 @@ class _DebugFragmentStat {
   });
 }
 
+class _LineCursorState {
+  final int lineCursor;
+  final int? partialLineStart;
+
+  const _LineCursorState({
+    required this.lineCursor,
+    required this.partialLineStart,
+  });
+}
+
 class _ParagraphLayout {
   final String text;
   final TextPainter painter;
@@ -1070,6 +1269,7 @@ class _ParagraphLayout {
   final List<double> lineWidths;
   final List<double> cumulativeLineHeights;
   final Map<String, double> sliceHeightCache;
+  final Map<String, double> sliceMaxLineWidthCache;
 
   _ParagraphLayout({
     required this.text,
@@ -1085,5 +1285,7 @@ class _ParagraphLayout {
     required this.lineWidths,
     required this.cumulativeLineHeights,
     Map<String, double>? sliceHeightCache,
-  }) : sliceHeightCache = sliceHeightCache ?? <String, double>{};
+    Map<String, double>? sliceMaxLineWidthCache,
+  })  : sliceHeightCache = sliceHeightCache ?? <String, double>{},
+        sliceMaxLineWidthCache = sliceMaxLineWidthCache ?? <String, double>{};
 }

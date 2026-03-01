@@ -255,6 +255,144 @@ void main() {
   });
 
   test(
+      'FlowPaginator force-splits long unbreakable tokens to keep width/height bounds',
+      () async {
+    const longToken =
+        '“ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789”';
+    final text = List<String>.generate(
+      260,
+      (i) => '第${i + 1}行：$longToken 这是超长不可断词回归测试。',
+    ).join('\n');
+    final flowDoc = FlowDoc(
+      blocks: [
+        ParagraphBlock(
+          id: 'p-unbreakable',
+          inlines: [TextInline(text)],
+        ),
+      ],
+    );
+
+    const style = ReaderStyle(
+      fontSize: 19,
+      lineHeight: 1.72,
+      letterSpacing: 0.0,
+      textAlign: TextAlign.start,
+    );
+    const layout = PageLayout(
+      usableWidth: 360,
+      usableHeight: 640,
+      padding: EdgeInsets.zero,
+    );
+
+    final paginator = FlowPaginator();
+    final plan = await paginator.paginate(
+      chapterId: 'chapter-unbreakable-token',
+      flowDoc: flowDoc,
+      style: style,
+      layout: layout,
+    );
+
+    expect(plan.pages.length, greaterThan(1));
+    final textFragments = <TextFragment>[];
+    for (final page in plan.pages) {
+      for (final fragment in page.fragments) {
+        if (fragment is TextFragment && fragment.blockId == 'p-unbreakable') {
+          textFragments.add(fragment);
+        }
+      }
+    }
+    expect(textFragments, isNotEmpty);
+    expect(textFragments.first.start, 0);
+    expect(textFragments.last.end, text.length);
+    for (var i = 1; i < textFragments.length; i++) {
+      expect(textFragments[i].start, textFragments[i - 1].end);
+      expect(textFragments[i].end, greaterThan(textFragments[i].start));
+    }
+
+    final blockMap = <String, Block>{for (final b in flowDoc.blocks) b.id: b};
+    final effectivePageHeight = math.max(80.0, layout.usableHeight - 2.0);
+    const textHeightBehavior = TextHeightBehavior(
+      applyHeightToFirstAscent: true,
+      applyHeightToLastDescent: true,
+    );
+
+    for (final page in plan.pages) {
+      var totalHeight = 0.0;
+      for (final fragment in page.fragments) {
+        if (fragment is TextFragment) {
+          final block = blockMap[fragment.blockId];
+          final plainText = switch (block) {
+            ParagraphBlock p => p.plainText,
+            HeadingBlock h => h.plainText,
+            _ => '',
+          };
+          if (plainText.isEmpty) {
+            continue;
+          }
+          final start = fragment.start.clamp(0, plainText.length);
+          final end = fragment.end.clamp(start, plainText.length);
+          if (end <= start) {
+            continue;
+          }
+          final text = plainText.substring(start, end);
+          final textStyle = style.toTextStyle();
+          final strut = StrutStyle(
+            fontFamily: textStyle.fontFamily,
+            fontSize: textStyle.fontSize ?? style.fontSize,
+            fontWeight: textStyle.fontWeight,
+            fontStyle: textStyle.fontStyle,
+            height: style.lineHeight,
+            leading: 0,
+            forceStrutHeight: true,
+          );
+          final painter = TextPainter(
+            text: TextSpan(text: text, style: textStyle),
+            textDirection: TextDirection.ltr,
+            textAlign: style.textAlign,
+            locale: style.locale,
+            textScaler: TextScaler.noScaling,
+            strutStyle: strut,
+            textHeightBehavior: textHeightBehavior,
+            textWidthBasis: TextWidthBasis.parent,
+          )..layout(maxWidth: layout.usableWidth);
+
+          final metrics = painter.computeLineMetrics();
+          for (final line in metrics) {
+            expect(
+              line.width,
+              lessThanOrEqualTo(layout.usableWidth + 0.001),
+              reason: 'page=${page.index} width=${line.width}',
+            );
+          }
+
+          final measuredHeight = painter.height <= 0
+              ? style.fontSize * style.lineHeight
+              : painter.height;
+          totalHeight += measuredHeight.ceilToDouble();
+          painter.dispose();
+          continue;
+        }
+        if (fragment is ImageFragment) {
+          totalHeight +=
+              (fragment.measuredHeight ?? (effectivePageHeight * 0.24))
+                  .ceilToDouble();
+          continue;
+        }
+        if (fragment is SpaceFragment) {
+          totalHeight += fragment.height.ceilToDouble();
+        }
+      }
+
+      expect(
+        totalHeight,
+        lessThanOrEqualTo(effectivePageHeight + 0.01),
+        reason:
+            'page=${page.index} totalHeight=$totalHeight pageHeight=$effectivePageHeight',
+      );
+    }
+  });
+
+  test(
       'FlowPaginator keeps newline-heavy TXT pages within height bounds after render normalization',
       () async {
     final lines = List<String>.generate(

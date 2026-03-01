@@ -36,6 +36,14 @@ class TxtParser implements BookParser {
   static const _decodeSampleBytes = 512 * 1024;
   static const _largeTxtBytes = 2 * 1024 * 1024;
   static const _fastFlowDocCharsThreshold = 3 * 1024 * 1024;
+  static const _fastParagraphChunkChars = 3600;
+  static const _normalParagraphChunkChars = 12000;
+  static const _blankParagraphSpaceHeight = 8.0;
+  static final RegExp _listLinePattern = RegExp(
+    r'^\s*(?:[-*•●○◆■□※]|[0-9]{1,3}[\.、．\)]|[一二三四五六七八九十百千]+[、\.．\)]|第[一二三四五六七八九十百千\d]+[章节回])',
+  );
+  static final RegExp _latinDigitTailPattern = RegExp(r'[A-Za-z0-9\)\]]$');
+  static final RegExp _latinDigitHeadPattern = RegExp(r'^[A-Za-z0-9\(\[]');
 
   static final List<RegExp> _chapterPatterns = [
     RegExp(r'^第[一二三四五六七八九十百千\d]+章\s*.*$'),
@@ -558,46 +566,189 @@ class TxtParser implements BookParser {
       return FlowDoc(blocks: blocks);
     }
 
-    if (fastMode) {
-      blocks.add(
-        ParagraphBlock(
-          id: 'p-${blockIndex++}',
-          inlines: [TextInline(bodyText)],
-        ),
-      );
-      return FlowDoc(blocks: blocks);
-    }
-
-    // 超大章节不做复杂段落切分，避免导入时主线程长时间卡住。
-    if (bodyText.length > 180000) {
-      blocks.add(
-        ParagraphBlock(
-          id: 'p-${blockIndex++}',
-          inlines: [TextInline(bodyText)],
-        ),
-      );
-      return FlowDoc(blocks: blocks);
-    }
-
-    final paragraphs = bodyText
-        .split(RegExp(r'\n\s*\n'))
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty);
-
-    for (final p in paragraphs) {
-      blocks.add(
-        ParagraphBlock(
-          id: 'p-${blockIndex++}',
-          inlines: [TextInline(p)],
-        ),
-      );
-    }
+    blockIndex = _appendTxtBodyBlocks(
+      blocks: blocks,
+      bodyText: bodyText,
+      startBlockIndex: blockIndex,
+      fastMode: fastMode,
+    );
 
     return FlowDoc(blocks: blocks);
   }
 
+  int _appendTxtBodyBlocks({
+    required List<Block> blocks,
+    required String bodyText,
+    required int startBlockIndex,
+    required bool fastMode,
+  }) {
+    var blockIndex = startBlockIndex;
+    final maxParagraphChars =
+        fastMode ? _fastParagraphChunkChars : _normalParagraphChunkChars;
+    final lines = bodyText.split('\n');
+    final paragraph = StringBuffer();
+    int blankRun = 0;
+    String? previousLine;
+
+    void flushParagraph() {
+      if (paragraph.isEmpty) {
+        return;
+      }
+      final text = paragraph.toString().trim();
+      paragraph.clear();
+      if (text.isEmpty) {
+        return;
+      }
+      blocks.add(
+        ParagraphBlock(
+          id: 'p-${blockIndex++}',
+          inlines: [TextInline(text)],
+        ),
+      );
+      previousLine = null;
+    }
+
+    void flushBlankRun() {
+      if (blankRun >= 2) {
+        blocks.add(
+          SpaceBlock(
+            id: 'space-${blockIndex++}',
+            height: _blankParagraphSpaceHeight,
+          ),
+        );
+      }
+      blankRun = 0;
+      previousLine = null;
+    }
+
+    for (final line in lines) {
+      final normalizedLine = line.trimRight();
+      if (normalizedLine.trim().isEmpty) {
+        flushParagraph();
+        blankRun += 1;
+        continue;
+      }
+
+      flushBlankRun();
+      if (paragraph.isEmpty) {
+        paragraph.write(normalizedLine);
+        previousLine = normalizedLine;
+      } else {
+        final prev = previousLine ?? '';
+        final keepHardBreak = _shouldKeepTxtHardBreak(
+          previousLine: prev,
+          currentLine: normalizedLine,
+        );
+        if (keepHardBreak) {
+          paragraph.write('\n');
+          paragraph.write(normalizedLine);
+        } else {
+          if (_shouldInsertAsciiJoinSpace(
+            previousLine: prev,
+            currentLine: normalizedLine,
+          )) {
+            paragraph.write(' ');
+          }
+          paragraph.write(normalizedLine.trimLeft());
+        }
+        previousLine = normalizedLine;
+      }
+      if (paragraph.length >= maxParagraphChars) {
+        flushParagraph();
+      }
+    }
+
+    flushParagraph();
+    flushBlankRun();
+    return blockIndex;
+  }
+
   String _normalizeHeading(String text) {
     return text.replaceAll(RegExp(r'\s+'), '').trim();
+  }
+
+  bool _shouldKeepTxtHardBreak({
+    required String previousLine,
+    required String currentLine,
+  }) {
+    final prev = previousLine.trimRight();
+    final curr = currentLine.trimRight();
+    if (prev.isEmpty || curr.isEmpty) {
+      return true;
+    }
+
+    final prevTrim = prev.trimLeft();
+    final currTrim = curr.trimLeft();
+
+    if (_listLinePattern.hasMatch(prevTrim) ||
+        _listLinePattern.hasMatch(currTrim)) {
+      return true;
+    }
+
+    if (_isLikelyPoetryLine(prevTrim) && _isLikelyPoetryLine(currTrim)) {
+      return true;
+    }
+
+    if (_startsWithExplicitIndent(curr)) {
+      return true;
+    }
+
+    if (prevTrim.endsWith('：') || prevTrim.endsWith(':')) {
+      return true;
+    }
+
+    if (_looksLikeDialogue(prevTrim) && _looksLikeDialogue(currTrim)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  bool _shouldInsertAsciiJoinSpace({
+    required String previousLine,
+    required String currentLine,
+  }) {
+    final prev = previousLine.trimRight();
+    final curr = currentLine.trimLeft();
+    if (prev.isEmpty || curr.isEmpty) {
+      return false;
+    }
+    return _latinDigitTailPattern.hasMatch(prev) &&
+        _latinDigitHeadPattern.hasMatch(curr);
+  }
+
+  bool _isLikelyPoetryLine(String line) {
+    final text = line.trim();
+    if (text.isEmpty) {
+      return false;
+    }
+    if (text.length > 18) {
+      return false;
+    }
+    return true;
+  }
+
+  bool _startsWithExplicitIndent(String line) {
+    if (line.startsWith('  ')) {
+      return true;
+    }
+    if (line.startsWith('\t')) {
+      return true;
+    }
+    return line.startsWith('　');
+  }
+
+  bool _looksLikeDialogue(String line) {
+    if (line.isEmpty) {
+      return false;
+    }
+    const quoteStarts = <String>['“', '"', '「', '『', '《', '—', '–'];
+    for (final q in quoteStarts) {
+      if (line.startsWith(q)) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 
