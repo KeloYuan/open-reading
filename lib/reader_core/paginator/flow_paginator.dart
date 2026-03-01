@@ -849,8 +849,13 @@ class FlowPaginator {
       return cached;
     }
     final slice = layout.text.substring(safeStart, safeEnd);
+    final normalizedSlice = _normalizeSliceTextForRenderParity(slice);
+    if (normalizedSlice.isEmpty) {
+      layout.sliceHeightCache[key] = 0.0;
+      return 0.0;
+    }
     final painter = TextPainter(
-      text: TextSpan(text: slice, style: layout.textStyle),
+      text: TextSpan(text: normalizedSlice, style: layout.textStyle),
       textDirection: TextDirection.ltr,
       textAlign: layout.textAlign,
       locale: layout.locale,
@@ -942,8 +947,13 @@ class FlowPaginator {
       return cached;
     }
     final slice = layout.text.substring(safeStart, safeEnd);
+    final normalizedSlice = _normalizeSliceTextForRenderParity(slice);
+    if (normalizedSlice.isEmpty) {
+      layout.sliceMaxLineWidthCache[key] = 0.0;
+      return 0.0;
+    }
     final painter = TextPainter(
-      text: TextSpan(text: slice, style: layout.textStyle),
+      text: TextSpan(text: normalizedSlice, style: layout.textStyle),
       textDirection: TextDirection.ltr,
       textAlign: layout.textAlign,
       locale: layout.locale,
@@ -963,7 +973,7 @@ class FlowPaginator {
       maxLineWidth = painter.width;
     }
     final boxes = painter.getBoxesForSelection(
-      TextSelection(baseOffset: 0, extentOffset: slice.length),
+      TextSelection(baseOffset: 0, extentOffset: normalizedSlice.length),
     );
     if (boxes.isNotEmpty) {
       var left = double.infinity;
@@ -1002,8 +1012,13 @@ class FlowPaginator {
     }
 
     final slice = layout.text.substring(safeStart, safeEnd);
+    final normalizedSlice = _normalizeSliceTextForRenderParity(slice);
+    if (normalizedSlice.isEmpty) {
+      layout.sliceLineRangesCache[key] = const <_LineRange>[];
+      return const <_LineRange>[];
+    }
     final painter = TextPainter(
-      text: TextSpan(text: slice, style: layout.textStyle),
+      text: TextSpan(text: normalizedSlice, style: layout.textStyle),
       textDirection: TextDirection.ltr,
       textAlign: layout.textAlign,
       locale: layout.locale,
@@ -1015,7 +1030,7 @@ class FlowPaginator {
 
     final ranges = _extractLineRangesFromPainter(
       painter: painter,
-      textLength: slice.length,
+      textLength: normalizedSlice.length,
       fallbackLineHeight: layout.minLineHeight,
       maxWidth: layout.maxWidth,
       offsetBase: safeStart,
@@ -1086,6 +1101,25 @@ class FlowPaginator {
       );
     }
     return ranges;
+  }
+
+  // 保持分页测量与 ReaderView 渲染一致，避免尾部换行导致的高度漂移。
+  String _normalizeSliceTextForRenderParity(String raw) {
+    if (raw.isEmpty) {
+      return raw;
+    }
+    final value = raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    int end = value.length;
+    while (end > 0 && value.codeUnitAt(end - 1) == 0x0A) {
+      end -= 1;
+    }
+    if (end <= 0) {
+      return '';
+    }
+    if (end == value.length) {
+      return value;
+    }
+    return value.substring(0, end);
   }
 
   _LineCursorState _advanceLineStateAfterSlice(

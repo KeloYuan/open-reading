@@ -511,6 +511,117 @@ void main() {
     }
   });
 
+  test(
+      'FlowPaginator keeps newline-rich TXT non-final pages reasonably filled across font sizes',
+      () async {
+    final text = List<String>.generate(
+      1200,
+      (i) => '第${i + 1}行：这是用于分页空间利用率回归的测试文本。',
+    ).join('\n');
+    final flowDoc = FlowDoc(
+      blocks: [
+        ParagraphBlock(
+          id: 'p-fill-ratio',
+          inlines: [TextInline(text)],
+        ),
+      ],
+    );
+
+    const layout = PageLayout(
+      usableWidth: 360,
+      usableHeight: 640,
+      padding: EdgeInsets.zero,
+    );
+    const textHeightBehavior = TextHeightBehavior(
+      applyHeightToFirstAscent: true,
+      applyHeightToLastDescent: true,
+    );
+    final blockMap = <String, Block>{for (final b in flowDoc.blocks) b.id: b};
+    final effectivePageHeight = math.max(80.0, layout.usableHeight - 2.0);
+    final paginator = FlowPaginator();
+
+    for (final fontSize in <double>[16, 22, 28]) {
+      final style = ReaderStyle(
+        fontSize: fontSize,
+        lineHeight: 1.72,
+        letterSpacing: 0.0,
+        textAlign: TextAlign.start,
+      );
+      final plan = await paginator.paginate(
+        chapterId: 'chapter-fill-ratio-$fontSize',
+        flowDoc: flowDoc,
+        style: style,
+        layout: layout,
+      );
+      expect(plan.pages.length, greaterThan(1), reason: 'font=$fontSize');
+
+      for (var i = 0; i < plan.pages.length - 1; i++) {
+        final page = plan.pages[i];
+        var totalHeight = 0.0;
+        for (final fragment in page.fragments) {
+          if (fragment is TextFragment) {
+            final block = blockMap[fragment.blockId];
+            final plainText = switch (block) {
+              ParagraphBlock p => p.plainText,
+              HeadingBlock h => h.plainText,
+              _ => '',
+            };
+            if (plainText.isEmpty) {
+              continue;
+            }
+            final start = fragment.start.clamp(0, plainText.length);
+            final end = fragment.end.clamp(start, plainText.length);
+            if (end <= start) {
+              continue;
+            }
+            final raw = plainText.substring(start, end);
+            final normalized = _normalizeFragmentTextForRenderTest(raw);
+            if (normalized.isEmpty) {
+              continue;
+            }
+            final textStyle = style.toTextStyle();
+            final strut = StrutStyle(
+              fontFamily: textStyle.fontFamily,
+              fontSize: textStyle.fontSize ?? style.fontSize,
+              fontWeight: textStyle.fontWeight,
+              fontStyle: textStyle.fontStyle,
+              height: style.lineHeight,
+              leading: 0,
+              forceStrutHeight: true,
+            );
+            final painter = TextPainter(
+              text: TextSpan(text: normalized, style: textStyle),
+              textDirection: TextDirection.ltr,
+              textAlign: style.textAlign,
+              locale: style.locale,
+              textScaler: TextScaler.noScaling,
+              strutStyle: strut,
+              textHeightBehavior: textHeightBehavior,
+              textWidthBasis: TextWidthBasis.parent,
+            )..layout(maxWidth: layout.usableWidth);
+            final measuredHeight = painter.height <= 0
+                ? style.fontSize * style.lineHeight
+                : painter.height;
+            totalHeight += measuredHeight.ceilToDouble();
+            painter.dispose();
+            continue;
+          }
+          if (fragment is SpaceFragment) {
+            totalHeight += fragment.height.ceilToDouble();
+          }
+        }
+
+        final fillRatio = totalHeight / effectivePageHeight;
+        expect(
+          fillRatio,
+          greaterThan(0.55),
+          reason:
+              'font=$fontSize page=${page.index} fillRatio=${fillRatio.toStringAsFixed(3)}',
+        );
+      }
+    }
+  });
+
   test('FlowPaginator avoids tiny trailing line on non-terminal fragments',
       () async {
     const token =

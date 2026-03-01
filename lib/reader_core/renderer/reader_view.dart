@@ -926,10 +926,7 @@ class _PagePaneState extends State<_PagePane> {
         final rawText = blockText.substring(start, end);
         final normalized = _normalizeFragmentTextForPage(rawText);
         if (normalized.isEmpty) {
-          final measured = fragment.measuredHeight;
-          if (measured != null && measured > 0) {
-            items.add(_RenderItem.space(measured));
-          }
+          // 尾部换行在分段边界不应再额外占据版面高度。
           continue;
         }
         items.add(
