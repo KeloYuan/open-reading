@@ -181,7 +181,9 @@ class _OnlineBookSearchPageState extends State<OnlineBookSearchPage> {
         builder: (context) => OnlineChapterListPage(
           source: source,
           book: book,
-          onDownloadAndRead: () => _downloadAndOpen(book),
+          onDownload: () => _downloadBook(book, openAfterDownload: false),
+          onReadOnline: (index) =>
+              _readOnline(book, initialChapterIndex: index),
         ),
       ),
     );
@@ -195,7 +197,69 @@ class _OnlineBookSearchPageState extends State<OnlineBookSearchPage> {
         .replaceAll(RegExp(r'_+'), '_');
   }
 
-  Future<void> _downloadAndOpen(OnlineBookItem book) async {
+  Future<void> _readOnline(
+    OnlineBookItem book, {
+    int initialChapterIndex = 0,
+  }) async {
+    final source = _resolveSource(book);
+    if (source == null) {
+      showSideToast(context, '无法定位该结果对应的书源');
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 12),
+            Text('正在加载目录...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final chapters = await _service.getChapters(
+        source: source,
+        bookUrl: book.bookUrl,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+
+      if (chapters.isEmpty) {
+        showSideToast(context, '未获取到可阅读章节');
+        return;
+      }
+      final safeIndex = initialChapterIndex.clamp(0, chapters.length - 1);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OnlineReaderPage(
+            source: source,
+            book: book,
+            chapters: chapters,
+            initialIndex: safeIndex,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      showSideToast(context, '在线阅读加载失败：$e');
+    }
+  }
+
+  Future<void> _downloadBook(
+    OnlineBookItem book, {
+    required bool openAfterDownload,
+  }) async {
     if (_isDownloading) {
       showSideToast(context, '已有下载任务进行中');
       return;
@@ -306,8 +370,12 @@ class _OnlineBookSearchPageState extends State<OnlineBookSearchPage> {
       }
 
       LibraryEventBus().notifyLibraryChanged();
-      showSideToast(context, '下载完成，已保存 TXT + HTML');
-      await ReadingRouterService.openBook(context, inserted);
+      if (openAfterDownload) {
+        showSideToast(context, '下载完成，已保存 TXT + HTML');
+        await ReadingRouterService.openBook(context, inserted);
+      } else {
+        showSideToast(context, '已下载到书架，可在书库继续阅读');
+      }
     } catch (e) {
       if (mounted) {
         showSideToast(context, '下载失败：$e');
@@ -502,12 +570,23 @@ class _OnlineBookSearchPageState extends State<OnlineBookSearchPage> {
                           label: const Text('目录'),
                         ),
                         const SizedBox(width: 6),
+                        TextButton.icon(
+                          onPressed:
+                              _isDownloading ? null : () => _readOnline(book),
+                          icon: const Icon(Icons.chrome_reader_mode_outlined,
+                              size: 18),
+                          label: const Text('在线阅读'),
+                        ),
+                        const SizedBox(width: 6),
                         FilledButton.icon(
                           onPressed: _isDownloading
                               ? null
-                              : () => _downloadAndOpen(book),
+                              : () => _downloadBook(
+                                    book,
+                                    openAfterDownload: false,
+                                  ),
                           icon: const Icon(Icons.download_rounded, size: 18),
-                          label: const Text('下载并阅读'),
+                          label: const Text('下载到书架'),
                         ),
                       ],
                     ),
@@ -527,12 +606,14 @@ class OnlineChapterListPage extends StatefulWidget {
     super.key,
     required this.source,
     required this.book,
-    this.onDownloadAndRead,
+    this.onDownload,
+    this.onReadOnline,
   });
 
   final BookSource source;
   final OnlineBookItem book;
-  final Future<void> Function()? onDownloadAndRead;
+  final Future<void> Function()? onDownload;
+  final Future<void> Function(int chapterIndex)? onReadOnline;
 
   @override
   State<OnlineChapterListPage> createState() => _OnlineChapterListPageState();
@@ -580,13 +661,22 @@ class _OnlineChapterListPageState extends State<OnlineChapterListPage> {
     }
   }
 
-  Future<void> _downloadAndRead() async {
-    final callback = widget.onDownloadAndRead;
+  Future<void> _downloadToShelf() async {
+    final callback = widget.onDownload;
     if (callback == null) {
       showSideToast(context, '当前页面未接入下载能力');
       return;
     }
     await callback();
+  }
+
+  Future<void> _readOnlineAt(int index) async {
+    final callback = widget.onReadOnline;
+    if (callback == null) {
+      showSideToast(context, '当前页面未接入在线阅读能力');
+      return;
+    }
+    await callback(index);
   }
 
   @override
@@ -602,9 +692,9 @@ class _OnlineChapterListPageState extends State<OnlineChapterListPage> {
             tooltip: '刷新目录',
           ),
           IconButton(
-            onPressed: _isLoading ? null : _downloadAndRead,
+            onPressed: _isLoading ? null : _downloadToShelf,
             icon: const Icon(Icons.download_rounded),
-            tooltip: '下载并阅读',
+            tooltip: '下载到书架',
           ),
         ],
       ),
@@ -636,10 +726,7 @@ class _OnlineChapterListPageState extends State<OnlineChapterListPage> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text('第 ${index + 1} 章'),
-                          onTap: () => showSideToast(
-                            context,
-                            '为保证体验一致，请使用右上角“下载并阅读”',
-                          ),
+                          onTap: () => _readOnlineAt(index),
                         );
                       },
                     ),

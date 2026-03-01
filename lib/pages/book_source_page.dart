@@ -124,16 +124,6 @@ class BookSourcePageState extends State<BookSourcePage>
       filtered = filtered.where((source) => source.enabled).toList();
     }
 
-    // 应用搜索筛选
-    final query = _searchController.text.toLowerCase();
-    if (query.isNotEmpty) {
-      filtered = filtered.where((source) {
-        return source.bookSourceName.toLowerCase().contains(query) ||
-            source.bookSourceComment.toLowerCase().contains(query) ||
-            source.bookSourceGroup.toLowerCase().contains(query);
-      }).toList();
-    }
-
     setState(() {
       _filteredSources = filtered;
     });
@@ -350,8 +340,10 @@ class BookSourcePageState extends State<BookSourcePage>
       ),
       child: TextField(
         controller: _searchController,
+        textInputAction: TextInputAction.search,
+        onSubmitted: (_) => _openAllSourceSearchWithKeyword(),
         decoration: InputDecoration(
-          hintText: '搜索书源站点',
+          hintText: '搜索书名/作者（全书源）',
           prefixIcon: Icon(
             Icons.search_rounded,
             size: 18,
@@ -361,15 +353,19 @@ class BookSourcePageState extends State<BookSourcePage>
               ? IconButton(
                   onPressed: () {
                     _searchController.clear();
-                    _applyFilters();
+                    setState(() {});
                   },
                   icon: const Icon(Icons.clear),
                 )
-              : null,
+              : IconButton(
+                  onPressed: _openAllSourceSearchWithKeyword,
+                  icon: const Icon(Icons.arrow_forward_rounded),
+                  tooltip: '全源搜索',
+                ),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 14),
         ),
-        onChanged: (_) => _applyFilters(),
+        onChanged: (_) => setState(() {}),
       ),
     );
   }
@@ -818,7 +814,12 @@ class BookSourcePageState extends State<BookSourcePage>
     );
   }
 
-  Future<void> _openAllSourceSearch() async {
+  Future<void> _openAllSourceSearchWithKeyword() async {
+    final keyword = _searchController.text.trim();
+    await _openAllSourceSearch(initialKeyword: keyword);
+  }
+
+  Future<void> _openAllSourceSearch({String initialKeyword = ''}) async {
     final enabled = await _sourceService.getEnabledSources();
     if (!mounted) return;
     if (enabled.isEmpty) {
@@ -828,7 +829,8 @@ class BookSourcePageState extends State<BookSourcePage>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const OnlineBookSearchPage.aggregate(),
+        builder: (context) =>
+            OnlineBookSearchPage.aggregate(initialKeyword: initialKeyword),
       ),
     );
   }
