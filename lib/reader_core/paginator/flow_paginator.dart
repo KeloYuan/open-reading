@@ -799,7 +799,7 @@ class FlowPaginator {
         start: safeStart,
         end: safeEnd,
       );
-      if (lineRanges.length <= 1) {
+      if (lineRanges.length <= 2) {
         return safeEnd;
       }
       final lastLine = lineRanges.last;

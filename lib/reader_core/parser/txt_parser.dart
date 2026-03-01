@@ -380,6 +380,11 @@ class TxtParser implements BookParser {
       }
     });
 
+    // 只有一个显式章节标题且位于开头时，保留它，避免回退策略覆盖真实标题。
+    if (markers.length == 1 && markers.first.startOffset == 0) {
+      return markers;
+    }
+
     if (markers.length >= 2) {
       return markers;
     }
@@ -617,8 +622,10 @@ class TxtParser implements BookParser {
           ),
         );
       }
+      if (blankRun > 0) {
+        previousLine = null;
+      }
       blankRun = 0;
-      previousLine = null;
     }
 
     for (final line in lines) {
@@ -685,19 +692,7 @@ class TxtParser implements BookParser {
       return true;
     }
 
-    if (_isLikelyPoetryLine(prevTrim) && _isLikelyPoetryLine(currTrim)) {
-      return true;
-    }
-
     if (_startsWithExplicitIndent(curr)) {
-      return true;
-    }
-
-    if (prevTrim.endsWith('：') || prevTrim.endsWith(':')) {
-      return true;
-    }
-
-    if (_looksLikeDialogue(prevTrim) && _looksLikeDialogue(currTrim)) {
       return true;
     }
 
@@ -717,17 +712,6 @@ class TxtParser implements BookParser {
         _latinDigitHeadPattern.hasMatch(curr);
   }
 
-  bool _isLikelyPoetryLine(String line) {
-    final text = line.trim();
-    if (text.isEmpty) {
-      return false;
-    }
-    if (text.length > 18) {
-      return false;
-    }
-    return true;
-  }
-
   bool _startsWithExplicitIndent(String line) {
     if (line.startsWith('  ')) {
       return true;
@@ -736,19 +720,6 @@ class TxtParser implements BookParser {
       return true;
     }
     return line.startsWith('　');
-  }
-
-  bool _looksLikeDialogue(String line) {
-    if (line.isEmpty) {
-      return false;
-    }
-    const quoteStarts = <String>['“', '"', '「', '『', '《', '—', '–'];
-    for (final q in quoteStarts) {
-      if (line.startsWith(q)) {
-        return true;
-      }
-    }
-    return false;
   }
 }
 
