@@ -510,6 +510,103 @@ void main() {
       );
     }
   });
+
+  test('FlowPaginator avoids tiny trailing line on non-terminal fragments',
+      () async {
+    const token =
+        '“ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789”';
+    final text = List<String>.filled(480, token).join();
+    final flowDoc = FlowDoc(
+      blocks: [
+        ParagraphBlock(
+          id: 'p-tiny-tail-guard',
+          inlines: [TextInline(text)],
+        ),
+      ],
+    );
+
+    const style = ReaderStyle(
+      fontSize: 19,
+      lineHeight: 1.72,
+      letterSpacing: 0.0,
+      textAlign: TextAlign.start,
+    );
+    const layout = PageLayout(
+      usableWidth: 336,
+      usableHeight: 640,
+      padding: EdgeInsets.zero,
+    );
+
+    final paginator = FlowPaginator();
+    final plan = await paginator.paginate(
+      chapterId: 'chapter-tiny-tail-guard',
+      flowDoc: flowDoc,
+      style: style,
+      layout: layout,
+    );
+
+    expect(plan.pages.length, greaterThan(1));
+
+    final textStyle = style.toTextStyle();
+    final strut = StrutStyle(
+      fontFamily: textStyle.fontFamily,
+      fontSize: textStyle.fontSize ?? style.fontSize,
+      fontWeight: textStyle.fontWeight,
+      fontStyle: textStyle.fontStyle,
+      height: style.lineHeight,
+      leading: 0,
+      forceStrutHeight: true,
+    );
+    final textWidth = math.max(24.0, layout.usableWidth - 2.0);
+
+    var checkedFragments = 0;
+    for (final page in plan.pages) {
+      for (final fragment in page.fragments) {
+        if (fragment is! TextFragment ||
+            fragment.blockId != 'p-tiny-tail-guard') {
+          continue;
+        }
+        if (fragment.end >= text.length) {
+          // 段末尾可自然收束，不做短尾行限制。
+          continue;
+        }
+        final start = fragment.start.clamp(0, text.length);
+        final end = fragment.end.clamp(start, text.length);
+        if (end <= start) {
+          continue;
+        }
+        final raw = text.substring(start, end);
+        final normalized = _normalizeFragmentTextForRenderTest(raw);
+        if (normalized.isEmpty) {
+          continue;
+        }
+
+        final ranges = _measureLineRangesForTest(
+          text: normalized,
+          style: textStyle,
+          strutStyle: strut,
+          textAlign: style.textAlign,
+          locale: style.locale,
+          maxWidth: textWidth,
+        );
+        if (ranges.length <= 1) {
+          continue;
+        }
+        checkedFragments += 1;
+        final lastLine = ranges.last;
+        final lastLineChars = lastLine.end - lastLine.start;
+        expect(
+          lastLineChars,
+          greaterThan(2),
+          reason:
+              'page=${page.index} fragment=${fragment.start}-${fragment.end} '
+              'lastLineChars=$lastLineChars',
+        );
+      }
+    }
+
+    expect(checkedFragments, greaterThan(0));
+  });
 }
 
 String _normalizeFragmentTextForRenderTest(String raw) {
@@ -528,4 +625,87 @@ String _normalizeFragmentTextForRenderTest(String raw) {
     return normalized;
   }
   return normalized.substring(0, end);
+}
+
+List<_TestLineRange> _measureLineRangesForTest({
+  required String text,
+  required TextStyle style,
+  required StrutStyle strutStyle,
+  required TextAlign textAlign,
+  required Locale? locale,
+  required double maxWidth,
+}) {
+  if (text.isEmpty) {
+    return const <_TestLineRange>[];
+  }
+  const eps = 0.05;
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textDirection: TextDirection.ltr,
+    textAlign: textAlign,
+    locale: locale,
+    textScaler: TextScaler.noScaling,
+    strutStyle: strutStyle,
+    textHeightBehavior: const TextHeightBehavior(
+      applyHeightToFirstAscent: true,
+      applyHeightToLastDescent: true,
+    ),
+    textWidthBasis: TextWidthBasis.parent,
+  )..layout(maxWidth: maxWidth);
+
+  final ranges = <_TestLineRange>[];
+  final metrics = painter.computeLineMetrics();
+  if (metrics.isEmpty) {
+    ranges.add(_TestLineRange(start: 0, end: text.length));
+    painter.dispose();
+    return ranges;
+  }
+
+  var cursor = 0;
+  const startProbeX = 0.0;
+  final endProbeX = math.max(0.0, maxWidth - eps);
+  for (final metric in metrics) {
+    if (cursor >= text.length) {
+      break;
+    }
+    final metricHeight =
+        metric.height <= 0 ? painter.preferredLineHeight : metric.height;
+    final lineTop = metric.baseline - metric.ascent;
+    final probeY = (lineTop + metricHeight / 2)
+        .clamp(0.0, math.max(0.0, painter.height - eps))
+        .toDouble();
+    final startProbe =
+        painter.getPositionForOffset(Offset(startProbeX, probeY));
+    final startBoundary = painter.getLineBoundary(startProbe);
+    var start = startBoundary.start.clamp(0, text.length).toInt();
+    if (start != cursor) {
+      start = cursor;
+    }
+    final endProbe = painter.getPositionForOffset(Offset(endProbeX, probeY));
+    final endBoundary = painter.getLineBoundary(endProbe);
+    var end = math
+        .max(startBoundary.end, endBoundary.end)
+        .clamp(start, text.length)
+        .toInt();
+    if (end <= start) {
+      end = math.min(text.length, start + 1).toInt();
+    }
+    ranges.add(_TestLineRange(start: start, end: end));
+    cursor = end;
+  }
+  if (cursor < text.length) {
+    ranges.add(_TestLineRange(start: cursor, end: text.length));
+  }
+  painter.dispose();
+  return ranges;
+}
+
+class _TestLineRange {
+  final int start;
+  final int end;
+
+  const _TestLineRange({
+    required this.start,
+    required this.end,
+  });
 }
