@@ -22,7 +22,7 @@ class FlowPaginator {
   static const double _layoutWidthSafety = 0.0;
   static const double _textInkHorizontalGuard = 1.0;
   static const int _shortLineWidowChars = 2;
-  static const String _cacheAlgoVersion = 'v51';
+  static const String _cacheAlgoVersion = 'v52';
   static const TextScaler _textScaler = TextScaler.noScaling;
   static const TextHeightBehavior _textHeightBehavior = TextHeightBehavior(
     applyHeightToFirstAscent: true,
