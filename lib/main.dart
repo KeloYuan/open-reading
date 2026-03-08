@@ -33,7 +33,7 @@ void main() async {
     // 检查并启用设备的最高刷新率
     SystemChrome.setApplicationSwitcherDescription(
       const ApplicationSwitcherDescription(
-        label: '小元读书',
+        label: '小元阅读器',
         primaryColor: 0xFF1976D2,
       ),
     );
@@ -118,7 +118,6 @@ class _RestartableAppState extends State<RestartableApp> {
 
 class ThemeNotifier extends ChangeNotifier {
   static const String _themeModePrefKey = 'isDarkMode';
-  static const String _disableGlassEffectsPrefKey = 'disable_glass_effects';
   static const String _uiStylePrefKey = 'ui_style_mode';
   static const String _appThemePrefKey = 'appTheme';
   static const String _customAccentPrefKey = 'customAccentColor';
@@ -132,7 +131,6 @@ class ThemeNotifier extends ChangeNotifier {
   Color? _globalAccentColor; // 全局强调色（与应用主题分离）
   String _lastPresetThemeName = AppThemes.blueTheme.name;
   AppUiStyle _uiStyle = AppUiStyle.glass;
-  bool _disableGlassEffectsPreference = false;
 
   ThemeMode get themeMode => _themeMode;
   bool get isInitialized => _isInitialized;
@@ -145,9 +143,7 @@ class ThemeNotifier extends ChangeNotifier {
   bool get isUsingThemeAccent => effectiveAccentColor == null;
   String get lastPresetThemeName => _lastPresetThemeName;
   AppUiStyle get uiStyle => _uiStyle;
-  bool get disableGlassEffectsPreference => _disableGlassEffectsPreference;
-  bool get shouldDisableGlassEffects =>
-      _uiStyle == AppUiStyle.material3 || _disableGlassEffectsPreference;
+  bool get shouldDisableGlassEffects => _uiStyle == AppUiStyle.material3;
 
   ThemeNotifier() {
     _loadTheme();
@@ -156,9 +152,8 @@ class ThemeNotifier extends ChangeNotifier {
   void _loadTheme() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     final isDarkMode = prefs.getBool(_themeModePrefKey);
-    _disableGlassEffectsPreference =
-        prefs.getBool(_disableGlassEffectsPrefKey) ?? false;
     _uiStyle = appUiStyleFromStorage(prefs.getString(_uiStylePrefKey));
+    await prefs.remove('disable_glass_effects');
     final appThemeName =
         prefs.getString(_appThemePrefKey) ?? AppThemes.blueTheme.name;
     final customColorValue = prefs.getInt(_customAccentPrefKey);
@@ -365,16 +360,6 @@ class ThemeNotifier extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_uiStylePrefKey, style.storageValue);
-  }
-
-  Future<void> setDisableGlassEffects(bool disabled) async {
-    if (_disableGlassEffectsPreference == disabled) return;
-    _disableGlassEffectsPreference = disabled;
-    _syncGlassEffectState();
-    notifyListeners();
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_disableGlassEffectsPrefKey, disabled);
   }
 
   void _syncGlassEffectState() {

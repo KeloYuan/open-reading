@@ -303,6 +303,7 @@ img, svg, video, canvas, table, pre, code, samp, kbd {
   String _foliatePageTurnStyle(ReaderPageTurnAnimation mode) {
     switch (mode) {
       case ReaderPageTurnAnimation.scroll:
+      case ReaderPageTurnAnimation.chapterScroll:
         return 'scroll';
       case ReaderPageTurnAnimation.slide:
       case ReaderPageTurnAnimation.cover:

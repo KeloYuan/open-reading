@@ -161,7 +161,7 @@ ${_cleanContent(content)}
 
 📍 第 $currentPage 页 / 共 $totalPages 页
 📅 分享于 $formattedDate
-📱 来自小元读书
+📱 来自小元阅读器
 
 ────────────────
 愿你在书中找到属于自己的世界 ✨''';
@@ -182,7 +182,7 @@ ${_cleanContent(content)}
 
 ✍️ 作者：$author
 📅 摘录于 $formattedDate
-📱 来自小元读书
+📱 来自小元阅读器
 
 ────────────────
 每一段文字都可能改变一个人的人生 📚''';
@@ -211,7 +211,7 @@ ${_cleanContent(content)}
 ⏰ 已阅读：${readingHours.toStringAsFixed(1)} 小时
 
 📅 更新于 $formattedDate
-📱 来自小元读书
+📱 来自小元阅读器
 
 ────────────────
 坚持阅读，收获智慧 🌱''';
@@ -238,7 +238,7 @@ ${_cleanContent(content)}
 ${_cleanContent(description)}
 
 📅 推荐于 $formattedDate
-📱 来自小元读书
+📱 来自小元阅读器
 
 ────────────────
 好书如朋友，值得分享 ✨''';
@@ -264,7 +264,7 @@ ${_cleanContent(description)}
 ${_cleanContent(noteContent)}
 
 📅 记录于 $formattedDate
-📱 来自小元读书
+📱 来自小元阅读器
 
 ────────────────
 思考让阅读更有意义 🤔''';
@@ -289,7 +289,7 @@ ${_cleanContent(noteContent)}
 ❤️ 偏爱类型：$favoriteGenre
 
 📅 统计于 $formattedDate
-📱 来自小元读书
+📱 来自小元阅读器
 
 ────────────────
 阅读是心灵的旅行 🌟''';

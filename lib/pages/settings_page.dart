@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -38,7 +39,6 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _enableAutoSave = true;
   bool _keepScreenOn = false;
   int _autoSaveInterval = 30;
-  bool _disableGlassEffects = false;
 
   // 阅读设置
   ReaderPageTurnAnimation _pageTurnAnimation = ReaderPageTurnAnimation.cover;
@@ -64,13 +64,13 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _enablePerformanceMonitor = false;
   bool _enableMemoryStats = false;
   bool _showFPS = false;
-  String _appVersion = '2.2026.0216';
+  String _appVersion = '3.0.0';
 
   @override
   void initState() {
     super.initState();
     _webdavService.statusNotifier.addListener(_onWebDavStatusChanged);
-    _loadAppVersion();
+    unawaited(_loadAppVersion());
     _loadSettings();
     // 状态栏设置现在由_SettingsPageWrapper处理
   }
@@ -95,6 +95,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadSettings() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     final epubLayoutEngine = await ReaderEngineService.getEpubLayoutEngine();
+    bool migrateSimulationMode = false;
     setState(() {
       _enableAutoSave = prefs.getBool('enableAutoSave') ?? true;
       _keepScreenOn = prefs.getBool('keepScreenOn') ?? false;
@@ -108,7 +109,12 @@ class _SettingsPageState extends State<SettingsPage> {
         prefs.getString('reader_page_turn_mode_v1'),
       );
       if (pageTurnMode != null) {
-        _pageTurnAnimation = pageTurnMode;
+        _pageTurnAnimation = pageTurnMode == ReaderPageTurnAnimation.simulation
+            ? ReaderPageTurnAnimation.cover
+            : pageTurnMode;
+        if (_pageTurnAnimation != pageTurnMode) {
+          migrateSimulationMode = true;
+        }
       } else {
         final legacyEnable = prefs.getBool('enablePageAnimation') ?? true;
         _pageTurnAnimation = legacyEnable
@@ -130,8 +136,12 @@ class _SettingsPageState extends State<SettingsPage> {
           prefs.getBool('enablePerformanceMonitor') ?? false;
       _enableMemoryStats = prefs.getBool('enableMemoryStats') ?? false;
       _showFPS = prefs.getBool('showFPS') ?? false;
-      _disableGlassEffects = prefs.getBool('disable_glass_effects') ?? false;
     });
+
+    if (migrateSimulationMode) {
+      await prefs.setString(
+          'reader_page_turn_mode_v1', _pageTurnAnimation.prefValue);
+    }
 
     if (prefs.getBool('enableAnimations') != true) {
       await prefs.setBool('enableAnimations', true);
@@ -144,8 +154,19 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  void _loadAppVersion() {
-    _appVersion = '2.2026.0216';
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final version = info.version.trim();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _appVersion = version.isNotEmpty ? version : '3.0.0';
+      });
+    } catch (_) {
+      // Keep default version fallback.
+    }
   }
 
   Future<void> _saveSettings() async {
@@ -183,7 +204,6 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setBool('enablePerformanceMonitor', _enablePerformanceMonitor);
     await prefs.setBool('enableMemoryStats', _enableMemoryStats);
     await prefs.setBool('showFPS', _showFPS);
-    await prefs.setBool('disable_glass_effects', _disableGlassEffects);
   }
 
   @override
@@ -230,7 +250,6 @@ class _SettingsPageState extends State<SettingsPage> {
     final l10n = context.l10n;
     final useRailNavigation =
         NavigationContext.of(context)?.useRailNavigation ?? false;
-    final isMaterial3Style = themeNotifier.uiStyle == AppUiStyle.material3;
     return Container(
       decoration: BoxDecoration(
         gradient: PageStyleHelper.backgroundGradient(context),
@@ -255,28 +274,6 @@ class _SettingsPageState extends State<SettingsPage> {
             title: l10n.appearanceSettings,
             icon: Icons.palette_outlined,
             children: [
-              _buildSwitchSetting(
-                title: '低性能模式（关闭毛玻璃）',
-                subtitle: isMaterial3Style
-                    ? 'Material 3 风格下自动关闭毛玻璃'
-                    : _disableGlassEffects
-                        ? '已关闭所有毛玻璃效果'
-                        : '保留毛玻璃效果',
-                value: isMaterial3Style ? true : _disableGlassEffects,
-                onChanged: (value) {
-                  setState(() => _disableGlassEffects = value);
-                  themeNotifier.setDisableGlassEffects(value);
-                  showSideToast(
-                    context,
-                    value ? '已关闭毛玻璃效果' : '已恢复毛玻璃效果',
-                    icon: value
-                        ? Icons.auto_awesome_motion_rounded
-                        : Icons.blur_on_rounded,
-                  );
-                },
-                icon: Icons.tune_rounded,
-                enabled: !isMaterial3Style,
-              ),
               _buildUiStyleSelector(themeNotifier),
               _buildThemeToggle(themeNotifier),
               _buildAppThemeSelector(themeNotifier),
@@ -629,7 +626,7 @@ class _SettingsPageState extends State<SettingsPage> {
           context,
         ).extension<UiStyleThemeExtension>()?.isMaterial3Style ??
         false;
-    return _disableGlassEffects || isMaterial3Style;
+    return isMaterial3Style;
   }
 
   Widget _buildSectionCard({
@@ -721,6 +718,8 @@ class _SettingsPageState extends State<SettingsPage> {
         return l10n.pageTurningSlide;
       case ReaderPageTurnAnimation.scroll:
         return l10n.pageTurningScroll;
+      case ReaderPageTurnAnimation.chapterScroll:
+        return '章节滚动';
       case ReaderPageTurnAnimation.simulation:
         return l10n.pageTurningSimulation;
     }
@@ -734,6 +733,8 @@ class _SettingsPageState extends State<SettingsPage> {
         return '左右平移翻页，轻量稳定';
       case ReaderPageTurnAnimation.scroll:
         return '上下滚动翻页，连续阅读';
+      case ReaderPageTurnAnimation.chapterScroll:
+        return '整章上下滚动，底部可切换章节';
       case ReaderPageTurnAnimation.simulation:
         return '3D 仿真翻页，沉浸感更强';
     }
@@ -747,6 +748,8 @@ class _SettingsPageState extends State<SettingsPage> {
         return Icons.swipe_rounded;
       case ReaderPageTurnAnimation.scroll:
         return Icons.swap_vert_rounded;
+      case ReaderPageTurnAnimation.chapterScroll:
+        return Icons.article_rounded;
       case ReaderPageTurnAnimation.simulation:
         return Icons.auto_awesome_motion_rounded;
     }
@@ -991,7 +994,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ReaderPageTurnAnimation.cover,
       ReaderPageTurnAnimation.slide,
       ReaderPageTurnAnimation.scroll,
-      ReaderPageTurnAnimation.simulation,
+      ReaderPageTurnAnimation.chapterScroll,
     ];
     final isMaterial3Style = Theme.of(context)
             .extension<UiStyleThemeExtension>()
@@ -2415,7 +2418,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      '小元读书',
+                      '小元阅读器',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),

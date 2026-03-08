@@ -258,7 +258,13 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
       prefs.getString(_pageTurnModePrefKey),
     );
     if (savedMode != null) {
-      _pageTurnAnimation = savedMode;
+      _pageTurnAnimation = savedMode == ReaderPageTurnAnimation.simulation
+          ? ReaderPageTurnAnimation.cover
+          : savedMode;
+      if (_pageTurnAnimation != savedMode) {
+        await prefs.setString(
+            _pageTurnModePrefKey, _pageTurnAnimation.prefValue);
+      }
       return;
     }
 
@@ -1050,6 +1056,16 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
       _setChromeVisible(!_chromeVisible);
       return;
     }
+    if (_pageTurnAnimation == ReaderPageTurnAnimation.chapterScroll) {
+      _jumpByDirection(
+        ChapterBoundaryDirection.next,
+        triggeredByBoundary: true,
+      );
+      if (_chromeVisible) {
+        _scheduleAutoImmersive();
+      }
+      return;
+    }
     if (x < leftBoundary) {
       _stepPageBackward();
     } else {
@@ -1132,6 +1148,13 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     BoxConstraints constraints, {
     required EdgeInsets mediaPadding,
   }) {
+    if (_pageTurnAnimation == ReaderPageTurnAnimation.chapterScroll) {
+      final chapterNavTop =
+          constraints.maxHeight - (mediaPadding.bottom + 116.0);
+      if (localPosition.dy >= chapterNavTop) {
+        return true;
+      }
+    }
     if (!_chromeVisible) {
       return false;
     }
@@ -1860,6 +1883,8 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
         return l10n.pageTurningSlide;
       case ReaderPageTurnAnimation.scroll:
         return l10n.pageTurningScroll;
+      case ReaderPageTurnAnimation.chapterScroll:
+        return '章节滚动';
       case ReaderPageTurnAnimation.simulation:
         return l10n.pageTurningSimulation;
     }
@@ -1873,6 +1898,8 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
         return '左右平移翻页，轻量稳定';
       case ReaderPageTurnAnimation.scroll:
         return '上下滚动翻页，连续阅读';
+      case ReaderPageTurnAnimation.chapterScroll:
+        return '整章上下滚动，底部可切换上一章/下一章';
       case ReaderPageTurnAnimation.simulation:
         return '3D 仿真翻页，层次更强';
     }
@@ -1886,6 +1913,8 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
         return Icons.swipe_rounded;
       case ReaderPageTurnAnimation.scroll:
         return Icons.swap_vert_rounded;
+      case ReaderPageTurnAnimation.chapterScroll:
+        return Icons.article_rounded;
       case ReaderPageTurnAnimation.simulation:
         return Icons.auto_awesome_motion_rounded;
     }
@@ -1937,7 +1966,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
       ReaderPageTurnAnimation.cover,
       ReaderPageTurnAnimation.slide,
       ReaderPageTurnAnimation.scroll,
-      ReaderPageTurnAnimation.simulation,
+      ReaderPageTurnAnimation.chapterScroll,
     ];
     await _showReaderBottomSheet<void>(
       context: context,

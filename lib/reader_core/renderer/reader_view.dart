@@ -23,6 +23,7 @@ enum ReaderPageTurnAnimation {
   slide,
   cover,
   scroll,
+  chapterScroll,
   simulation,
 }
 
@@ -35,6 +36,8 @@ extension ReaderPageTurnAnimationPrefs on ReaderPageTurnAnimation {
         return 'cover';
       case ReaderPageTurnAnimation.scroll:
         return 'scroll';
+      case ReaderPageTurnAnimation.chapterScroll:
+        return 'chapter_scroll';
       case ReaderPageTurnAnimation.simulation:
         return 'simulation';
     }
@@ -48,8 +51,11 @@ extension ReaderPageTurnAnimationPrefs on ReaderPageTurnAnimation {
         return ReaderPageTurnAnimation.cover;
       case 'scroll':
         return ReaderPageTurnAnimation.scroll;
+      case 'chapter_scroll':
+        return ReaderPageTurnAnimation.chapterScroll;
       case 'simulation':
-        return ReaderPageTurnAnimation.simulation;
+        // Temporarily disable simulation mode and migrate to cover.
+        return ReaderPageTurnAnimation.cover;
     }
     return null;
   }
@@ -275,6 +281,27 @@ class _ReaderViewState extends State<ReaderView> {
               (widget.style.fontSize * widget.style.lineHeight))
           .floor(),
     );
+    final isChapterScrollMode =
+        widget.pageTurnAnimation == ReaderPageTurnAnimation.chapterScroll;
+    if (isChapterScrollMode) {
+      final pageCount = math.max(1, pages.length);
+      final initialPage = _clampPageIndex(widget.initialPageIndex);
+      return _ChapterScrollPane(
+        style: widget.style,
+        flowDoc: widget.flowDoc,
+        chapterPlainText: widget.chapterPlainText,
+        chapterTitle: widget.currentChapterTitle,
+        pagePadding: pagePadding,
+        pageUsableWidth: widget.layout.usableWidth,
+        pageUsableHeight: widget.layout.usableHeight,
+        pageBackgroundColor: widget.pageBackgroundColor,
+        textColor: widget.textColor,
+        virtualPageCount: pageCount,
+        initialPageIndex: initialPage,
+        onPageChanged: widget.onPageChanged,
+        onReachChapterBoundary: widget.onReachChapterBoundary,
+      );
+    }
     if (pages.isEmpty) {
       return _PagePane(
         key: const ValueKey('page-fallback'),
@@ -423,46 +450,8 @@ class _ReaderViewState extends State<ReaderView> {
     }
 
     if (widget.pageTurnAnimation == ReaderPageTurnAnimation.simulation) {
-      return AnimatedBuilder(
-        animation: controller,
-        child: child,
-        builder: (context, animatedChild) {
-          if (!controller.hasClients || !controller.position.haveDimensions) {
-            return animatedChild!;
-          }
-          final currentPage =
-              controller.page ?? controller.initialPage.toDouble();
-          final delta = index - currentPage;
-          if (delta.abs() >= 1.0) {
-            return animatedChild!;
-          }
-
-          final viewportWidth = controller.position.viewportDimension;
-          if (viewportWidth <= 0) {
-            return animatedChild!;
-          }
-
-          final progress = (1.0 - delta.abs()).clamp(0.0, 1.0);
-          final translateX = -delta * viewportWidth * 0.22;
-          final rotateY = delta * 0.11;
-          final scale = (0.95 + progress * 0.05).clamp(0.9, 1.0);
-          final opacity = (0.85 + progress * 0.15).clamp(0.0, 1.0);
-
-          return Opacity(
-            opacity: opacity,
-            child: Transform(
-              alignment:
-                  delta >= 0 ? Alignment.centerLeft : Alignment.centerRight,
-              transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.0012)
-                ..translateByDouble(translateX, 0, 0, 1)
-                ..rotateY(rotateY)
-                ..scaleByDouble(scale, 1.0, 1.0, 1.0),
-              child: animatedChild,
-            ),
-          );
-        },
-      );
+      // Temporarily disable simulation animation to avoid unstable behavior.
+      return child;
     }
 
     if (widget.pageTurnAnimation != ReaderPageTurnAnimation.cover) {
@@ -577,6 +566,276 @@ class _ReaderViewState extends State<ReaderView> {
       endOffset: 0,
       fragments: [],
     );
+  }
+}
+
+class _ChapterScrollPane extends StatefulWidget {
+  final ReaderStyle style;
+  final FlowDoc flowDoc;
+  final String? chapterPlainText;
+  final String? chapterTitle;
+  final EdgeInsets pagePadding;
+  final double pageUsableWidth;
+  final double pageUsableHeight;
+  final Color? pageBackgroundColor;
+  final Color? textColor;
+  final int virtualPageCount;
+  final int initialPageIndex;
+  final ValueChanged<int>? onPageChanged;
+  final ChapterBoundaryCallback? onReachChapterBoundary;
+
+  const _ChapterScrollPane({
+    required this.style,
+    required this.flowDoc,
+    required this.chapterPlainText,
+    required this.chapterTitle,
+    required this.pagePadding,
+    required this.pageUsableWidth,
+    required this.pageUsableHeight,
+    required this.pageBackgroundColor,
+    required this.textColor,
+    required this.virtualPageCount,
+    required this.initialPageIndex,
+    required this.onPageChanged,
+    required this.onReachChapterBoundary,
+  });
+
+  @override
+  State<_ChapterScrollPane> createState() => _ChapterScrollPaneState();
+}
+
+class _ChapterScrollPaneState extends State<_ChapterScrollPane> {
+  static const TextHeightBehavior _textHeightBehavior = TextHeightBehavior(
+    applyHeightToFirstAscent: true,
+    applyHeightToLastDescent: true,
+  );
+
+  final ScrollController _scrollController = ScrollController();
+  int _lastVirtualPageIndex = -1;
+  DateTime? _lastBoundaryTriggerAt;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_emitVirtualPageIfNeeded);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        _emitVirtualPageIfNeeded();
+        return;
+      }
+      final maxExtent = _scrollController.position.maxScrollExtent;
+      final pageCount = math.max(1, widget.virtualPageCount);
+      if (maxExtent <= 0 || pageCount <= 1) {
+        _emitVirtualPageIfNeeded();
+        return;
+      }
+      final ratio = (widget.initialPageIndex / (pageCount - 1)).clamp(0.0, 1.0);
+      final targetOffset = (maxExtent * ratio).clamp(0.0, maxExtent);
+      if (targetOffset > 0.0) {
+        _scrollController.jumpTo(targetOffset);
+      }
+      _emitVirtualPageIfNeeded();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChapterScrollPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.virtualPageCount != widget.virtualPageCount) {
+      _lastVirtualPageIndex = -1;
+      _emitVirtualPageIfNeeded();
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_emitVirtualPageIfNeeded);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bg =
+        widget.pageBackgroundColor ?? Theme.of(context).scaffoldBackgroundColor;
+    final fg = widget.textColor ?? Theme.of(context).colorScheme.onSurface;
+    final chapterTitle = widget.chapterTitle?.trim() ?? '';
+    final chapterText = _chapterTextForScroll();
+    final baseStyle = widget.style.toTextStyle(color: fg);
+    final minContentHeight = math.max(
+      80.0,
+      widget.pageUsableHeight - widget.pagePadding.vertical,
+    );
+
+    return Container(
+      color: bg,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _handleBoundaryOverscroll,
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          padding: widget.pagePadding,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: minContentHeight,
+              minWidth: widget.pageUsableWidth,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (chapterTitle.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      chapterTitle,
+                      style: baseStyle.copyWith(
+                        fontSize: (widget.style.fontSize * 1.2).clamp(16, 34),
+                        fontWeight: FontWeight.w700,
+                        height: 1.22,
+                      ),
+                      textScaler: TextScaler.noScaling,
+                      textHeightBehavior: _textHeightBehavior,
+                    ),
+                  ),
+                if (chapterText.isNotEmpty)
+                  SelectableText(
+                    chapterText,
+                    style: baseStyle.copyWith(height: widget.style.lineHeight),
+                    textAlign: widget.style.textAlign,
+                    textScaler: TextScaler.noScaling,
+                    textHeightBehavior: _textHeightBehavior,
+                  )
+                else
+                  Text(
+                    '本章暂无可显示内容',
+                    style: baseStyle,
+                    textScaler: TextScaler.noScaling,
+                    textHeightBehavior: _textHeightBehavior,
+                  ),
+                const SizedBox(height: 20),
+                _buildBoundaryButtons(context),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBoundaryButtons(BuildContext context) {
+    final callback = widget.onReachChapterBoundary;
+    final enabled = callback != null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: enabled
+                  ? () => callback(ChapterBoundaryDirection.previous)
+                  : null,
+              icon: const Icon(Icons.chevron_left_rounded),
+              label: const Text('上一章'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: enabled
+                  ? () => callback(ChapterBoundaryDirection.next)
+                  : null,
+              icon: const Icon(Icons.chevron_right_rounded),
+              label: const Text('下一章'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _handleBoundaryOverscroll(ScrollNotification notification) {
+    final callback = widget.onReachChapterBoundary;
+    if (callback == null || notification is! OverscrollNotification) {
+      return false;
+    }
+    if (notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+    final now = DateTime.now();
+    if (_lastBoundaryTriggerAt != null &&
+        now.difference(_lastBoundaryTriggerAt!) <
+            const Duration(milliseconds: 420)) {
+      return false;
+    }
+    final metrics = notification.metrics;
+    final atStart = metrics.pixels <= metrics.minScrollExtent + 0.5;
+    final atEnd = metrics.pixels >= metrics.maxScrollExtent - 0.5;
+    if (notification.overscroll < 0 && atStart) {
+      _lastBoundaryTriggerAt = now;
+      callback(ChapterBoundaryDirection.previous);
+      return true;
+    }
+    if (notification.overscroll > 0 && atEnd) {
+      _lastBoundaryTriggerAt = now;
+      callback(ChapterBoundaryDirection.next);
+      return true;
+    }
+    return false;
+  }
+
+  void _emitVirtualPageIfNeeded() {
+    final callback = widget.onPageChanged;
+    if (callback == null) {
+      return;
+    }
+    if (!_scrollController.hasClients) {
+      final initial = widget.initialPageIndex
+          .clamp(
+            0,
+            math.max(0, widget.virtualPageCount - 1),
+          )
+          .toInt();
+      if (initial != _lastVirtualPageIndex) {
+        _lastVirtualPageIndex = initial;
+        callback(initial);
+      }
+      return;
+    }
+
+    final pageCount = math.max(1, widget.virtualPageCount);
+    final position = _scrollController.position;
+    final maxExtent = position.maxScrollExtent;
+    final ratio =
+        maxExtent <= 0 ? 0.0 : (position.pixels / maxExtent).clamp(0.0, 1.0);
+    final index = (ratio * (pageCount - 1))
+        .round()
+        .clamp(0, math.max(0, pageCount - 1))
+        .toInt();
+    if (index == _lastVirtualPageIndex) {
+      return;
+    }
+    _lastVirtualPageIndex = index;
+    callback(index);
+  }
+
+  String _chapterTextForScroll() {
+    final raw = (widget.chapterPlainText?.isNotEmpty ?? false)
+        ? widget.chapterPlainText!
+        : widget.flowDoc.toPlainText();
+    if (raw.isEmpty) {
+      return raw;
+    }
+    var value = raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    int end = value.length;
+    while (end > 0 && value.codeUnitAt(end - 1) == 0x0A) {
+      end -= 1;
+    }
+    if (end <= 0) {
+      return '';
+    }
+    if (end != value.length) {
+      value = value.substring(0, end);
+    }
+    return value;
   }
 }
 
