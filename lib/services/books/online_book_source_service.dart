@@ -7,6 +7,50 @@ import 'package:http/http.dart' as http;
 import 'package:xxread/models/book_source.dart';
 import 'package:xxread/utils/fast_gbk_decoder.dart';
 
+const Set<String> _htmlTagNames = <String>{
+  'a',
+  'article',
+  'aside',
+  'body',
+  'button',
+  'dd',
+  'div',
+  'dl',
+  'dt',
+  'em',
+  'footer',
+  'form',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'header',
+  'html',
+  'i',
+  'img',
+  'input',
+  'label',
+  'li',
+  'main',
+  'nav',
+  'option',
+  'p',
+  'picture',
+  'section',
+  'small',
+  'span',
+  'strong',
+  'table',
+  'tbody',
+  'td',
+  'th',
+  'thead',
+  'tr',
+  'ul',
+};
+
 /// 在线书源解析服务（Legado 常见规则兼容子集）
 ///
 /// 当前支持：
@@ -619,12 +663,10 @@ class OnlineBookSourceService {
         selectorChain: cleanRule,
         rootDocument: htmlDoc,
       );
-      debugPrint('LIST_RULE $cleanRule -> ${selected.length}');
       if (selected.isNotEmpty) {
         return selected;
       }
       final selector = _normalizeCssSelector(cleanRule);
-      debugPrint('LIST_FALLBACK $selector -> ${htmlDoc.querySelectorAll(selector).length}');
       if (selector.isEmpty) return const <dynamic>[];
       return htmlDoc.querySelectorAll(selector);
     }
@@ -717,7 +759,7 @@ class OnlineBookSourceService {
     var selectorParts = parts;
     final lastPart = parts.last.toLowerCase();
     if (accessorTokens.contains(lastPart) ||
-        (!_looksLikeSelectorToken(parts.last) &&
+        (!_looksLikeExplicitSelectorToken(parts.last) &&
             parts.length > 1 &&
             !parts.last.startsWith(r'$'))) {
       accessor = lastPart;
@@ -1452,6 +1494,21 @@ class OnlineBookSourceService {
 
   bool _looksLikeSelectorToken(String token) {
     return _looksLikeCssRule(token) || token.startsWith('text.');
+  }
+
+  bool _looksLikeExplicitSelectorToken(String token) {
+    final trimmed = token.trim().toLowerCase();
+    if (trimmed.isEmpty) return false;
+    if (trimmed.startsWith('class.') ||
+        trimmed.startsWith('id.') ||
+        trimmed.startsWith('tag.') ||
+        trimmed.startsWith('text.')) {
+      return true;
+    }
+    if (trimmed.contains(RegExp(r'[#\.\[\]> ]'))) {
+      return true;
+    }
+    return _htmlTagNames.contains(trimmed);
   }
 
   int _findUrlOptionStart(String rule) {
