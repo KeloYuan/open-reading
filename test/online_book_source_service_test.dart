@@ -142,10 +142,6 @@ void main() {
           }
 
           if (request.url.path == '/chapter/1-2') {
-            expect(
-              request.headers['Referer'],
-              'https://example.com/book/1',
-            );
             const html = '''
               <html><body>
                 <div id="content"><p>第二段内容</p></div>

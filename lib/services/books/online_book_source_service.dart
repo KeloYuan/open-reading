@@ -1492,10 +1492,6 @@ class OnlineBookSourceService {
     return part;
   }
 
-  bool _looksLikeSelectorToken(String token) {
-    return _looksLikeCssRule(token) || token.startsWith('text.');
-  }
-
   bool _looksLikeExplicitSelectorToken(String token) {
     final trimmed = token.trim().toLowerCase();
     if (trimmed.isEmpty) return false;
