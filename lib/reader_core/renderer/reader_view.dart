@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' hide Page;
 import 'package:flutter/rendering.dart' show SelectedContentRange;
 
@@ -13,6 +14,7 @@ import '../selection/reader_selection.dart';
 typedef SelectionActionCallback = void Function(ReaderSelectionPayload payload);
 typedef ChapterBoundaryCallback = void Function(
     ChapterBoundaryDirection direction);
+typedef TermTapCallback = void Function(TermAnnotation term);
 
 enum ChapterBoundaryDirection {
   previous,
@@ -72,11 +74,13 @@ class ReaderView extends StatefulWidget {
   final ReaderStyle style;
   final PageLayout layout;
   final List<Annotation> annotations;
+  final List<TermAnnotation> termAnnotations;
   final int initialPageIndex;
   final bool enablePageAnimation;
   final ReaderPageTurnAnimation pageTurnAnimation;
   final ValueChanged<int>? onPageChanged;
   final SelectionActionCallback? onSelectionAction;
+  final TermTapCallback? onTermTap;
   final ChapterBoundaryCallback? onReachChapterBoundary;
 
   const ReaderView({
@@ -91,11 +95,13 @@ class ReaderView extends StatefulWidget {
     required this.style,
     required this.layout,
     required this.annotations,
+    this.termAnnotations = const <TermAnnotation>[],
     this.initialPageIndex = 0,
     this.enablePageAnimation = true,
     this.pageTurnAnimation = ReaderPageTurnAnimation.slide,
     this.onPageChanged,
     this.onSelectionAction,
+    this.onTermTap,
     this.onReachChapterBoundary,
   });
 
@@ -319,7 +325,9 @@ class _ReaderViewState extends State<ReaderView> {
         pageBackgroundColor: widget.pageBackgroundColor,
         textColor: widget.textColor,
         annotations: widget.annotations,
+        termAnnotations: widget.termAnnotations,
         onSelectionAction: widget.onSelectionAction,
+        onTermTap: widget.onTermTap,
       );
     }
 
@@ -436,7 +444,9 @@ class _ReaderViewState extends State<ReaderView> {
       pageBackgroundColor: widget.pageBackgroundColor,
       textColor: widget.textColor,
       annotations: widget.annotations,
+      termAnnotations: widget.termAnnotations,
       onSelectionAction: widget.onSelectionAction,
+      onTermTap: widget.onTermTap,
     );
   }
 
@@ -854,7 +864,9 @@ class _PagePane extends StatefulWidget {
   final Color? pageBackgroundColor;
   final Color? textColor;
   final List<Annotation> annotations;
+  final List<TermAnnotation> termAnnotations;
   final SelectionActionCallback? onSelectionAction;
+  final TermTapCallback? onTermTap;
 
   const _PagePane({
     super.key,
@@ -872,7 +884,9 @@ class _PagePane extends StatefulWidget {
     required this.pageBackgroundColor,
     required this.textColor,
     required this.annotations,
+    required this.termAnnotations,
     required this.onSelectionAction,
+    required this.onTermTap,
   });
 
   @override
@@ -891,6 +905,7 @@ class _PagePaneState extends State<_PagePane> {
   final SelectionListenerNotifier _selectionNotifier =
       SelectionListenerNotifier();
   final ScrollController _pageScrollController = ScrollController();
+  final List<TapGestureRecognizer> _termRecognizers = <TapGestureRecognizer>[];
   String? _lastRenderLogKey;
 
   String _selectedText = '';
@@ -904,10 +919,18 @@ class _PagePaneState extends State<_PagePane> {
 
   @override
   void dispose() {
+    _disposeTermRecognizers();
     _selectionNotifier.removeListener(_handleSelectionDetails);
     _selectionNotifier.dispose();
     _pageScrollController.dispose();
     super.dispose();
+  }
+
+  void _disposeTermRecognizers() {
+    for (final recognizer in _termRecognizers) {
+      recognizer.dispose();
+    }
+    _termRecognizers.clear();
   }
 
   @override
@@ -1541,6 +1564,7 @@ class _PagePaneState extends State<_PagePane> {
       text: text,
       pageStartOffset: pageStartOffset,
       annotations: widget.annotations,
+      termAnnotations: widget.termAnnotations,
       baseStyle: textStyle,
     );
     final resolvedLocale = textStyle.locale ??
@@ -2071,55 +2095,131 @@ class _PagePaneState extends State<_PagePane> {
     required String text,
     required int pageStartOffset,
     required List<Annotation> annotations,
+    required List<TermAnnotation> termAnnotations,
     required TextStyle baseStyle,
   }) {
     if (text.isEmpty) {
       return [TextSpan(text: text, style: baseStyle)];
     }
 
-    final ranges = <({int start, int end, Color color})>[];
+    _disposeTermRecognizers();
+
+    final annRanges = <({int start, int end, Color color})>[];
     for (final ann in annotations) {
       final localStart = ann.startOffset - pageStartOffset;
       final localEnd = ann.endOffset - pageStartOffset;
       final start = localStart.clamp(0, text.length);
       final end = localEnd.clamp(0, text.length);
       if (end > start) {
-        ranges.add((start: start, end: end, color: ann.color));
+        annRanges.add((start: start, end: end, color: ann.color));
       }
     }
 
-    if (ranges.isEmpty) {
+    final termRanges = <({
+      int start,
+      int end,
+      Color color,
+      TermMarkStyle style,
+      TermAnnotation term
+    })>[];
+    for (final term in termAnnotations) {
+      final localStart = term.startOffset - pageStartOffset;
+      final localEnd = term.endOffset - pageStartOffset;
+      final start = localStart.clamp(0, text.length);
+      final end = localEnd.clamp(0, text.length);
+      if (end > start) {
+        termRanges.add((
+          start: start,
+          end: end,
+          color: term.color,
+          style: term.style,
+          term: term,
+        ));
+      }
+    }
+
+    if (annRanges.isEmpty && termRanges.isEmpty) {
       return [TextSpan(text: text, style: baseStyle)];
     }
 
-    ranges.sort((a, b) => a.start.compareTo(b.start));
-
-    final spans = <InlineSpan>[];
-    int cursor = 0;
-
-    for (final r in ranges) {
-      if (r.start > cursor) {
-        spans.add(
-            TextSpan(text: text.substring(cursor, r.start), style: baseStyle));
-      }
-
-      final start = math.max(cursor, r.start);
-      final end = math.max(start, r.end);
-      if (end > start) {
-        spans.add(
-          TextSpan(
-            text: text.substring(start, end),
-            style: baseStyle.copyWith(
-              backgroundColor: r.color.withValues(alpha: 0.35),
-            ),
-          ),
-        );
-        cursor = end;
-      }
+    final boundaries = <int>{0, text.length};
+    for (final r in annRanges) {
+      boundaries.add(r.start);
+      boundaries.add(r.end);
+    }
+    for (final r in termRanges) {
+      boundaries.add(r.start);
+      boundaries.add(r.end);
     }
 
-    if (cursor < text.length) {
-      spans.add(TextSpan(text: text.substring(cursor), style: baseStyle));
+    final points = boundaries.toList()..sort();
+    final spans = <InlineSpan>[];
+    for (var i = 0; i < points.length - 1; i++) {
+      final start = points[i];
+      final end = points[i + 1];
+      if (end <= start) {
+        continue;
+      }
+
+      TextStyle style = baseStyle;
+      ({int start, int end, Color color})? ann;
+      for (final range in annRanges) {
+        if (start >= range.start && start < range.end) {
+          ann = range;
+          break;
+        }
+      }
+      if (ann != null) {
+        style = style.copyWith(
+          backgroundColor: ann.color.withValues(alpha: 0.35),
+        );
+      }
+
+      ({
+        int start,
+        int end,
+        Color color,
+        TermMarkStyle style,
+        TermAnnotation term
+      })? term;
+      for (final range in termRanges) {
+        if (start >= range.start && start < range.end) {
+          term = range;
+          break;
+        }
+      }
+
+      TapGestureRecognizer? recognizer;
+      if (term != null) {
+        final tappedTerm = term.term;
+        if (term.style == TermMarkStyle.highlight) {
+          final currentBg = style.backgroundColor ?? Colors.transparent;
+          style = style.copyWith(
+            backgroundColor: Color.alphaBlend(
+              term.color.withValues(alpha: 0.26),
+              currentBg,
+            ),
+            fontWeight: FontWeight.w600,
+          );
+        } else {
+          style = style.copyWith(
+            decoration: TextDecoration.underline,
+            decorationColor: term.color.withValues(alpha: 0.96),
+            decorationThickness: 1.8,
+          );
+        }
+        recognizer = TapGestureRecognizer()
+          ..onTap = () => widget.onTermTap?.call(tappedTerm);
+        _termRecognizers.add(recognizer);
+      }
+
+      spans.add(
+        TextSpan(
+          text: text.substring(start, end),
+          style: style,
+          recognizer: recognizer,
+        ),
+      );
     }
 
     return spans;

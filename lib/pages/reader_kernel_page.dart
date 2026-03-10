@@ -1355,6 +1355,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                   style: _controller.style,
                   layout: _controller.layout,
                   annotations: _controller.annotations,
+                  termAnnotations: _controller.termAnnotations,
                   enablePageAnimation:
                       _pageTurnAnimation != ReaderPageTurnAnimation.slide,
                   pageTurnAnimation: _pageTurnAnimation,
@@ -1372,6 +1373,7 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
                   },
                   onSelectionAction: (payload) =>
                       _onSelectionAction(context, payload),
+                  onTermTap: (term) => _onTermTapped(context, term),
                   onReachChapterBoundary: _onBoundaryReached,
                 );
                 final animatedReader = AnimatedSwitcher(
@@ -2643,6 +2645,176 @@ class _ReaderKernelPageState extends State<ReaderKernelPage>
     }
   }
 
+  Future<void> _onTermTapped(
+    BuildContext context,
+    core.TermAnnotation term,
+  ) async {
+    final action = await showModalBottomSheet<_TermAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.menu_book_rounded),
+                  title: Text('查看术语解释：${term.term}'),
+                  subtitle: const Text('二级菜单：打开解释面板'),
+                  onTap: () => Navigator.of(sheetContext).pop(
+                    _TermAction.explain,
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.auto_awesome_rounded),
+                  title: const Text('让 AI 深入讲解'),
+                  subtitle: const Text('结合当前页和本书索引继续解释'),
+                  onTap: () => Navigator.of(sheetContext).pop(
+                    _TermAction.askAi,
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.highlight_alt_rounded),
+                  title: const Text('标记这个术语'),
+                  subtitle: const Text('添加高亮，便于后续复盘'),
+                  onTap: () => Navigator.of(sheetContext).pop(
+                    _TermAction.mark,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || !context.mounted || action == null) {
+      return;
+    }
+
+    if (action == _TermAction.explain) {
+      await _showTermExplanationDialog(context, term);
+      return;
+    }
+    if (action == _TermAction.askAi) {
+      await _showAiChatSheet(
+        initialQuestion: '请解释术语“${term.term}”，并结合当前章节给出一个例子。',
+      );
+      return;
+    }
+
+    await _controller.addHighlight(
+      ReaderSelectionPayload(
+        action: ReaderSelectionAction.highlight,
+        text: term.term,
+        localStart: 0,
+        localEnd: term.term.length,
+        globalStart: term.startOffset,
+        globalEnd: term.endOffset,
+      ),
+    );
+  }
+
+  Future<void> _showTermExplanationDialog(
+    BuildContext context,
+    core.TermAnnotation term,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text('术语解释 · ${term.term}'),
+          content: SingleChildScrollView(
+            child: Text(term.explanation),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _showDeepTermExplanation(context, term);
+              },
+              child: const Text('一键深度解释'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showDeepTermExplanation(
+    BuildContext context,
+    core.TermAnnotation term,
+  ) async {
+    if (!mounted || !context.mounted) {
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    String answer;
+    try {
+      final plan = _controller.pagePlan;
+      String pageText = '';
+      if (plan != null && plan.pages.isNotEmpty) {
+        final page =
+            plan.pages[_controller.pageIndex.clamp(0, plan.pages.length - 1)];
+        pageText = _controller.pageText(page);
+      }
+      answer = await _controller.askAiChat(
+        history: [
+          AIChatMessage(
+            role: 'user',
+            content:
+                '请深入解释术语“${term.term}”。要求：1) 给出定义 2) 给一个书内上下文例子 3) 给一个记忆方法。',
+          ),
+        ],
+        pageText: pageText,
+      );
+    } catch (e) {
+      answer = '深度解释失败：$e';
+    }
+
+    if (!mounted || !context.mounted) {
+      return;
+    }
+    Navigator.of(context, rootNavigator: true).pop();
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text('深度解释 · ${term.term}'),
+          content: SingleChildScrollView(child: Text(answer)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _showAiChatSheet(
+                  initialQuestion: '继续讲解术语“${term.term}”，并给出 3 个检查题。',
+                );
+              },
+              child: const Text('继续追问'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _onSelectionAction(
     BuildContext context,
     ReaderSelectionPayload payload,
@@ -3444,6 +3616,12 @@ class _TocSearchResult {
   final core.TocItem item;
 }
 
+enum _TermAction {
+  explain,
+  askAi,
+  mark,
+}
+
 class _ReaderAiChatPanel extends StatefulWidget {
   const _ReaderAiChatPanel({
     required this.controller,
@@ -3511,12 +3689,18 @@ class _ReaderAiChatPanelState extends State<_ReaderAiChatPanel> {
   Future<void> _bootstrap() async {
     try {
       final settings = await widget.controller.loadAiSettings();
+      final readingAdvice = await widget.controller.loadBookReadingAdvice();
       if (!mounted) {
         return;
       }
       setState(() {
         _settings = settings;
         _loadingSettings = false;
+        if (readingAdvice != null && readingAdvice.trim().isNotEmpty) {
+          _messages.add(
+            _AiUiMessage.system('AI 阅读建议\\n$readingAdvice'),
+          );
+        }
         _messages.add(
           _AiUiMessage.assistant(
             '我已经读取了本页内容（${widget.pageText.length} 字），可以直接问我：总结、解释、提炼要点、出题都可以。',
@@ -4123,7 +4307,6 @@ class _AiProviderConfigDialog extends StatefulWidget {
 }
 
 class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
-  final _formKey = GlobalKey<FormState>();
   late final TextEditingController _keyController;
   late final TextEditingController _modelController;
   late final TextEditingController _baseUrlController;
@@ -4131,7 +4314,9 @@ class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
 
   late final Map<AIProviderType, AIProviderSettings> _draftByProvider;
   late AIProviderType _selectedProvider;
+  late AIModelPreset _selectedPreset;
   bool _obscureApiKey = true;
+  bool _showAdvanced = false;
   String? _errorText;
 
   @override
@@ -4143,14 +4328,17 @@ class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
                 AIProviderSettings.defaults(provider))
             .normalized(),
     };
-    _selectedProvider = widget.initialSettings.provider;
-    _draftByProvider[_selectedProvider] = widget.initialSettings.normalized();
+    final initial = widget.initialSettings.normalized();
+    _selectedProvider = initial.provider;
+    _draftByProvider[_selectedProvider] = initial;
+    _selectedPreset = AIModelPresets.match(initial) ??
+        AIModelPresets.defaultForProvider(_selectedProvider);
 
     _keyController = TextEditingController();
     _modelController = TextEditingController();
     _baseUrlController = TextEditingController();
     _tempController = TextEditingController();
-    _applyProviderDraft(_selectedProvider);
+    _applyDraft(_draftByProvider[_selectedProvider]!);
   }
 
   @override
@@ -4162,13 +4350,14 @@ class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
     super.dispose();
   }
 
-  void _applyProviderDraft(AIProviderType provider) {
-    final draft =
-        _draftByProvider[provider] ?? AIProviderSettings.defaults(provider);
-    _keyController.text = draft.apiKey;
-    _modelController.text = draft.model;
-    _baseUrlController.text = draft.baseUrl;
-    _tempController.text = draft.temperature.toStringAsFixed(2);
+  void _applyDraft(AIProviderSettings settings) {
+    final normalized = settings.normalized();
+    _keyController.text = normalized.apiKey;
+    _modelController.text = normalized.model;
+    _baseUrlController.text = normalized.baseUrl;
+    _tempController.text = normalized.temperature.toStringAsFixed(2);
+    _selectedPreset = AIModelPresets.match(normalized) ??
+        AIModelPresets.defaultForProvider(normalized.provider);
   }
 
   AIProviderSettings _buildDraftFromInputs(
@@ -4191,19 +4380,18 @@ class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
         .normalized();
   }
 
-  bool _validateTemperature(double value) {
+  bool _validateTemperature(AIProviderType provider, double value) {
     if (!value.isFinite) {
       return false;
     }
     if (value < 0 || value > 2) {
       return false;
     }
-    if (_selectedProvider == AIProviderType.minimax &&
-        (value <= 0 || value > 1)) {
+    if (provider == AIProviderType.minimax && (value <= 0 || value > 1)) {
       return false;
     }
-    if ((_selectedProvider == AIProviderType.claude ||
-            _selectedProvider == AIProviderType.gemini) &&
+    if ((provider == AIProviderType.claude ||
+            provider == AIProviderType.gemini) &&
         value > 1) {
       return false;
     }
@@ -4223,23 +4411,65 @@ class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
     }
   }
 
-  void _onProviderChanged(AIProviderType provider) {
+  void _stashCurrentDraft() {
     _draftByProvider[_selectedProvider] =
         _buildDraftFromInputs(_selectedProvider);
+  }
+
+  void _onProviderChanged(AIProviderType provider) {
+    _stashCurrentDraft();
+    final nextDraft = _draftByProvider[provider] ??
+        AIModelPresets.defaultForProvider(provider).toSettings();
     setState(() {
       _selectedProvider = provider;
       _errorText = null;
-      _applyProviderDraft(provider);
+      _applyDraft(nextDraft);
+    });
+  }
+
+  void _onPresetChanged(AIModelPreset preset) {
+    final currentApiKey = _keyController.text.trim();
+    final applied = preset.toSettings(apiKey: currentApiKey);
+    _draftByProvider[preset.provider] = applied;
+    setState(() {
+      _selectedProvider = preset.provider;
+      _selectedPreset = preset;
+      _errorText = null;
+      _applyDraft(applied);
     });
   }
 
   void _onSave() {
-    final valid = _formKey.currentState?.validate() ?? false;
-    if (!valid) {
+    final apiKey = _keyController.text.trim();
+    if (apiKey.isEmpty) {
+      setState(() {
+        _errorText = 'API Key 不能为空';
+      });
       return;
     }
+
+    final model = _modelController.text.trim();
+    if (model.isEmpty) {
+      setState(() {
+        _errorText = 'Model 不能为空';
+      });
+      return;
+    }
+
+    final baseUrl = _baseUrlController.text.trim();
+    final uri = Uri.tryParse(baseUrl);
+    if (baseUrl.isEmpty ||
+        uri == null ||
+        !(uri.isScheme('http') || uri.isScheme('https'))) {
+      setState(() {
+        _errorText = 'Base URL 必须是合法的 http/https 地址';
+      });
+      return;
+    }
+
     final parsedTemp = double.tryParse(_tempController.text.trim());
-    if (parsedTemp == null || !_validateTemperature(parsedTemp)) {
+    if (parsedTemp == null ||
+        !_validateTemperature(_selectedProvider, parsedTemp)) {
       setState(() {
         _errorText = _selectedProvider == AIProviderType.minimax
             ? 'MiniMax 的 Temperature 必须在 0.01 ~ 1.00 之间'
@@ -4248,16 +4478,26 @@ class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
       return;
     }
 
-    final result = _buildDraftFromInputs(
-      _selectedProvider,
-      allowFallbackTemp: false,
-    );
+    final result = AIProviderSettings(
+      provider: _selectedProvider,
+      apiKey: apiKey,
+      baseUrl: baseUrl,
+      model: model,
+      temperature: parsedTemp,
+    ).normalized();
+    _draftByProvider[_selectedProvider] = result;
     Navigator.of(context).pop(result);
   }
 
   @override
   Widget build(BuildContext context) {
     final fg = widget.theme.foreground;
+    final providerPresets = AIModelPresets.byProvider(_selectedProvider);
+    final effectivePreset = providerPresets.firstWhere(
+      (preset) => preset.id == _selectedPreset.id,
+      orElse: () => AIModelPresets.defaultForProvider(_selectedProvider),
+    );
+
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 14),
@@ -4275,72 +4515,111 @@ class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
               ),
               border: Border.all(color: fg.withValues(alpha: 0.26)),
             ),
-            child: Form(
-              key: _formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'AI 接口配置',
-                      style: TextStyle(
-                        color: fg.withValues(alpha: 0.95),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                      ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'AI 快速配置',
+                    style: TextStyle(
+                      color: fg.withValues(alpha: 0.95),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
                     ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<AIProviderType>(
-                      initialValue: _selectedProvider,
-                      decoration: const InputDecoration(
-                        labelText: '服务商',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: AIProviderType.values
-                          .map(
-                            (provider) => DropdownMenuItem(
-                              value: provider,
-                              child: Text(provider.displayName),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (provider) {
-                        if (provider == null || provider == _selectedProvider) {
-                          return;
-                        }
-                        _onProviderChanged(provider);
-                      },
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '预设已填好 Base URL 和模型，你通常只需要输入 API Key。',
+                    style: TextStyle(
+                      color: fg.withValues(alpha: 0.72),
+                      fontSize: 12.5,
+                      height: 1.35,
                     ),
-                    const SizedBox(height: 10),
-                    TextFormField(
-                      controller: _keyController,
-                      obscureText: _obscureApiKey,
-                      decoration: InputDecoration(
-                        labelText: 'API Key',
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                        suffixIcon: IconButton(
-                          tooltip: _obscureApiKey ? '显示' : '隐藏',
-                          icon: Icon(_obscureApiKey
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<AIProviderType>(
+                    initialValue: _selectedProvider,
+                    decoration: const InputDecoration(
+                      labelText: '服务商',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: AIProviderType.values
+                        .map(
+                          (provider) => DropdownMenuItem(
+                            value: provider,
+                            child: Text(provider.displayName),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (provider) {
+                      if (provider == null || provider == _selectedProvider) {
+                        return;
+                      }
+                      _onProviderChanged(provider);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<AIModelPreset>(
+                    initialValue: effectivePreset,
+                    decoration: const InputDecoration(
+                      labelText: '预设模型',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: providerPresets
+                        .map(
+                          (preset) => DropdownMenuItem(
+                            value: preset,
+                            child: Text('${preset.vendor} · ${preset.label}'),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (preset) {
+                      if (preset == null) {
+                        return;
+                      }
+                      _onPresetChanged(preset);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: _keyController,
+                    obscureText: _obscureApiKey,
+                    decoration: InputDecoration(
+                      labelText: 'API Key',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      suffixIcon: IconButton(
+                        tooltip: _obscureApiKey ? '显示' : '隐藏',
+                        icon: Icon(
+                          _obscureApiKey
                               ? Icons.visibility_off_rounded
-                              : Icons.visibility_rounded),
-                          onPressed: () {
-                            setState(() {
-                              _obscureApiKey = !_obscureApiKey;
-                            });
-                          },
+                              : Icons.visibility_rounded,
                         ),
+                        onPressed: () {
+                          setState(() {
+                            _obscureApiKey = !_obscureApiKey;
+                          });
+                        },
                       ),
-                      validator: (value) {
-                        if ((value ?? '').trim().isEmpty) {
-                          return 'API Key 不能为空';
-                        }
-                        return null;
-                      },
                     ),
-                    const SizedBox(height: 10),
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('高级设置'),
+                    subtitle: const Text('需要时再修改模型 / URL / 温度'),
+                    value: _showAdvanced,
+                    onChanged: (value) {
+                      setState(() {
+                        _showAdvanced = value;
+                      });
+                    },
+                  ),
+                  if (_showAdvanced) ...[
                     TextFormField(
                       controller: _modelController,
                       decoration: const InputDecoration(
@@ -4348,12 +4627,6 @@ class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
-                      validator: (value) {
-                        if ((value ?? '').trim().isEmpty) {
-                          return 'Model 不能为空';
-                        }
-                        return null;
-                      },
                     ),
                     const SizedBox(height: 10),
                     TextFormField(
@@ -4363,18 +4636,6 @@ class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
-                      validator: (value) {
-                        final text = (value ?? '').trim();
-                        if (text.isEmpty) {
-                          return 'Base URL 不能为空';
-                        }
-                        final uri = Uri.tryParse(text);
-                        if (uri == null ||
-                            !(uri.isScheme('http') || uri.isScheme('https'))) {
-                          return '请输入合法的 http/https 地址';
-                        }
-                        return null;
-                      },
                     ),
                     const SizedBox(height: 10),
                     TextFormField(
@@ -4387,18 +4648,6 @@ class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
-                      validator: (value) {
-                        final parsed = double.tryParse((value ?? '').trim());
-                        if (parsed == null) {
-                          return 'Temperature 必须是数字';
-                        }
-                        if (!_validateTemperature(parsed)) {
-                          return _selectedProvider == AIProviderType.minimax
-                              ? 'MiniMax 需 0.01 ~ 1.00'
-                              : '超出允许范围';
-                        }
-                        return null;
-                      },
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -4409,42 +4658,33 @@ class _AiProviderConfigDialogState extends State<_AiProviderConfigDialog> {
                         height: 1.35,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                  ],
+                  if (_errorText != null) ...[
+                    const SizedBox(height: 10),
                     Text(
-                      'MiniMax: https://api.minimax.io/v1\nGLM: https://open.bigmodel.cn/api/paas/v4\nOpenAI: https://api.openai.com/v1\nClaude: https://api.anthropic.com\nGemini: https://generativelanguage.googleapis.com/v1beta',
+                      _errorText!,
                       style: TextStyle(
-                        color: fg.withValues(alpha: 0.66),
-                        fontSize: 11.5,
-                        height: 1.35,
+                        color: Colors.redAccent.shade200,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
-                    ),
-                    if (_errorText != null) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        _errorText!,
-                        style: TextStyle(
-                          color: Colors.redAccent.shade200,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('取消'),
-                        ),
-                        const Spacer(),
-                        FilledButton(
-                          onPressed: _onSave,
-                          child: const Text('保存'),
-                        ),
-                      ],
                     ),
                   ],
-                ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('取消'),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: _onSave,
+                        child: const Text('保存并使用'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),

@@ -1,7 +1,9 @@
 import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' hide Page;
+import 'package:xxread/services/ai/global_ai_reading_service.dart';
 
 import 'ai/ai_service.dart';
 import 'data/reader_models.dart';
@@ -23,13 +25,17 @@ class ReaderKernelController extends ChangeNotifier {
     ReaderStorage? storage,
     AIService? aiService,
     FlowPaginator? paginator,
+    GlobalAIReadingService? globalAiReadingService,
   })  : _storage = storage ?? ReaderStorage(),
         _aiService = aiService ?? ReaderHttpAIService(),
-        _paginator = paginator ?? FlowPaginator();
+        _paginator = paginator ?? FlowPaginator(),
+        _globalAiReadingService =
+            globalAiReadingService ?? GlobalAIReadingService();
 
   final ReaderStorage _storage;
   final AIService _aiService;
   final FlowPaginator _paginator;
+  final GlobalAIReadingService _globalAiReadingService;
 
   String? _openBookId;
   String? _openTitle;
@@ -56,6 +62,7 @@ class ReaderKernelController extends ChangeNotifier {
   String? _error;
   String? _lastAiAnswer;
   List<Annotation> _annotations = const [];
+  List<TermAnnotation> _termAnnotations = const [];
 
   ParsedBook? get parsedBook => _parsedBook;
   int get chapterIndex => _chapterIndex;
@@ -67,6 +74,7 @@ class ReaderKernelController extends ChangeNotifier {
   String? get error => _error;
   String? get lastAiAnswer => _lastAiAnswer;
   List<Annotation> get annotations => _annotations;
+  List<TermAnnotation> get termAnnotations => _termAnnotations;
 
   ParsedChapter? get currentParsedChapter {
     final book = _parsedBook;
@@ -146,6 +154,9 @@ class ReaderKernelController extends ChangeNotifier {
       }
 
       await _loadAnnotations();
+      await _loadTermAnnotations();
+      final legacyBookId = int.tryParse(bookId);
+      unawaited(_refreshAiKnowledge(parsed, legacyBookId: legacyBookId));
       await paginateCurrentChapter(anchorOffset: null);
     } catch (e) {
       _error = e.toString();
@@ -383,6 +394,7 @@ class ReaderKernelController extends ChangeNotifier {
     _chapterIndex = chapterIndex.clamp(0, _parsedBook!.chapters.length - 1);
     _pageIndex = 0;
     await _loadAnnotations();
+    await _loadTermAnnotations();
     await paginateCurrentChapter(anchorOffset: anchorOffset);
   }
 
@@ -678,6 +690,19 @@ class ReaderKernelController extends ChangeNotifier {
     return AIProviderSettings.defaults(provider ?? AIProviderType.minimax);
   }
 
+  Future<String?> loadBookReadingAdvice() async {
+    final book = _parsedBook?.book;
+    if (book == null) {
+      return null;
+    }
+    final memory = await _globalAiReadingService.loadBookMemory(book.id);
+    final advice = (memory?['readingAdvice'] as String?)?.trim();
+    if (advice == null || advice.isEmpty) {
+      return null;
+    }
+    return advice;
+  }
+
   Future<void> saveAiSettings(AIProviderSettings settings) async {
     final aiService = _aiService;
     if (aiService is! ConfigurableAIService) {
@@ -696,15 +721,59 @@ class ReaderKernelController extends ChangeNotifier {
       throw const AIServiceException('请先打开书籍后再使用 AI');
     }
 
-    final answer = await _aiService.chat(
-      history: history,
-      pageText: pageText,
-      meta: AIRequestMeta(
-        bookId: book.id,
-        chapterId: parsed.chapter.id,
-        pageIndex: _pageIndex,
-      ),
+    final lastQuestion = history.lastWhere(
+      (m) => m.role == 'user',
+      orElse: () => const AIChatMessage(role: 'user', content: ''),
     );
+    final injectedContext = await _globalAiReadingService.buildInjectedContext(
+      bookId: book.id,
+      userQuestion: lastQuestion.content,
+      chapterId: parsed.chapter.id,
+    );
+    final enhancedHistory = <AIChatMessage>[
+      if (injectedContext.isNotEmpty)
+        AIChatMessage(
+          role: 'system',
+          content: '以下是本地记忆和索引检索结果，请优先参考：\\n$injectedContext',
+        ),
+      ...history,
+    ];
+    final enhancedPageText = injectedContext.isEmpty
+        ? pageText
+        : '$pageText\\n\\n[本地索引上下文]\\n$injectedContext';
+
+    String answer;
+    try {
+      answer = await _aiService.chat(
+        history: enhancedHistory,
+        pageText: enhancedPageText,
+        meta: AIRequestMeta(
+          bookId: book.id,
+          chapterId: parsed.chapter.id,
+          pageIndex: _pageIndex,
+        ),
+      );
+    } on AIServiceException catch (e) {
+      final msg = e.message;
+      final needsConfig =
+          msg.contains('API Key') || msg.contains('先配置') || msg.contains('请输入');
+      if (!needsConfig) {
+        rethrow;
+      }
+      answer = await _globalAiReadingService.buildLocalFallbackAnswer(
+        bookId: book.id,
+        userQuestion: lastQuestion.content,
+        chapterId: parsed.chapter.id,
+      );
+    }
+
+    if (lastQuestion.content.trim().isNotEmpty) {
+      await _globalAiReadingService.appendConversationMemory(
+        bookId: book.id,
+        question: lastQuestion.content.trim(),
+        answer: answer,
+      );
+    }
     _lastAiAnswer = answer;
     notifyListeners();
     return answer;
@@ -863,5 +932,41 @@ class ReaderKernelController extends ChangeNotifier {
       bookId: book.id,
       chapterId: parsed.chapter.id,
     );
+  }
+
+  Future<void> _loadTermAnnotations() async {
+    final parsed = currentParsedChapter;
+    final book = _parsedBook?.book;
+    if (parsed == null || book == null) {
+      _termAnnotations = const [];
+      return;
+    }
+
+    _termAnnotations = await _globalAiReadingService.loadTermAnnotations(
+      bookId: book.id,
+      chapterId: parsed.chapter.id,
+    );
+  }
+
+  Future<void> _refreshAiKnowledge(
+    ParsedBook parsedBook, {
+    int? legacyBookId,
+  }) async {
+    await _globalAiReadingService.ensureKnowledgeForParsedBook(
+      parsedBook: parsedBook,
+      legacyBookId: legacyBookId,
+    );
+
+    final current = currentParsedChapter;
+    final book = _parsedBook?.book;
+    if (current == null || book == null) {
+      return;
+    }
+    final nextTerms = await _globalAiReadingService.loadTermAnnotations(
+      bookId: book.id,
+      chapterId: current.chapter.id,
+    );
+    _termAnnotations = nextTerms;
+    notifyListeners();
   }
 }

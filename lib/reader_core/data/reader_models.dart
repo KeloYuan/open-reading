@@ -216,6 +216,72 @@ class Annotation {
   }
 }
 
+enum TermMarkStyle {
+  highlight,
+  underline,
+}
+
+@immutable
+class TermAnnotation {
+  final String id;
+  final String bookId;
+  final String chapterId;
+  final String term;
+  final String explanation;
+  final int startOffset;
+  final int endOffset;
+  final Color color;
+  final TermMarkStyle style;
+  final DateTime createdAt;
+
+  const TermAnnotation({
+    required this.id,
+    required this.bookId,
+    required this.chapterId,
+    required this.term,
+    required this.explanation,
+    required this.startOffset,
+    required this.endOffset,
+    required this.color,
+    required this.style,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'book_id': bookId,
+      'chapter_id': chapterId,
+      'term': term,
+      'explanation': explanation,
+      'start_offset': startOffset,
+      'end_offset': endOffset,
+      'color': color.toARGB32(),
+      'style': style.name,
+      'created_at': createdAt.millisecondsSinceEpoch,
+    };
+  }
+
+  factory TermAnnotation.fromMap(Map<String, dynamic> map) {
+    final styleRaw = (map['style'] as String?) ?? '';
+    final style = styleRaw == TermMarkStyle.highlight.name
+        ? TermMarkStyle.highlight
+        : TermMarkStyle.underline;
+    return TermAnnotation(
+      id: map['id'] as String,
+      bookId: map['book_id'] as String,
+      chapterId: map['chapter_id'] as String,
+      term: map['term'] as String,
+      explanation: map['explanation'] as String,
+      startOffset: map['start_offset'] as int,
+      endOffset: map['end_offset'] as int,
+      color: Color(map['color'] as int),
+      style: style,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
+    );
+  }
+}
+
 @immutable
 class ReadingPosition {
   final String chapterId;

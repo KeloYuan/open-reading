@@ -708,7 +708,7 @@ class RuleContent {
   factory RuleContent.fromJson(Map<String, dynamic> json) {
     return RuleContent(
       content: json['content'] ?? '',
-      nextUrl: json['nextUrl'] ?? '',
+      nextUrl: (json['nextUrl'] ?? json['nextContentUrl'] ?? '').toString(),
       webJs: json['webJs'] ?? '',
       imageStyle: json['imageStyle'] ?? '',
       replaceRegex: json['replaceRegex'] ?? '',

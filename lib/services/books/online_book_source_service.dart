@@ -614,7 +614,17 @@ class OnlineBookSourceService {
     }
 
     if (htmlDoc != null) {
+      final selected = _selectHtmlElements(
+        context: htmlDoc.documentElement,
+        selectorChain: cleanRule,
+        rootDocument: htmlDoc,
+      );
+      debugPrint('LIST_RULE $cleanRule -> ${selected.length}');
+      if (selected.isNotEmpty) {
+        return selected;
+      }
       final selector = _normalizeCssSelector(cleanRule);
+      debugPrint('LIST_FALLBACK $selector -> ${htmlDoc.querySelectorAll(selector).length}');
       if (selector.isEmpty) return const <dynamic>[];
       return htmlDoc.querySelectorAll(selector);
     }
@@ -633,19 +643,20 @@ class OnlineBookSourceService {
     final cleanRule = _sanitizeRule(rule);
     if (cleanRule.isEmpty) return '';
 
-    final candidates = cleanRule
+    final candidates = rule
         .split('||')
-        .map((segment) => _sanitizeRule(segment))
+        .map((segment) => segment.trim())
         .where((segment) => segment.isNotEmpty);
 
     for (final candidate in candidates) {
       final value = _extractFieldByRule(
         item: item,
-        rule: candidate,
+        rule: _sanitizeRule(candidate),
         rootJson: rootJson,
         rootDocument: rootDocument,
       );
-      final normalized = _normalizeExtractedString(value);
+      final transformed = _applyInlineRegexRules(value, candidate);
+      final normalized = _normalizeExtractedString(transformed);
       if (normalized.isEmpty) continue;
       if (isUrl) {
         final absolute = _resolveAbsoluteUrl(normalized, baseUrl);
@@ -694,39 +705,76 @@ class OnlineBookSourceService {
 
   String _extractFromHtml(
       dynamic item, String rule, dom.Document rootDocument) {
-    final atIndex = rule.lastIndexOf('@');
-    String selector = rule;
-    String accessor = 'text';
-    if (atIndex > 0) {
-      selector = rule.substring(0, atIndex).trim();
-      accessor = rule.substring(atIndex + 1).trim().toLowerCase();
+    final parts = rule
+        .split('@')
+        .map((segment) => segment.trim())
+        .where((segment) => segment.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '';
+
+    const accessorTokens = <String>{'text', 'txt', 'html', 'outerhtml'};
+    var accessor = 'text';
+    var selectorParts = parts;
+    final lastPart = parts.last.toLowerCase();
+    if (accessorTokens.contains(lastPart) ||
+        (!_looksLikeSelectorToken(parts.last) &&
+            parts.length > 1 &&
+            !parts.last.startsWith(r'$'))) {
+      accessor = lastPart;
+      selectorParts = parts.sublist(0, parts.length - 1);
     }
 
-    dom.Element? target;
-    final normalizedSelector = _normalizeCssSelector(selector);
-    if (item is dom.Element && normalizedSelector.isEmpty) {
-      target = item;
-    } else if (item is dom.Element && normalizedSelector.isNotEmpty) {
-      target = item.querySelector(normalizedSelector);
-    } else if (normalizedSelector.isNotEmpty) {
-      target = rootDocument.querySelector(normalizedSelector);
-    } else {
-      target = rootDocument.documentElement;
+    var targets = selectorParts.isEmpty
+        ? <dom.Element>[
+            if (item is dom.Element)
+              item
+            else if (rootDocument.documentElement != null)
+              rootDocument.documentElement!,
+          ]
+        : _selectHtmlElements(
+            context: item,
+            selectorChain: selectorParts.join('@'),
+            rootDocument: rootDocument,
+          );
+    if (targets.isEmpty && selectorParts.isNotEmpty) {
+      final fallbackSelector = _normalizeCssSelector(selectorParts.join('@'));
+      if (fallbackSelector.isNotEmpty) {
+        if (item is dom.Element) {
+          final matched = item.querySelector(fallbackSelector);
+          if (matched != null) {
+            targets = <dom.Element>[matched];
+          }
+        }
+        targets = targets.isNotEmpty
+            ? targets
+            : <dom.Element>[
+                if (rootDocument.querySelector(fallbackSelector) != null)
+                  rootDocument.querySelector(fallbackSelector)!,
+              ];
+      }
     }
+    if (targets.isEmpty) return '';
 
-    if (target == null) return '';
-
-    switch (accessor) {
+    switch (accessor.toLowerCase()) {
       case '':
       case 'text':
       case 'txt':
-        return target.text;
+        return targets
+            .map((element) => element.text.trim())
+            .where((text) => text.isNotEmpty)
+            .join(' ');
       case 'html':
-        return target.innerHtml;
+        return targets.map((element) => element.innerHtml).join('\n');
       case 'outerhtml':
-        return target.outerHtml;
+        return targets.map((element) => element.outerHtml).join('\n');
       default:
-        return target.attributes[accessor] ?? '';
+        for (final target in targets) {
+          final attribute = target.attributes[accessor];
+          if (attribute != null && attribute.trim().isNotEmpty) {
+            return attribute;
+          }
+        }
+        return '';
     }
   }
 
@@ -830,18 +878,12 @@ class OnlineBookSourceService {
       final urlPart = trimmed.substring(0, i).trim();
       final optionPart = trimmed.substring(i + 1).trimLeft();
       if (!optionPart.startsWith('{')) continue;
-      try {
-        final decoded = jsonDecode(optionPart);
-        if (decoded is Map) {
-          return _ParsedUrlRule(
-            url: urlPart,
-            options: decoded.map(
-              (key, value) => MapEntry(key.toString(), value),
-            ),
-          );
-        }
-      } catch (_) {
-        // ignore malformed candidate, continue scanning the next comma
+      final decoded = _decodeLooseJsonObject(optionPart);
+      if (decoded != null) {
+        return _ParsedUrlRule(
+          url: urlPart,
+          options: decoded,
+        );
       }
     }
 
@@ -911,14 +953,22 @@ class OnlineBookSourceService {
 
   String _normalizeCssSelector(String selector) {
     return selector
+        .replaceAll('@', ' ')
         .replaceAll('&&', ' ')
         .split(RegExp(r'\s+'))
+        .map(_normalizeSelectorPartToCss)
         .where((part) => part.isNotEmpty)
         .join(' ');
   }
 
   bool _looksLikeCssRule(String rule) {
     if (rule.startsWith(r'$')) return false;
+    if (rule.startsWith('class.') ||
+        rule.startsWith('id.') ||
+        rule.startsWith('tag.') ||
+        rule.startsWith('text.')) {
+      return true;
+    }
     if (rule.contains('@')) return true;
     final cssHint = RegExp(r'[#\.\[\]> ]');
     if (cssHint.hasMatch(rule)) return true;
@@ -928,21 +978,24 @@ class OnlineBookSourceService {
   String _resolveAbsoluteUrl(String maybeUrl, String baseUrl) {
     final raw = maybeUrl.trim();
     if (raw.isEmpty) return '';
+    final optionIndex = _findUrlOptionStart(raw);
+    final urlPart = optionIndex >= 0 ? raw.substring(0, optionIndex).trim() : raw;
+    final optionSuffix = optionIndex >= 0 ? raw.substring(optionIndex) : '';
     try {
-      final uri = Uri.parse(raw);
+      final uri = Uri.parse(urlPart);
       if (uri.hasScheme) {
-        return uri.toString();
+        return '${uri.toString()}$optionSuffix';
       }
     } catch (_) {
       return '';
     }
 
-    if (baseUrl.trim().isEmpty) return raw;
+    if (baseUrl.trim().isEmpty) return '$urlPart$optionSuffix';
     try {
       final baseUri = Uri.parse(baseUrl);
-      return baseUri.resolve(raw).toString();
+      return '${baseUri.resolve(urlPart).toString()}$optionSuffix';
     } catch (_) {
-      return raw;
+      return '$urlPart$optionSuffix';
     }
   }
 
@@ -1214,6 +1267,230 @@ class OnlineBookSourceService {
         .replaceAll(RegExp(r'[ \t]+\n'), '\n')
         .replaceAll(RegExp(r'\n{3,}'), '\n\n')
         .trim();
+  }
+
+  String _applyInlineRegexRules(String content, String originalRule) {
+    final regexIndex = originalRule.indexOf('##');
+    if (regexIndex < 0 || content.isEmpty) return content;
+
+    final command = originalRule.substring(regexIndex + 2);
+    if (command.trim().isEmpty) return content;
+    final segments = command.split('##');
+    if (segments.isEmpty || segments.first.trim().isEmpty) {
+      return content;
+    }
+
+    final pattern = segments.first;
+    final replacement =
+        segments.length > 1 ? segments.sublist(1).join('##') : '';
+    try {
+      return content.replaceAll(RegExp(pattern, multiLine: true), replacement);
+    } catch (_) {
+      return content;
+    }
+  }
+
+  List<dom.Element> _selectHtmlElements({
+    required dynamic context,
+    required String selectorChain,
+    required dom.Document rootDocument,
+  }) {
+    final cleanChain = _sanitizeRule(selectorChain);
+    if (cleanChain.isEmpty) return const <dom.Element>[];
+
+    final rootElement = context is dom.Element
+        ? context
+        : rootDocument.documentElement;
+    if (rootElement == null) return const <dom.Element>[];
+
+    var current = <dom.Element>[rootElement];
+    final parts = cleanChain
+        .split('@')
+        .map((segment) => segment.trim())
+        .where((segment) => segment.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return current;
+
+    for (final part in parts) {
+      final next = <dom.Element>[];
+      for (final element in current) {
+        next.addAll(_selectFromElement(element, part));
+      }
+      if (next.isEmpty) {
+        return const <dom.Element>[];
+      }
+      current = next;
+    }
+    return current;
+  }
+
+  List<dom.Element> _selectFromElement(dom.Element root, String rawToken) {
+    final token = rawToken.trim();
+    if (token.isEmpty) return const <dom.Element>[];
+
+    final sliceMatch =
+        RegExp(r'!(\-?\d+)(?::(\-?\d+))?$').firstMatch(token);
+    var workingToken = token;
+    int? excludeIndex;
+    int? rangeStart;
+    int? rangeEnd;
+    if (sliceMatch != null) {
+      workingToken = token.substring(0, sliceMatch.start).trim();
+      final first = int.tryParse(sliceMatch.group(1)!);
+      final second = int.tryParse(sliceMatch.group(2) ?? '');
+      if (sliceMatch.group(2) == null) {
+        excludeIndex = first;
+      } else {
+        rangeStart = first;
+        rangeEnd = second;
+      }
+    }
+
+    int? exactIndex;
+    final indexedMatch = RegExp(
+      r'^(class|id|tag)\.([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*)\.(\-?\d+)$',
+    ).firstMatch(workingToken);
+    if (indexedMatch != null) {
+      workingToken = '${indexedMatch.group(1)}.${indexedMatch.group(2)}';
+      exactIndex = int.tryParse(indexedMatch.group(3)!);
+    }
+
+    List<dom.Element> elements;
+    if (workingToken.startsWith('text.')) {
+      elements = _findElementsByText(root, workingToken.substring(5));
+    } else {
+      final selector = _normalizeSelectorPartToCss(workingToken);
+      if (selector.isEmpty) return const <dom.Element>[];
+      elements = <dom.Element>[
+        if (_elementMatches(root, selector)) root,
+        ...root.querySelectorAll(selector),
+      ];
+    }
+
+    if (excludeIndex != null) {
+      final normalizedIndex =
+          excludeIndex < 0 ? elements.length + excludeIndex : excludeIndex;
+      elements = [
+        for (var i = 0; i < elements.length; i++)
+          if (i != normalizedIndex) elements[i],
+      ];
+    }
+
+    if (rangeStart != null) {
+      var start = rangeStart;
+      var end = rangeEnd ?? elements.length;
+      if (start < 0) start = elements.length + start;
+      if (end < 0) end = elements.length + end;
+      start = start.clamp(0, elements.length);
+      end = end.clamp(start, elements.length);
+      elements = elements.sublist(start, end);
+    }
+
+    if (exactIndex != null) {
+      var index = exactIndex;
+      if (index < 0) index = elements.length + index;
+      if (index < 0 || index >= elements.length) {
+        return const <dom.Element>[];
+      }
+      return <dom.Element>[elements[index]];
+    }
+
+    return elements;
+  }
+
+  List<dom.Element> _findElementsByText(dom.Element root, String query) {
+    final needle = query.trim();
+    if (needle.isEmpty) return const <dom.Element>[];
+
+    final matches = <dom.Element>[];
+    for (final element in root.querySelectorAll('*')) {
+      if (element.text.contains(needle)) {
+        matches.add(element);
+      }
+    }
+    if (root.text.contains(needle)) {
+      matches.insert(0, root);
+    }
+    return matches;
+  }
+
+  bool _elementMatches(dom.Element element, String selector) {
+    try {
+      final parent = element.parent;
+      if (parent == null) return false;
+      return parent.querySelectorAll(selector).contains(element);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _normalizeSelectorPartToCss(String rawPart) {
+    var part = rawPart.trim();
+    if (part.isEmpty || part.startsWith('text.')) return '';
+
+    part = part.replaceAll('&&', ' ');
+    part = part.replaceAll(RegExp(r'!(\-?\d+)(?::\-?\d+)?$'), '');
+
+    if (part.startsWith('class.')) {
+      final className = part.substring(6).trim();
+      if (className.isEmpty) return '';
+      return '.${className.replaceAll('.', '.')}';
+    }
+    if (part.startsWith('id.')) {
+      final id = part.substring(3).trim();
+      if (id.isEmpty) return '';
+      return '#$id';
+    }
+    if (part.startsWith('tag.')) {
+      final tag = part.substring(4).trim();
+      if (tag.isEmpty) return '';
+      final tagIndex = RegExp(r'^([A-Za-z0-9_-]+)\.(\-?\d+)$').firstMatch(tag);
+      return tagIndex?.group(1) ?? tag;
+    }
+    return part;
+  }
+
+  bool _looksLikeSelectorToken(String token) {
+    return _looksLikeCssRule(token) || token.startsWith('text.');
+  }
+
+  int _findUrlOptionStart(String rule) {
+    for (var i = 0; i < rule.length - 1; i++) {
+      if (rule[i] == ',' && rule[i + 1] == '{') {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  Map<String, dynamic>? _decodeLooseJsonObject(String raw) {
+    dynamic decode(String input) {
+      return jsonDecode(input);
+    }
+
+    try {
+      final parsed = decode(raw);
+      if (parsed is Map) {
+        return parsed.map((key, value) => MapEntry(key.toString(), value));
+      }
+    } catch (_) {
+      final normalized = raw
+          .replaceAll(';', ',')
+          .replaceAll("'", '"')
+          .replaceAllMapped(
+            RegExp(r'([{\[,]\s*)([A-Za-z0-9_]+)\s*:'),
+            (match) => '${match.group(1)}"${match.group(2)}":',
+          );
+      try {
+        final parsed = decode(normalized);
+        if (parsed is Map) {
+          return parsed.map((key, value) => MapEntry(key.toString(), value));
+        }
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
   }
 }
 

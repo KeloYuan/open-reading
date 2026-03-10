@@ -6,13 +6,199 @@ import 'package:http/http.dart' as http;
 
 import 'package:xxread/models/book_source.dart';
 import 'package:xxread/services/books/book_source_dao.dart';
+import 'package:xxread/utils/fast_gbk_decoder.dart';
+
+String normalizeBookSourceImportUrl(String input) {
+  final trimmed = input.trim();
+  if (trimmed.isEmpty) {
+    throw const FormatException('导入链接不能为空');
+  }
+
+  final decodedInput = _decodeRepeatedly(trimmed);
+  final uri = Uri.tryParse(decodedInput);
+  if (uri == null) {
+    throw FormatException('无法识别导入链接: $trimmed');
+  }
+
+  final scheme = uri.scheme.toLowerCase();
+  if (scheme == 'http' || scheme == 'https') {
+    return decodedInput;
+  }
+
+  if (scheme != 'legado') {
+    throw const FormatException('仅支持 http/https 或 Legado 一键导入链接');
+  }
+
+  final pathSegments = uri.pathSegments.map((segment) => segment.toLowerCase());
+  final isBookSourceImport =
+      uri.host.toLowerCase() == 'import' && pathSegments.contains('booksource');
+  if (!isBookSourceImport) {
+    throw const FormatException('当前仅支持书源导入链接');
+  }
+
+  final src = uri.queryParameters['src']?.trim() ?? '';
+  if (src.isEmpty) {
+    throw const FormatException('导入链接缺少 src 参数');
+  }
+
+  final resolved = _decodeRepeatedly(src);
+  final resolvedUri = Uri.tryParse(resolved);
+  if (resolvedUri == null ||
+      !(resolvedUri.scheme == 'http' || resolvedUri.scheme == 'https')) {
+    throw FormatException('导入链接中的 src 无效: $resolved');
+  }
+  return resolved;
+}
+
+String decodeBookSourceImportPayload(
+  List<int> bytes, {
+  Map<String, String>? responseHeaders,
+}) {
+  if (bytes.isEmpty) return '';
+
+  var effectiveBytes = Uint8List.fromList(bytes);
+  if (effectiveBytes.length >= 3 &&
+      effectiveBytes[0] == 0xEF &&
+      effectiveBytes[1] == 0xBB &&
+      effectiveBytes[2] == 0xBF) {
+    effectiveBytes = Uint8List.sublistView(effectiveBytes, 3);
+  }
+
+  final explicitCharset = _extractCharset(responseHeaders);
+  if (_isGbkCharset(explicitCharset)) {
+    return sanitizeBookSourceImportPayload(
+      decodeGbkFast(effectiveBytes, lenient: true),
+    );
+  }
+
+  try {
+    return sanitizeBookSourceImportPayload(utf8.decode(effectiveBytes));
+  } catch (_) {
+    if (_isGbkCharset(explicitCharset) || isLikelyValidGbkByteStream(effectiveBytes)) {
+      return sanitizeBookSourceImportPayload(
+        decodeGbkFast(effectiveBytes, lenient: true),
+      );
+    }
+    return sanitizeBookSourceImportPayload(
+      utf8.decode(effectiveBytes, allowMalformed: true),
+    );
+  }
+}
+
+String sanitizeBookSourceImportPayload(String rawText) {
+  final normalized = _stripBom(rawText).trim();
+  if (normalized.isEmpty) return '';
+
+  if (_isValidJsonDocument(normalized)) {
+    return normalized;
+  }
+
+  final preMatch = RegExp(
+    r'<pre[^>]*>([\s\S]*?)</pre>',
+    caseSensitive: false,
+  ).firstMatch(normalized);
+  if (preMatch != null) {
+    final candidate = _stripBom(preMatch.group(1) ?? '').trim();
+    if (_isValidJsonDocument(candidate)) {
+      return candidate;
+    }
+  }
+
+  final listCandidate = _extractJsonCandidate(normalized, '[', ']');
+  if (listCandidate != null) {
+    return listCandidate;
+  }
+
+  final objectCandidate = _extractJsonCandidate(normalized, '{', '}');
+  if (objectCandidate != null) {
+    return objectCandidate;
+  }
+
+  return normalized;
+}
+
+String _decodeRepeatedly(String value) {
+  var current = value.trim();
+  for (var i = 0; i < 3; i++) {
+    final decoded = Uri.decodeFull(current);
+    if (decoded == current) {
+      break;
+    }
+    current = decoded;
+  }
+  return current;
+}
+
+String? _extractJsonCandidate(String input, String startToken, String endToken) {
+  final start = input.indexOf(startToken);
+  final end = input.lastIndexOf(endToken);
+  if (start < 0 || end <= start) {
+    return null;
+  }
+
+  final candidate = input.substring(start, end + 1).trim();
+  if (_isValidJsonDocument(candidate)) {
+    return candidate;
+  }
+  return null;
+}
+
+bool _isValidJsonDocument(String text) {
+  if (text.isEmpty) return false;
+  final trimmed = text.trim();
+  if (!(trimmed.startsWith('[') || trimmed.startsWith('{'))) {
+    return false;
+  }
+  try {
+    jsonDecode(trimmed);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+String _stripBom(String value) {
+  if (value.startsWith('\uFEFF')) {
+    return value.substring(1);
+  }
+  return value;
+}
+
+String _extractCharset(Map<String, String>? headers) {
+  if (headers == null || headers.isEmpty) return '';
+  for (final entry in headers.entries) {
+    if (entry.key.toLowerCase() != 'content-type') continue;
+    final match = RegExp(
+      r'charset\s*=\s*("?)([^;"\s]+)\1',
+      caseSensitive: false,
+    ).firstMatch(entry.value);
+    if (match != null) {
+      return match.group(2)?.trim().toLowerCase() ?? '';
+    }
+  }
+  return '';
+}
+
+bool _isGbkCharset(String charset) {
+  final normalized = charset.trim().toLowerCase();
+  return normalized == 'gbk' ||
+      normalized == 'gb2312' ||
+      normalized == 'gb18030';
+}
 
 /// 书源业务服务
 /// 提供书源管理、搜索、导入导出等功能
 class BookSourceService {
-  static final BookSourceService _instance = BookSourceService._internal();
-  factory BookSourceService() => _instance;
-  BookSourceService._internal();
+  static BookSourceService? _instance;
+  factory BookSourceService({http.Client? httpClient}) {
+    if (httpClient != null) {
+      return BookSourceService._internal(httpClient);
+    }
+    return _instance ??= BookSourceService._internal(http.Client());
+  }
+  BookSourceService._internal(this._httpClient);
+
+  final http.Client _httpClient;
 
   /// 缓存的书源列表
   List<BookSource>? _cachedSources;
@@ -239,7 +425,7 @@ class BookSourceService {
   /// 从JSON字符串导入书源
   Future<ImportResult> importFromJson(String jsonString) async {
     try {
-      final jsonData = jsonDecode(jsonString);
+      final jsonData = jsonDecode(sanitizeBookSourceImportPayload(jsonString));
       final List<BookSource> sources = [];
       final List<String> errors = [];
       final Set<String> importedIds = <String>{};
@@ -325,8 +511,9 @@ class BookSourceService {
   /// 从URL导入书源
   Future<ImportResult> importFromUrl(String url) async {
     try {
-      final response = await http.get(
-        Uri.parse(url),
+      final resolvedUrl = normalizeBookSourceImportUrl(url);
+      final response = await _httpClient.get(
+        Uri.parse(resolvedUrl),
         headers: {
           'User-Agent': 'XXRead/1.0',
           'Accept': 'application/json, text/plain',
@@ -334,7 +521,10 @@ class BookSourceService {
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        final jsonString = utf8.decode(response.bodyBytes);
+        final jsonString = decodeBookSourceImportPayload(
+          response.bodyBytes,
+          responseHeaders: response.headers,
+        );
         return await importFromJson(jsonString);
       } else {
         return ImportResult(
@@ -343,6 +533,8 @@ class BookSourceService {
           errors: ['HTTP错误: ${response.statusCode}'],
         );
       }
+    } on FormatException catch (e) {
+      return ImportResult(success: 0, total: 0, errors: [e.message]);
     } catch (e) {
       return ImportResult(success: 0, total: 0, errors: ['网络错误: $e']);
     }
@@ -359,7 +551,7 @@ class BookSourceService {
         );
       }
 
-      final content = await file.readAsString();
+      final content = decodeBookSourceImportPayload(await file.readAsBytes());
       return await importFromJson(content);
     } catch (e) {
       return ImportResult(success: 0, total: 0, errors: ['读取文件失败: $e']);
@@ -401,7 +593,7 @@ class BookSourceService {
 
       final stopwatch = Stopwatch()..start();
 
-      final response = await http.get(
+      final response = await _httpClient.get(
         Uri.parse(source.bookSourceUrl),
         headers: {'User-Agent': 'XXRead/1.0', ...source.header},
       ).timeout(Duration(milliseconds: source.respondTime));

@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'dart:ui';
 import 'dart:io';
+import '../models/book.dart';
+import '../services/ai/global_ai_reading_service.dart';
 import '../services/books/book_services.dart';
 import '../services/reading/reading_services.dart';
 import '../utils/glass_config.dart';
@@ -31,9 +33,12 @@ class HomeDashboardPage extends StatefulWidget {
 class _HomeDashboardPageState extends State<HomeDashboardPage> {
   final _statsDao = ReadingStatsDao();
   final _bookDao = BookDao();
+  final _aiService = GlobalAIReadingService();
   Map<String, int> _summaryStats = {};
   List<Map<String, dynamic>> _weeklyData = [];
   Map<String, dynamic> _achievementStats = {};
+  String? _aiReadingAdvice;
+  String? _aiAdviceBookTitle;
   int _bookCount = 0;
   bool _isLoading = true;
 
@@ -46,15 +51,24 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
   Future<void> _loadAllStats() async {
     setState(() => _isLoading = true);
     try {
-      final summary = await _statsDao.getSummaryStats();
-      final weekly = await _statsDao.getWeeklyChartData();
-      final achievements = await _statsDao.getAchievementStats();
-      final bookCount = await _bookDao.getBooksCount();
+      final summaryFuture = _statsDao.getSummaryStats();
+      final weeklyFuture = _statsDao.getWeeklyChartData();
+      final achievementsFuture = _statsDao.getAchievementStats();
+      final bookCountFuture = _bookDao.getBooksCount();
+      final aiAdviceFuture = _loadAiAdvice();
+
+      final summary = await summaryFuture;
+      final weekly = await weeklyFuture;
+      final achievements = await achievementsFuture;
+      final bookCount = await bookCountFuture;
+      final aiAdvice = await aiAdviceFuture;
 
       setState(() {
         _summaryStats = summary;
         _weeklyData = weekly;
         _achievementStats = achievements;
+        _aiReadingAdvice = aiAdvice.$1;
+        _aiAdviceBookTitle = aiAdvice.$2;
         _bookCount = bookCount;
         _isLoading = false;
       });
@@ -63,6 +77,50 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
       // 错误处理 - 静默处理，不影响用户体验
       debugPrint('Error loading stats: $e');
     }
+  }
+
+  Future<(String?, String?)> _loadAiAdvice() async {
+    try {
+      final recentIds = await _statsDao.getRecentBookIds(limit: 6);
+      final candidates = <Book>[];
+      for (final id in recentIds) {
+        final book = await _bookDao.getBookById(id);
+        if (book != null) {
+          candidates.add(book);
+        }
+      }
+
+      if (candidates.isEmpty) {
+        final allBooks = await _bookDao.getAllBooks();
+        allBooks.sort((a, b) {
+          final progressCmp = b.currentPage.compareTo(a.currentPage);
+          if (progressCmp != 0) {
+            return progressCmp;
+          }
+          return b.importDate.compareTo(a.importDate);
+        });
+        candidates.addAll(allBooks.take(10));
+      }
+
+      for (final book in candidates) {
+        final bookId = book.id;
+        if (bookId == null) {
+          continue;
+        }
+        final memory = await _aiService.loadBookMemory(bookId.toString());
+        final advice = (memory?['readingAdvice'] as String?)?.trim();
+        if (advice != null && advice.isNotEmpty) {
+          return (advice, book.title);
+        }
+        final summary = (memory?['summary'] as String?)?.trim();
+        if (summary != null && summary.isNotEmpty) {
+          return (summary, book.title);
+        }
+      }
+    } catch (e) {
+      debugPrint('load ai advice failed: $e');
+    }
+    return (null, null);
   }
 
   // 导航到详细统计页面
@@ -172,6 +230,13 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
                   ),
                   children: [
                     _buildWelcomeCard(),
+                    if ((_aiReadingAdvice ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      _buildAiAdviceCard(
+                        advice: _aiReadingAdvice!,
+                        sourceBookTitle: _aiAdviceBookTitle,
+                      ),
+                    ],
                     // iOS端使用Transform.translate抵消系统默认间距，Android端添加间距
                     if (!kIsWeb && !Platform.isIOS) const SizedBox(height: 28),
                     _buildOptimizedSummaryCards(),
@@ -242,6 +307,14 @@ class _HomeDashboardPageState extends State<HomeDashboardPage> {
                 ),
                 children: [
                   _buildTabletHeroCard(),
+                  if ((_aiReadingAdvice ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    _buildAiAdviceCard(
+                      advice: _aiReadingAdvice!,
+                      sourceBookTitle: _aiAdviceBookTitle,
+                      isTablet: true,
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,

@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/book.dart';
+import '../services/ai/global_ai_reading_service.dart';
 import '../services/books/book_services.dart';
 import '../services/core/core_services.dart';
 import '../services/library/library_event_bus_service.dart';
@@ -149,6 +150,7 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
   final _bookDao = BookDao();
   final _planService = ReadingPlanService();
   final _appStateService = AppStateService();
+  final _aiService = GlobalAIReadingService();
   StreamSubscription<void>? _libraryChangedSubscription;
 
   _HomePalette get _palette => _HomePalette.fromTheme(Theme.of(context));
@@ -158,6 +160,8 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
   List<Book> _recentBooks = [];
   ReadingPlanSnapshot? _readingPlan;
   Book? _recommendedPlanBook;
+  String? _aiReadingAdvice;
+  String? _aiAdviceBookTitle;
   bool _isLoading = true;
   Timer? _focusTimer;
   DateTime? _focusEndTime;
@@ -200,6 +204,7 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
         recommendedBook = await _bookDao.getBookById(planBookId);
       }
       recommendedBook ??= recentBooks.isNotEmpty ? recentBooks.first : null;
+      final aiAdviceData = await _loadAiAdviceForBook(recommendedBook);
 
       if (!mounted) return;
       setState(() {
@@ -208,12 +213,35 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
         _recentBooks = recentBooks;
         _readingPlan = plan;
         _recommendedPlanBook = recommendedBook;
+        _aiReadingAdvice = aiAdviceData.$1;
+        _aiAdviceBookTitle = aiAdviceData.$2;
         _isLoading = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<(String?, String?)> _loadAiAdviceForBook(Book? book) async {
+    if (book == null || book.id == null) {
+      return (null, null);
+    }
+
+    try {
+      final memory = await _aiService.loadBookMemory(book.id!.toString());
+      final advice = (memory?['readingAdvice'] as String?)?.trim();
+      if (advice != null && advice.isNotEmpty) {
+        return (advice, book.title);
+      }
+      final summary = (memory?['summary'] as String?)?.trim();
+      if (summary != null && summary.isNotEmpty) {
+        return (summary, book.title);
+      }
+    } catch (_) {
+      return (null, null);
+    }
+    return (null, null);
   }
 
   Future<List<Book>> _loadRecentBooks() async {
@@ -521,6 +549,14 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
                           ],
                           RepaintBoundary(child: _buildHeroCard()),
                           SizedBox(height: metrics.sectionSpacing),
+                          if ((_aiReadingAdvice ?? '').trim().isNotEmpty) ...[
+                            RepaintBoundary(
+                              child: _buildSectionLabel('AI 阅读建议'),
+                            ),
+                            SizedBox(height: metrics.sectionSpacing),
+                            RepaintBoundary(child: _buildAiAdviceCard()),
+                            SizedBox(height: metrics.sectionSpacing),
+                          ],
                           RepaintBoundary(child: _buildSectionLabel('今日速览')),
                           SizedBox(height: metrics.sectionSpacing),
                           RepaintBoundary(child: _buildSummaryRow()),
@@ -722,6 +758,63 @@ class _HomeMobileDashboardPageState extends State<HomeMobileDashboardPage> {
                     plan == null ? '计划加载中' : '目标 ${plan.dailyGoalMinutes} 分钟/天',
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiAdviceCard() {
+    final palette = _palette;
+    final advice = (_aiReadingAdvice ?? '').trim();
+    final fromBook = (_aiAdviceBookTitle ?? '').trim();
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: _frostedCardDecoration(
+        radius: 18,
+        stronger: true,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.auto_awesome_rounded,
+                size: 20,
+                color: palette.accentColor,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'AI 给你的阅读建议',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: palette.primaryTextColor,
+                ),
+              ),
+            ],
+          ),
+          if (fromBook.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              '基于《$fromBook》',
+              style: TextStyle(
+                fontSize: 12,
+                color: palette.secondaryTextColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Text(
+            advice,
+            style: TextStyle(
+              fontSize: 13,
+              color: palette.secondaryTextColor,
+              height: 1.45,
+            ),
           ),
         ],
       ),

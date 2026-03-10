@@ -1098,7 +1098,7 @@ class BookSourcePageState extends State<BookSourcePage>
           child: TextField(
             controller: controller,
             decoration: const InputDecoration(
-              hintText: 'https://...',
+              hintText: 'https://... 或 legado://import/bookSource?...',
               border: OutlineInputBorder(),
             ),
           ),

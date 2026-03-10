@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../main.dart';
 import '../utils/app_themes.dart';
 import '../l10n/app_localizations.dart';
+import '../reader_core/ai/ai_service.dart';
 import '../reader_core/renderer/reader_view.dart';
 import '../services/books/book_services.dart';
 import '../services/core/core_services.dart';
@@ -36,6 +37,12 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  final ReaderHttpAIService _aiService = ReaderHttpAIService();
+  late final TextEditingController _aiApiKeyController;
+  late final TextEditingController _aiModelController;
+  late final TextEditingController _aiBaseUrlController;
+  late final TextEditingController _aiTempController;
+
   bool _enableAutoSave = true;
   bool _keepScreenOn = false;
   int _autoSaveInterval = 30;
@@ -65,10 +72,22 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _enableMemoryStats = false;
   bool _showFPS = false;
   String _appVersion = '3.0.0';
+  final Map<AIProviderType, AIProviderSettings> _aiDraftByProvider =
+      <AIProviderType, AIProviderSettings>{};
+  AIProviderType _selectedAiProvider = AIProviderType.openai;
+  AIModelPreset? _selectedAiPreset;
+  bool _aiSettingsLoaded = false;
+  bool _obscureAiApiKey = true;
+  bool _isSavingAiSettings = false;
+  String? _aiSettingsError;
 
   @override
   void initState() {
     super.initState();
+    _aiApiKeyController = TextEditingController();
+    _aiModelController = TextEditingController();
+    _aiBaseUrlController = TextEditingController();
+    _aiTempController = TextEditingController();
     _webdavService.statusNotifier.addListener(_onWebDavStatusChanged);
     unawaited(_loadAppVersion());
     _loadSettings();
@@ -78,6 +97,10 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _webdavService.statusNotifier.removeListener(_onWebDavStatusChanged);
+    _aiApiKeyController.dispose();
+    _aiModelController.dispose();
+    _aiBaseUrlController.dispose();
+    _aiTempController.dispose();
     super.dispose();
   }
 
@@ -93,9 +116,19 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadSettings() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
     final epubLayoutEngine = await ReaderEngineService.getEpubLayoutEngine();
+    final activeAiSettings = await _aiService.loadSettings();
+    final aiSettingsByProvider = <AIProviderType, AIProviderSettings>{
+      for (final provider in AIProviderType.values)
+        provider: provider == activeAiSettings.provider
+            ? activeAiSettings
+            : await _aiService.loadSettings(provider),
+    };
     bool migrateSimulationMode = false;
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _enableAutoSave = prefs.getBool('enableAutoSave') ?? true;
       _keepScreenOn = prefs.getBool('keepScreenOn') ?? false;
@@ -136,7 +169,13 @@ class _SettingsPageState extends State<SettingsPage> {
           prefs.getBool('enablePerformanceMonitor') ?? false;
       _enableMemoryStats = prefs.getBool('enableMemoryStats') ?? false;
       _showFPS = prefs.getBool('showFPS') ?? false;
+      _aiDraftByProvider
+        ..clear()
+        ..addAll(aiSettingsByProvider);
+      _selectedAiProvider = activeAiSettings.provider;
+      _aiSettingsLoaded = true;
     });
+    _applyAiDraft(_aiDraftByProvider[_selectedAiProvider]!);
 
     if (migrateSimulationMode) {
       await prefs.setString(
@@ -204,6 +243,335 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setBool('enablePerformanceMonitor', _enablePerformanceMonitor);
     await prefs.setBool('enableMemoryStats', _enableMemoryStats);
     await prefs.setBool('showFPS', _showFPS);
+  }
+
+  void _applyAiDraft(AIProviderSettings settings) {
+    final normalized = settings.normalized();
+    _aiApiKeyController.text = normalized.apiKey;
+    _aiModelController.text = normalized.model;
+    _aiBaseUrlController.text = normalized.baseUrl;
+    _aiTempController.text = normalized.temperature.toStringAsFixed(2);
+    _selectedAiPreset = AIModelPresets.match(normalized) ??
+        AIModelPresets.defaultForProvider(normalized.provider);
+  }
+
+  AIProviderSettings _buildAiDraftFromInputs(
+    AIProviderType provider, {
+    bool allowFallbackTemp = true,
+  }) {
+    final previous =
+        _aiDraftByProvider[provider] ?? AIProviderSettings.defaults(provider);
+    final parsedTemp = double.tryParse(_aiTempController.text.trim());
+    final nextTemp =
+        parsedTemp ?? (allowFallbackTemp ? previous.temperature : double.nan);
+    return previous
+        .copyWith(
+          provider: provider,
+          apiKey: _aiApiKeyController.text,
+          model: _aiModelController.text,
+          baseUrl: _aiBaseUrlController.text,
+          temperature: nextTemp,
+        )
+        .normalized();
+  }
+
+  void _stashCurrentAiDraft() {
+    _aiDraftByProvider[_selectedAiProvider] =
+        _buildAiDraftFromInputs(_selectedAiProvider);
+  }
+
+  void _onAiProviderChanged(AIProviderType provider) {
+    _stashCurrentAiDraft();
+    final nextDraft = _aiDraftByProvider[provider] ??
+        AIModelPresets.defaultForProvider(provider).toSettings();
+    setState(() {
+      _selectedAiProvider = provider;
+      _aiSettingsError = null;
+      _applyAiDraft(nextDraft);
+    });
+  }
+
+  void _onAiPresetChanged(AIModelPreset preset) {
+    final applied = preset.toSettings(apiKey: _aiApiKeyController.text.trim());
+    _aiDraftByProvider[preset.provider] = applied;
+    setState(() {
+      _selectedAiProvider = preset.provider;
+      _aiSettingsError = null;
+      _applyAiDraft(applied);
+    });
+  }
+
+  bool _validateAiTemperature(AIProviderType provider, double value) {
+    if (!value.isFinite || value < 0 || value > 2) {
+      return false;
+    }
+    if (provider == AIProviderType.minimax) {
+      return value > 0 && value <= 1;
+    }
+    if ((provider == AIProviderType.claude ||
+            provider == AIProviderType.gemini) &&
+        value > 1) {
+      return false;
+    }
+    return true;
+  }
+
+  String _aiTemperatureHint(AIProviderType provider) {
+    switch (provider) {
+      case AIProviderType.minimax:
+        return 'Temperature: MiniMax 建议 0.01 ~ 1.00';
+      case AIProviderType.claude:
+      case AIProviderType.gemini:
+        return 'Temperature: 0.00 ~ 1.00';
+      case AIProviderType.glm:
+      case AIProviderType.openai:
+        return 'Temperature: 0.00 ~ 2.00';
+    }
+  }
+
+  Future<void> _showAiCustomConfigDialog() async {
+    _stashCurrentAiDraft();
+    final current = (_aiDraftByProvider[_selectedAiProvider] ??
+            AIProviderSettings.defaults(_selectedAiProvider))
+        .normalized();
+    final modelController = TextEditingController(text: current.model);
+    final baseUrlController = TextEditingController(text: current.baseUrl);
+    final tempController = TextEditingController(
+      text: current.temperature.toStringAsFixed(2),
+    );
+    String? errorText;
+
+    final result = await showDialog<AIProviderSettings>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('自定义 AI 配置'),
+              content: SizedBox(
+                width: 440,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '当前服务商：${_selectedAiProvider.displayName}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withValues(alpha: 0.68),
+                            ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: modelController,
+                        decoration: const InputDecoration(
+                          labelText: 'Model',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: baseUrlController,
+                        decoration: const InputDecoration(
+                          labelText: 'Base URL',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: tempController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Temperature',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _aiTemperatureHint(_selectedAiProvider),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withValues(alpha: 0.62),
+                            ),
+                      ),
+                      if (errorText != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          errorText!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('取消'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final model = modelController.text.trim();
+                    if (model.isEmpty) {
+                      setDialogState(() {
+                        errorText = 'Model 不能为空';
+                      });
+                      return;
+                    }
+
+                    final baseUrl = baseUrlController.text.trim();
+                    final uri = Uri.tryParse(baseUrl);
+                    if (baseUrl.isEmpty ||
+                        uri == null ||
+                        !(uri.isScheme('http') || uri.isScheme('https'))) {
+                      setDialogState(() {
+                        errorText = 'Base URL 必须是合法的 http/https 地址';
+                      });
+                      return;
+                    }
+
+                    final parsedTemp = double.tryParse(tempController.text.trim());
+                    if (parsedTemp == null ||
+                        !_validateAiTemperature(
+                          _selectedAiProvider,
+                          parsedTemp,
+                        )) {
+                      setDialogState(() {
+                        errorText = _selectedAiProvider == AIProviderType.minimax
+                            ? 'MiniMax 的 Temperature 必须在 0.01 ~ 1.00 之间'
+                            : 'Temperature 超出范围，请按提示填写';
+                      });
+                      return;
+                    }
+
+                    Navigator.of(dialogContext).pop(
+                      current
+                          .copyWith(
+                            provider: _selectedAiProvider,
+                            apiKey: _aiApiKeyController.text.trim(),
+                            model: model,
+                            baseUrl: baseUrl,
+                            temperature: parsedTemp,
+                          )
+                          .normalized(),
+                    );
+                  },
+                  child: const Text('应用'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    modelController.dispose();
+    baseUrlController.dispose();
+    tempController.dispose();
+
+    if (result == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _aiDraftByProvider[_selectedAiProvider] = result;
+      _aiSettingsError = null;
+      _applyAiDraft(result);
+    });
+    showSideToast(context, '已应用自定义参数，记得保存配置');
+  }
+
+  Future<void> _saveAiSettings() async {
+    final apiKey = _aiApiKeyController.text.trim();
+    if (apiKey.isEmpty) {
+      setState(() {
+        _aiSettingsError = 'API Key 不能为空';
+      });
+      return;
+    }
+
+    final model = _aiModelController.text.trim();
+    if (model.isEmpty) {
+      setState(() {
+        _aiSettingsError = 'Model 不能为空';
+      });
+      return;
+    }
+
+    final baseUrl = _aiBaseUrlController.text.trim();
+    final uri = Uri.tryParse(baseUrl);
+    if (baseUrl.isEmpty ||
+        uri == null ||
+        !(uri.isScheme('http') || uri.isScheme('https'))) {
+      setState(() {
+        _aiSettingsError = 'Base URL 必须是合法的 http/https 地址';
+      });
+      return;
+    }
+
+    final parsedTemp = double.tryParse(_aiTempController.text.trim());
+    if (parsedTemp == null ||
+        !_validateAiTemperature(_selectedAiProvider, parsedTemp)) {
+      setState(() {
+        _aiSettingsError = _selectedAiProvider == AIProviderType.minimax
+            ? 'MiniMax 的 Temperature 必须在 0.01 ~ 1.00 之间'
+            : 'Temperature 超出范围，请按提示填写';
+      });
+      return;
+    }
+
+    final settings = AIProviderSettings(
+      provider: _selectedAiProvider,
+      apiKey: apiKey,
+      baseUrl: baseUrl,
+      model: model,
+      temperature: parsedTemp,
+    ).normalized();
+
+    setState(() {
+      _isSavingAiSettings = true;
+      _aiSettingsError = null;
+    });
+
+    try {
+      await _aiService.saveSettings(settings);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _aiDraftByProvider[_selectedAiProvider] = settings;
+        _selectedAiPreset = AIModelPresets.match(settings);
+      });
+      showSideToast(context, 'AI 设置已保存');
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _aiSettingsError = '保存失败: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingAiSettings = false;
+        });
+      }
+    }
   }
 
   @override
@@ -316,6 +684,14 @@ class _SettingsPageState extends State<SettingsPage> {
                 onTap: _showEpubLayoutEngineModal,
                 icon: _epubLayoutEngineIcon(_epubLayoutEngine),
               ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildSectionCard(
+            title: 'AI 阅读助手',
+            icon: Icons.auto_awesome_outlined,
+            children: [
+              _buildAiSettingsSection(),
             ],
           ),
           const SizedBox(height: 20),
@@ -683,6 +1059,257 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildAiSettingsSection() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final currentSettings = (_aiDraftByProvider[_selectedAiProvider] ??
+            AIProviderSettings.defaults(_selectedAiProvider))
+        .normalized();
+    final matchedPreset = AIModelPresets.match(currentSettings);
+    final providerPresets = AIModelPresets.byProvider(_selectedAiProvider);
+
+    if (!_aiSettingsLoaded) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer.withValues(alpha: 0.28),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: colorScheme.primary.withValues(alpha: 0.18),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.auto_awesome_rounded,
+                    size: 18,
+                    color: colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            currentSettings.isConfigured
+                                ? 'AI 已配置'
+                                : '尚未配置 API Key',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: currentSettings.isConfigured
+                                  ? Colors.green.withValues(alpha: 0.14)
+                                  : colorScheme.secondary
+                                      .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              currentSettings.isConfigured ? '可直接使用' : '待配置',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: currentSettings.isConfigured
+                                    ? Colors.green.shade700
+                                    : colorScheme.secondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        matchedPreset != null
+                            ? '当前预设：${matchedPreset.vendor} · ${matchedPreset.label}'
+                            : '当前配置：自定义 · ${currentSettings.model}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurface
+                                  .withValues(alpha: 0.72),
+                              height: 1.35,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '已内置常用服务商和模型，通常只需要选择预设并输入 API Key。',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurface
+                                  .withValues(alpha: 0.64),
+                              height: 1.35,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<AIProviderType>(
+            key: ValueKey<String>('ai-provider-${_selectedAiProvider.value}'),
+            initialValue: _selectedAiProvider,
+            decoration: const InputDecoration(
+              labelText: '服务商',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: AIProviderType.values
+                .map(
+                  (provider) => DropdownMenuItem(
+                    value: provider,
+                    child: Text(provider.displayName),
+                  ),
+                )
+                .toList(),
+            onChanged: (provider) {
+              if (provider == null || provider == _selectedAiProvider) {
+                return;
+              }
+              _onAiProviderChanged(provider);
+            },
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<AIModelPreset>(
+                  key: ValueKey<String>(
+                    'ai-preset-${_selectedAiProvider.value}-${_selectedAiPreset?.id ?? 'custom'}',
+                  ),
+                  initialValue: matchedPreset,
+                  hint: const Text('选择预设模型'),
+                  decoration: const InputDecoration(
+                    labelText: '预设模型',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: providerPresets
+                      .map(
+                        (preset) => DropdownMenuItem(
+                          value: preset,
+                          child: Text('${preset.vendor} · ${preset.label}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (preset) {
+                    if (preset == null) {
+                      return;
+                    }
+                    _onAiPresetChanged(preset);
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: _showAiCustomConfigDialog,
+                icon: const Icon(Icons.tune_rounded),
+                label: const Text('自定义'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            matchedPreset != null
+                ? '选择预设后只需输入 API Key 即可使用。'
+                : '当前使用自定义参数，可随时切回预设。',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurface.withValues(alpha: 0.62),
+                ),
+          ),
+          const SizedBox(height: 14),
+          TextFormField(
+            controller: _aiApiKeyController,
+            obscureText: _obscureAiApiKey,
+            onChanged: (_) {
+              if (_aiSettingsError != null) {
+                setState(() {
+                  _aiSettingsError = null;
+                });
+              }
+            },
+            decoration: InputDecoration(
+              labelText: 'API Key',
+              hintText: '输入后即可启用当前预设',
+              border: const OutlineInputBorder(),
+              isDense: true,
+              suffixIcon: IconButton(
+                tooltip: _obscureAiApiKey ? '显示' : '隐藏',
+                onPressed: () {
+                  setState(() {
+                    _obscureAiApiKey = !_obscureAiApiKey;
+                  });
+                },
+                icon: Icon(
+                  _obscureAiApiKey
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded,
+                ),
+              ),
+            ),
+          ),
+          if (_aiSettingsError != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _aiSettingsError!,
+              style: TextStyle(
+                color: colorScheme.error,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _isSavingAiSettings ? null : _saveAiSettings,
+              icon: _isSavingAiSettings
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: colorScheme.onPrimary,
+                      ),
+                    )
+                  : const Icon(Icons.save_outlined),
+              label: Text(_isSavingAiSettings ? '保存中...' : '保存 AI 配置'),
+            ),
+          ),
+        ],
       ),
     );
   }

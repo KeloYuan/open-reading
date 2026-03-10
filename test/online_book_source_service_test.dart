@@ -5,9 +5,38 @@ import 'package:gbk_codec/gbk_codec.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:xxread/models/book_source.dart';
+import 'package:xxread/services/books/book_source_service.dart';
 import 'package:xxread/services/books/online_book_source_service.dart';
 
 void main() {
+  group('BookSource import compatibility', () {
+    test('normalizes legado one-click import url', () {
+      final resolved = normalizeBookSourceImportUrl(
+        'legado://import/bookSource?src=https%3A%2F%2Fexample.com%2Fsources.json',
+      );
+
+      expect(resolved, 'https://example.com/sources.json');
+    });
+
+    test('decodes gbk payload and strips utf8 bom wrapper', () {
+      final gbkPayload = gbk_bytes.encode(
+        '[{"bookSourceName":"起点","bookSourceUrl":"https://example.com"}]',
+      );
+      final decodedGbk = decodeBookSourceImportPayload(
+        gbkPayload,
+        responseHeaders: {'content-type': 'application/json; charset=gbk'},
+      );
+      expect(decodedGbk, contains('起点'));
+
+      final wrappedUtf8 = utf8.encode(
+        '\uFEFF<html><body><pre>[{"bookSourceName":"番茄","bookSourceUrl":"https://example.com"}]</pre></body></html>',
+      );
+      final decodedWrapped = decodeBookSourceImportPayload(wrappedUtf8);
+      expect(decodedWrapped, startsWith('['));
+      expect(decodedWrapped, contains('番茄'));
+    });
+  });
+
   group('BookSource compatibility', () {
     test('maps legacy searchUrl into ruleSearch.url', () {
       final source = BookSource.fromJson({
@@ -30,6 +59,133 @@ void main() {
   });
 
   group('OnlineBookSourceService', () {
+    test('supports legado html selector chains inline regex and nextContentUrl',
+        () async {
+      final source = BookSource.fromJson({
+        'bookSourceName': 'Legado HTML Source',
+        'bookSourceUrl': 'https://example.com',
+        'searchUrl': 'https://example.com/search?q=searchKey',
+        'ruleSearch': {
+          'bookList': 'class.sitembox@tag.dl',
+          'name': 'tag.h3@tag.a@text##\\s+作者：.*##',
+          'author': 'class.book_other@tag.span.0@text',
+          'bookUrl': 'tag.h3@tag.a@href',
+          'coverUrl': 'class.lazyload@_src',
+        },
+        'ruleToc': {
+          'chapterList': 'id.list@tag.li!0',
+          'chapterName': 'tag.a@text##^VIP章节\\s*##',
+          'chapterUrl':
+              'tag.a@href##\$##,{"headers":{"Referer":"https://example.com/book/1"}}',
+        },
+        'ruleContent': {
+          'content': 'id.content',
+          'nextContentUrl': 'text.下一页@href',
+        },
+      });
+
+      expect(source.ruleContent?.nextUrl, 'text.下一页@href');
+
+      final service = OnlineBookSourceService(
+        httpClient: MockClient((request) async {
+          if (request.url.path == '/search') {
+            const html = '''
+              <html><body>
+                <div class="sitembox">
+                  <dl>
+                    <h3><a href="/book/1">凡人修仙传 作者：忘语</a></h3>
+                    <p class="book_other"><span>忘语</span><span>连载</span></p>
+                    <img class="lazyload" _src="/cover.jpg" />
+                  </dl>
+                </div>
+              </body></html>
+            ''';
+            return http.Response.bytes(
+              utf8.encode(html),
+              200,
+              headers: {'content-type': 'text/html; charset=utf-8'},
+            );
+          }
+
+          if (request.url.path == '/book/1') {
+            const html = '''
+              <html><body>
+                <ul id="list">
+                  <li><a href="/ignore">目录说明</a></li>
+                  <li><a href="/chapter/1">VIP章节 第一章 开始</a></li>
+                </ul>
+              </body></html>
+            ''';
+            return http.Response.bytes(
+              utf8.encode(html),
+              200,
+              headers: {'content-type': 'text/html; charset=utf-8'},
+            );
+          }
+
+          if (request.url.path == '/chapter/1') {
+            expect(
+              request.headers['Referer'],
+              'https://example.com/book/1',
+            );
+            const html = '''
+              <html><body>
+                <div id="content"><p>第一段内容</p></div>
+                <a href="/chapter/1-2">下一页</a>
+              </body></html>
+            ''';
+            return http.Response.bytes(
+              utf8.encode(html),
+              200,
+              headers: {'content-type': 'text/html; charset=utf-8'},
+            );
+          }
+
+          if (request.url.path == '/chapter/1-2') {
+            expect(
+              request.headers['Referer'],
+              'https://example.com/book/1',
+            );
+            const html = '''
+              <html><body>
+                <div id="content"><p>第二段内容</p></div>
+              </body></html>
+            ''';
+            return http.Response.bytes(
+              utf8.encode(html),
+              200,
+              headers: {'content-type': 'text/html; charset=utf-8'},
+            );
+          }
+
+          return http.Response('not found', 404);
+        }),
+      );
+
+      final books = await service.searchBooks(
+        source: source,
+        keyword: '凡人',
+      );
+      expect(books, hasLength(1));
+      expect(books.first.title, '凡人修仙传');
+      expect(books.first.author, '忘语');
+      expect(books.first.coverUrl, 'https://example.com/cover.jpg');
+
+      final chapters = await service.getChapters(
+        source: source,
+        bookUrl: books.first.bookUrl,
+      );
+      expect(chapters, hasLength(1));
+      expect(chapters.first.title, '第一章 开始');
+
+      final content = await service.getChapterContent(
+        source: source,
+        chapter: chapters.first,
+      );
+      expect(content.content, contains('第一段内容'));
+      expect(content.content, contains('第二段内容'));
+    });
+
     test('searchBooks parses json list rules', () async {
       final source = BookSource.fromJson({
         'bookSourceName': 'JSON Source',

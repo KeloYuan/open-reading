@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **小元读书 (xxread)** - 优雅的 Flutter 跨平台电子书阅读器，支持多种书籍格式（EPUB、PDF、TXT），提供舒适的阅读体验。
 
-**技术栈：** Flutter 3.8+ / Dart 3.8+ / SQLite / Riverpod / vector_math
+**技术栈：** Flutter 3.35.3 / Dart 3.9.2 / SQLite / Riverpod / vector_math
 
-**项目规模：** 79 个 Dart 文件，跨平台支持（Android/iOS/macOS/Windows）
+**项目规模：** 124 个 Dart 文件，跨平台支持（Android/iOS/macOS/Windows/Linux）
 
 ## 常用命令
 
@@ -43,6 +43,33 @@ lib/
 ├── l10n/                          # 国际化 (中文/英文)
 │   ├── app_*.arb                  # 翻译资源
 │   └── app_localizations*.dart    # 生成代码
+├── reader_core/                   # 现代化阅读器内核 (19个文件) ⭐ NEW
+│   ├── reader_kernel_controller.dart  # 内核控制器
+│   ├── data/                      # 数据模型
+│   │   └── reader_models.dart     # Book, Chapter, ReaderStyle, PageLayout 等
+│   ├── document/                  # 文档处理
+│   │   ├── flow_doc.dart          # 流文档模型
+│   │   └── html_to_flow_doc.dart  # HTML 转换器
+│   ├── paginator/                 # 分页系统
+│   │   ├── flow_paginator.dart    # 流式分页器
+│   │   └── page_plan.dart         # 分页计划
+│   ├── parser/                    # 格式解析器
+│   │   ├── epub_parser.dart       # EPUB 解析
+│   │   ├── txt_parser.dart        # TXT 解析
+│   │   ├── mobi_parser.dart       # MOBI 解析
+│   │   ├── fb2_parser.dart        # FB2 解析
+│   │   ├── rtf_parser.dart        # RTF 解析
+│   │   ├── docx_parser.dart       # DOCX 解析
+│   │   └── parser_models.dart     # 解析器模型
+│   ├── renderer/                  # 渲染器
+│   │   └── reader_view.dart       # 阅读视图
+│   ├── storage/                   # 存储层
+│   │   └── reader_storage.dart    # 存储接口
+│   ├── selection/                 # 文本选择
+│   │   └── reader_selection.dart  # 选择控制器
+│   ├── ai/                        # AI 服务
+│   │   └── ai_service.dart        # AI 接口
+│   └── reader_core.dart           # 模块导出
 ├── models/                        # 数据模型层 (9个文件)
 │   ├── book.dart                  # 书籍模型
 │   ├── chapter.dart               # 章节模型
@@ -280,6 +307,51 @@ TtsService (ChangeNotifier)
 - 工具栏显示：调用 `_showSystemUI()`
 - 工具栏隐藏：调用 `_hideSystemUI()`
 
+### reader_core 现代化架构（New）
+
+项目包含一个新的现代化阅读器内核模块 `lib/reader_core/`，采用内核化设计：
+
+**核心组件：**
+- **ReaderKernelController** - 阅读器内核控制器
+  - 统一管理书籍打开、章节切换、分页、样式
+  - 集成 AI 服务、存储、分页器
+  - 使用 ChangeNotifier 进行状态通知
+
+- **FlowPaginator** - 流式分页器
+  - 基于流文档 (FlowDoc) 的高性能分页
+  - 支持内存缓存和磁盘缓存
+  - 渐进式分页（eagerPageCount + batchSize）
+  - 使用二分查找快速定位页面
+
+- **Parser 模块** - 多格式解析器
+  - 支持 EPUB、TXT、MOBI、FB2、RTF、DOCX
+  - 统一的 ParsedBook/ParsedChapter 模型
+  - 独立的解析器实现，易于扩展
+
+- **ReaderStorage** - 存储抽象层
+  - 提供统一的存储接口
+  - 支持进度、书签、笔记的持久化
+
+- **FlowDoc** - 流文档模型
+  - 文档内容的抽象表示
+  - 支持文本、图片、格式化内容
+  - HTML 转 FlowDoc 转换器
+
+**数据模型 (reader_core/data/)：**
+- `Book` - 书籍基本信息
+- `Chapter` - 章节内容
+- `TocItem` - 目录项
+- `ReaderStyle` - 阅读样式（字体、行高、字间距等）
+- `PageLayout` - 页面布局（尺寸、边距、列数）
+- `Page` - 分页结果
+- `PagePlan` - 完整的分页计划
+- `Annotation` - 笔记/高亮标注
+
+**与旧架构的关系：**
+- `reader_core` 是新的现代化架构，采用更清晰的设计
+- 旧的 `services/` 层仍然在使用，两者并存
+- 新代码优先考虑使用 `reader_core` 的组件
+
 ## 开发规范
 
 ### 决策前必须询问
@@ -426,6 +498,18 @@ flutter build apk --debug          # 验证构建
 | [lib/utils/page_transitions.dart](lib/utils/page_transitions.dart) | 页面转场 | ⭐⭐⭐ |
 | [lib/utils/encoding_detector_helper.dart](lib/utils/encoding_detector_helper.dart) | 编码检测辅助 | ⭐⭐⭐ |
 
+### reader_core 现代化架构 (NEW)
+
+| 文件 | 用途 | 重要程度 |
+|------|------|----------|
+| [lib/reader_core/reader_kernel_controller.dart](lib/reader_core/reader_kernel_controller.dart) | 阅读器内核控制器 | ⭐⭐⭐⭐⭐ |
+| [lib/reader_core/paginator/flow_paginator.dart](lib/reader_core/paginator/flow_paginator.dart) | 流式分页器 | ⭐⭐⭐⭐⭐ |
+| [lib/reader_core/data/reader_models.dart](lib/reader_core/data/reader_models.dart) | 核心数据模型 | ⭐⭐⭐⭐⭐ |
+| [lib/reader_core/document/flow_doc.dart](lib/reader_core/document/flow_doc.dart) | 流文档模型 | ⭐⭐⭐⭐ |
+| [lib/reader_core/parser/epub_parser.dart](lib/reader_core/parser/epub_parser.dart) | EPUB 解析器 | ⭐⭐⭐⭐ |
+| [lib/reader_core/storage/reader_storage.dart](lib/reader_core/storage/reader_storage.dart) | 存储抽象层 | ⭐⭐⭐⭐ |
+| [lib/reader_core/renderer/reader_view.dart](lib/reader_core/renderer/reader_view.dart) | 阅读视图渲染器 | ⭐⭐⭐⭐ |
+
 ## 常见问题
 
 ### 分页结果不准确
@@ -494,6 +578,12 @@ flutter build apk --debug          # 验证构建
 - `knowledge_base/text_pagination_solutions.md` - 文本分页方案
 
 ## 更新记录
+
+### 2026-03-10
+- 更新项目规模：124 个 Dart 文件
+- 添加 reader_core 现代化架构文档
+- 新增 FlowPaginator、ReaderKernelController 等核心组件说明
+- 更新项目结构，包含新的 reader_core 模块
 
 ### 2025-12-25
 - 修复 Android 全屏问题（使用原生方法通道）

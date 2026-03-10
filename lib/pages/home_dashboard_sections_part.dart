@@ -8,6 +8,95 @@ part of 'home_dashboard_page.dart';
 ///
 /// 这样主文件更聚焦在：数据加载 + 页面入口。
 extension _HomeDashboardSections on _HomeDashboardPageState {
+  Widget _buildAiAdviceCard({
+    required String advice,
+    String? sourceBookTitle,
+    bool isTablet = false,
+  }) {
+    final theme = Theme.of(context);
+    final radius = isTablet ? 22.0 : 20.0;
+    final horizontalPadding = isTablet ? 20.0 : 18.0;
+    final verticalPadding = isTablet ? 18.0 : 16.0;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        enabled: !GlassEffectConfig.shouldDisableBlur,
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          padding: EdgeInsets.fromLTRB(
+            horizontalPadding,
+            verticalPadding,
+            horizontalPadding,
+            verticalPadding,
+          ),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                theme.colorScheme.tertiaryContainer.withValues(alpha: 0.32),
+                theme.colorScheme.primaryContainer.withValues(alpha: 0.22),
+                theme.colorScheme.surface.withValues(alpha: 0.82),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.20),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.auto_awesome_rounded,
+                      color: theme.colorScheme.primary,
+                      size: isTablet ? 20 : 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'AI 阅读建议',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              if ((sourceBookTitle ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '基于《${sourceBookTitle!.trim()}》',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 10),
+              Text(
+                advice,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  height: 1.45,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.86),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildWelcomeCard() {
     final totalMinutes = (_summaryStats['total'] ?? 0) ~/ 60;
     final todayMinutes = (_summaryStats['today'] ?? 0) ~/ 60;

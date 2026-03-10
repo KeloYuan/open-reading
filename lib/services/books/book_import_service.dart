@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
@@ -21,6 +22,7 @@ import 'package:xxread/services/books/epub_image_extractor_service.dart';
 import 'package:xxread/services/books/book_image_map_service.dart';
 import 'package:xxread/services/pagination/pagination_cache_service.dart';
 import 'package:xxread/services/library/library_event_bus_service.dart';
+import 'package:xxread/services/ai/global_ai_reading_service.dart';
 import 'package:xxread/utils/encoding_detector_helper.dart';
 
 class EnhancedBookMetadata {
@@ -460,7 +462,12 @@ class BookImportService {
 
         progressCallback?.call(1.0, '导入成功！');
 
-        return book.copyWith(id: bookId);
+        final imported = book.copyWith(id: bookId);
+        unawaited(
+          GlobalAIReadingService().scheduleImportedBookAnalysis(book: imported),
+        );
+
+        return imported;
       }
     } catch (e) {
       debugPrint('Enhanced import process failed: $e');
