@@ -1,3 +1,6 @@
+// 文件说明：旧分页服务实现，负责按样式把纯文本切分为页面内容。
+// 技术要点：服务层、Flutter。
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 

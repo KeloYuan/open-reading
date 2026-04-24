@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+  width="1024"
+  height="1024"
+  viewBox="0 0 1024 1024"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <title>Xiaoyuan Reading App Icon Draft</title>
+  <desc>
+    Transparent-background SVG for Xcode Icon Composer. The star, left page,
+    spine, right page, and line details are separated into independent groups.
+  </desc>
+
+  <defs>
+    <linearGradient id="left-cover-fill" x1="220" y1="346" x2="476" y2="796" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F8FBFF"/>
+      <stop offset="1" stop-color="#ECF2FF"/>
+    </linearGradient>
+    <linearGradient id="right-cover-fill" x1="548" y1="346" x2="804" y2="796" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F8FBFF"/>
+      <stop offset="1" stop-color="#ECF2FF"/>
+    </linearGradient>
+    <linearGradient id="left-page-fill" x1="262" y1="410" x2="462" y2="734" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F4F7FF"/>
+    </linearGradient>
+    <linearGradient id="right-page-fill" x1="562" y1="410" x2="762" y2="734" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F4F7FF"/>
+    </linearGradient>
+    <linearGradient id="spine-fill" x1="512" y1="402" x2="512" y2="790" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7B90FF"/>
+      <stop offset="1" stop-color="#6679EE"/>
+    </linearGradient>
+    <linearGradient id="star-fill" x1="512" y1="176" x2="512" y2="308" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9CF5E6"/>
+      <stop offset="1" stop-color="#67DEC9"/>
+    </linearGradient>
+  </defs>
+
+  <g id="star">
+    <path
+      d="M512 176L530 222L576 240L530 258L512 304L494 258L448 240L494 222L512 176Z"
+      fill="url(#star-fill)"
+    />
+  </g>
+
+  <g id="left-cover">
+    <path
+      d="M470 404C424 374 374 360 320 362C253 364 210 409 210 471V688C210 748 256 794 316 794C374 794 426 776 470 742V404Z"
+      fill="url(#left-cover-fill)"
+    />
+    <path
+      d="M470 404C424 374 374 360 320 362C253 364 210 409 210 471"
+      stroke="#CBD6FF"
+      stroke-width="14"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M318 794C374 776 423 760 470 744"
+      stroke="#BCC9FF"
+      stroke-width="14"
+      stroke-linecap="round"
+    />
+  </g>
+
+  <g id="left-page">
+    <path
+      d="M448 434C412 412 372 400 330 402C287 404 260 434 260 478V664C260 709 294 742 339 742C381 742 418 730 448 708V434Z"
+      fill="url(#left-page-fill)"
+    />
+  </g>
+
+  <g id="left-page-lines">
+    <path d="M304 500H414" stroke="#9EB1FF" stroke-width="14" stroke-linecap="round"/>
+    <path d="M294 572H406" stroke="#9EB1FF" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+  <g id="spine">
+    <path
+      d="M496 402C505 394 519 394 528 402V782C523 776 517 770 512 764C507 770 501 776 496 782V402Z"
+      fill="url(#spine-fill)"
+    />
+    <path
+      d="M512 420V744"
+      stroke="#90A2FF"
+      stroke-width="8"
+      stroke-linecap="round"
+    />
+  </g>
+
+  <g id="right-cover">
+    <path
+      d="M554 404C600 374 650 360 704 362C771 364 814 409 814 471V688C814 748 768 794 708 794C650 794 598 776 554 742V404Z"
+      fill="url(#right-cover-fill)"
+    />
+    <path
+      d="M554 404C600 374 650 360 704 362C771 364 814 409 814 471"
+      stroke="#CBD6FF"
+      stroke-width="14"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M706 794C650 776 601 760 554 744"
+      stroke="#BCC9FF"
+      stroke-width="14"
+      stroke-linecap="round"
+    />
+  </g>
+
+  <g id="right-page">
+    <path
+      d="M576 434C612 412 652 400 694 402C737 404 764 434 764 478V664C764 709 730 742 685 742C643 742 606 730 576 708V434Z"
+      fill="url(#right-page-fill)"
+    />
+  </g>
+
+  <g id="right-page-lines">
+    <path d="M610 500H720" stroke="#9EB1FF" stroke-width="14" stroke-linecap="round"/>
+    <path d="M618 572H730" stroke="#9EB1FF" stroke-width="14" stroke-linecap="round"/>
+  </g>
+</svg>

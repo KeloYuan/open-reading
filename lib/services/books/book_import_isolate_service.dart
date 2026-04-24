@@ -1,3 +1,6 @@
+// 文件说明：导入隔离线程服务，把哈希计算和元数据提取放到 isolate 执行。
+// 技术要点：服务层、Crypto 哈希、文件系统、JSON、Flutter。
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';

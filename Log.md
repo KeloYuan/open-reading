@@ -1,5 +1,30 @@
 # Project Log
 
+## 2026-04-16
+- **[NEW] Foliate Reader**: 新增 `lib/pages/foliate_reader_page.dart`。
+    - **混合架构**：采用 Foliate (WebView) 渲染底层，保留 Flutter 原生控制 UI。
+    - **交互同步**：实现 JS Bridge 同步主题（CSS 注入）、排版设置（字号/行高）、进度更新和目录提取。
+    - **原生增强**：在 WebView 之上集成了 Flutter 编写的毛玻璃控制面板、全书进度条和原生目录列表。
+- **[CLEANUP] 移除自研内核渲染层**: 
+    - 删除 `lib/pages/reader_kernel_page.dart` 和 `lib/pages/epub_foliate_reader_page.dart`。
+    - 删除 `lib/reader_core/renderer/` 和 `lib/reader_core/paginator/`。
+    - 统一阅读入口至 `ReadingRouterService`，默认启用新混合阅读器。
+- **[DOC] 文档同步**: 
+    - 更新 `Log.md` 并新建 `Project.md` 以反映最新的混合架构索引。
+
+## 2026-03-28
+- **[DOC] 根目录阅读总文档**：新增 `/Users/xiaoyuan/work/Origo Reader/reading-architecture.md`
+    - 将 Legado TXT/EPUB 阅读机制与跨平台可行性分析合并成一份总文档
+    - 放置到 `Origo Reader` 根目录，使用更短文件名，便于作为统一入口阅读
+- **[DOC] Legado 阅读架构拆解**：新增 `knowledge_base/LEGADO_TXT_EPUB_READING_ARCHITECTURE.md`
+    - 系统分析 Legado 的 TXT 阅读链路：编码探测、目录规则选择、正则分章、无规则兜底、按字节偏移读取正文
+    - 系统分析 Legado 的 EPUB 阅读链路：`epublib` 懒加载、TOC/spine 双路径建目录、fragment 级切章、XHTML 清洗、图片资源读取与章节缓存
+    - 总结 TXT 与 EPUB 在 `ContentProcessor + TextChapterLayout` 上汇合的统一阅读内核
+- **[DOC] Legado 方案跨平台可行性分析**：新增 `knowledge_base/LEGADO_SCHEME_CROSS_PLATFORM_ANALYSIS.md`
+    - 按 Android、iOS、Flutter、桌面、Web、OHOS、Server 逐一评估这套方案的可迁移性
+    - 明确哪些能力适合跨平台共享，哪些必须按平台重写
+    - 给出面向当前 `OpenReading` 多端工程的推荐推进顺序与技术取舍
+
 ## 2025-12-15
 - **[FIX] 分页算法优化**：修复"最后一行只显示一个字"的问题
     - 在高度计算时减去 2px 安全裕度，避免浮点精度问题导致文字溢出

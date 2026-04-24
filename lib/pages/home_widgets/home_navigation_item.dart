@@ -1,3 +1,6 @@
+// 文件说明：首页导航项数据与表现组件，描述单个导航入口。
+// 技术要点：Flutter UI。
+
 import 'package:flutter/material.dart';
 
 /// 首页导航项模型。

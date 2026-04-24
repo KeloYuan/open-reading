@@ -1,3 +1,6 @@
+// 文件说明：笔记与高亮 DAO，负责书摘、批注和高亮数据的本地读写。
+// 技术要点：服务层。
+
 import 'package:xxread/models/book_note.dart';
 import 'package:xxread/services/core/database_service.dart';
 

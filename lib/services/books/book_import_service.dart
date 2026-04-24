@@ -1,3 +1,6 @@
+// 文件说明：书籍导入总入口，统筹 TXT、EPUB、PDF 和压缩包的导入流程。
+// 技术要点：服务层、File Picker、Path、Path Provider、SharedPreferences、EPUBX。
+
 import 'dart:io';
 import 'dart:async';
 import 'package:file_picker/file_picker.dart';

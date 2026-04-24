@@ -1,3 +1,6 @@
+// 文件说明：纯文本解析桥接层，为 TXT/RTF/FB2 等文本格式提供统一入口。
+// 技术要点：ReaderCore、文件系统。
+
 import 'dart:io';
 
 import '../data/reader_models.dart';

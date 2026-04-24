@@ -1,3 +1,6 @@
+// 文件说明：应用设置服务，负责全局偏好项的读取与变更通知。
+// 技术要点：服务层、SharedPreferences、Flutter。
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

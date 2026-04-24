@@ -1,3 +1,6 @@
+// 文件说明：应用主题定义文件，集中维护主题色板与 ThemeData 生成逻辑。
+// 技术要点：工具方法、Flutter。
+
 import 'package:flutter/material.dart';
 
 // 应用主题数据结构（与阅读主题分离）

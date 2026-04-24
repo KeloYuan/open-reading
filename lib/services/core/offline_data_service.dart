@@ -1,3 +1,6 @@
+// 文件说明：离线数据服务，维护离线操作队列和网络恢复后的同步策略。
+// 技术要点：服务层、Connectivity Plus、Flutter。
+
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';

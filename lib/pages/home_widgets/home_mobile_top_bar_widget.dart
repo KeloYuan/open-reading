@@ -1,3 +1,6 @@
+// 文件说明：移动端首页顶部栏组件，承载品牌展示与顶部操作入口。
+// 技术要点：Flutter UI、渲染层。
+
 import 'dart:ui';
 
 import 'package:flutter/material.dart';

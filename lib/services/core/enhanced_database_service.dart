@@ -1,3 +1,6 @@
+// 文件说明：增强数据库服务，补充事务、统计和健康检查能力。
+// 技术要点：服务层、SQLite、Flutter。
+
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';

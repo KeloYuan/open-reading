@@ -59,7 +59,7 @@ dependencies:
   webview_flutter: ^4.13.0
   flutter_inappwebview: ^6.1.5
   
-  # anx-reader 核心依赖
+  # Web 阅读核心依赖
   wakelock_plus: ^1.4.0
   icons_plus: ^5.0.0
   battery_plus: ^6.2.3

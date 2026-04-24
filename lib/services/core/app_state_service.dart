@@ -1,3 +1,6 @@
+// 文件说明：应用状态服务，记录最近阅读、当前书籍和全局运行状态。
+// 技术要点：服务层、Flutter。
+
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:xxread/services/core/data_cache_service.dart';

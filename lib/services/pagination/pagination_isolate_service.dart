@@ -1,3 +1,6 @@
+// 文件说明：分页 isolate 服务，把重计算分页任务放到后台线程。
+// 技术要点：服务层、Isolate、Flutter。
+
 import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:xxread/services/pagination/enhanced_paginator_service.dart';

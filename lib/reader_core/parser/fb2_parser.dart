@@ -1,3 +1,6 @@
+// 文件说明：FB2 解析器，用于读取 FictionBook 文本并转成统一章节模型。
+// 技术要点：ReaderCore、JSON、文件系统。
+
 import 'dart:convert';
 import 'dart:io';
 

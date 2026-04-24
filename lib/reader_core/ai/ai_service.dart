@@ -1,3 +1,6 @@
+// 文件说明：阅读内核 AI 配置与请求模型，统一描述模型、提供商和请求参数。
+// 技术要点：ReaderCore、Dio、SharedPreferences、JSON。
+
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -68,6 +71,117 @@ extension AIProviderTypeX on AIProviderType {
         return AIProviderType.minimax;
     }
   }
+}
+
+String normalizeAIBaseUrl(AIProviderType provider, String baseUrl) {
+  final trimmed = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+  if (trimmed.isEmpty) {
+    return '';
+  }
+
+  final uri = Uri.tryParse(trimmed);
+  if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
+    return trimmed;
+  }
+
+  var path = uri.path.replaceAll(RegExp(r'/+$'), '');
+  switch (provider) {
+    case AIProviderType.minimax:
+    case AIProviderType.glm:
+    case AIProviderType.openai:
+      path = path.replaceFirst(
+        RegExp(r'/chat/completions$', caseSensitive: false),
+        '',
+      );
+      break;
+    case AIProviderType.claude:
+      path = path.replaceFirst(
+        RegExp(r'/v1/messages$', caseSensitive: false),
+        '/v1',
+      );
+      path = path.replaceFirst(
+        RegExp(r'/messages$', caseSensitive: false),
+        '',
+      );
+      break;
+    case AIProviderType.gemini:
+      path = path.replaceFirst(
+        RegExp(r'/models/[^/]+:generateContent$', caseSensitive: false),
+        '',
+      );
+      break;
+  }
+
+  return uri.replace(path: path).toString().replaceAll(RegExp(r'/+$'), '');
+}
+
+String? validateAIProviderSettings(
+  AIProviderSettings settings, {
+  bool requireApiKey = true,
+}) {
+  final normalized = settings.normalized();
+  if (requireApiKey && normalized.apiKey.isEmpty) {
+    return 'API Key 不能为空';
+  }
+  if (normalized.model.isEmpty) {
+    return 'Model 不能为空';
+  }
+
+  final uri = Uri.tryParse(normalized.baseUrl);
+  if (normalized.baseUrl.isEmpty ||
+      uri == null ||
+      !(uri.isScheme('http') || uri.isScheme('https'))) {
+    return 'Base URL 必须是合法的 http/https 地址';
+  }
+
+  if (!_isValidTemperature(normalized.provider, normalized.temperature)) {
+    return normalized.provider == AIProviderType.minimax
+        ? 'MiniMax 的 Temperature 必须在 0.01 ~ 1.00 之间'
+        : 'Temperature 超出范围，请按提示填写';
+  }
+
+  final model = normalized.model.toLowerCase();
+  switch (normalized.provider) {
+    case AIProviderType.claude:
+      if (!model.startsWith('claude')) {
+        return 'Claude 服务商的模型名通常应以 claude 开头，请检查 provider 和 model 是否匹配';
+      }
+      break;
+    case AIProviderType.gemini:
+      if (!model.contains('gemini')) {
+        return 'Gemini 服务商的模型名通常应包含 gemini，请检查 provider 和 model 是否匹配';
+      }
+      break;
+    case AIProviderType.glm:
+      if (!model.startsWith('glm')) {
+        return 'GLM 服务商的模型名通常应以 glm 开头，请检查 provider 和 model 是否匹配';
+      }
+      break;
+    case AIProviderType.minimax:
+      if (!model.contains('minimax')) {
+        return 'MiniMax 服务商的模型名通常应包含 MiniMax，请检查 provider 和 model 是否匹配';
+      }
+      break;
+    case AIProviderType.openai:
+      break;
+  }
+
+  return null;
+}
+
+bool _isValidTemperature(AIProviderType provider, double value) {
+  if (!value.isFinite || value < 0 || value > 2) {
+    return false;
+  }
+  if (provider == AIProviderType.minimax) {
+    return value > 0 && value <= 1;
+  }
+  if ((provider == AIProviderType.claude ||
+          provider == AIProviderType.gemini) &&
+      value > 1) {
+    return false;
+  }
+  return true;
 }
 
 class AIModelPreset {
@@ -338,7 +452,7 @@ class AIProviderSettings {
   }
 
   AIProviderSettings normalized() {
-    final normalizedBaseUrl = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    final normalizedBaseUrl = normalizeAIBaseUrl(provider, baseUrl);
     final normalizedModel = model.trim();
     final normalizedTemperature = temperature.isFinite ? temperature : 0.7;
     return copyWith(
@@ -467,6 +581,10 @@ class ReaderHttpAIService implements ConfigurableAIService {
   @override
   Future<void> saveSettings(AIProviderSettings settings) async {
     final normalized = settings.normalized();
+    final validationError = validateAIProviderSettings(normalized);
+    if (validationError != null) {
+      throw AIServiceException(validationError);
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_activeProviderKey, normalized.provider.value);
     await prefs.setString(_apiKeyKey(normalized.provider), normalized.apiKey);
@@ -531,8 +649,9 @@ class ReaderHttpAIService implements ConfigurableAIService {
     required AIRequestMeta meta,
   }) async {
     final settings = await _resolveActiveSettings();
-    if (!settings.isConfigured) {
-      throw const AIServiceException('请先配置 AI 的 API Key');
+    final validationError = validateAIProviderSettings(settings);
+    if (validationError != null) {
+      throw AIServiceException(validationError);
     }
 
     final context = _compactPageContext(pageText);
@@ -564,14 +683,19 @@ class ReaderHttpAIService implements ConfigurableAIService {
     final payload = _buildPayload(settings: settings, messages: messages);
 
     try {
-      final response = await _dio.post<dynamic>(
+      final response = await _dio.post<String>(
         endpoint,
         data: payload,
         options: _buildRequestOptions(settings),
       );
+      final responseData = _decodeResponseBody(
+        rawBody: response.data,
+        endpoint: endpoint,
+        settings: settings,
+      );
       final answer = _extractAssistantContent(
         settings: settings,
-        responseData: response.data,
+        responseData: responseData,
       );
       if (answer.trim().isEmpty) {
         throw const AIServiceException('模型返回为空，请重试');
@@ -663,9 +787,32 @@ class ReaderHttpAIService implements ConfigurableAIService {
 
     return Options(
       headers: headers,
+      responseType: ResponseType.plain,
+      receiveDataWhenStatusError: true,
       sendTimeout: const Duration(seconds: 20),
       receiveTimeout: const Duration(seconds: 90),
     );
+  }
+
+  dynamic _decodeResponseBody({
+    required String? rawBody,
+    required String endpoint,
+    required AIProviderSettings settings,
+  }) {
+    final body = rawBody?.trim() ?? '';
+    if (body.isEmpty) {
+      throw AIServiceException(
+        '服务端返回为空，通常是 Base URL 配置错误、网关没有转发到模型接口，或服务端提前断开连接。\n请求地址：$endpoint',
+      );
+    }
+
+    try {
+      return jsonDecode(body);
+    } on FormatException {
+      throw AIServiceException(
+        '服务端返回的不是合法 JSON，当前接口可能与 ${settings.provider.displayName} 配置不兼容。\n请求地址：$endpoint\n返回片段：${_truncateForError(body)}',
+      );
+    }
   }
 
   Map<String, dynamic> _buildPayload({
@@ -845,52 +992,80 @@ class ReaderHttpAIService implements ConfigurableAIService {
   String _extractDioErrorMessage(DioException e) {
     final status = e.response?.statusCode;
     final data = e.response?.data;
-    if (data is Map<String, dynamic>) {
+    final endpoint = e.requestOptions.uri.toString();
+    if (data is Map) {
       final error = data['error'];
-      if (error is Map<String, dynamic>) {
+      if (error is Map) {
         final message = error['message'];
         if (message is String && message.trim().isNotEmpty) {
-          return _enhanceProviderError(message, status);
+          return _enhanceProviderError(message, status, endpoint: endpoint);
         }
       }
       final message = data['message'];
       if (message is String && message.trim().isNotEmpty) {
-        return _enhanceProviderError(message, status);
+        return _enhanceProviderError(message, status, endpoint: endpoint);
       }
       final detail = data['detail'];
       if (detail is String && detail.trim().isNotEmpty) {
-        return _enhanceProviderError(detail, status);
+        return _enhanceProviderError(detail, status, endpoint: endpoint);
       }
     }
     if (data is String && data.trim().isNotEmpty) {
       try {
         final jsonMap = jsonDecode(data);
-        if (jsonMap is Map<String, dynamic>) {
+        if (jsonMap is Map) {
           final msg = jsonMap['message'];
           if (msg is String && msg.trim().isNotEmpty) {
-            return _enhanceProviderError(msg, status);
+            return _enhanceProviderError(msg, status, endpoint: endpoint);
           }
         }
       } catch (_) {
-        return _enhanceProviderError(data, status);
+        return _enhanceProviderError(data, status, endpoint: endpoint);
       }
     }
-    return '网络请求失败${status == null ? '' : '($status)'}：${e.message ?? '未知错误'}';
+    final rawError = e.error?.toString() ?? e.message ?? '未知错误';
+    if (_looksLikeMissingResponse(rawError)) {
+      return '请求失败${status == null ? '' : '($status)'}：未能读取服务端返回的数据，通常是 Base URL 配错、接口返回空内容，或网络把响应截断了。\n请求地址：$endpoint';
+    }
+    return '网络请求失败${status == null ? '' : '($status)'}：$rawError\n请求地址：$endpoint';
   }
 
-  String _enhanceProviderError(String message, int? status) {
+  String _enhanceProviderError(
+    String message,
+    int? status, {
+    required String endpoint,
+  }) {
     final text = message.trim();
     if (text.toLowerCase().contains('invalid chat setting')) {
-      return '请求失败($status)：$text\n建议检查：1) MiniMax 温度需在 (0,1]；2) 模型名与接口是否匹配；3) 仅使用单条 system 指令。';
+      return '请求失败($status)：$text\n建议检查：1) MiniMax 温度需在 (0,1]；2) 模型名与接口是否匹配；3) 仅使用单条 system 指令。\n请求地址：$endpoint';
     }
     if (text.toLowerCase().contains('anthropic-version')) {
-      return '请求失败($status)：$text\n提示：Claude 必须携带 anthropic-version 请求头。';
+      return '请求失败($status)：$text\n提示：Claude 必须携带 anthropic-version 请求头。\n请求地址：$endpoint';
     }
     if (text.toLowerCase().contains('api key not valid') ||
         text.toLowerCase().contains('invalid api key')) {
-      return '请求失败($status)：$text\n提示：请确认服务商与 API Key 对应，不可混用。';
+      return '请求失败($status)：$text\n提示：请确认服务商与 API Key 对应，不可混用。\n请求地址：$endpoint';
     }
-    return '请求失败($status)：$text';
+    if (_looksLikeMissingResponse(text)) {
+      return '请求失败${status == null ? '' : '($status)'}：未能读取服务端返回的数据，通常是 Base URL 配错、接口返回空内容，或网络把响应截断了。\n请求地址：$endpoint';
+    }
+    return '请求失败($status)：$text\n请求地址：$endpoint';
+  }
+
+  bool _looksLikeMissingResponse(String text) {
+    final lower = text.toLowerCase();
+    return lower.contains('data couldn') && lower.contains('missing') ||
+        lower.contains('data is missing') ||
+        lower.contains('because it is missing') ||
+        lower.contains('unexpected end of input');
+  }
+
+  String _truncateForError(String text, {int maxLength = 220}) {
+    final compact = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.length <= maxLength) {
+      return compact;
+    }
+    return '${compact.substring(0, maxLength)}...';
   }
 
   String _apiKeyKey(AIProviderType provider) {

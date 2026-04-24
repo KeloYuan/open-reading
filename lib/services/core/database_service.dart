@@ -1,3 +1,6 @@
+// 文件说明：数据库底座服务，负责 SQLite 初始化、建表和版本升级。
+// 技术要点：服务层、Path、Path Provider、SQLite FFI、文件系统、Flutter。
+
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -12,7 +15,7 @@ class DatabaseService {
 
   static Database? _database;
   static const String _dbName = 'xxread_v2.db';
-  static const int _dbVersion = 12;
+  static const int _dbVersion = 13;
   static bool _isInitializing = false;
   static final Completer<Database> _initCompleter = Completer<Database>();
 
@@ -250,11 +253,6 @@ class DatabaseService {
       await db.execute('DROP TABLE IF EXISTS notes');
     }
 
-    // Version 8: Add book_sources table for advanced book source system
-    if (oldVersion < 8) {
-      await _createBookSourcesTable(db);
-    }
-
     // Version 9: Add indexes to books and reading_stats tables for performance
     if (oldVersion < 9) {
       await _createBooksTableIndexes(db);
@@ -290,6 +288,9 @@ class DatabaseService {
         await db.execute('ALTER TABLE bookmarks ADD COLUMN cfi TEXT');
       }
       await _createBookmarksIndexes(db);
+    }
+    if (oldVersion < 13) {
+      await db.execute('DROP TABLE IF EXISTS book_sources');
     }
   }
 
@@ -364,62 +365,12 @@ class DatabaseService {
         FOREIGN KEY (book_id) REFERENCES books (id) ON DELETE CASCADE
       )
     ''');
-
-    // Create book_sources table for advanced book source system
-    await _createBookSourcesTable(db);
-
     // Create indexes for performance
     await _createBooksTableIndexes(db);
     await _createBookmarksIndexes(db);
     await _createReadingStatsIndexes(db);
     await _createReadingSessionsIndexes(db);
     await _createBookNotesIndexes(db);
-  }
-
-  /// 创建书源表
-  Future<void> _createBookSourcesTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE book_sources (
-        id TEXT PRIMARY KEY,
-        book_source_name TEXT NOT NULL,
-        book_source_group TEXT NOT NULL DEFAULT '',
-        book_source_comment TEXT NOT NULL DEFAULT '',
-        book_source_type INTEGER NOT NULL DEFAULT 0,
-        book_source_url TEXT NOT NULL,
-        book_source_version INTEGER NOT NULL DEFAULT 1,
-        enabled INTEGER NOT NULL DEFAULT 1,
-        enabled_explore INTEGER NOT NULL DEFAULT 1,
-        last_update_time INTEGER NOT NULL,
-        weight INTEGER NOT NULL DEFAULT 0,
-        rule_search TEXT,
-        rule_explore TEXT,
-        rule_book_info TEXT,
-        rule_toc TEXT,
-        rule_content TEXT,
-        variable_map TEXT,
-        http_config TEXT,
-        header TEXT,
-        login_url TEXT,
-        login_ui TEXT,
-        respond_time INTEGER NOT NULL DEFAULT 180000,
-        created_time INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000),
-        updated_time INTEGER NOT NULL DEFAULT (strftime('%s', 'now') * 1000)
-      )
-    ''');
-
-    // Create indexes for better performance
-    await db.execute(
-      'CREATE INDEX idx_book_source_name ON book_sources (book_source_name)',
-    );
-    await db.execute(
-      'CREATE INDEX idx_book_source_group ON book_sources (book_source_group)',
-    );
-    await db.execute(
-      'CREATE INDEX idx_book_source_enabled ON book_sources (enabled)',
-    );
-    await db.execute(
-      'CREATE INDEX idx_book_source_type ON book_sources (book_source_type)',
-    );
   }
 
   /// 创建books表索引

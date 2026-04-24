@@ -1,3 +1,6 @@
+// 文件说明：阅读计划服务，计算今日计划、推荐书籍和进度快照。
+// 技术要点：服务层、SharedPreferences。
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../books/book_dao.dart';

@@ -1,3 +1,6 @@
+// 文件说明：设置页封面相关操作的 part 拆分文件，减少主页面复杂度。
+// 技术要点：Flutter UI、Dart part。
+
 part of 'settings_page.dart';
 
 extension _SettingsPageCoverActions on _SettingsPageState {

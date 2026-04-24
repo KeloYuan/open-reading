@@ -1,19 +1,21 @@
+// 文件说明：阅读路由服务，按书籍格式打开当前主阅读页面。
+// 技术要点：服务层、文件系统、Flutter。
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:xxread/models/book.dart';
-import 'package:xxread/pages/epub_foliate_reader_page.dart';
-import 'package:xxread/pages/reader_kernel_page.dart';
+import 'package:xxread/pages/foliate_reader_page.dart';
 import 'package:xxread/services/books/book_dao.dart';
 import 'package:xxread/services/books/book_storage_repair_service.dart';
 import 'package:xxread/services/core/app_state_service.dart';
 import 'package:xxread/services/library/library_event_bus_service.dart';
-import 'package:xxread/services/reading/reader_engine_service.dart';
+import 'package:xxread/services/reading/web_reader_source_service.dart';
 import 'package:xxread/utils/system_ui_helper.dart';
 import 'package:xxread/widgets/side_toast.dart';
 
-/// 阅读器路由服务（仅保留阅读内核入口）
+/// 阅读器路由服务（统一走 WebView 阅读线路）
 class ReadingRouterService {
   static const Set<String> _supportedFormats = <String>{
     'txt',
@@ -24,6 +26,7 @@ class ReadingRouterService {
     'fb2',
     'rtf',
     'docx',
+    'pdf',
   };
 
   /// 打开书籍（使用阅读内核页面）
@@ -53,7 +56,7 @@ class ReadingRouterService {
       if (context.mounted) {
         showSideToast(
           context,
-          '暂不支持 ${book.format.toUpperCase()}，当前支持 TXT / EPUB / MOBI / AZW / AZW3 / FB2 / RTF / DOCX。',
+          '暂不支持 ${book.format.toUpperCase()}，当前支持 TXT / EPUB / MOBI / AZW / AZW3 / FB2 / RTF / DOCX / PDF。',
         );
       }
       return;
@@ -62,25 +65,34 @@ class ReadingRouterService {
     if (!context.mounted) {
       return;
     }
-    await _openReaderKernelPage(context, book);
+    await _openFoliateReaderPage(context, book);
   }
 
-  static Future<void> _openReaderKernelPage(
+  static Future<void> _openFoliateReaderPage(
     BuildContext context,
     Book book,
   ) async {
     final hostBrightness = Theme.of(context).brightness;
-    Widget page = ReaderKernelPage(book: book);
-    final isEpub = book.format.toLowerCase() == 'epub';
-    if (isEpub) {
-      final engine = await ReaderEngineService.getEpubLayoutEngine();
-      if (engine != EpubLayoutEngine.flutter) {
-        page = EpubFoliateReaderPage(
-          book: book,
-          strictPagination: engine == EpubLayoutEngine.foliateStrict,
+    WebReaderSource source;
+    try {
+      source = await WebReaderSourceService().resolve(book);
+    } catch (e) {
+      debugPrint('❌ WebView 阅读资源准备失败: $e');
+      if (context.mounted) {
+        showSideToast(
+          context,
+          'WebView 阅读资源准备失败：$e',
+          icon: Icons.error_outline_rounded,
         );
       }
+      return;
     }
+
+    final page = FoliateReaderPage(
+      book: book,
+      sourceFilePath: source.filePath,
+    );
+
     await _recordRecentReading(book);
     if (!context.mounted) return;
 

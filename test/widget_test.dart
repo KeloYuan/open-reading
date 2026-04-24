@@ -1,3 +1,6 @@
+// 文件说明：应用级基础测试，验证主应用可以完成最小化挂载。
+// 技术要点：测试、Riverpod、Flutter Test、Provider、Flutter。
+
 // This is a basic Flutter widget test for XX阅读 app.
 //
 // To perform an interaction with a widget in your test, use the WidgetTester

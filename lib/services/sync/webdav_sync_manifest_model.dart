@@ -1,3 +1,6 @@
+// 文件说明：WebDAV 清单模型，定义同步清单的数据结构。
+// 技术要点：服务层。
+
 import 'webdav_sync_path_helper.dart';
 
 /// WebDAV 同步清单（manifest）。
@@ -18,7 +21,6 @@ class WebDavSyncManifestModel {
   final int annotationsCount;
   final int progressCount;
   final int statsCount;
-  final int sourcesCount;
   final int selectedBookFilesCount;
 
   const WebDavSyncManifestModel({
@@ -33,7 +35,6 @@ class WebDavSyncManifestModel {
     required this.annotationsCount,
     required this.progressCount,
     required this.statsCount,
-    required this.sourcesCount,
     required this.selectedBookFilesCount,
   });
 
@@ -45,20 +46,24 @@ class WebDavSyncManifestModel {
       'generated_at': generatedAt.toIso8601String(),
       'datasets': {
         'books': _dataset(WebDavSyncPathHelper.booksFile, booksCount),
-        'bookmarks': _dataset(WebDavSyncPathHelper.bookmarksFile, bookmarksCount),
+        'bookmarks':
+            _dataset(WebDavSyncPathHelper.bookmarksFile, bookmarksCount),
         'notes': _dataset(WebDavSyncPathHelper.notesFile, notesCount),
-        'highlights': _dataset(WebDavSyncPathHelper.highlightsFile, highlightsCount),
+        'highlights':
+            _dataset(WebDavSyncPathHelper.highlightsFile, highlightsCount),
         'annotations': _dataset(
           WebDavSyncPathHelper.annotationsFile,
           annotationsCount,
         ),
         'progress': _dataset(WebDavSyncPathHelper.progressFile, progressCount),
         'stats': _dataset(WebDavSyncPathHelper.statsFile, statsCount),
-        'sources': _dataset(WebDavSyncPathHelper.sourcesFile, sourcesCount),
       },
       'selected_book_files_count': selectedBookFilesCount,
       'future_reserved': {
-        'notes_v2': {'path': WebDavSyncPathHelper.notesDir, 'status': 'reserved'},
+        'notes_v2': {
+          'path': WebDavSyncPathHelper.notesDir,
+          'status': 'reserved'
+        },
         'highlights_v2': {
           'path': WebDavSyncPathHelper.highlightsDir,
           'status': 'reserved',

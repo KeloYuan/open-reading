@@ -1,7 +1,9 @@
+// 文件说明：首页壳层页面，负责底部导航、页面装配和桌面/移动端切换。
+// 技术要点：Flutter UI、渲染层。
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'home_dashboard_page.dart';
 import 'home_layout_constants.dart';
@@ -13,7 +15,6 @@ import 'home_widgets/home_mobile_top_bar_widget.dart';
 import 'library_page.dart';
 import 'settings_page.dart';
 import 'import_book_page.dart';
-import 'book_source_page.dart';
 import '../utils/layout_helper.dart';
 import '../utils/glass_config.dart';
 import '../utils/page_style_helper.dart';
@@ -92,20 +93,15 @@ class _HomeShellPageState extends State<HomeShellPage> {
   // 所有导航点击、PageView 切换，最终都更新这个值。
   int _selectedIndex = 0;
   late PageController _pageController;
-  bool _booksourceEnabled = true;
   AppLocalizations? _l10n;
-  final GlobalKey<BookSourcePageState> _bookSourcePageKey =
-      GlobalKey<BookSourcePageState>();
 
   // 导航项单一数据源：
   // - 底部导航（手机）和侧边栏（平板/桌面）都读这里。
-  // - 开关书源页时也只改这里。
   List<HomeNavigationItem> _navigationItems = [];
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
     _initializeNavigationItems();
     // 优化PageController，设置合适的视窗比例
     _pageController = PageController(
@@ -114,23 +110,14 @@ class _HomeShellPageState extends State<HomeShellPage> {
     );
   }
 
-  Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _booksourceEnabled = prefs.getBool('enable_booksource') ?? true;
-    });
-    _initializeNavigationItems();
-  }
-
   /// 组装导航项列表（可看作“首页路由表”）。
   ///
   /// 规则：
   /// 1) 首页、书库固定在前。
-  /// 2) 书源按开关决定是否出现。
-  /// 3) 设置固定在最后。
+  /// 2) 设置固定在最后。
   void _initializeNavigationItems() {
     final l10n = _l10n;
-    final baseItems = [
+    final items = <HomeNavigationItem>[
       HomeNavigationItem(
         icon: Icons.home_outlined,
         selectedIcon: Icons.home,
@@ -143,34 +130,16 @@ class _HomeShellPageState extends State<HomeShellPage> {
         label: l10n?.library ?? 'Library',
         page: const LibraryPage(),
       ),
-    ];
-
-    final conditionalItems = <HomeNavigationItem>[];
-
-    // 条件添加书源选项
-    if (_booksourceEnabled) {
-      conditionalItems.add(
-        HomeNavigationItem(
-          icon: Icons.source_outlined,
-          selectedIcon: Icons.source,
-          label: l10n?.bookSource ?? 'Sources',
-          page: BookSourcePage(key: _bookSourcePageKey),
-        ),
-      );
-    }
-
-    // 设置选项总是最后
-    conditionalItems.add(
       HomeNavigationItem(
         icon: Icons.settings_outlined,
         selectedIcon: Icons.settings,
         label: l10n?.settings ?? 'Settings',
         page: const SettingsPage(),
       ),
-    );
+    ];
 
     setState(() {
-      _navigationItems = [...baseItems, ...conditionalItems];
+      _navigationItems = items;
       // 如果当前选中的索引超出范围，重置为首页
       if (_selectedIndex >= _navigationItems.length) {
         _selectedIndex = 0;

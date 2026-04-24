@@ -1,3 +1,6 @@
+// 文件说明：书库页面，负责书籍列表、筛选、排序和进入阅读。
+// 技术要点：Flutter UI、文件系统、渲染层。
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -8,7 +11,8 @@ import '../models/book.dart';
 import '../services/books/book_services.dart';
 import '../services/library/library_services.dart';
 import '../services/pagination/pagination_services.dart';
-import '../services/reading/reading_services.dart';
+import '../services/reading/reading_progress_service.dart';
+import '../services/reading/reading_router_service.dart';
 import '../widgets/side_toast.dart';
 import 'import_book_page.dart';
 import 'home_layout_constants.dart';

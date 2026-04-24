@@ -1,3 +1,6 @@
+// 文件说明：MOBI 解析器，负责读取元数据和文本内容并输出统一结构。
+// 技术要点：ReaderCore、JSON、文件系统。
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';

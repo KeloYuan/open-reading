@@ -1,3 +1,6 @@
+// 文件说明：书籍 DAO，负责书籍元数据、进度和分页缓存字段的数据库读写。
+// 技术要点：服务层、Flutter。
+
 import 'package:flutter/material.dart';
 import 'package:xxread/models/book.dart';
 import 'package:xxread/services/core/database_service.dart';

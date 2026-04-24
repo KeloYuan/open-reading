@@ -1,3 +1,6 @@
+// 文件说明：设置页面，负责应用主题、语言、同步、备份和外观设置。
+// 技术要点：Flutter UI、Icons Plus、Package Info、Provider、SharedPreferences、URL Launcher。
+
 import 'dart:async';
 import 'dart:ui';
 import 'dart:io';
@@ -12,10 +15,8 @@ import '../main.dart';
 import '../utils/app_themes.dart';
 import '../l10n/app_localizations.dart';
 import '../reader_core/ai/ai_service.dart';
-import '../reader_core/renderer/reader_view.dart';
 import '../services/books/book_services.dart';
 import '../services/core/core_services.dart';
-import '../services/reading/reader_engine_service.dart';
 import '../services/sync/sync_services.dart';
 import '../widgets/side_toast.dart';
 import '../widgets/webdav_config_dialog.dart';
@@ -28,6 +29,22 @@ import '../utils/system_ui_helper.dart';
 import '../utils/ui_style.dart';
 
 part 'settings_page_cover_actions_part.dart';
+
+// --- 保留历史翻页模式枚举，供已有设置值迁移使用 ---
+enum ReaderPageTurnAnimation { cover, slide, scroll, chapterScroll, simulation }
+
+extension ReaderPageTurnAnimationExt on ReaderPageTurnAnimation {
+  String get prefValue => name;
+}
+
+class ReaderPageTurnAnimationPrefs {
+  static ReaderPageTurnAnimation? fromPrefValue(String? value) {
+    if (value == null) return null;
+    return ReaderPageTurnAnimation.values.firstWhere((e) => e.name == value,
+        orElse: () => ReaderPageTurnAnimation.cover);
+  }
+}
+// ------------------------------------------------
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -49,12 +66,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // 阅读设置
   ReaderPageTurnAnimation _pageTurnAnimation = ReaderPageTurnAnimation.cover;
-  EpubLayoutEngine _epubLayoutEngine = EpubLayoutEngine.flutter;
   bool _enableVolumeKeyTurn = true;
   bool _showSystemStatusBarInReader = false;
 
-  // 书源设置
-  bool _enableBooksource = true;
   bool _enableAutoExtractCover = true;
 
   // WebDAV设置
@@ -117,7 +131,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final epubLayoutEngine = await ReaderEngineService.getEpubLayoutEngine();
     final activeAiSettings = await _aiService.loadSettings();
     final aiSettingsByProvider = <AIProviderType, AIProviderSettings>{
       for (final provider in AIProviderType.values)
@@ -134,7 +147,6 @@ class _SettingsPageState extends State<SettingsPage> {
       _keepScreenOn = prefs.getBool('keepScreenOn') ?? false;
       _autoSaveInterval = prefs.getInt('autoSaveInterval') ?? 30;
 
-      _enableBooksource = prefs.getBool('enable_booksource') ?? true;
       _enableAutoExtractCover = prefs.getBool('enableAutoExtractCover') ?? true;
 
       // 阅读设置
@@ -157,8 +169,6 @@ class _SettingsPageState extends State<SettingsPage> {
       _enableVolumeKeyTurn = prefs.getBool('enableVolumeKeyTurn') ?? true;
       _showSystemStatusBarInReader =
           prefs.getBool('readerShowSystemStatusBar') ?? false;
-      _epubLayoutEngine = epubLayoutEngine;
-
       // 其他设置
       _enableFullscreen = prefs.getBool('enableFullscreen') ?? false;
 
@@ -215,7 +225,6 @@ class _SettingsPageState extends State<SettingsPage> {
     await prefs.setBool('keepScreenOn', _keepScreenOn);
     await prefs.setInt('autoSaveInterval', _autoSaveInterval);
 
-    await prefs.setBool('enable_booksource', _enableBooksource);
     await prefs.setBool('enableAutoExtractCover', _enableAutoExtractCover);
 
     // 阅读设置
@@ -232,8 +241,6 @@ class _SettingsPageState extends State<SettingsPage> {
       'readerShowSystemStatusBar',
       _showSystemStatusBarInReader,
     );
-    await ReaderEngineService.setEpubLayoutEngine(_epubLayoutEngine);
-
     // 其他设置
     await prefs.setBool('enableFullscreen', _enableFullscreen);
 
@@ -426,49 +433,44 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 FilledButton(
                   onPressed: () {
-                    final model = modelController.text.trim();
-                    if (model.isEmpty) {
-                      setDialogState(() {
-                        errorText = 'Model 不能为空';
-                      });
-                      return;
-                    }
-
-                    final baseUrl = baseUrlController.text.trim();
-                    final uri = Uri.tryParse(baseUrl);
-                    if (baseUrl.isEmpty ||
-                        uri == null ||
-                        !(uri.isScheme('http') || uri.isScheme('https'))) {
-                      setDialogState(() {
-                        errorText = 'Base URL 必须是合法的 http/https 地址';
-                      });
-                      return;
-                    }
-
-                    final parsedTemp = double.tryParse(tempController.text.trim());
+                    final parsedTemp =
+                        double.tryParse(tempController.text.trim());
                     if (parsedTemp == null ||
                         !_validateAiTemperature(
                           _selectedAiProvider,
                           parsedTemp,
                         )) {
                       setDialogState(() {
-                        errorText = _selectedAiProvider == AIProviderType.minimax
-                            ? 'MiniMax 的 Temperature 必须在 0.01 ~ 1.00 之间'
-                            : 'Temperature 超出范围，请按提示填写';
+                        errorText =
+                            _selectedAiProvider == AIProviderType.minimax
+                                ? 'MiniMax 的 Temperature 必须在 0.01 ~ 1.00 之间'
+                                : 'Temperature 超出范围，请按提示填写';
+                      });
+                      return;
+                    }
+
+                    final nextSettings = current
+                        .copyWith(
+                          provider: _selectedAiProvider,
+                          apiKey: _aiApiKeyController.text.trim(),
+                          model: modelController.text.trim(),
+                          baseUrl: baseUrlController.text.trim(),
+                          temperature: parsedTemp,
+                        )
+                        .normalized();
+                    final validationError = validateAIProviderSettings(
+                      nextSettings,
+                      requireApiKey: false,
+                    );
+                    if (validationError != null) {
+                      setDialogState(() {
+                        errorText = validationError;
                       });
                       return;
                     }
 
                     Navigator.of(dialogContext).pop(
-                      current
-                          .copyWith(
-                            provider: _selectedAiProvider,
-                            apiKey: _aiApiKeyController.text.trim(),
-                            model: model,
-                            baseUrl: baseUrl,
-                            temperature: parsedTemp,
-                          )
-                          .normalized(),
+                      nextSettings,
                     );
                   },
                   child: const Text('应用'),
@@ -542,6 +544,13 @@ class _SettingsPageState extends State<SettingsPage> {
       model: model,
       temperature: parsedTemp,
     ).normalized();
+    final validationError = validateAIProviderSettings(settings);
+    if (validationError != null) {
+      setState(() {
+        _aiSettingsError = validationError;
+      });
+      return;
+    }
 
     setState(() {
       _isSavingAiSettings = true;
@@ -678,12 +687,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     setState(() => _showSystemStatusBarInReader = value),
                 icon: Icons.vertical_align_top_rounded,
               ),
-              _buildActionSetting(
-                title: 'EPUB 排版引擎（仅 EPUB）',
-                subtitle: _epubLayoutEngineSubtitle(_epubLayoutEngine),
-                onTap: _showEpubLayoutEngineModal,
-                icon: _epubLayoutEngineIcon(_epubLayoutEngine),
-              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -692,62 +695,6 @@ class _SettingsPageState extends State<SettingsPage> {
             icon: Icons.auto_awesome_outlined,
             children: [
               _buildAiSettingsSection(),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _buildSectionCard(
-            title: l10n.bookSourceFeatures,
-            icon: Icons.source,
-            children: [
-              _buildSwitchSetting(
-                title: l10n.enableBookSource,
-                subtitle: l10n.enableBookSourceHint,
-                value: _enableBooksource,
-                onChanged: (value) {
-                  setState(() => _enableBooksource = value);
-                  _saveSettings();
-                  // 通知主页面刷新导航栏
-                  _showRestartDialog(
-                    reason: '书源功能的开启/关闭需要重启应用才能生效。',
-                  );
-                },
-                icon: Icons.cloud_download,
-              ),
-              if (_enableBooksource) ...[
-                Padding(
-                  padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: Colors.amber.withValues(alpha: 0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: Colors.amber.shade700,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            l10n.bookSourceEnabledHint,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.amber.shade700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
           const SizedBox(height: 20),
@@ -901,7 +848,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           _buildSyncChip('笔记', Icons.note),
                           _buildSyncChip('进度', Icons.timeline),
                           _buildSyncChip('统计', Icons.bar_chart),
-                          _buildSyncChip('书源', Icons.source),
                         ],
                       ),
                     ],
@@ -1157,8 +1103,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             ? '当前预设：${matchedPreset.vendor} · ${matchedPreset.label}'
                             : '当前配置：自定义 · ${currentSettings.model}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurface
-                                  .withValues(alpha: 0.72),
+                              color:
+                                  colorScheme.onSurface.withValues(alpha: 0.72),
                               height: 1.35,
                             ),
                       ),
@@ -1166,8 +1112,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       Text(
                         '已内置常用服务商和模型，通常只需要选择预设并输入 API Key。',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurface
-                                  .withValues(alpha: 0.64),
+                              color:
+                                  colorScheme.onSurface.withValues(alpha: 0.64),
                               height: 1.35,
                             ),
                       ),
@@ -1380,240 +1326,6 @@ class _SettingsPageState extends State<SettingsPage> {
       case ReaderPageTurnAnimation.simulation:
         return Icons.auto_awesome_motion_rounded;
     }
-  }
-
-  String _epubLayoutEngineSubtitle(EpubLayoutEngine engine) {
-    switch (engine) {
-      case EpubLayoutEngine.flutter:
-        return 'Flutter（原生内核，推荐）';
-      case EpubLayoutEngine.foliate:
-        return 'Foliate（Web 内核，兼容模式）';
-      case EpubLayoutEngine.foliateStrict:
-        return 'Foliate（Web 内核，严格分页实验）';
-    }
-  }
-
-  IconData _epubLayoutEngineIcon(EpubLayoutEngine engine) {
-    switch (engine) {
-      case EpubLayoutEngine.flutter:
-        return Icons.auto_fix_high_rounded;
-      case EpubLayoutEngine.foliate:
-        return Icons.web_asset_rounded;
-      case EpubLayoutEngine.foliateStrict:
-        return Icons.grid_view_rounded;
-    }
-  }
-
-  void _showEpubLayoutEngineModal() {
-    final isMaterial3Style = Theme.of(context)
-            .extension<UiStyleThemeExtension>()
-            ?.isMaterial3Style ??
-        false;
-    final scheme = Theme.of(context).colorScheme;
-    final options = <(
-      EpubLayoutEngine engine,
-      String title,
-      String subtitle,
-      IconData icon
-    )>[
-      (
-        EpubLayoutEngine.flutter,
-        'Flutter 原生内核（推荐）',
-        '原生分页与渲染链路，优先保证可控与稳定',
-        Icons.auto_fix_high_rounded,
-      ),
-      (
-        EpubLayoutEngine.foliate,
-        'Foliate 兼容模式',
-        'Web 分页引擎，适合做兼容性对照',
-        Icons.web_asset_rounded,
-      ),
-      (
-        EpubLayoutEngine.foliateStrict,
-        'Foliate 严格分页（实验）',
-        'Web 分页严格策略，优先规避缺字与边缘溢出',
-        Icons.grid_view_rounded,
-      ),
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor:
-          isMaterial3Style ? scheme.surfaceContainerHigh : Colors.transparent,
-      builder: (modalContext) {
-        return Container(
-          decoration: BoxDecoration(
-            color: isMaterial3Style
-                ? Theme.of(modalContext).colorScheme.surfaceContainerHigh
-                : Theme.of(modalContext).colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border(
-              top: BorderSide(
-                color: Theme.of(modalContext).colorScheme.outline.withValues(
-                      alpha: isMaterial3Style ? 0.24 : 0.16,
-                    ),
-              ),
-            ),
-          ),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 14),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Theme.of(modalContext)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 2, 24, 12),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.auto_stories_rounded,
-                        color: Theme.of(modalContext).colorScheme.primary,
-                        size: 22,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'EPUB 排版引擎',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: Theme.of(modalContext).colorScheme.onSurface,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                ...options.map((option) {
-                  final selected = _epubLayoutEngine == option.$1;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(14),
-                        onTap: () async {
-                          if (selected) {
-                            Navigator.of(modalContext).pop();
-                            return;
-                          }
-                          setState(() => _epubLayoutEngine = option.$1);
-                          Navigator.of(modalContext).pop();
-                          await _saveSettings();
-                          if (!mounted) {
-                            return;
-                          }
-                          showSideToast(
-                            context,
-                            switch (option.$1) {
-                              EpubLayoutEngine.flutter => '已切换到 Flutter 可控内核',
-                              EpubLayoutEngine.foliate => '已切换到 Foliate 兼容模式',
-                              EpubLayoutEngine.foliateStrict =>
-                                '已切换到 Foliate 严格分页（实验）',
-                            },
-                            icon: option.$4,
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: selected
-                                  ? Theme.of(modalContext).colorScheme.primary
-                                  : Theme.of(modalContext)
-                                      .colorScheme
-                                      .outline
-                                      .withValues(alpha: 0.35),
-                              width: selected ? 1.6 : 1,
-                            ),
-                            color: selected
-                                ? Theme.of(modalContext)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.08)
-                                : Colors.transparent,
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                option.$4,
-                                color: selected
-                                    ? Theme.of(modalContext).colorScheme.primary
-                                    : Theme.of(modalContext)
-                                        .colorScheme
-                                        .onSurface
-                                        .withValues(alpha: 0.75),
-                                size: 18,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      option.$2,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: selected
-                                            ? Theme.of(modalContext)
-                                                .colorScheme
-                                                .primary
-                                            : Theme.of(modalContext)
-                                                .colorScheme
-                                                .onSurface,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      option.$3,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Theme.of(modalContext)
-                                            .colorScheme
-                                            .onSurface
-                                            .withValues(alpha: 0.62),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (selected)
-                                Icon(
-                                  Icons.check_circle,
-                                  color: Theme.of(modalContext)
-                                      .colorScheme
-                                      .primary,
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-                const SizedBox(height: 14),
-              ],
-            ),
-          ),
-        );
-      },
-    );
   }
 
   void _showPageTurningModal(AppLocalizations l10n) {

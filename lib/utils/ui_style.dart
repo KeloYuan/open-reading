@@ -1,3 +1,6 @@
+// 文件说明：应用 UI 风格扩展，定义 Material3 与玻璃态等风格切换。
+// 技术要点：工具方法、Flutter。
+
 import 'package:flutter/material.dart';
 
 enum AppUiStyle {

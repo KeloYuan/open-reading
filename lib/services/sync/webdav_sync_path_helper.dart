@@ -1,3 +1,6 @@
+// 文件说明：WebDAV 路径辅助工具，统一管理云端目录和文件命名规则。
+// 技术要点：服务层。
+
 /// WebDAV 远端路径规范。
 ///
 /// 目标：
@@ -15,7 +18,6 @@ class WebDavSyncPathHelper {
   static const String annotationsDir = '${rootDir}annotations/';
   static const String progressDir = '${rootDir}progress/';
   static const String statsDir = '${rootDir}stats/';
-  static const String sourcesDir = '${rootDir}sources/';
   static const String settingsDir = '${rootDir}settings/';
   static const String filesDir = '${rootDir}files/';
   static const String coversDir = '${rootDir}covers/';
@@ -30,7 +32,6 @@ class WebDavSyncPathHelper {
   static const String annotationsFile = '${annotationsDir}annotations.json';
   static const String progressFile = '${progressDir}progress.json';
   static const String statsFile = '${statsDir}reading_stats.json';
-  static const String sourcesFile = '${sourcesDir}book_sources.json';
 
   static const List<String> allDirectories = [
     rootDir,
@@ -42,7 +43,6 @@ class WebDavSyncPathHelper {
     annotationsDir,
     progressDir,
     statsDir,
-    sourcesDir,
     settingsDir,
     filesDir,
     coversDir,

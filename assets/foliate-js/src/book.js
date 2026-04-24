@@ -1,5 +1,5 @@
 console.log('book.js')
-console.log('AnxUA', navigator.userAgent)
+console.log('ReaderUA', navigator.userAgent)
 
 import './view.js'
 import { FootnoteHandler } from './footnotes.js'
@@ -12,13 +12,7 @@ const { EPUB } = await import('./epub.js')
 var isPdf = false;
 
 const getPosition = (target) => {
-  const pointIsInView = (point) => {
-    const { x, y } = point;
-    return x >= 0 &&
-      y >= 0 &&
-      x <= window.innerWidth &&
-      y <= window.innerHeight;
-  };
+  const clamp01 = value => Math.min(Math.max(value, 0), 1);
 
   const frameRect = (framePos, elementRect, scaleX = 1, scaleY = 1) => {
     return {
@@ -43,46 +37,107 @@ const getPosition = (target) => {
   const frame = frameElement?.getBoundingClientRect() ?? { top: 0, left: 0 };
 
   const rects = Array.from(target.getClientRects());
-  const firstRect = frameRect(frame, rects[0], scaleX, scaleY);
-  const lastRect = frameRect(frame, rects[rects.length - 1], scaleX, scaleY);
+  if (!rects.length) {
+    return {
+      left: 0,
+      top: 0,
+      right: 0,
+      bottom: 0
+    };
+  }
+  const frameRects = rects.map(rect => frameRect(frame, rect, scaleX, scaleY));
+
+  const boundingRect = frameRects.reduce((acc, rect) => ({
+    left: Math.min(acc.left, rect.left),
+    top: Math.min(acc.top, rect.top),
+    right: Math.max(acc.right, rect.right),
+    bottom: Math.max(acc.bottom, rect.bottom)
+  }), { ...frameRects[0] });
 
   const screenWidth = window.innerWidth;
   const screenHeight = window.innerHeight;
 
-  const startPoint = {
-    point: {
-      x: ((firstRect.left + firstRect.right) / 2) / screenWidth,
-      y: firstRect.top / screenHeight
-    },
-    dir: 'up'
+  return {
+    left: clamp01(boundingRect.left / screenWidth),
+    top: clamp01(boundingRect.top / screenHeight),
+    right: clamp01(boundingRect.right / screenWidth),
+    bottom: clamp01(boundingRect.bottom / screenHeight)
   };
-
-  const endPoint = {
-    point: {
-      x: ((lastRect.left + lastRect.right) / 2) / screenWidth,
-      y: lastRect.bottom / screenHeight
-    },
-    dir: 'down'
-  };
-
-  const isStartInView = pointIsInView(startPoint.point);
-  const isEndInView = pointIsInView(endPoint.point);
-
-  if (!isStartInView && !isEndInView) {
-    return { point: { x: 0, y: 0 } };
-  }
-  if (!isStartInView) return endPoint;
-  if (!isEndInView) return startPoint;
-
-  return (startPoint.point.y * screenHeight > screenHeight - endPoint.point.y * screenHeight)
-    ? startPoint
-    : endPoint;
 };
 
 const getSelectionRange = (selection) => {
   if (!selection?.rangeCount) return null;
   const range = selection.getRangeAt(0);
   return range.collapsed ? null : range;
+};
+
+const CONTEXT_WINDOW_CHARS = 120;
+const MAX_CONTEXT_CHARS = 600;
+
+const collapseWhitespace = (text) =>
+  typeof text === 'string'
+    ? text.replace(/\s+/g, ' ').trim()
+    : '';
+
+const sliceWithWindow = (text, start, end) => {
+  if (!text) return '';
+  const safeStart = Math.max(0, Math.min(text.length, start));
+  const safeEnd = Math.max(safeStart, Math.min(text.length, end));
+  return text.slice(safeStart, safeEnd);
+};
+
+const buildRangeContextText = (range) => {
+  if (!range) return '';
+
+  const selectionText = range.toString().trim();
+  const startNode = range.startContainer;
+  const endNode = range.endContainer;
+  const startText = startNode?.textContent ?? '';
+  const endText = endNode?.textContent ?? '';
+
+  let contextText = '';
+
+  if (startNode === endNode) {
+    const segment = sliceWithWindow(
+      startText,
+      range.startOffset - CONTEXT_WINDOW_CHARS,
+      range.endOffset + CONTEXT_WINDOW_CHARS
+    );
+    contextText = collapseWhitespace(segment);
+  } else {
+    const startSegment = collapseWhitespace(
+      sliceWithWindow(
+        startText,
+        range.startOffset - CONTEXT_WINDOW_CHARS,
+        range.startOffset + CONTEXT_WINDOW_CHARS
+      )
+    );
+    const endSegment = collapseWhitespace(
+      sliceWithWindow(
+        endText,
+        range.endOffset - CONTEXT_WINDOW_CHARS,
+        range.endOffset + CONTEXT_WINDOW_CHARS
+      )
+    );
+    const parts = [
+      startSegment,
+      selectionText,
+      endSegment
+    ].filter(Boolean);
+    contextText = parts.join(' ');
+  }
+
+  if (!contextText && selectionText) {
+    contextText = selectionText;
+  }
+
+  contextText = collapseWhitespace(contextText);
+
+  if (contextText.length > MAX_CONTEXT_CHARS) {
+    return contextText.slice(0, MAX_CONTEXT_CHARS);
+  }
+
+  return contextText;
 };
 
 const handleSelection = (view, doc, index) => {
@@ -103,37 +158,151 @@ const handleSelection = (view, doc, index) => {
     text = newSelection.toString();
   }
 
+  const contextText = buildRangeContextText(range);
+
   onSelectionEnd({
     index,
     range,
     lang,
     cfi,
     pos: position,
-    text
+    text,
+    contextText
   });
 };
 
 const setSelectionHandler = (view, doc, index) => {
-  //    doc.addEventListener('pointerdown', () => isSelecting = true);
-  // if windows or macos or iOS
-  if (navigator.platform.includes('Win') || navigator.platform.includes('Mac')
-    || navigator.platform.includes('iPhone') || navigator.platform.includes('iPad')
+  let hasActiveSelection = false;
+  let lastPointerUpRange = null;
+  doc.__readerSelectionClearedAt = 0;
+  doc.__readerSuppressClick = false;
+
+  const handleSelectionStateChange = () => {
+    const selectionRange = getSelectionRange(doc.getSelection());
+    if (selectionRange) {
+      hasActiveSelection = true;
+      doc.__readerSelectionClearedAt = 0;
+      doc.__readerSuppressClick = false;
+      return;
+    }
+
+    if (!hasActiveSelection) return;
+    hasActiveSelection = false;
+    lastPointerUpRange = null;
+    doc.__readerSelectionClearedAt = Date.now();
+    doc.__readerSuppressClick = true;
+    callFlutter('onSelectionCleared');
+  };
+
+  doc.addEventListener('selectionchange', handleSelectionStateChange);
+
+  const rangesEqual = (a, b) => (
+    a.startContainer === b.startContainer
+    && a.startOffset === b.startOffset
+    && a.endContainer === b.endContainer
+    && a.endOffset === b.endOffset
+  );
+
+  const shouldSkipPointerUp = () => {
+    const selectionRange = getSelectionRange(doc.getSelection());
+    if (!selectionRange) return false;
+
+    if (lastPointerUpRange && rangesEqual(lastPointerUpRange, selectionRange)) {
+      return true;
+    }
+
+    lastPointerUpRange = selectionRange.cloneRange();
+    return false;
+  };
+
+  if (navigator.platform.includes('Mac')
+    || navigator.platform.includes('iPhone')
+    || navigator.platform.includes('iPad')
   ) {
-    doc.addEventListener('pointerup', () => handleSelection(view, doc, index));
-  }
-  else {
-    doc.addEventListener('contextmenu', e => {
-      // if (e.pointerType === 'mouse') {
-        handleSelection(view, doc, index);
-      // }
+    doc.addEventListener('pointerup', () => {
+      if (shouldSkipPointerUp()) return;
+      handleSelection(view, doc, index);
     });
   }
-  // doc.addEventListener('selectionchange', () => handleSelection(view, doc, index));
+  else if (navigator.platform.includes('Win')) {
+    if (navigator.maxTouchPoints > 0) {
+      doc.addEventListener('pointerup', (e) => {
+        if (e.pointerType === 'touch') return;
+        if (shouldSkipPointerUp()) return;
+        handleSelection(view, doc, index);
+      });
+
+      let isMouseSelecting = false;
+      doc.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'mouse') return;
+        isMouseSelecting = true;
+      });
+      doc.addEventListener('pointerup', (e) => {
+        if (e.pointerType !== 'mouse') return;
+        isMouseSelecting = false;
+      });
+
+      let debounceTimerId = undefined;
+      doc.addEventListener('selectionchange', () => {
+        if (isMouseSelecting) return;
+
+        const selRange = getSelectionRange(doc.getSelection());
+        if (!selRange) return;
+
+        clearTimeout(debounceTimerId);
+        debounceTimerId = setTimeout(() => {
+          handleSelection(view, doc, index);
+        }, 500);
+      });
+    } else {
+      doc.addEventListener('pointerup', () => {
+        if (shouldSkipPointerUp()) return;
+        handleSelection(view, doc, index);
+      });
+    }
+  }
+  else if (navigator.userAgent.includes('Phone; OpenHarmony')) {
+    doc.addEventListener('contextmenu', e => {
+      e.preventDefault();
+    });
+
+    let debounceTimerId = undefined;
+    doc.addEventListener('selectionchange', () => {
+      const selRange = getSelectionRange(doc.getSelection());
+      if (!selRange) return;
+
+      clearTimeout(debounceTimerId);
+      debounceTimerId = setTimeout(() => {
+        handleSelection(view, doc, index);
+      }, 600);
+    });
+  } else {
+    let hasNativeSelectionStarted = false;
+
+    doc.addEventListener('pointerdown', () => {
+      hasNativeSelectionStarted = false;
+    });
+
+    doc.addEventListener('pointercancel', () => {
+      hasNativeSelectionStarted = true;
+    });
+
+    doc.addEventListener('contextmenu', e => {
+      if (e.pointerType === 'mouse') {
+        handleSelection(view, doc, index);
+        return;
+      }
+
+      if (!hasNativeSelectionStarted) {
+        e.preventDefault();
+        return;
+      }
+
+      handleSelection(view, doc, index);
+    });
+  }
 
   if (!view.isFixedLayout) {
-    // go to the next page when selecting to the end of a page
-    // this makes it possible to select across pages
-
     doc.addEventListener('selectstart', () => {
       const container = view.shadowRoot.querySelector('foliate-paginator').shadowRoot.querySelector("#container");
       if (!container) return;
@@ -655,6 +824,7 @@ class Reader {
   }
 
   renderAnnotation(annotations) {
+    this.clearAnnotations()
     const annos = annotations ?? allAnnotations ?? []
     for (const anno of annos) {
       const { value, type, color, note } = anno
@@ -669,6 +839,26 @@ class Reader {
       this.addAnnotation(annotation)
     }
 
+  }
+
+  clearAnnotations() {
+    for (const annotation of this.annotationsByValue.values()) {
+      if (annotation.type !== 'bookmark') {
+        try {
+          this.view.addAnnotation(annotation, true)
+        } catch (_) {
+        }
+      }
+    }
+
+    this.annotations.clear()
+    this.annotationsByValue.clear()
+    this.#bookmarkInfo = {
+      exists: false,
+      cfi: null,
+      id: null,
+    }
+    this.#hideBookmarkIcon()
   }
 
   showContextMenu() {
@@ -1033,10 +1223,17 @@ class Reader {
 }
 
 
-const open = async (file, cfi) => {
+const open = async (file, cfi, progress) => {
   const reader = new Reader()
   globalThis.reader = reader
   await reader.open(file, cfi)
+  if ((!cfi || cfi === '') && typeof progress === 'number' && !Number.isNaN(progress)) {
+    try {
+      await reader.view.goToFraction(Math.min(0.9999, Math.max(0, progress)))
+    } catch (e) {
+      console.warn('[XXReadConfig] failed to restore progress', e)
+    }
+  }
   if (!importing) {
     callFlutter('onLoadEnd')
     onSetToc()
@@ -1142,7 +1339,7 @@ const onAnnotationClick = (annotation) => callFlutter('onAnnotationClick', annot
 
 const onClickView = (x, y) => callFlutter('onClick', { x, y })
 
-const onExternalLink = (link) => console.log(link)
+const onExternalLink = (link) => callFlutter('onExternalLink', link)
 
 const onSetToc = () => callFlutter('onSetToc', reader.toc)
 
@@ -1177,11 +1374,15 @@ window.changeStyle = (newStyle) => {
   setStyle()
 }
 
+window.applyStyle = (newStyle) => window.changeStyle(newStyle)
+
 window.goToHref = href => reader.view.goTo(href)
 
 window.goToCfi = cfi => reader.view.goTo(cfi)
 
 window.goToPercent = percent => reader.view.goToFraction(percent)
+
+window.goToProgress = percent => window.goToPercent(percent)
 
 window.nextPage = () => reader.view.next()
 
@@ -1301,6 +1502,7 @@ window.back = () => reader.view.history.back()
 window.forward = () => reader.view.history.forward()
 
 window.renderAnnotations = (annotations) => reader.renderAnnotation(annotations)
+window.clearAnnotations = () => reader.clearAnnotations()
 
 window.theChapterContent = () => reader.getChapterContent()
 
@@ -1375,6 +1577,7 @@ const injectedConfig = globalThis.__XXREAD_CONFIG__
 let importing
 let url
 let initialCfi
+let initialProgress
 let style
 let readingRules
 
@@ -1382,6 +1585,7 @@ if (injectedConfig && typeof injectedConfig === 'object') {
   importing = Boolean(injectedConfig.importing)
   url = injectedConfig.url ?? null
   initialCfi = injectedConfig.initialCfi ?? null
+  initialProgress = injectedConfig.initialProgress ?? null
   style = {
     ...defaultStyle,
     ...(injectedConfig.style ?? {}),
@@ -1395,6 +1599,7 @@ if (injectedConfig && typeof injectedConfig === 'object') {
   importing = Boolean(readJSONParam(urlParams, 'importing', false))
   url = readJSONParam(urlParams, 'url', null)
   initialCfi = readJSONParam(urlParams, 'initialCfi', null)
+  initialProgress = readJSONParam(urlParams, 'initialProgress', null)
   style = {
     ...defaultStyle,
     ...(readJSONParam(urlParams, 'style', {}) ?? {}),
@@ -1410,6 +1615,6 @@ if (!url || typeof url !== 'string') {
 } else {
   fetch(url)
     .then(res => res.blob())
-    .then(blob => open(new File([blob], new URL(url, window.location.origin).pathname), initialCfi))
+    .then(blob => open(new File([blob], new URL(url, window.location.origin).pathname), initialCfi, initialProgress))
     .catch(e => console.error(e))
 }

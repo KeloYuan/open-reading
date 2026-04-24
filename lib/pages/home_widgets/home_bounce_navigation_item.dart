@@ -1,3 +1,6 @@
+// 文件说明：首页底部导航动画组件，为导航项提供弹跳反馈。
+// 技术要点：Flutter UI。
+
 import 'package:flutter/material.dart';
 
 import 'home_navigation_item.dart';

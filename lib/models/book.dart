@@ -1,3 +1,6 @@
+// 文件说明：书籍数据模型，定义书籍元数据、阅读进度和缓存字段。
+// 技术要点：Dart 数据模型。
+
 class Book {
   final int? id;
   final String title;

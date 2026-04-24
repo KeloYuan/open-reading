@@ -1,3 +1,6 @@
+// 文件说明：数据总管服务，协调数据库、缓存、离线队列与完整性检查。
+// 技术要点：服务层、Flutter。
+
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:xxread/services/core/data_cache_service.dart';

@@ -172,21 +172,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get readingSettings => '阅读设置';
 
   @override
-  String get bookSource => '书源';
-
-  @override
-  String get bookSourceFeatures => '书源功能';
-
-  @override
-  String get enableBookSource => '启用书源功能';
-
-  @override
-  String get enableBookSourceHint => '开启在线书籍搜索和阅读功能';
-
-  @override
-  String get bookSourceEnabledHint => '启用书源功能后，可在导航栏中看到「书源」选项，支持在线书籍搜索和阅读。';
-
-  @override
   String get enableTts => '启用朗读功能';
 
   @override

@@ -1,3 +1,6 @@
+// 文件说明：封面抓取服务，负责从远程资源拉取书籍封面。
+// 技术要点：服务层、Dio、Flutter。
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 

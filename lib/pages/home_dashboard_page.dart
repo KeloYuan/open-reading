@@ -1,3 +1,6 @@
+// 文件说明：大屏首页仪表盘页面，聚合统计卡片、最近阅读和可视化内容。
+// 技术要点：Flutter UI、FL Chart、渲染层、文件系统。
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -6,7 +9,7 @@ import 'dart:io';
 import '../models/book.dart';
 import '../services/ai/global_ai_reading_service.dart';
 import '../services/books/book_services.dart';
-import '../services/reading/reading_services.dart';
+import '../services/reading/reading_stats_dao.dart';
 import '../utils/glass_config.dart';
 import '../utils/layout_helper.dart';
 import '../utils/localization_extension.dart';

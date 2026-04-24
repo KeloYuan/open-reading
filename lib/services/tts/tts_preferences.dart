@@ -1,3 +1,6 @@
+// 文件说明：TTS 偏好设置服务，负责朗读配置项的持久化。
+// 技术要点：服务层、SharedPreferences。
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// TTS配置管理类

@@ -1,3 +1,6 @@
+// 文件说明：HTML 到 FlowDoc 的转换器，把 HTML 结构归一化到阅读文档模型。
+// 技术要点：ReaderCore、HTML 解析、Flutter。
+
 import 'package:flutter/material.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;

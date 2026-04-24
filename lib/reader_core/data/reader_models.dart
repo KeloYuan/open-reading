@@ -1,3 +1,6 @@
+// 文件说明：阅读内核的数据模型集合，定义章节、目录、样式等核心结构。
+// 技术要点：ReaderCore、Flutter。
+
 import 'package:flutter/material.dart';
 
 @immutable

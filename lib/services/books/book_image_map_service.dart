@@ -1,3 +1,6 @@
+// 文件说明：EPUB 图片路径映射服务，维护原始资源路径到本地缓存路径的映射。
+// 技术要点：服务层、Path Provider、Path、文件系统、JSON、Flutter。
+
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';

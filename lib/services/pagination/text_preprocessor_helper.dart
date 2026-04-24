@@ -1,3 +1,6 @@
+// 文件说明：文本预处理工具，负责清洗段落、空白和章节前的文本规范化。
+// 技术要点：服务层、Flutter。
+
 import 'package:flutter/foundation.dart';
 
 /// 文本预处理器

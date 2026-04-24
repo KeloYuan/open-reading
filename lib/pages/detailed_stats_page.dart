@@ -1,3 +1,6 @@
+// 文件说明：阅读统计详情页，展示时长、趋势和图表等分析数据。
+// 技术要点：Flutter UI、FL Chart、文件系统、渲染层。
+
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
@@ -5,7 +8,7 @@ import 'package:flutter/material.dart' hide BackdropFilter;
 import 'package:flutter/widgets.dart' as fw show BackdropFilter;
 import 'package:fl_chart/fl_chart.dart';
 import '../services/books/book_services.dart';
-import '../services/reading/reading_services.dart';
+import '../services/reading/reading_stats_dao.dart';
 import '../utils/glass_config.dart';
 import '../models/book.dart';
 

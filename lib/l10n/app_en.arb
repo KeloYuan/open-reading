@@ -216,26 +216,6 @@
   "@readingSettings": {
     "description": "Reading settings section"
   },
-  "bookSource": "Sources",
-  "@bookSource": {
-    "description": "Book source label"
-  },
-  "bookSourceFeatures": "Book Sources",
-  "@bookSourceFeatures": {
-    "description": "Book sources feature section"
-  },
-  "enableBookSource": "Enable book sources",
-  "@enableBookSource": {
-    "description": "Enable book source option"
-  },
-  "enableBookSourceHint": "Enable online book search and reading",
-  "@enableBookSourceHint": {
-    "description": "Hint about enabling book sources"
-  },
-  "bookSourceEnabledHint": "When enabled, you will see the \"Sources\" tab for online search and reading.",
-  "@bookSourceEnabledHint": {
-    "description": "Hint when book source is enabled"
-  },
   "enableTts": "Enable TTS",
   "@enableTts": {
     "description": "Enable text-to-speech option"

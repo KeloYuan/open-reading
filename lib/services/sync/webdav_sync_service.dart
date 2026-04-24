@@ -1,3 +1,6 @@
+// 文件说明：WebDAV 同步主服务，负责连接、上传、下载、冲突处理与状态通知。
+// 技术要点：服务层、Dio、HTML 解析、Path、Path Provider、SharedPreferences。
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -14,11 +17,9 @@ import 'package:xxread/services/books/book_dao.dart';
 import 'package:xxread/services/books/bookmark_dao.dart';
 import 'package:xxread/services/books/book_note_dao.dart';
 import 'package:xxread/services/reading/reading_stats_dao.dart';
-import 'package:xxread/services/books/book_source_dao.dart';
 import 'package:xxread/models/book.dart';
 import 'package:xxread/models/bookmark.dart';
 import 'package:xxread/models/book_note.dart';
-import 'package:xxread/models/book_source.dart';
 import 'package:xxread/services/sync/webdav_sync_manifest_model.dart';
 import 'package:xxread/services/sync/webdav_sync_path_helper.dart';
 import 'package:xxread/services/sync/sync_utils.dart';
@@ -34,7 +35,7 @@ enum SyncStatus {
 }
 
 /// WebDAV同步服务
-/// 参考anx-reader的架构设计，提供完整的数据同步功能
+/// 提供完整的数据同步功能
 ///
 /// 支持同步的数据类型：
 /// - 书籍元数据（差异化字段）
@@ -43,7 +44,6 @@ enum SyncStatus {
 /// - 批注（从笔记中派生）
 /// - 阅读进度
 /// - 阅读统计
-/// - 书源配置
 /// - 书籍文件（按需上传）
 class WebDavSyncService {
   static final WebDavSyncService _instance = WebDavSyncService._internal();
@@ -72,7 +72,6 @@ class WebDavSyncService {
   final BookmarkDao _bookmarkDao = BookmarkDao();
   final BookNoteDao _noteDao = BookNoteDao();
   final ReadingStatsDao _statsDao = ReadingStatsDao();
-  // BookSourceDao 使用静态方法，不需要实例
 
   // 按需上传的书籍文件集合
   final Set<int> _selectedBooksForSync = {};
@@ -998,7 +997,6 @@ class WebDavSyncService {
     await _runSyncStage('上传高亮与批注', _uploadHighlightsAndAnnotations);
     await _runSyncStage('上传阅读进度', _uploadProgress, optional: true);
     await _runSyncStage('上传阅读统计', _uploadStats);
-    await _runSyncStage('上传书源', _uploadSources, optional: true);
 
     await _runSyncStage('上传同步清单', _uploadSyncManifest, optional: true);
     await _runSyncStage('上传书籍文件', _uploadBookFiles, optional: true);
@@ -1205,31 +1203,6 @@ class WebDavSyncService {
     }
   }
 
-  /// 上传书源
-  Future<void> _uploadSources() async {
-    try {
-      final sources = await BookSourceDao.getAll();
-
-      final sourcesData = {
-        'version': 1,
-        'device_id': await SyncUtils.getDeviceId(),
-        'timestamp': DateTime.now().toIso8601String(),
-        'sources': sources.map((s) => s.toJson()).toList(),
-      };
-
-      final jsonData = jsonEncode(sourcesData);
-      await _retryRequest(
-        label: '上传书源',
-        action: () =>
-            _dio.put(WebDavSyncPathHelper.sourcesFile, data: jsonData),
-      );
-
-      debugPrint('📡 已上传 ${sources.length} 个书源');
-    } catch (e) {
-      throw Exception('上传书源失败: $e');
-    }
-  }
-
   /// 上传同步清单，统一描述“这次同步包含了什么”
   Future<void> _uploadSyncManifest() async {
     try {
@@ -1237,7 +1210,6 @@ class WebDavSyncService {
       final bookmarks = await _bookmarkDao.getAllBookmarks();
       final notes = await _noteDao.getAllNotes();
       final stats = await _statsDao.getAllStats();
-      final sources = await BookSourceDao.getAll();
 
       final highlightsCount = notes
           .where((n) => n.type == 'highlight' || n.type == 'underline')
@@ -1258,7 +1230,6 @@ class WebDavSyncService {
         annotationsCount: annotationsCount,
         progressCount: books.length,
         statsCount: stats.length,
-        sourcesCount: sources.length,
         selectedBookFilesCount: _selectedBooksForSync.length,
       );
 
@@ -1405,7 +1376,6 @@ class WebDavSyncService {
     await _runSyncStage('下载笔记', _downloadNotes, optional: true);
     await _runSyncStage('下载阅读进度', _downloadProgress, optional: true);
     await _runSyncStage('下载阅读统计', _downloadStats, optional: true);
-    await _runSyncStage('下载书源', _downloadSources, optional: true);
   }
 
   /// 下载书籍列表
@@ -1515,28 +1485,6 @@ class WebDavSyncService {
         return;
       }
       throw Exception('下载阅读统计失败: $e');
-    }
-  }
-
-  /// 下载书源
-  Future<void> _downloadSources() async {
-    try {
-      final response = await _retryRequest(
-        label: '下载书源',
-        action: () => _dio.get(WebDavSyncPathHelper.sourcesFile),
-      );
-      if (response.statusCode == 200) {
-        final data = _asJsonMap(response.data);
-        final remoteSources = _asJsonList(data['sources']);
-
-        await _mergeSources(remoteSources);
-      }
-    } catch (e) {
-      if (_isRemoteFileMissing(e)) {
-        debugPrint('远程书源数据不存在，跳过下载');
-        return;
-      }
-      throw Exception('下载书源失败: $e');
     }
   }
 
@@ -1792,45 +1740,6 @@ class WebDavSyncService {
     debugPrint(
       '📊 阅读统计合并完成: 新增 $insertedCount, 更新 $updatedCount, 去重 $dedupedCount, 保持不变 $unchangedCount',
     );
-  }
-
-  /// 合并书源（按 URL 去重，双向合并）
-  Future<void> _mergeSources(List<Map<String, dynamic>> remoteSources) async {
-    int addedCount = 0;
-    int mergedCount = 0;
-
-    final localSources = await BookSourceDao.getAll();
-    final localUrlSet = <String>{};
-
-    for (final source in localSources) {
-      localUrlSet.add(source.bookSourceUrl);
-    }
-
-    for (final remoteMap in remoteSources) {
-      try {
-        final url = (remoteMap['bookSourceUrl'] ?? remoteMap['book_source_url'])
-            ?.toString()
-            .trim();
-        if (url == null || url.isEmpty) {
-          continue;
-        }
-
-        if (localUrlSet.contains(url)) {
-          // URL 已存在，跳过（保留本地）
-          mergedCount++;
-        } else {
-          // 新增远程书源
-          final bookSource = BookSource.fromJson(remoteMap);
-          await BookSourceDao.insert(bookSource);
-          localUrlSet.add(url);
-          addedCount++;
-        }
-      } catch (e) {
-        debugPrint('合并书源失败: $e');
-      }
-    }
-
-    debugPrint('📡 书源合并完成: 新增 $addedCount, 已存在 $mergedCount');
   }
 
   /// 合并书籍数据

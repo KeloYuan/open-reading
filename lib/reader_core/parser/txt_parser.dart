@@ -1,3 +1,6 @@
+// 文件说明：TXT 解析器，负责解码、切章与生成可重排的文档结构。
+// 技术要点：ReaderCore、文件系统、Flutter。
+
 import 'dart:io';
 import 'dart:math' as math;
 

@@ -1,3 +1,6 @@
+// 文件说明：数据备份服务，负责数据库与缓存数据的备份、校验和恢复。
+// 技术要点：服务层、Path Provider、SharedPreferences、Crypto 哈希、JSON、文件系统。
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';

@@ -1,3 +1,6 @@
+// 文件说明：书库事件总线，用于在不同页面之间广播书库刷新事件。
+// 技术要点：服务层。
+
 import 'dart:async';
 
 class LibraryEventBus {

@@ -1,4 +1,6 @@
-import 'dart:convert';
+// 文件说明：同步辅助工具，负责设备标识、序列化和同步通用函数。
+// 技术要点：服务层、SharedPreferences、UUID、JSON、文件系统、Flutter。
+
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -178,11 +180,6 @@ class SyncUtils {
   /// 统计去重键：date
   static String generateStatsKey(String date) {
     return 'stats:$date';
-  }
-
-  /// 书源去重键：bookSourceUrl
-  static String generateSourceKey(String url) {
-    return 'source:${base64Encode(url.codeUnits)}';
   }
 
   /// 格式化同步时间戳

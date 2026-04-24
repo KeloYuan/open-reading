@@ -1,4 +1,7 @@
-﻿import 'package:flutter/material.dart';
+// 文件说明：页面转场工具，封装自定义路由动画与导航扩展。
+// 技术要点：工具方法。
+
+import 'package:flutter/material.dart';
 
 /// 自定义页面过渡动画
 /// 提供流畅的页面进入和退出动画效果

@@ -1,3 +1,6 @@
+// 文件说明：EPUB 解析器，抽取章节、目录和 HTML 内容并生成 FlowDoc。
+// 技术要点：ReaderCore、EPUBX、HTML 解析、文件系统。
+
 import 'dart:io';
 import 'dart:typed_data';
 

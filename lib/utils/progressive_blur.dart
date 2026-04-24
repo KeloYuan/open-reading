@@ -1,4 +1,7 @@
-﻿// 渐进模糊效果工具类
+// 文件说明：渐进式模糊组件与算法，提供多层次背景模糊效果。
+// 技术要点：工具方法、渲染层、Flutter。
+
+// 渐进模糊效果工具类
 // Progressive Blur Effects Helper
 
 import 'dart:ui';

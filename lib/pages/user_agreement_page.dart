@@ -1,3 +1,6 @@
+// 文件说明：用户协议页面，同时管理首次启动协议确认状态。
+// 技术要点：Flutter UI、SharedPreferences、渲染层。
+
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';

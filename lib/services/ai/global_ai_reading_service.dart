@@ -1,3 +1,6 @@
+// 文件说明：全局 AI 阅读服务，为首页和阅读场景生成建议、摘要和知识片段。
+// 技术要点：服务层、Crypto 哈希、Path、Path Provider、JSON、文件系统。
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';

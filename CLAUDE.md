@@ -10,6 +10,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **项目规模：** 124 个 Dart 文件，跨平台支持（Android/iOS/macOS/Windows/Linux）
 
+## 2026-04 阅读平台策略覆盖说明
+
+本文件后续若与仓库根目录 `CLAUDE.md`、`app/iOS/AGENTS.md` 或 `docs/reading-platform/` 冲突，以较新的阅读平台策略为准。
+
+1. 新的 TXT 阅读能力应优先对齐 `Rust Core + Native Paginator + Native Reader`，不要再把“临时 EPUB + Readium”当作长期演进方向。
+2. 阅读进度、书签、高亮、笔记、TTS 恢复必须绑定 locator / canonical text anchor，而不是数据库里的 `page_index` 一类旧字段。
+3. 当前设备上的页码必须视为派生结果；换字号、换设备、换边距后允许页码变化，但必须仍能恢复到同一文本位置。
+4. 分页缓存必须绑定 `layoutSignature`，任何影响排版的设置变化后都应失效重算。
+5. 新实现优先保证一致性和恢复能力，再考虑分页速度与局部兼容。
+
 ## 常用命令
 
 ```bash

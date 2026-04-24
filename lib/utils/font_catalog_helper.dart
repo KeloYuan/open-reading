@@ -1,3 +1,6 @@
+// 文件说明：字体目录辅助工具，维护阅读字体选项与展示文案。
+// 技术要点：工具方法。
+
 import '../l10n/app_localizations.dart';
 
 class FontOption {

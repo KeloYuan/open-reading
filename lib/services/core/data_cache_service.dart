@@ -1,3 +1,6 @@
+// 文件说明：数据缓存服务，负责轻量级缓存、脏标记和恢复加速。
+// 技术要点：服务层、SharedPreferences、JSON、Flutter。
+
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';

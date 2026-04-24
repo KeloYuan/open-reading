@@ -1,3 +1,6 @@
+// 文件说明：首页相关页面包装组件，统一处理 KeepAlive、样式和系统栏。
+// 技术要点：Flutter UI。
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 

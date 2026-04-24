@@ -1,10 +1,12 @@
+// 文件说明：书籍导入页面，处理本地文件与 WebDAV 导入。
+// 技术要点：Flutter UI、文件系统。
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/book.dart';
-import '../pages/online_book_search_page.dart';
 import '../pages/webdav_remote_import_page.dart';
 import '../services/books/book_services.dart';
 import '../services/sync/webdav_sync_service.dart';
@@ -14,7 +16,7 @@ import '../utils/system_ui_helper.dart';
 import '../utils/ui_style.dart';
 import '../widgets/side_toast.dart';
 
-enum _ImportChannel { local, webdav, source }
+enum _ImportChannel { local, webdav }
 
 class ImportBookPage extends StatefulWidget {
   const ImportBookPage({super.key});
@@ -104,9 +106,6 @@ class _ImportBookPageState extends State<ImportBookPage> {
       case _ImportChannel.webdav:
         await _importFromWebDav();
         break;
-      case _ImportChannel.source:
-        await _importFromSource();
-        break;
     }
   }
 
@@ -130,17 +129,6 @@ class _ImportBookPageState extends State<ImportBookPage> {
       if (!mounted) return;
       Navigator.pop(context, true);
     }
-  }
-
-  Future<void> _importFromSource() async {
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const OnlineBookSearchPage.aggregate(),
-      ),
-    );
-    if (!mounted) return;
-    await _loadLatestImportedBook();
   }
 
   String _formatImportDate(DateTime date) {
@@ -296,12 +284,10 @@ class _ImportBookPageState extends State<ImportBookPage> {
     final actionLabel = switch (_selectedChannel) {
       _ImportChannel.local => '选择文件并导入',
       _ImportChannel.webdav => '从 WebDAV 远端导入',
-      _ImportChannel.source => '打开书源搜索导入',
     };
     final actionIcon = switch (_selectedChannel) {
       _ImportChannel.local => Icons.file_open_rounded,
       _ImportChannel.webdav => Icons.cloud_download_rounded,
-      _ImportChannel.source => Icons.travel_explore_rounded,
     };
 
     return Container(
@@ -407,14 +393,6 @@ class _ImportBookPageState extends State<ImportBookPage> {
             icon: Icons.cloud_sync_outlined,
           ),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _buildChannelChip(
-            label: '书源导入',
-            channel: _ImportChannel.source,
-            icon: Icons.travel_explore_outlined,
-          ),
-        ),
       ],
     );
   }
@@ -486,22 +464,18 @@ class _ImportBookPageState extends State<ImportBookPage> {
     final cardTitle = switch (_selectedChannel) {
       _ImportChannel.local => '拖拽或点击上传',
       _ImportChannel.webdav => '浏览 WebDAV 远端书籍',
-      _ImportChannel.source => '从在线书源下载导入',
     };
     final cardDesc = switch (_selectedChannel) {
       _ImportChannel.local => '导入后自动生成目录与分页，支持较大文件分段处理。',
       _ImportChannel.webdav => '连接你的 WebDAV 云端，选择远端书籍导入到本地书架。',
-      _ImportChannel.source => '一键聚合搜索已启用书源，下载后进入与本地一致的阅读体验。',
     };
     final cardButton = switch (_selectedChannel) {
       _ImportChannel.local => '选择文件',
       _ImportChannel.webdav => '打开远端列表',
-      _ImportChannel.source => '打开书源搜索',
     };
     final cardIcon = switch (_selectedChannel) {
       _ImportChannel.local => Icons.upload_file_rounded,
       _ImportChannel.webdav => Icons.cloud_sync_outlined,
-      _ImportChannel.source => Icons.travel_explore_outlined,
     };
 
     return Container(

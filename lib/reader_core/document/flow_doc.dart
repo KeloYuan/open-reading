@@ -1,3 +1,6 @@
+// 文件说明：FlowDoc 文档抽象层，将不同格式统一成可排版的块级结构。
+// 技术要点：ReaderCore、Flutter。
+
 import 'package:flutter/material.dart';
 
 @immutable

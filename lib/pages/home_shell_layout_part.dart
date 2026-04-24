@@ -1,3 +1,6 @@
+// 文件说明：首页壳层的 part 拆分文件，承载导航布局和系统栏相关实现。
+// 技术要点：Flutter UI、Dart part。
+
 part of 'home_shell_page.dart';
 
 /// 首页壳层的大块布局方法拆分到这里：
@@ -381,8 +384,6 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
         icon: Icons.add_rounded,
         onTap: _navigateToImport,
       );
-    } else if (currentPage is BookSourcePage) {
-      trailing = _buildBookSourceTopBarActions();
     } else if (currentPage is SettingsPage) {
       trailing = null;
     } else {
@@ -435,36 +436,6 @@ extension _HomeShellLayoutPart on _HomeShellPageState {
       return button;
     }
     return Tooltip(message: tooltip, child: button);
-  }
-
-  Widget _buildBookSourceTopBarActions() {
-    final sourceState = _bookSourcePageKey.currentState;
-    final isFiltersOpen = sourceState?.isFiltersPanelVisible ?? false;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildTopBarActionButton(
-          icon: Icons.add_rounded,
-          tooltip: '添加书源',
-          onTap: () => sourceState?.handleTopBarAdd(),
-        ),
-        const SizedBox(width: 8),
-        _buildTopBarActionButton(
-          icon: Icons.tune_rounded,
-          tooltip: isFiltersOpen ? '收起筛选' : '展开筛选',
-          onTap: () {
-            sourceState?.handleTopBarToggleFilters();
-            _updateSelectedIndex(_selectedIndex);
-          },
-        ),
-        const SizedBox(width: 8),
-        _buildTopBarActionButton(
-          icon: Icons.more_horiz_rounded,
-          tooltip: '更多选项',
-          onTap: () => sourceState?.handleTopBarMore(),
-        ),
-      ],
-    );
   }
 
   void _switchToTab(int index) {

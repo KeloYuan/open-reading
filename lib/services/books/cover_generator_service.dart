@@ -1,3 +1,6 @@
+// 文件说明：封面生成服务，基于标题与颜色方案生成默认封面图片。
+// 技术要点：服务层、Path、Path Provider、文件系统、渲染层、Flutter。
+
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;

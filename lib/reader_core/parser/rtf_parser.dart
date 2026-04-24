@@ -1,3 +1,6 @@
+// 文件说明：RTF 解析器，用于提取富文本内容并桥接到阅读模型。
+// 技术要点：ReaderCore、JSON、文件系统。
+
 import 'dart:convert';
 import 'dart:io';
 

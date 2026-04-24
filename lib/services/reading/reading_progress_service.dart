@@ -1,10 +1,13 @@
+// 文件说明：阅读进度服务，负责保存、恢复和广播书籍阅读位置。
+// 技术要点：服务层、SharedPreferences、Flutter。
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:xxread/services/books/book_dao.dart';
 
 /// 阅读进度保存服务
-/// 参考anx-reader的数据持久化机制，提供完整的进度管理
+/// 提供完整的进度管理
 class ReadingProgressService {
   static final ReadingProgressService _instance =
       ReadingProgressService._internal();

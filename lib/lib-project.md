@@ -1,48 +1,29 @@
 # lib/ 结构总览
 
-> 更新：2026-02-13
-> 说明：本文件聚焦 `lib/` 目录结构，完整索引请看 `CODEBASE_DOCUMENTATION.md`
+> 更新：2026-04-03
+> 说明：这是 `lib/` 的快速入口版索引，详细逐文件说明请看 `../CODEBASE_DOCUMENTATION.md`。
 
 ## 快速入口
 
-- `lib/main.dart`：应用入口
-- `lib/pages/reader_kernel_page.dart`：阅读器核心页面（新阅读内核）
-- `lib/services/pagination/pagination_services.dart`：分页域入口
-- `lib/services/books/book_services.dart`：书籍域入口
-- `lib/services/reading/reading_services.dart`：阅读域入口
-- `lib/pages/home_shell_page.dart`：首页壳层（导航）
-- `lib/pages/home_shell_layout_part.dart`：首页壳层布局/系统栏拆分
-- `lib/pages/home_mobile_dashboard_page.dart`：手机首页内容（UI）
-- `lib/pages/home_dashboard_sections_part.dart`：首页统计区块拆分（卡片/图表/成就）
-- `lib/services/sync/sync_services.dart`：同步域入口（WebDAV）
-- `lib/services/sync/ios_cloud_sync_service.dart`：iOS 文件/iCloud Drive 分类快照同步
+- `lib/main.dart`：应用启动入口
+- `lib/pages/home_shell_page.dart`：首页导航壳层
+- `lib/services/books/book_import_service.dart`：导入总入口
+- `lib/services/reading/reading_router_service.dart`：阅读路由入口
+- `lib/pages/foliate_reader_page.dart`：当前主阅读页面
+- `lib/reader_core/`：阅读支撑实现（解析、文档模型与共享数据结构）
+- `lib/services/pagination/`：旧分页链路
+- `lib/services/sync/webdav_sync_service.dart`：同步主入口
 
-## 目录概览
+## 本次整理结果
 
-```
-lib/
-├── main.dart
-├── l10n/
-├── models/        # 书籍、章节、笔记、书源
-├── providers/     # Riverpod 状态管理
-├── pages/         # 页面（reader/home/library/settings...）
-├── services/      # 业务服务（导入、分页、同步、DAO、TTS...）
-├── utils/         # 工具类（主题、响应式、转场...）
-└── widgets/       # 复用组件
-```
+- 统一以当前工作区中的 `OpenReading/` 为主工程真相源。
+- 删除 9 个无引用叶子文件，减少阅读噪音。
+- 为可维护的 Dart 源码补齐文件头简介，方便直接从文件顶部理解职责。
+- 把 `lib/` 内文件重新按“入口/页面/阅读内核/服务/工具/组件”分类。
 
-## 说明与建议
+## 重点提醒
 
-- 旧阅读页 `reader_page.dart` 与其工具栏拆分文件已移除，统一使用 `reader_kernel_page.dart` + `reader_core/` 管线。
-- `services/` 中包含多个领域能力：导入、分页、数据库、同步、TTS、图片处理等。
-- 服务层新增域入口：`core/`、`books/`、`pagination/`、`reading/`、`library/`（统一导入更直观）。
-- 阅读旧体系相关模型/组件（如旧翻页配置、旧目录/TTS 面板）已移除，避免双实现并行。
-- 首页优先按职责阅读：`home_shell_page.dart`（壳层）→ `home_mobile_dashboard_page.dart`（手机内容）→ `home_layout_constants.dart`（布局常量）。
-- 首页统计旧大文件已拆分为 `home_dashboard_page.dart`（入口）+ `home_dashboard_sections_part.dart`（UI区块方法），方便新手分段阅读。
-- 首页壳层已拆分为 `home_shell_page.dart`（状态/路由）+ `home_shell_layout_part.dart`（布局/系统栏），排查导航问题更聚焦。
-- 首页可视化区块拆分在 `lib/pages/home_widgets/`，每个文件对应一个 UI 区块，便于新手按模块改。
-- 设置页封面操作已拆分到 `lib/pages/settings_page_cover_actions_part.dart`，避免单文件过大。
-- 壳层相关拆分文件：`home_navigation_item.dart`、`home_bounce_navigation_item.dart`、`home_page_wrappers.dart`。
-- WebDAV 同步路径规范集中在 `lib/services/sync/webdav_sync_path_helper.dart`。
-- WebDAV 同步清单模型在 `lib/services/sync/webdav_sync_manifest_model.dart`，用于描述书籍/进度/笔记/高亮/批注的数据覆盖范围。
-- iOS 可通过设置页触发“iCloud/文件夹同步”，直接在 iCloud Documents / 文件目录下按分类保存副本（books/progress/notes/...）。
+- 当前线上默认阅读链路偏向 `WebReaderPage`，不是旧文档里提到的 `reader_page.dart`。
+- `reader_core/` 是后续理解 TXT 新平台和统一文档模型时最重要的目录。
+- `services/pagination/` 和 `reader_core/` 同时存在，代表项目仍处于解析支撑层与旧分页链路并存阶段。
+- `l10n/app_localizations*.dart` 是生成文件，只需要知道用途，不建议手改。

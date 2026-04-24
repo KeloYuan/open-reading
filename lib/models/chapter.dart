@@ -1,3 +1,6 @@
+// 文件说明：章节数据模型，描述章节标题、顺序与正文切片。
+// 技术要点：Dart 数据模型。
+
 class Chapter {
   final int? id; // 添加id字段
   final String title;

@@ -1,3 +1,6 @@
+// 文件说明：阅读统计 DAO，负责阅读时长、页数和趋势数据的统计落库。
+// 技术要点：服务层。
+
 import 'dart:math' as math;
 
 import 'package:xxread/services/core/database_service.dart';

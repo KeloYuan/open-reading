@@ -216,26 +216,6 @@
   "@readingSettings": {
     "description": "阅读设置部分"
   },
-  "bookSource": "书源",
-  "@bookSource": {
-    "description": "书源标签"
-  },
-  "bookSourceFeatures": "书源功能",
-  "@bookSourceFeatures": {
-    "description": "书源功能部分"
-  },
-  "enableBookSource": "启用书源功能",
-  "@enableBookSource": {
-    "description": "启用书源选项"
-  },
-  "enableBookSourceHint": "开启在线书籍搜索和阅读功能",
-  "@enableBookSourceHint": {
-    "description": "启用书源提示"
-  },
-  "bookSourceEnabledHint": "启用书源功能后，可在导航栏中看到「书源」选项，支持在线书籍搜索和阅读。",
-  "@bookSourceEnabledHint": {
-    "description": "书源启用后提示"
-  },
   "enableTts": "启用朗读功能",
   "@enableTts": {
     "description": "启用TTS选项"

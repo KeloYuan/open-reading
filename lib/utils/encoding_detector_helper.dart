@@ -1,3 +1,6 @@
+// 文件说明：编码检测辅助工具，帮助 TXT 导入阶段判断文本编码。
+// 技术要点：工具方法、Flutter。
+
 import 'package:flutter/foundation.dart';
 
 /// 编码检测辅助工具

@@ -1,3 +1,6 @@
+// 文件说明：阅读解析阶段的通用模型与解析器接口定义。
+// 技术要点：ReaderCore。
+
 import 'dart:typed_data';
 
 import '../data/reader_models.dart';

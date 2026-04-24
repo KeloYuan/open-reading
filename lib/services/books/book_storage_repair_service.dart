@@ -1,3 +1,6 @@
+// 文件说明：书籍存储修复服务，用于处理文件迁移和失效路径修复。
+// 技术要点：服务层、Path、Path Provider、文件系统、Flutter。
+
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';

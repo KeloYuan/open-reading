@@ -1,3 +1,6 @@
+// 文件说明：iOS 云同步服务，负责文件目录快照和平台特定同步入口。
+// 技术要点：服务层、Path、Path Provider、JSON、文件系统、Flutter。
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -8,7 +11,6 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:xxread/services/books/book_dao.dart';
 import 'package:xxread/services/books/book_note_dao.dart';
-import 'package:xxread/services/books/book_source_dao.dart';
 import 'package:xxread/services/books/bookmark_dao.dart';
 import 'package:xxread/services/reading/reading_stats_dao.dart';
 
@@ -101,7 +103,6 @@ class IosCloudSyncService {
       final bookmarks = await _bookmarkDao.getAllBookmarks();
       final notes = await _noteDao.getAllNotes();
       final stats = await _statsDao.getAllStats();
-      final sources = await BookSourceDao.getAll();
       final nowIso = DateTime.now().toIso8601String();
 
       int copiedBookFilesCount = 0;
@@ -240,14 +241,6 @@ class IosCloudSyncService {
           },
         ),
         _writeJsonFile(
-          path.join(rootDir.path, 'sources/book_sources.json'),
-          {
-            'version': 1,
-            'timestamp': nowIso,
-            'sources': sources.map((e) => e.toJson()).toList(),
-          },
-        ),
-        _writeJsonFile(
           path.join(rootDir.path, 'meta/snapshot_manifest.json'),
           {
             'version': 1,
@@ -259,7 +252,6 @@ class IosCloudSyncService {
             'highlight_count': highlights.length,
             'annotation_count': annotations.length,
             'stats_count': stats.length,
-            'source_count': sources.length,
             'copied_book_files_count': copiedBookFilesCount,
             'copied_cover_files_count': copiedCoverFilesCount,
             'missing_book_files_count': missingBookFilesCount,
@@ -327,7 +319,6 @@ class IosCloudSyncService {
       path.join(rootPath, 'annotations'),
       path.join(rootPath, 'progress'),
       path.join(rootPath, 'stats'),
-      path.join(rootPath, 'sources'),
     ];
 
     for (final dirPath in dirs) {
@@ -393,7 +384,6 @@ class IosCloudSyncService {
       '- annotations/annotations.json: 批注集合',
       '- bookmarks/bookmarks.json: 书签集合',
       '- stats/reading_stats.json: 阅读统计',
-      '- sources/book_sources.json: 书源配置',
       '- meta/snapshot_manifest.json: 本次同步清单',
     ].join('\n');
 

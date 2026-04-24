@@ -1,3 +1,6 @@
+// 文件说明：移动端首页页面，负责最近阅读、周统计、专注计时与 AI 建议。
+// 技术要点：Flutter UI、文件系统。
+
 import 'dart:io';
 import 'dart:async';
 
@@ -8,7 +11,9 @@ import '../services/ai/global_ai_reading_service.dart';
 import '../services/books/book_services.dart';
 import '../services/core/core_services.dart';
 import '../services/library/library_event_bus_service.dart';
-import '../services/reading/reading_services.dart';
+import '../services/reading/reading_plan_service.dart';
+import '../services/reading/reading_router_service.dart';
+import '../services/reading/reading_stats_dao.dart';
 import '../utils/layout_helper.dart';
 import '../utils/page_transitions.dart';
 import '../utils/ui_style.dart';

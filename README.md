@@ -76,15 +76,6 @@
 | 书签笔记同步 | ✅ 完成 | 高亮书签云端同步 |
 | 冲突处理 | ✅ 完成 | 时间戳自动合并 |
 
-### 书源管理
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 书源添加 | ✅ 完成 | 自定义书源配置 |
-| 书源启用 | ✅ 完成 | 启用/禁用书源 |
-| 书源编辑 | ✅ 完成 | 修改书源信息 |
-| 书源删除 | ✅ 完成 | 移除书源 |
-
 ### 系统功能
 
 | 功能 | 状态 | 说明 |
@@ -113,8 +104,6 @@
 
 | 功能 | 优先级 | 说明 |
 |------|--------|------|
-| 书源搜索 | 🔴 高 | 通过书源搜索书籍 |
-| 书源阅读 | 🔴 高 | 从书源在线阅读/下载 |
 | 网络书籍导入 | 🟡 中 | URL 导入网络资源 |
 
 ### 阅读体验
@@ -168,59 +157,28 @@
 
 ## 项目结构
 
+详细逐文件索引请看 `CODEBASE_DOCUMENTATION.md`，这里保留当前代码的高层目录图。
+
 ```
 lib/
-├── main.dart                    # 应用入口，主题配置
-├── models/                      # 数据模型层
-│   ├── book.dart               # 书籍模型
-│   ├── chapter.dart            # 章节模型
-│   ├── bookmark.dart           # 书签模型
-│   ├── book_note.dart          # 笔记/高亮模型
-│   ├── book_source.dart        # 书源模型
-│   ├── page_turning_config.dart # 翻页配置
-│   └── text_page_data.dart     # 文本页面数据
-├── pages/                       # 页面组件层
-│   ├── reader_page.dart        # 阅读页面（核心）
-│   ├── home_shell_page.dart    # 首页容器
-│   ├── home_dashboard_page.dart # 首页内容
-│   ├── library_page.dart       # 书库页面
-│   ├── import_book_page.dart   # 导入书籍页面
-│   ├── settings_page.dart      # 设置页面
-│   ├── book_source_page.dart   # 书源管理页面
-│   └── detailed_stats_page.dart # 详细统计页面
-├── providers/                   # 状态管理
-│   └── reader_providers.dart   # 阅读器核心 Provider
-├── services/                    # 业务逻辑层
-│   ├── books/                  # 书籍相关服务
-│   │   ├── book_import_service.dart      # 书籍导入
-│   │   ├── enhanced_txt_import_service.dart # TXT 导入
-│   │   ├── book_dao.dart                 # 数据访问
-│   │   └── epub_image_extractor_service.dart # EPUB 图片
-│   ├── pagination/             # 分页系统
-│   │   ├── enhanced_paginator_service.dart # 核心分页器
-│   │   ├── pagination_cache_service.dart   # 分页缓存
-│   │   └── text_preprocessor_helper.dart   # 文本预处理
-│   ├── reading/                # 阅读功能
-│   │   ├── reading_router_service.dart    # 阅读路由
-│   │   ├── reading_progress_service.dart   # 阅读进度
-│   │   └── reader_settings_service.dart   # 阅读设置
-│   ├── tts/                    # TTS 朗读
-│   │   ├── base_tts.dart       # TTS 基类
-│   │   ├── system_tts.dart     # 系统 TTS 实现
-│   │   └── tts_preferences.dart # TTS 设置
-│   └── sync/                   # 同步模块
-│       └── webdav_sync_service.dart # WebDAV 同步
-├── utils/                       # 工具类层
-│   ├── app_themes.dart        # 应用主题
-│   ├── layout_helper.dart      # 响应式布局
-│   ├── page_transitions.dart   # 页面转场
-│   └── glass_config.dart      # 毛玻璃效果
-└── widgets/                     # 自定义组件
-    ├── toc_widget.dart         # 目录组件
-    ├── tts_settings_sheet.dart # TTS 设置面板
-    ├── page_turning_settings_sheet.dart # 翻页设置
-    ├── enhanced_text_selection_toolbar.dart # 文本选择
-    └── webdav_config_dialog.dart # WebDAV 配置
+├── main.dart                          # 应用入口
+├── l10n/                              # 国际化生成代码
+├── models/                            # 书籍、章节、书签等模型
+├── pages/                             # 页面层与首页局部组件
+│   ├── foliate_reader_page.dart       # 当前默认阅读页面
+│   ├── home_shell_page.dart           # 首页导航壳层
+│   ├── home_mobile_dashboard_page.dart # 移动端首页
+│   └── library_page.dart              # 书库页面
+├── reader_core/                       # 阅读支撑层（解析、文档转换、模型）
+├── services/
+│   ├── books/                         # 导入、DAO、封面、图片
+│   ├── core/                          # 数据库、缓存、备份、离线能力
+│   ├── pagination/                    # 旧分页链路与缓存
+│   ├── reading/                       # 阅读路由、计划、进度、资源准备
+│   ├── sync/                          # WebDAV / iOS 云同步
+│   └── tts/                           # TTS 抽象与偏好设置
+├── utils/                             # 主题、布局、系统 UI、编码工具
+└── widgets/                           # 通用组件
 ```
 
 ---

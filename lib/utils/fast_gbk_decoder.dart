@@ -1,3 +1,6 @@
+// 文件说明：GBK 快速解码工具，为中文 TXT 导入提供高性能解码能力。
+// 技术要点：工具方法、GBK 编解码。
+
 // ignore_for_file: implementation_imports
 
 import 'dart:typed_data';

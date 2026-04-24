@@ -1,3 +1,6 @@
+// 文件说明：增强 TXT 导入服务，负责解码检测、文本预处理与章节提取。
+// 技术要点：服务层、JSON、Flutter。
+
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';

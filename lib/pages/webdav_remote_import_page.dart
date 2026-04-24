@@ -1,3 +1,6 @@
+// 文件说明：WebDAV 远程导入页面，用于浏览云端目录并导入书籍。
+// 技术要点：Flutter UI、文件系统。
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';

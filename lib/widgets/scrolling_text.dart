@@ -1,3 +1,6 @@
+// 文件说明：滚动文本组件，用于超长文本的自动滚动显示。
+// 技术要点：Flutter UI。
+
 import 'package:flutter/material.dart';
 
 /// 自动滚动文本组件，当文本过长时会自动滚动显示

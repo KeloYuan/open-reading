@@ -1,3 +1,6 @@
+// 文件说明：EPUB 图片提取服务，把压缩包中的图片抽取到本地缓存目录。
+// 技术要点：服务层、Archive ZIP、EPUBX、Path、文件系统、Flutter。
+
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';

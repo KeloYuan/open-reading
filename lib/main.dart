@@ -1,3 +1,6 @@
+// 文件说明：应用启动入口，负责初始化数据库、依赖注入、主题、国际化与全局服务。
+// 技术要点：Flutter Localizations、Riverpod、Provider、SharedPreferences、SQLite FFI、Path Provider。
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -14,7 +17,6 @@ import 'pages/home_shell_page.dart';
 import 'pages/user_agreement_page.dart';
 import 'services/books/book_services.dart';
 import 'services/core/core_services.dart';
-import 'services/reading/reading_services.dart';
 import 'utils/app_themes.dart';
 import 'services/tts_service.dart';
 import 'package:path_provider/path_provider.dart';
@@ -404,18 +406,6 @@ class _XxReadAppState extends State<XxReadApp> {
       debugPrint('❌ 数据管理系统初始化失败: $e');
       if (mounted) {
         setState(() => _bootstrapError = '数据系统初始化失败');
-      }
-      return;
-    }
-
-    // 初始化阅读引擎协调器
-    try {
-      await ReadingEngineCoordinator().ensureInitialized();
-      debugPrint('✅ 阅读引擎协调器已初始化');
-    } catch (e) {
-      debugPrint('❌ 阅读引擎协调器初始化失败: $e');
-      if (mounted) {
-        setState(() => _bootstrapError = '阅读引擎初始化失败');
       }
       return;
     }

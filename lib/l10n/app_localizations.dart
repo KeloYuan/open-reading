@@ -422,36 +422,6 @@ abstract class AppLocalizations {
   /// **'Reading Settings'**
   String get readingSettings;
 
-  /// Book source label
-  ///
-  /// In en, this message translates to:
-  /// **'Sources'**
-  String get bookSource;
-
-  /// Book sources feature section
-  ///
-  /// In en, this message translates to:
-  /// **'Book Sources'**
-  String get bookSourceFeatures;
-
-  /// Enable book source option
-  ///
-  /// In en, this message translates to:
-  /// **'Enable book sources'**
-  String get enableBookSource;
-
-  /// Hint about enabling book sources
-  ///
-  /// In en, this message translates to:
-  /// **'Enable online book search and reading'**
-  String get enableBookSourceHint;
-
-  /// Hint when book source is enabled
-  ///
-  /// In en, this message translates to:
-  /// **'When enabled, you will see the \"Sources\" tab for online search and reading.'**
-  String get bookSourceEnabledHint;
-
   /// Enable text-to-speech option
   ///
   /// In en, this message translates to:

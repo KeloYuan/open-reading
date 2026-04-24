@@ -1,3 +1,6 @@
+// 文件说明：DOCX 解析器，把 Word 文档转换成阅读内核可消费的章节数据。
+// 技术要点：ReaderCore、Archive ZIP、JSON、文件系统。
+
 import 'dart:convert';
 import 'dart:io';
 

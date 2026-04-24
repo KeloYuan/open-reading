@@ -1,3 +1,6 @@
+// 文件说明：首页仪表盘的 part 拆分文件，承载统计区块与局部构建方法。
+// 技术要点：Flutter UI、Dart part。
+
 part of 'home_dashboard_page.dart';
 
 /// 首页大量 UI 区块方法拆分到这里：

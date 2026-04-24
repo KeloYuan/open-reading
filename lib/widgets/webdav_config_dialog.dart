@@ -1,3 +1,6 @@
+// 文件说明：WebDAV 配置对话框，用于编辑服务器、账号和测试连接。
+// 技术要点：Flutter UI、渲染层。
+
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -189,7 +192,7 @@ class _WebDavConfigDialogState extends State<WebDavConfigDialog> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '配置服务器后可同步书籍、书签、进度和书源',
+                  '配置服务器后可同步书籍、书签、进度和笔记',
                   style: TextStyle(color: _getSubtitleColor(), fontSize: 13),
                 ),
               ],

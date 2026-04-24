@@ -1,3 +1,6 @@
+// 文件说明：书签 DAO，负责书签数据的增删改查。
+// 技术要点：服务层。
+
 import 'package:xxread/models/bookmark.dart';
 import 'package:xxread/services/core/database_service.dart';
 
@@ -52,6 +55,26 @@ class BookmarkDao {
     return null;
   }
 
+  // 根据 CFI 获取书签
+  Future<Bookmark?> getBookmarkByCfi(int bookId, String cfi) async {
+    final normalizedCfi = cfi.trim();
+    if (normalizedCfi.isEmpty) {
+      return null;
+    }
+    final db = await _databaseService.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'bookmarks',
+      where: 'bookId = ? AND cfi = ?',
+      whereArgs: [bookId, normalizedCfi],
+      limit: 1,
+    );
+
+    if (maps.isNotEmpty) {
+      return Bookmark.fromMap(maps.first);
+    }
+    return null;
+  }
+
   // 删除书签
   Future<int> deleteBookmark(int id) async {
     final db = await _databaseService.database;
@@ -65,6 +88,20 @@ class BookmarkDao {
       'bookmarks',
       where: 'bookId = ? AND pageNumber = ?',
       whereArgs: [bookId, pageNumber],
+    );
+  }
+
+  // 根据 CFI 删除书签
+  Future<int> deleteBookmarkByCfi(int bookId, String cfi) async {
+    final normalizedCfi = cfi.trim();
+    if (normalizedCfi.isEmpty) {
+      return 0;
+    }
+    final db = await _databaseService.database;
+    return await db.delete(
+      'bookmarks',
+      where: 'bookId = ? AND cfi = ?',
+      whereArgs: [bookId, normalizedCfi],
     );
   }
 

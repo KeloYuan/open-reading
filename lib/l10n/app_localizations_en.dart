@@ -172,22 +172,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get readingSettings => 'Reading Settings';
 
   @override
-  String get bookSource => 'Sources';
-
-  @override
-  String get bookSourceFeatures => 'Book Sources';
-
-  @override
-  String get enableBookSource => 'Enable book sources';
-
-  @override
-  String get enableBookSourceHint => 'Enable online book search and reading';
-
-  @override
-  String get bookSourceEnabledHint =>
-      'When enabled, you will see the \"Sources\" tab for online search and reading.';
-
-  @override
   String get enableTts => 'Enable TTS';
 
   @override

@@ -1,3 +1,6 @@
+// 文件说明：TTS 抽象基类，定义语音列表、播放状态和统一接口。
+// 技术要点：服务层、Flutter。
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 

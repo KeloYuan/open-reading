@@ -1,3 +1,6 @@
+// 文件说明：分页缓存服务，负责把分页结果按布局签名落盘缓存。
+// 技术要点：服务层、Path Provider、Crypto 哈希、文件系统、JSON、Flutter。
+
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';

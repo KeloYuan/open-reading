@@ -1,3 +1,6 @@
+// 文件说明：书签数据模型，保存书签位置、标题和创建时间。
+// 技术要点：Dart 数据模型。
+
 class Bookmark {
   final int? id;
   final int bookId;

@@ -1,3 +1,6 @@
+// 文件说明：分享服务，统一生成分享文本并调用系统分享能力。
+// 技术要点：服务层、Share Plus、Intl、Flutter。
+
 import 'package:flutter/foundation.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';

@@ -1,3 +1,6 @@
+// 文件说明：应用品牌图标组件，统一渲染小元读书的品牌标识。
+// 技术要点：Flutter UI。
+
 import 'package:flutter/material.dart';
 
 const String kAppBrandIconAsset = 'assets/images/app_icon.png';

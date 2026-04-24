@@ -1,3 +1,6 @@
+// 文件说明：页面样式辅助工具，统一包装页面的背景、间距和视觉风格。
+// 技术要点：工具方法、Flutter。
+
 import 'package:flutter/material.dart';
 import 'ui_style.dart';
 

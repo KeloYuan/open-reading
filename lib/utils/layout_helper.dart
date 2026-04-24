@@ -1,3 +1,6 @@
+// 文件说明：响应式布局工具，根据屏幕尺寸判断导航模式与布局类型。
+// 技术要点：工具方法、Flutter。
+
 import 'package:flutter/material.dart';
 
 class LayoutHelper {

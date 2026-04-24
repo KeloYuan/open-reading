@@ -1,3 +1,6 @@
+// 文件说明：侧边提示组件，提供全局浮层式提示反馈。
+// 技术要点：Flutter UI、渲染层。
+
 import 'dart:async';
 import 'dart:ui';
 

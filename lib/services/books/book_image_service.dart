@@ -1,3 +1,6 @@
+// 文件说明：书籍图片缓存服务，负责图片落盘、去重和显示元数据管理。
+// 技术要点：服务层、Path、Crypto 哈希、文件系统、渲染层、JSON。
+
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
