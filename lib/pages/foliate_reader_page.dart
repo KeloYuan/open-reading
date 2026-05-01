@@ -1,22 +1,18 @@
-// 文件说明：Foliate 阅读页面，采用 Foliate (WebView) 渲染并使用 Flutter 原生控制 UI。
-// 技术要点：Flutter UI、InAppWebView、Foliate-JS Bridge、SharedPreferences。
+// 文件说明：Foliate 阅读页面 UI 壳——委托 EpubPlayer 处理 WebView / JS Bridge，
+// 自身仅负责玻璃面板、主题/排版/目录 Sheet、进度保存、系统 UI。
+// 技术要点：GlobalKey<EpubPlayerState>、SharedPreferences、WidgetsBindingObserver。
 
 import 'dart:async';
-import 'dart:collection';
-import 'dart:convert';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:xxread/models/book.dart' as legacy;
-import 'package:xxread/models/bookmark.dart';
+import 'package:xxread/page/epub_player.dart';
 import 'package:xxread/services/books/book_dao.dart';
-import 'package:xxread/services/books/book_note_dao.dart';
-import 'package:xxread/services/books/bookmark_dao.dart';
 import 'package:xxread/services/reading/local_reader_file_server.dart';
 import 'package:xxread/utils/glass_config.dart';
 import 'package:xxread/utils/system_ui_helper.dart';
@@ -46,7 +42,8 @@ class _FoliateReaderPageState extends State<FoliateReaderPage>
   static const String _readerProgressPrefKeyPrefix = 'reader_web_progress_v1_';
   static const double _floatingPanelRadius = 30;
 
-  InAppWebViewController? _webController;
+  final _epubPlayerKey = GlobalKey<EpubPlayerState>();
+
   bool _configReady = false;
   bool _readerReady = false;
   bool _chromeVisible = false;
@@ -56,21 +53,15 @@ class _FoliateReaderPageState extends State<FoliateReaderPage>
   String? _serverUrl;
   String? _currentBookmarkCfi;
 
-  String _chapterTitle = '';
-  int _bookCurrentPage = 1;
-  int _bookTotalPages = 1;
   double _overallProgress = 0.0;
   String? _lastKnownCfi;
-  List<dynamic> _toc = <dynamic>[];
 
   double _fontSize = 1.25;
   double _lineHeight = 1.5;
 
   final _bookDao = BookDao();
-  final _bookNoteDao = BookNoteDao();
-  final _bookmarkDao = BookmarkDao();
 
-  final List<_ReaderThemePreset> _themes = const [
+  static const List<_ReaderThemePreset> _themes = [
     _ReaderThemePreset(
       name: '纯白',
       background: Color(0xFFFFFFFF),
@@ -247,30 +238,14 @@ class _FoliateReaderPageState extends State<FoliateReaderPage>
     return '#$r$g$b$a';
   }
 
-  Future<void> _callReaderMethod(String method, [dynamic argument]) async {
-    final controller = _webController;
-    if (controller == null) {
-      return;
-    }
-    final source = argument == null
-        ? 'window.$method && window.$method();'
-        : 'window.$method && window.$method(${jsonEncode(argument)});';
-    await controller.evaluateJavascript(source: source);
-  }
-
-  Future<void> _applyReaderStyle(Map<String, dynamic> style) async {
-    if (style.isEmpty) {
-      return;
-    }
-    await _callReaderMethod('changeStyle', style);
-  }
+  // ── EpubPlayer 委托方法 ──
 
   Future<void> _updateTheme(int index) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_themePrefKey, index);
     setState(() => _themeIndex = index);
     final preset = _activeTheme;
-    await _applyReaderStyle({
+    _epubPlayerKey.currentState?.changeStyle({
       'backgroundColor': _toHex8(preset.background),
       'fontColor': _toHex8(preset.foreground),
     });
@@ -288,242 +263,101 @@ class _FoliateReaderPageState extends State<FoliateReaderPage>
       style['spacing'] = lineHeight;
       await prefs.setDouble(_lineHeightPrefKey, lineHeight);
     }
-    await _applyReaderStyle(style);
+    if (style.isNotEmpty) {
+      _epubPlayerKey.currentState?.changeStyle(style);
+    }
   }
 
   Future<void> _saveProgressNow() async {
+    final player = _epubPlayerKey.currentState;
+    if (player == null) return;
     final bookId = widget.book.id;
-    if (bookId == null) {
-      return;
-    }
-    await _bookDao.updateBookProgress(bookId, _bookCurrentPage - 1);
-    await _bookDao.updateBookTotalPages(bookId, _bookTotalPages);
+    if (bookId == null) return;
+
+    final cfi = player.cfi;
+    final percentage = player.percentage;
+    final currentPage = player.bookCurrentPage;
+    final totalPages = player.bookTotalPages;
+
+    await _bookDao.updateBookProgress(bookId, currentPage - 1);
+    await _bookDao.updateBookTotalPages(bookId, totalPages);
     final prefs = await SharedPreferences.getInstance();
-    if (_lastKnownCfi != null) {
-      await prefs.setString('$_readerCfiPrefKeyPrefix$bookId', _lastKnownCfi!);
+    if (cfi.isNotEmpty) {
+      await prefs.setString('$_readerCfiPrefKeyPrefix$bookId', cfi);
     }
     await prefs.setDouble(
-        '$_readerProgressPrefKeyPrefix$bookId', _overallProgress);
+        '$_readerProgressPrefKeyPrefix$bookId', percentage);
   }
 
   void _handleTap(double x) {
+    // 点击前先移除上下文菜单
+    final player = _epubPlayerKey.currentState;
+    if (player?.contextMenuEntry != null) {
+      player?.removeOverlay();
+      player?.clearWebViewSelection();
+      return;
+    }
     if (x < 0.3) {
-      _callReaderMethod('prevPage');
+      player?.prevPage();
     } else if (x > 0.7) {
-      _callReaderMethod('nextPage');
+      player?.nextPage();
     } else {
       setState(() => _chromeVisible = !_chromeVisible);
     }
   }
 
-  Future<void> _renderSavedAnnotations() async {
-    final bookId = widget.book.id;
-    if (bookId == null) {
-      await _callReaderMethod(
-          'renderAnnotations', const <Map<String, dynamic>>[]);
-      return;
-    }
-
-    final bookmarks = await _bookmarkDao.getBookmarksForBook(bookId);
-    final notes = await _bookNoteDao.selectBookNotesByBookId(bookId);
-    final annotations = <Map<String, dynamic>>[
-      for (final bookmark in bookmarks)
-        if ((bookmark.cfi ?? '').trim().isNotEmpty)
-          {
-            'id': bookmark.id,
-            'value': bookmark.cfi,
-            'type': 'bookmark',
-            'color': '#215a8f',
-            'note': bookmark.note,
-          },
-      for (final note in notes)
-        if (note.cfi.trim().isNotEmpty)
-          {
-            'id': note.id,
-            'value': note.cfi,
-            'type': note.type,
-            'color': '#${note.color}',
-            'note': note.content,
-          },
-    ];
-    await _callReaderMethod('renderAnnotations', annotations);
+  void _onRelocated() {
+    final player = _epubPlayerKey.currentState;
+    if (player == null) return;
+    setState(() {
+      _overallProgress = player.percentage;
+      _lastKnownCfi = player.cfi;
+      _hasCurrentBookmark = player.bookmarkExists;
+      _currentBookmarkCfi = player.bookmarkCfi;
+    });
   }
 
-  Future<void> _handleBookmarkEvent(Map<String, dynamic> payload) async {
-    final bookId = widget.book.id;
-    if (bookId == null) {
-      return;
-    }
-    final detailRaw = payload['detail'];
-    if (detailRaw is! Map) {
-      return;
-    }
-    final detail = Map<String, dynamic>.from(detailRaw);
-    final remove = payload['remove'] == true;
-    final cfi = detail['cfi']?.toString().trim() ?? '';
-    if (cfi.isEmpty) {
-      return;
-    }
-
-    if (remove) {
-      await _bookmarkDao.deleteBookmarkByCfi(bookId, cfi);
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _hasCurrentBookmark = false;
-        _currentBookmarkCfi = null;
-      });
-      showSideToast(
-        context,
-        '已移除当前书签',
-        icon: Icons.bookmark_remove_rounded,
-      );
+  void _onBookmarkChanged(bool exists) {
+    setState(() {
+      _hasCurrentBookmark = exists;
+    });
+    if (exists) {
+      showSideToast(context, '已添加当前书签', icon: Icons.bookmark_added_rounded);
     } else {
-      final existing = await _bookmarkDao.getBookmarkByCfi(bookId, cfi);
-      if (existing == null) {
-        final snippet = detail['content']?.toString().trim() ?? '';
-        await _bookmarkDao.insertBookmark(
-          Bookmark(
-            bookId: bookId,
-            pageNumber: _bookCurrentPage > 0 ? _bookCurrentPage - 1 : 0,
-            note: snippet,
-            cfi: cfi,
-          ),
-        );
-      }
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _hasCurrentBookmark = true;
-        _currentBookmarkCfi = cfi;
-      });
-      showSideToast(
-        context,
-        '已添加当前书签',
-        icon: Icons.bookmark_added_rounded,
-      );
+      showSideToast(context, '已移除当前书签', icon: Icons.bookmark_remove_rounded);
     }
-
-    await _renderSavedAnnotations();
   }
 
-  Future<void> _openExternalLink(dynamic rawLink) async {
-    String? link;
-    if (rawLink is String) {
-      link = rawLink.trim();
-    } else if (rawLink is Map) {
-      final href = rawLink['href'];
-      if (href is String) {
-        link = href.trim();
-      }
-    }
-    if (!mounted || link == null || link.isEmpty) {
-      return;
-    }
+  void _onLoadEnd() {
+    setState(() => _readerReady = true);
+  }
 
+  void _onPullUp() {
+    if (!_chromeVisible) {
+      setState(() => _chromeVisible = true);
+    }
+  }
+
+  void _onExternalLink(String link) {
     final uri = Uri.tryParse(link);
     if (uri == null || uri.scheme.isEmpty || uri.scheme == 'javascript') {
       showSideToast(context, '无法打开无效链接', icon: Icons.link_off_rounded);
       return;
     }
-
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!opened && mounted) {
-      showSideToast(context, '外部链接打开失败', icon: Icons.error_outline_rounded);
-    }
+    launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   Future<void> _toggleCurrentBookmark() async {
     if (_hasCurrentBookmark) {
       final cfi = _currentBookmarkCfi;
-      if (cfi == null || cfi.isEmpty) {
-        return;
-      }
-      await _callReaderMethod('removeAnnotation', cfi);
+      if (cfi == null || cfi.isEmpty) return;
+      _epubPlayerKey.currentState?.removeAnnotation(cfi);
       return;
     }
-    await _callReaderMethod('addBookmarkHere');
+    _epubPlayerKey.currentState?.addBookmarkHere();
   }
 
-  void _registerJSHandlers(InAppWebViewController controller) {
-    controller.addJavaScriptHandler(
-      handlerName: 'onLoadEnd',
-      callback: (args) {
-        if (mounted) {
-          setState(() => _readerReady = true);
-        }
-        return null;
-      },
-    );
-    controller.addJavaScriptHandler(
-      handlerName: 'onRelocated',
-      callback: (args) {
-        if (args.isEmpty || args.first is! Map) {
-          return null;
-        }
-        final payload = Map<String, dynamic>.from(args.first as Map);
-        final bookmark = payload['bookmark'];
-        final bookmarkMap =
-            bookmark is Map ? Map<String, dynamic>.from(bookmark) : null;
-        setState(() {
-          _chapterTitle = payload['chapterTitle']?.toString() ?? '';
-          _bookCurrentPage = (payload['bookCurrentPage'] as num?)?.toInt() ?? 1;
-          _bookTotalPages = (payload['bookTotalPages'] as num?)?.toInt() ?? 1;
-          _overallProgress = (payload['percentage'] as num?)?.toDouble() ?? 0.0;
-          _lastKnownCfi = payload['cfi']?.toString();
-          _hasCurrentBookmark = bookmarkMap?['exists'] == true;
-          _currentBookmarkCfi = bookmarkMap?['cfi']?.toString();
-        });
-        return null;
-      },
-    );
-    controller.addJavaScriptHandler(
-      handlerName: 'onSetToc',
-      callback: (args) {
-        if (args.isNotEmpty) {
-          setState(() => _toc = List<dynamic>.from(args.first as List));
-        }
-        return null;
-      },
-    );
-    controller.addJavaScriptHandler(
-      handlerName: 'onClick',
-      callback: (args) {
-        if (args.isEmpty || args.first is! Map) {
-          return null;
-        }
-        final payload = Map<String, dynamic>.from(args.first as Map);
-        _handleTap((payload['x'] as num).toDouble());
-        return null;
-      },
-    );
-    controller.addJavaScriptHandler(
-      handlerName: 'renderAnnotations',
-      callback: (args) async {
-        await _renderSavedAnnotations();
-        return null;
-      },
-    );
-    controller.addJavaScriptHandler(
-      handlerName: 'handleBookmark',
-      callback: (args) async {
-        if (args.isNotEmpty && args.first is Map) {
-          await _handleBookmarkEvent(
-              Map<String, dynamic>.from(args.first as Map));
-        }
-        return null;
-      },
-    );
-    controller.addJavaScriptHandler(
-      handlerName: 'onExternalLink',
-      callback: (args) async {
-        await _openExternalLink(args.isNotEmpty ? args.first : null);
-        return null;
-      },
-    );
-  }
+  // ── Sheet 面板 ──
 
   void _showThemeSheet() {
     showModalBottomSheet(
@@ -594,6 +428,8 @@ class _FoliateReaderPageState extends State<FoliateReaderPage>
   }
 
   void _showTocSheet() {
+    final player = _epubPlayerKey.currentState;
+    final toc = player?.toc ?? [];
     showModalBottomSheet(
       context: context,
       backgroundColor: _activeTheme.background,
@@ -619,13 +455,13 @@ class _FoliateReaderPageState extends State<FoliateReaderPage>
             Expanded(
               child: ListView.separated(
                 controller: scrollController,
-                itemCount: _toc.length,
+                itemCount: toc.length,
                 separatorBuilder: (context, index) => Divider(
                   color: _activeTheme.foreground.withValues(alpha: 0.1),
                   height: 1,
                 ),
                 itemBuilder: (context, index) {
-                  final item = Map<String, dynamic>.from(_toc[index] as Map);
+                  final item = Map<String, dynamic>.from(toc[index] as Map);
                   final title = item['label']?.toString() ?? '无标题';
                   final href = item['href']?.toString();
                   return ListTile(
@@ -639,7 +475,7 @@ class _FoliateReaderPageState extends State<FoliateReaderPage>
                     onTap: href == null
                         ? null
                         : () {
-                            _callReaderMethod('goToHref', href);
+                            player?.goToHref(href);
                             Navigator.pop(context);
                             setState(() => _chromeVisible = false);
                           },
@@ -727,36 +563,38 @@ class _FoliateReaderPageState extends State<FoliateReaderPage>
     );
   }
 
+  // ── 构建 UI ──
+
   @override
   Widget build(BuildContext context) {
     if (!_configReady) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+
+    final player = _epubPlayerKey.currentState;
+    final chapterTitle = player?.chapterTitle ?? '';
+    final bookCurrentPage = player?.bookCurrentPage ?? 1;
+    final bookTotalPages = player?.bookTotalPages ?? 1;
+
     return Scaffold(
       backgroundColor: _activeTheme.background,
       body: Stack(
         children: [
           Positioned.fill(
-            child: InAppWebView(
-              initialFile: 'assets/foliate-js/app.html',
-              initialSettings: InAppWebViewSettings(
-                javaScriptEnabled: true,
-                transparentBackground: true,
-                allowFileAccessFromFileURLs: true,
-                allowUniversalAccessFromFileURLs: true,
-                allowFileAccess: true,
-              ),
-              initialUserScripts: UnmodifiableListView<UserScript>([
-                UserScript(
-                  source:
-                      'window.__XXREAD_CONFIG__ = ${jsonEncode(_foliateConfig())};',
-                  injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
-                ),
-              ]),
-              onWebViewCreated: (controller) {
-                _webController = controller;
-                _registerJSHandlers(controller);
-              },
+            child: EpubPlayer(
+              key: _epubPlayerKey,
+              book: widget.book,
+              sourceFilePath: widget.sourceFilePath,
+              serverUrl: _serverUrl,
+              initialCfi: _lastKnownCfi,
+              initialProgress: _overallProgress,
+              foliateConfig: _foliateConfig(),
+              onRelocated: _onRelocated,
+              onBookmarkChanged: _onBookmarkChanged,
+              onClick: _handleTap,
+              onLoadEnd: _onLoadEnd,
+              onPullUp: _onPullUp,
+              onExternalLink: _onExternalLink,
             ),
           ),
           if (!_readerReady)
@@ -783,7 +621,8 @@ class _FoliateReaderPageState extends State<FoliateReaderPage>
               left: 0,
               right: 0,
               bottom: 8,
-              child: _buildBottomReadingInfoOverlay(),
+              child: _buildBottomReadingInfoOverlay(
+                  chapterTitle, bookCurrentPage, bookTotalPages),
             ),
         ],
       ),
@@ -864,7 +703,7 @@ class _FoliateReaderPageState extends State<FoliateReaderPage>
                         value: _overallProgress.clamp(0.0, 1.0),
                         onChanged: (val) {
                           setState(() => _overallProgress = val);
-                          _callReaderMethod('goToPercent', val);
+                          _epubPlayerKey.currentState?.goToPercent(val);
                         },
                       ),
                     ),
@@ -945,7 +784,8 @@ class _FoliateReaderPageState extends State<FoliateReaderPage>
     );
   }
 
-  Widget _buildBottomReadingInfoOverlay() {
+  Widget _buildBottomReadingInfoOverlay(
+      String chapterTitle, int currentPage, int totalPages) {
     return SafeArea(
       top: false,
       child: Center(
@@ -956,7 +796,7 @@ class _FoliateReaderPageState extends State<FoliateReaderPage>
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
-            '$_chapterTitle · 第 $_bookCurrentPage/$_bookTotalPages 页',
+            '$chapterTitle · 第 $currentPage/$totalPages 页',
             style: TextStyle(
               color: _activeTheme.foreground.withValues(alpha: 0.8),
               fontSize: 11,

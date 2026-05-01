@@ -117,9 +117,6 @@ PODS:
     - Flutter
   - wakelock_plus (0.0.1):
     - Flutter
-  - webview_flutter_wkwebview (0.0.1):
-    - Flutter
-    - FlutterMacOS
 
 DEPENDENCIES:
   - audio_service (from `.symlinks/plugins/audio_service/darwin`)
@@ -135,14 +132,14 @@ DEPENDENCIES:
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - pdfx (from `.symlinks/plugins/pdfx/ios`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
-  - ReadiumAdapterGCDWebServer (from `/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumAdapterGCDWebServer.podspec`)
-  - ReadiumFuzi (from `/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumFuzi.podspec`)
-  - ReadiumGCDWebServer (from `/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumGCDWebServer.podspec`)
-  - ReadiumInternal (from `/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumInternal.podspec`)
-  - ReadiumNavigator (from `/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumNavigator.podspec`)
-  - ReadiumShared (from `/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumShared.podspec`)
-  - ReadiumStreamer (from `/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumStreamer.podspec`)
-  - ReadiumZIPFoundation (from `/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumZIPFoundation.podspec`)
+  - ReadiumAdapterGCDWebServer (from `/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumAdapterGCDWebServer.podspec`)
+  - ReadiumFuzi (from `/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumFuzi.podspec`)
+  - ReadiumGCDWebServer (from `/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumGCDWebServer.podspec`)
+  - ReadiumInternal (from `/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumInternal.podspec`)
+  - ReadiumNavigator (from `/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumNavigator.podspec`)
+  - ReadiumShared (from `/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumShared.podspec`)
+  - ReadiumStreamer (from `/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumStreamer.podspec`)
+  - ReadiumZIPFoundation (from `/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumZIPFoundation.podspec`)
   - saver_gallery (from `.symlinks/plugins/saver_gallery/ios`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
@@ -150,7 +147,6 @@ DEPENDENCIES:
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
   - volume_controller (from `.symlinks/plugins/volume_controller/ios`)
   - wakelock_plus (from `.symlinks/plugins/wakelock_plus/ios`)
-  - webview_flutter_wkwebview (from `.symlinks/plugins/webview_flutter_wkwebview/darwin`)
 
 SPEC REPOS:
   trunk:
@@ -192,21 +188,21 @@ EXTERNAL SOURCES:
   permission_handler_apple:
     :path: ".symlinks/plugins/permission_handler_apple/ios"
   ReadiumAdapterGCDWebServer:
-    :podspec: "/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumAdapterGCDWebServer.podspec"
+    :podspec: "/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumAdapterGCDWebServer.podspec"
   ReadiumFuzi:
-    :podspec: "/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumFuzi.podspec"
+    :podspec: "/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumFuzi.podspec"
   ReadiumGCDWebServer:
-    :podspec: "/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumGCDWebServer.podspec"
+    :podspec: "/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumGCDWebServer.podspec"
   ReadiumInternal:
-    :podspec: "/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumInternal.podspec"
+    :podspec: "/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumInternal.podspec"
   ReadiumNavigator:
-    :podspec: "/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumNavigator.podspec"
+    :podspec: "/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumNavigator.podspec"
   ReadiumShared:
-    :podspec: "/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumShared.podspec"
+    :podspec: "/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumShared.podspec"
   ReadiumStreamer:
-    :podspec: "/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumStreamer.podspec"
+    :podspec: "/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumStreamer.podspec"
   ReadiumZIPFoundation:
-    :podspec: "/Users/xiaoyuan/work/Origo Reader/OpenReading/ios/ReadiumLocalSpecs/ReadiumZIPFoundation.podspec"
+    :podspec: "/Users/xiaoyuan/work/Origo Reader/app/flutter-app/ios/ReadiumLocalSpecs/ReadiumZIPFoundation.podspec"
   saver_gallery:
     :path: ".symlinks/plugins/saver_gallery/ios"
   share_plus:
@@ -221,8 +217,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/volume_controller/ios"
   wakelock_plus:
     :path: ".symlinks/plugins/wakelock_plus/ios"
-  webview_flutter_wkwebview:
-    :path: ".symlinks/plugins/webview_flutter_wkwebview/darwin"
 
 SPEC CHECKSUMS:
   audio_service: aa99a6ba2ae7565996015322b0bb024e1d25c6fd
@@ -262,7 +256,6 @@ SPEC CHECKSUMS:
   url_launcher_ios: 694010445543906933d732453a59da0a173ae33d
   volume_controller: ca1cde542ee70fad77d388f82e9616488110942b
   wakelock_plus: e29112ab3ef0b318e58cfa5c32326458be66b556
-  webview_flutter_wkwebview: 1821ceac936eba6f7984d89a9f3bcb4dea99ebb2
 
 PODFILE CHECKSUM: f1ef054241d0e040b8c94800c1dc853c6ae8cb70
 
