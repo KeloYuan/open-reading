@@ -12,51 +12,60 @@
 </p>
 
 <p align="center">
-  <b>优雅的 Flutter 跨平台电子书阅读器，支持多种格式，提供舒适的阅读体验。</b><br/>
-  <i>An elegant cross-platform ebook reader — beautifully crafted with Flutter & Rust.</i>
+  <b>专注阅读本身的电子书阅读器</b><br/>
+  <sub>不社交 · 不弹窗 · 不开屏广告 · 只安静地读书</sub>
 </p>
 
----
+<p align="center">
+  <b>English</b> · <a href="#-关于小元阅读器">中文</a>
+</p>
 
-## 📖 About
+<br/>
 
-**Open Reading** (小元阅读器) 是 [小元读书 (Origo Reader)](https://github.com/KeloYuan/Origo-Reader) 项目的**开源跨平台版本**，基于 Flutter 构建，覆盖 Android、iOS、macOS、Windows、Linux 五个平台。
+> **Open Reading** is the open-source edition of [Origo Reader (小元读书)](https://github.com/KeloYuan/Origo-Reader).  
+> Built with Flutter + Rust, one codebase covers Android, iOS, macOS, Windows, and Linux.  
+> No social features. No ads. No distractions. Just books.
 
-> 市面上的阅读器要么功能臃肿，要么界面丑陋。
-> Open Reading 只想做一件事：**让你安静地读书，顺便好看一点。**
-
----
-
-## ✨ Features
-
-### 📖 Reading Experience
-| Feature | Description |
-|---------|-------------|
-| 📄 **Multi-Format** | EPUB · PDF · TXT · ZIP 全格式支持 |
-| 📐 **Smart Pagination** | 二分搜索算法精准分页，告别排版错乱 |
-| 🔄 **Page Turn Modes** | 翻页 / 滑动 / 滚动 / 3D 仿真翻页 |
-| 🎨 **Reading Themes** | 多种预设主题 + 自定义背景/字体颜色 |
-| 🔤 **Typography Control** | 字号 · 行距 · 字距 · 缩进，精细调节 |
-| 🌙 **Dark Mode** | 护眼暗色模式，深夜阅读不伤眼 |
-
-### 🛠️ Smart Tools
-| Feature | Description |
-|---------|-------------|
-| 🔖 **Bookmarks** | 一键添加书签，快速跳转 |
-| ✏️ **Highlights & Notes** | 高亮标注 + 笔记，深度阅读 |
-| 🔊 **TTS** | 文本朗读，支持语速/音量/音调调节 + 逐句高亮 |
-| 📊 **Reading Stats** | 每日/每周/每月阅读统计，可视化图表 |
-| ☁️ **WebDAV Sync** | 书籍 · 进度 · 书架 · 笔记全量云端同步 |
-
-### 🔧 Tech Highlights
-| Feature | Description |
-|---------|-------------|
-| 🦀 **Rust Core** | 核心解析引擎 Rust 编写，极致性能 |
-| 📱 **5 Platforms** | Android · iOS · macOS · Windows · Linux |
-| ⚡ **Riverpod** | 响应式状态管理，丝滑流畅 |
-| 💾 **SQLite** | 本地数据持久化，零依赖云服务 |
+<br/>
 
 ---
+
+<br/>
+
+## ✨ Why Open Reading
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+
+#### 📖 读得舒服
+- 📄 EPUB · PDF · TXT · ZIP 全格式
+- 📐 二分搜索精准分页，不跳不闪
+- 🔄 翻页 / 滑动 / 滚动 / 3D 仿真
+- 🎨 多种阅读主题 + 自定义背景色
+- 🔤 字号 · 行距 · 字距 · 缩进全可调
+- 🌙 护眼暗色模式
+
+</td>
+    <td width="50%" valign="top">
+
+#### 🛠️ 用得省心
+- 🔖 书签 · 一键快速跳转
+- ✏️ 高亮标注 + 笔记，深度阅读
+- 🔊 TTS 朗读 + 逐句高亮
+- 📊 阅读统计可视化（日/周/月）
+- ☁️ WebDAV 全量云端同步
+- 🦀 Rust 核心引擎，极致性能
+
+</td>
+  </tr>
+</table>
+
+<br/>
+
+---
+
+<br/>
 
 ## 📱 Supported Platforms
 
@@ -70,30 +79,18 @@
   </tr>
 </table>
 
----
-
-## 📦 Tech Stack
-
-```
-Frontend    → Flutter 3.35 + Dart 3.9 + Material 3
-State       → Riverpod 2.6
-Database    → SQLite (sqflite)
-Reader      → WebView (Foliate) + Rust Core Engine
-```
+<br/>
 
 ---
+
+<br/>
 
 ## 🚀 Getting Started
 
 ```bash
-# Clone
 git clone https://github.com/KeloYuan/open-reading.git
 cd open-reading
-
-# Install dependencies
 flutter pub get
-
-# Run
 flutter run
 ```
 
@@ -107,7 +104,27 @@ flutter build windows    # Windows
 flutter build linux      # Linux
 ```
 
+<br/>
+
 ---
+
+<br/>
+
+## 📦 Tech Stack
+
+```
+Frontend    → Flutter 3.35 + Dart 3.9 + Material 3
+State       → Riverpod 2.6
+Database    → SQLite (sqflite)
+Reader      → WebView (Foliate) + Rust Core Engine
+Sync        → WebDAV
+```
+
+<br/>
+
+---
+
+<br/>
 
 ## 📁 Project Structure
 
@@ -123,7 +140,11 @@ lib/
 └── l10n/                  # Internationalization
 ```
 
+<br/>
+
 ---
+
+<br/>
 
 ## 🗺️ Roadmap
 
@@ -141,26 +162,68 @@ lib/
 - [ ] 全局暗色模式
 - [ ] 自定义字体导入
 
+<br/>
+
 ---
+
+<br/>
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+欢迎贡献！无论是修 bug、加功能还是改进文档。
+
+1. Fork 本仓库
+2. 创建分支 (`git checkout -b feature/amazing-feature`)
+3. 提交 (`git commit -m 'feat: add amazing feature'`)
+4. 推送 (`git push origin feature/amazing-feature`)
+5. 开 Pull Request
+
+<br/>
 
 ---
+
+<br/>
+
+## ⭐ Star History
+
+<p align="center">
+  <a href="https://star-history.com/#KeloYuan/open-reading&Date">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=KeloYuan/open-reading&type=Date&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=KeloYuan/open-reading&type=Date" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=KeloYuan/open-reading&type=Date" width="600" />
+    </picture>
+  </a>
+</p>
+
+<br/>
+
+---
+
+<br/>
+
+## 🌍 关于小元阅读器
+
+<p align="center">
+  <b>让阅读回归阅读本身。</b>
+</p>
+
+<p align="center">
+  排版好不好看 · 翻页顺不顺手 · 笔记好不好找<br/>
+  <sub>—— 这些才是阅读器该关心的事。</sub>
+</p>
+
+<br/>
 
 ## 📄 License
 
 [MIT](LICENSE) © [KeloYuan](https://github.com/KeloYuan)
 
----
+<br/>
 
 <p align="center">
-  <b>小元阅读器</b> — <i>Reading, refined.</i><br/><br/>
-  Part of <a href="https://github.com/KeloYuan/Origo-Reader">Origo Reader (小元读书)</a><br/><br/>
-  If you like this project, give it a ⭐ — it keeps me going!
+  Part of <a href="https://github.com/KeloYuan/Origo-Reader"><b>Origo Reader (小元读书)</b></a> — Reading, refined.<br/><br/>
+  <a href="https://github.com/KeloYuan/open-reading/stargazers">
+    <img src="https://img.shields.io/badge/⭐_Star_支持-FFD600?style=for-the-badge&logo=github&logoColor=black" />
+  </a>
 </p>
