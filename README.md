@@ -1,222 +1,166 @@
-# 小元读书 (Origo Reader)
+<p align="center">
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d1117,50:1a1b26,100:0d1117&height=200&section=header&text=Open%20Reading&fontSize=50&fontColor=f7768e&fontAlignY=40&desc=%E5%B0%8F%E5%85%83%E9%98%85%E8%AF%BB%E5%99%A8%20%E2%80%94%20An%20Elegant%20Cross-Platform%20Ebook%20Reader&descSize=16&descAlignY=60&descAlign=50&animation=fadeIn" width="100%" />
+</p>
 
-## 这个仓库会发Release，源代码会在APP上架App Store后开源
-优雅的 Flutter 跨平台电子书阅读器，支持多种书籍格式，提供舒适的阅读体验。
+<p align="center">
+  <a href="https://github.com/KeloYuan/open-reading/releases"><img src="https://img.shields.io/github/v/release/KeloYuan/open-reading?style=for-the-badge&color=f7768e" /></a>
+  <a href="https://github.com/KeloYuan/open-reading/stargazers"><img src="https://img.shields.io/github/stars/KeloYuan/open-reading?style=for-the-badge&color=e0af68" /></a>
+  <img src="https://img.shields.io/badge/Flutter-3.35-blue?style=for-the-badge&logo=flutter&logoColor=white" />
+  <img src="https://img.shields.io/badge/Dart-3.9-0175C2?style=for-the-badge&logo=dart&logoColor=white" />
+  <img src="https://img.shields.io/badge/Rust-Powered-da4326?style=for-the-badge&logo=rust&logoColor=white" />
+  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" />
+</p>
 
-![Flutter](https://img.shields.io/badge/Flutter-3.35.3-blue)
-![License](https://img.shields.io/badge/License-Private-red)
-![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android%20%7C%20Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
-
----
-
-## 功能清单
-
-### 格式支持
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| EPUB 格式 | ✅ 完成 | 完整的 EPUB 电子书支持，图片提取 |
-| PDF 格式 | ✅ 完成 | 原生 PDF 渲染阅读 |
-| TXT 格式 | ✅ 完成 | 编码检测、智能章节提取 |
-| ZIP 压缩包 | ✅ 完成 | 支持导入压缩包内的电子书 |
-
-### 阅读体验
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 智能分页 | ✅ 完成 | 二分法高性能分页，渐进式加载 |
-| 翻页模式 - 覆盖 | ✅ 完成 | 模拟真实翻页效果 |
-| 翻页模式 - 滑动 | ✅ 完成 | 左右滑动切换 |
-| 翻页模式 - 滚动 | ✅ 完成 | 连续滚动模式 |
-| 翻页模式 - 仿真 | ✅ 完成 | 3D 翻页动画 |
-| 阅读主题 | ✅ 完成 | 8 种预设 + 自定义主题 |
-| 字体调节 | ✅ 完成 | 字体大小、行距、字间距、首行缩进 |
-| 音量键翻页 | ✅ 完成 | 硬件按键支持 |
-| 沉浸式阅读 | ✅ 完成 | 全屏模式，自动隐藏系统栏 |
-| 目录导航 | ✅ 完成 | 章节快速跳转 |
-| 图片显示 | ✅ 完成 | EPUB 图片渲染 |
-
-### 书签笔记
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 添加书签 | ✅ 完成 | 快速标记位置 |
-| 书签管理 | ✅ 完成 | 列表查看、跳转 |
-| 文本高亮 | ✅ 完成 | 多颜色高亮支持 |
-| 添加笔记 | ✅ 完成 | 高亮关联笔记 |
-| 阅读进度 | ✅ 完成 | 自动保存位置 |
-
-### TTS 朗读
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 系统 TTS | ✅ 完成 | Android TTS / iOS AVSpeechSynthesizer |
-| 语速调节 | ✅ 完成 | 可调节朗读速度 |
-| 音量调节 | ✅ 完成 | 可调节朗读音量 |
-| 音调调节 | ✅ 完成 | 可调节朗读音调 |
-| 定时停止 | ✅ 完成 | 睡眠定时功能 |
-| 句子高亮 | ✅ 完成 | 朗读时高亮当前句子 |
-
-### 数据统计
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 阅读时长统计 | ✅ 完成 | 按日/周/月统计 |
-| 阅读进度追踪 | ✅ 完成 | 书籍进度可视化 |
-| 阅读历史 | ✅ 完成 | 历史记录查询 |
-| 统计图表 | ✅ 完成 | fl_chart 图表展示 |
-
-### 数据同步
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| WebDAV 同步 | ✅ 完成 | 云端备份与恢复 |
-| 书籍元数据同步 | ✅ 完成 | 书名、作者等信息 |
-| 进度同步 | ✅ 完成 | 阅读位置同步 |
-| 书签笔记同步 | ✅ 完成 | 高亮书签云端同步 |
-| 冲突处理 | ✅ 完成 | 时间戳自动合并 |
-
-### 系统功能
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 文件导入 | ✅ 完成 | 本地文件系统导入 |
-| 书籍封面 | ✅ 完成 | 自动生成封面 |
-| 响应式布局 | ✅ 完成 | 手机/平板自适应 |
-| 国际化 | ✅ 完成 | 中文/英文支持 |
-| 增量更新 | ✅ 完成 | 内容哈希检测 |
-
-### 平台支持
-
-| 平台 | 状态 | 说明 |
-|------|------|------|
-| Android | ✅ 完成 | 最低 API 21 |
-| iOS | ✅ 完成 | 最低 iOS 11.0 |
-| Windows | ✅ 完成 | 桌面平台完整支持 |
-| macOS | ✅ 完成 | 桌面平台完整支持 |
-| Linux | ✅ 完成 | 桌面平台完整支持 |
+<p align="center">
+  <b>优雅的 Flutter 跨平台电子书阅读器，支持多种格式，提供舒适的阅读体验。</b><br/>
+  <i>An elegant cross-platform ebook reader — beautifully crafted with Flutter & Rust.</i>
+</p>
 
 ---
 
-## 待完成功能
+## 📖 About
 
-### 核心功能
+**Open Reading** (小元阅读器) 是 [小元读书 (Origo Reader)](https://github.com/KeloYuan/Origo-Reader) 项目的**开源跨平台版本**，基于 Flutter 构建，覆盖 Android、iOS、macOS、Windows、Linux 五个平台。
 
-| 功能 | 优先级 | 说明 |
-|------|--------|------|
-| 网络书籍导入 | 🟡 中 | URL 导入网络资源 |
-
-### 阅读体验
-
-| 功能 | 优先级 | 说明 |
-|------|--------|------|
-| 滚动翻页优化 | 🟡 中 | 滚动模式性能优化 |
-| PDF 目录跳转 | 🟡 中 | PDF 章节导航 |
-| PDF 缩放 | 🟡 中 | PDF 查看缩放 |
-
-### 同步功能
-
-| 功能 | 优先级 | 说明 |
-|------|--------|------|
-| iCloud 同步 | 🟡 中 | Apple 生态同步 |
-| 本地备份 | 🟡 中 | JSON/数据库导出导入 |
-
-### 其他
-
-| 功能 | 优先级 | 说明 |
-|------|--------|------|
-| 夜间模式全局开关 | 🟢 低 | 设置页一键切换 |
-| 字体自定义 | 🟢 低 | 导入自定义字体 |
-| 书籍排序 | 🟢 低 | 多维度排序选项 |
+> 市面上的阅读器要么功能臃肿，要么界面丑陋。
+> Open Reading 只想做一件事：**让你安静地读书，顺便好看一点。**
 
 ---
 
-## 技术栈
+## ✨ Features
 
-### 核心框架
-- **Flutter** `3.35.3` - 跨平台 UI 框架
-- **Dart** `3.9.2` - 编程语言
-- **Riverpod** `2.6.1` - 状态管理
+### 📖 Reading Experience
+| Feature | Description |
+|---------|-------------|
+| 📄 **Multi-Format** | EPUB · PDF · TXT · ZIP 全格式支持 |
+| 📐 **Smart Pagination** | 二分搜索算法精准分页，告别排版错乱 |
+| 🔄 **Page Turn Modes** | 翻页 / 滑动 / 滚动 / 3D 仿真翻页 |
+| 🎨 **Reading Themes** | 多种预设主题 + 自定义背景/字体颜色 |
+| 🔤 **Typography Control** | 字号 · 行距 · 字距 · 缩进，精细调节 |
+| 🌙 **Dark Mode** | 护眼暗色模式，深夜阅读不伤眼 |
 
-### 数据层
-- **SQLite** (`sqflite`) - 本地数据库
-- **SharedPreferences** - 配置存储
-- **Path Provider** - 文件路径管理
+### 🛠️ Smart Tools
+| Feature | Description |
+|---------|-------------|
+| 🔖 **Bookmarks** | 一键添加书签，快速跳转 |
+| ✏️ **Highlights & Notes** | 高亮标注 + 笔记，深度阅读 |
+| 🔊 **TTS** | 文本朗读，支持语速/音量/音调调节 + 逐句高亮 |
+| 📊 **Reading Stats** | 每日/每周/每月阅读统计，可视化图表 |
+| ☁️ **WebDAV Sync** | 书籍 · 进度 · 书架 · 笔记全量云端同步 |
 
-### 文件处理
-- **EPUBX** - EPUB 格式解析
-- **PDFX** - PDF 渲染
-- **_archive** - ZIP 压缩包处理
-
-### UI 组件
-- **Material 3** - Google 设计语言
-- **FL Chart** - 图表展示
-- **flutter_svg** - SVG 渲染
+### 🔧 Tech Highlights
+| Feature | Description |
+|---------|-------------|
+| 🦀 **Rust Core** | 核心解析引擎 Rust 编写，极致性能 |
+| 📱 **5 Platforms** | Android · iOS · macOS · Windows · Linux |
+| ⚡ **Riverpod** | 响应式状态管理，丝滑流畅 |
+| 💾 **SQLite** | 本地数据持久化，零依赖云服务 |
 
 ---
 
-## 项目结构
+## 📱 Supported Platforms
 
-详细逐文件索引请看 `CODEBASE_DOCUMENTATION.md`，这里保留当前代码的高层目录图。
+<table>
+  <tr>
+    <td align="center"><img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" /><br/><sub>API 21+</sub></td>
+    <td align="center"><img src="https://img.shields.io/badge/iOS-007AFF?style=for-the-badge&logo=apple&logoColor=white" /><br/><sub>iOS 11+</sub></td>
+    <td align="center"><img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white" /><br/><sub>Apple Silicon</sub></td>
+    <td align="center"><img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" /><br/><sub>Win 10+</sub></td>
+    <td align="center"><img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" /><br/><sub>x64</sub></td>
+  </tr>
+</table>
+
+---
+
+## 📦 Tech Stack
 
 ```
-lib/
-├── main.dart                          # 应用入口
-├── l10n/                              # 国际化生成代码
-├── models/                            # 书籍、章节、书签等模型
-├── pages/                             # 页面层与首页局部组件
-│   ├── foliate_reader_page.dart       # 当前默认阅读页面
-│   ├── home_shell_page.dart           # 首页导航壳层
-│   ├── home_mobile_dashboard_page.dart # 移动端首页
-│   └── library_page.dart              # 书库页面
-├── reader_core/                       # 阅读支撑层（解析、文档转换、模型）
-├── services/
-│   ├── books/                         # 导入、DAO、封面、图片
-│   ├── core/                          # 数据库、缓存、备份、离线能力
-│   ├── pagination/                    # 旧分页链路与缓存
-│   ├── reading/                       # 阅读路由、计划、进度、资源准备
-│   ├── sync/                          # WebDAV / iOS 云同步
-│   └── tts/                           # TTS 抽象与偏好设置
-├── utils/                             # 主题、布局、系统 UI、编码工具
-└── widgets/                           # 通用组件
+Frontend    → Flutter 3.35 + Dart 3.9 + Material 3
+State       → Riverpod 2.6
+Database    → SQLite (sqflite)
+Reader      → WebView (Foliate) + Rust Core Engine
 ```
 
 ---
 
-## 快速开始
-
-### 环境要求
-- Flutter SDK `3.35.3+`
-- Dart SDK `3.9.2+`
-- Android Studio / VS Code
-
-### 安装步骤
+## 🚀 Getting Started
 
 ```bash
-# 克隆项目
-git clone <repository-url>
-cd xxread
+# Clone
+git clone https://github.com/KeloYuan/open-reading.git
+cd open-reading
 
-# 安装依赖
+# Install dependencies
 flutter pub get
 
-# 调试运行
+# Run
 flutter run
+```
 
-# 发布构建
+### Build
+
+```bash
 flutter build apk        # Android
 flutter build ios        # iOS
+flutter build macos      # macOS
 flutter build windows    # Windows
-flutter build macos     # macOS
 flutter build linux      # Linux
 ```
 
 ---
 
-## 许可证
+## 📁 Project Structure
 
-此项目为私有项目。
+```
+lib/
+├── main.dart              # Entry point
+├── models/                # Data models (books, chapters, bookmarks)
+├── pages/                 # UI pages & home components
+├── reader_core/           # Reader engine core (parser, document model)
+├── services/              # Business services (import, DAO, sync, reading, TTS)
+├── utils/                 # Themes, layout, encoding utilities
+├── widgets/               # Reusable UI components
+└── l10n/                  # Internationalization
+```
 
 ---
 
-**小元读书** - 让阅读更加优雅 📚✨
+## 🗺️ Roadmap
+
+- [x] EPUB / PDF / TXT / ZIP 格式支持
+- [x] 智能分页引擎（二分搜索）
+- [x] 多种翻页模式（含 3D 仿真）
+- [x] 多种阅读主题 + 自定义主题
+- [x] 书签 · 高亮 · 笔记
+- [x] TTS 文本朗读
+- [x] 阅读统计图表
+- [x] WebDAV 全量同步
+- [ ] 🔥 书源搜索 & 在线阅读
+- [ ] URL 导入书籍
+- [ ] iCloud 同步
+- [ ] 全局暗色模式
+- [ ] 自定义字体导入
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+[MIT](LICENSE) © [KeloYuan](https://github.com/KeloYuan)
+
+---
+
+<p align="center">
+  <b>小元阅读器</b> — <i>Reading, refined.</i><br/><br/>
+  Part of <a href="https://github.com/KeloYuan/Origo-Reader">Origo Reader (小元读书)</a><br/><br/>
+  If you like this project, give it a ⭐ — it keeps me going!
+</p>
