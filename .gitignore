@@ -5,19 +5,25 @@
 *.swp
 .DS_Store
 .atom/
+.build/
 .buildlog/
 .history
 .svn/
+.swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
+# IntelliJ / VS Code
 *.iml
 *.ipr
 *.iws
 .idea/
-
-# VS Code related
 .vscode/
+
+# Claude / Agent internal
+.claude/
+CLAUDE.md
+AGENTS.md
+.omx/
 
 # Flutter/Dart/Pub related
 **/doc/api/
@@ -25,57 +31,10 @@ migrate_working_dir/
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
-.packages
 .pub-cache/
 .pub/
 /build/
 pubspec.lock
-
-# Android related
-**/android/**/gradle-wrapper.jar
-**/android/.gradle
-**/android/captures/
-**/android/gradlew
-**/android/gradlew.bat
-**/android/local.properties
-**/android/**/GeneratedPluginRegistrant.java
-
-# iOS/XCode related
-**/ios/**/*.mode1v3
-**/ios/**/*.mode2v3
-**/ios/**/*.moved-aside
-**/ios/**/*.pbxuser
-**/ios/**/*.perspectivev3
-**/ios/**/*sync/
-**/ios/**/.sconsign.dblite
-**/ios/**/.tags*
-**/ios/**/.vagrant/
-**/ios/**/DerivedData/
-**/ios/**/Icon?
-**/ios/**/Pods/
-**/ios/**/.symlinks/
-**/ios/**/profile
-**/ios/**/xcuserdata
-**/ios/.generated/
-**/ios/Flutter/App.framework
-**/ios/Flutter/Flutter.framework
-**/ios/Flutter/Flutter.podspec
-**/ios/Flutter/Generated.xcconfig
-**/ios/Flutter/ephemeral
-**/ios/Flutter/app.flx
-**/ios/Flutter/app.zip
-**/ios/Flutter/flutter_assets/
-**/ios/Flutter/flutter_export_environment.sh
-**/ios/ServiceDefinitions.json
-**/ios/Runner/GeneratedPluginRegistrant.*
-
-# macOS
-**/macos/Flutter/GeneratedPluginRegistrant.swift
-**/macos/Flutter/ephemeral/
-
-# Windows
-**/windows/flutter/generated_plugin.cmake
-**/windows/flutter/generated_plugins.cmake
 
 # Symbolication related
 app.*.symbols
@@ -87,9 +46,42 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+android/local.properties
+
+# Platform subdirs (vendored / generated)
+/anx-reader
+/legado
+
+# Internal dev docs & logs
+Log.md
+knowledge_base/
+*.pen
+
+# Screenshots / dev captures
+screenshots/
+shot/
+diagrams/
+
+# Misc utility scripts & internal docs
+extract_svg.py
+fix_svg.py
+replace_withopacity.ps1
+预览SVG图表.html
+如何预览SVG图表.md
+修复SVG显示.py
+提取并转换SVG.py
+devtools_options.yaml
+
+# Copyright application / internal docs
+软著*.md
+需求.md
+最终解决方案.md
+转换为PDF说明.md
+
+# Test data (novel TXT files — not part of the project)
+/*.txt
 
 # Secrets
 *.env
 *.pem
 *.key
-local.properties
